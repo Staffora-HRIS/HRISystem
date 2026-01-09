@@ -42,10 +42,12 @@ bun run migrate:down  # Rollback last migration
 bun run migrate:create <name>  # Create new migration file
 
 # Run tests
-bun test              # All packages
-bun run test:api      # API tests only
-bun run test:web      # Frontend tests only
-bun test --watch      # Watch mode (in api or web package)
+bun test                           # All packages
+bun run test:api                   # API tests only
+bun run test:web                   # Frontend tests only
+bun test --watch                   # Watch mode
+bun test path/to/file.test.ts     # Single test file
+bun test --test-name-pattern "pattern"  # Filter by test name
 
 # Type checking and linting
 bun run typecheck     # All packages
@@ -77,12 +79,21 @@ Copy `docker/.env.example` to `docker/.env` and set required secrets:
 
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point
-- `src/worker.ts`: Background job processor
+- `src/worker.ts`: Background job processor entry point
 - `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency)
 - `src/modules/`: Feature modules (hr, time, absence, talent, lms, cases, onboarding, workflows, portal, auth) - each with routes.ts, service.ts, repository.ts, schemas.ts
-- `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker)
+- `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
+- `src/worker/`: Worker runtime (scheduler, outbox-processor)
 - `src/lib/`: Shared utilities (transaction handling)
 - `src/test/`: Integration tests (rls, idempotency, outbox, effective-dating, state-machine)
+
+### Worker Subsystem
+Background processing uses Redis Streams for reliable async operations:
+- **Outbox Processor**: Polls `domain_outbox` table, publishes events to Redis Streams
+- **Notification Worker**: Sends emails (nodemailer/SMTP) and push notifications (Firebase)
+- **Export Worker**: Generates Excel/CSV files, uploads to S3
+- **PDF Worker**: Generates certificates, letters, case bundles using pdf-lib
+- **Scheduler**: Cron-based jobs for reminders, notifications, cleanup
 
 ### Frontend Layers (packages/web)
 - `app/routes/`: React Router v7 file-based routes with route groups: `(auth)/`, `(app)/`, `(admin)/`
@@ -91,7 +102,7 @@ Copy `docker/.env.example` to `docker/.env` and set required secrets:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql`. Currently includes 87 migrations covering all modules.
+Migrations are numbered `NNNN_description.sql`. Currently includes 96 migrations covering all modules. See `migrations/README.md` for conventions.
 
 ## Critical Patterns (Non-Negotiable)
 
@@ -171,4 +182,5 @@ Import paths available from the shared package:
 
 - `Docs/systemplan.md`: Complete system specification
 - `Docs/Prompt.md`: Implementation directives and deliverables
+- `Docs/FULL_IMPLEMENTATION_REPORT.md`: Implementation status and completed work
 - `migrations/README.md`: Migration conventions and patterns

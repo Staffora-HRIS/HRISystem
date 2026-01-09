@@ -1,0 +1,298 @@
+/**
+ * Absence Management Routes
+ */
+
+import { Elysia, t } from "elysia";
+import { requirePermission } from "../../plugins/rbac";
+import { AbsenceRepository } from "./repository";
+import { AbsenceService } from "./service";
+import {
+  CreateLeaveTypeSchema,
+  CreateLeavePolicySchema,
+  CreateLeaveRequestSchema,
+  LeaveRequestFiltersSchema,
+  LeaveApprovalSchema,
+  IdParamsSchema,
+  EmployeeIdParamsSchema,
+} from "./schemas";
+
+/**
+ * Error response schema
+ */
+const ErrorResponseSchema = t.Object({
+  error: t.Object({
+    code: t.String(),
+    message: t.String(),
+    details: t.Optional(t.Record(t.String(), t.Unknown())),
+  }),
+});
+
+export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-routes" })
+  .derive((ctx) => {
+    const { db } = ctx as any;
+    const repo = new AbsenceRepository(db);
+    const service = new AbsenceService(repo);
+    return { absenceService: service };
+  })
+
+  // Leave Types
+  .get(
+    "/leave-types",
+    async (ctx) => {
+      const { absenceService, tenantContext } = ctx as any;
+      const result = await absenceService.getLeaveTypes(tenantContext);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch leave types");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      detail: { tags: ["Absence"], summary: "List leave types" },
+    }
+  )
+
+  .post(
+    "/leave-types",
+    async (ctx) => {
+      const { absenceService, tenantContext, body } = ctx as any;
+      const result = await absenceService.createLeaveType(tenantContext, body as any);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to create leave type");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      body: CreateLeaveTypeSchema,
+      detail: { tags: ["Absence"], summary: "Create leave type" },
+    }
+  )
+
+  .get(
+    "/leave-types/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.getLeaveTypeById(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_TYPE_NOT_FOUND" ? 404 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      params: IdParamsSchema,
+      response: {
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Get leave type by ID" },
+    }
+  )
+
+  // Leave Policies
+  .get(
+    "/policies",
+    async (ctx) => {
+      const { absenceService, tenantContext } = ctx as any;
+      const result = await absenceService.getLeavePolicies(tenantContext);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch policies");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      detail: { tags: ["Absence"], summary: "List leave policies" },
+    }
+  )
+
+  .post(
+    "/policies",
+    async (ctx) => {
+      const { absenceService, tenantContext, body } = ctx as any;
+      const result = await absenceService.createLeavePolicy(tenantContext, body as any);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to create policy");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      body: CreateLeavePolicySchema,
+      detail: { tags: ["Absence"], summary: "Create leave policy" },
+    }
+  )
+
+  // Leave Requests
+  .get(
+    "/requests",
+    async (ctx) => {
+      const { absenceService, tenantContext, query } = ctx as any;
+      const result = await absenceService.getLeaveRequests(tenantContext, query);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch requests");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      query: t.Partial(LeaveRequestFiltersSchema),
+      detail: { tags: ["Absence"], summary: "List leave requests" },
+    }
+  )
+
+  .post(
+    "/requests",
+    async (ctx) => {
+      const { absenceService, tenantContext, body } = ctx as any;
+      const result = await absenceService.createLeaveRequest(tenantContext, body as any);
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to create request");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      body: CreateLeaveRequestSchema,
+      detail: { tags: ["Absence"], summary: "Create leave request" },
+    }
+  )
+
+  .get(
+    "/requests/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.getLeaveRequestById(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_REQUEST_NOT_FOUND" ? 404 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      params: IdParamsSchema,
+      response: {
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Get leave request by ID" },
+    }
+  )
+
+  .post(
+    "/requests/:id/submit",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.submitLeaveRequest(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_REQUEST_NOT_FOUND" ? 404 : 400, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      response: {
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Submit leave request" },
+    }
+  )
+
+  .post(
+    "/requests/:id/approve",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, body, error } = ctx as any;
+      let result;
+      if ((body as any).action === "approve") {
+        result = await absenceService.approveLeaveRequest(
+          tenantContext,
+          params.id,
+          tenantContext.userId,
+          (body as any).comments
+        );
+      } else {
+        result = await absenceService.rejectLeaveRequest(
+          tenantContext,
+          params.id,
+          tenantContext.userId,
+          (body as any).comments
+        );
+      }
+      if (!result.success) {
+        return error(result.error?.code === "REQUEST_NOT_PENDING" ? 400 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence:approvals", "write")],
+      params: IdParamsSchema,
+      body: LeaveApprovalSchema,
+      response: {
+        400: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Approve or reject leave request" },
+    }
+  )
+
+  .delete(
+    "/requests/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.cancelLeaveRequest(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_REQUEST_NOT_FOUND" ? 404 : 400, {
+          error: result.error,
+        });
+      }
+      return { success: true, message: "Leave request cancelled" };
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      response: {
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Cancel leave request" },
+    }
+  )
+
+  // Leave Balances
+  .get(
+    "/balances/:employeeId",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, query } = ctx as any;
+      const year = query.year ? parseInt(query.year, 10) : undefined;
+      const result = await absenceService.getLeaveBalances(
+        tenantContext,
+        params.employeeId,
+        year
+      );
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch balances");
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      params: EmployeeIdParamsSchema,
+      query: t.Object({
+        year: t.Optional(t.String()),
+      }),
+      detail: { tags: ["Absence"], summary: "Get employee leave balances" },
+    }
+  );
+
+export type AbsenceRoutes = typeof absenceRoutes;
