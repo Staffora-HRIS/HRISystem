@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\\\Users\\\\jb12b\\\\Documents\\\\GitHub\\\\HRISystem\" log --oneline -10)",
+      "Bash(git -C \"C:\\\\Users\\\\jb12b\\\\Documents\\\\GitHub\\\\HRISystem\" show 8fb23e2 --stat)",
+      "Bash(dir:*)",
+      "Bash(bun install)",
+      "Bash(bun run typecheck:*)",
+      "Bash(npx tsc:*)",
+      "Bash(bun x tsc:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

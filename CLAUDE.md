@@ -78,19 +78,20 @@ Copy `docker/.env.example` to `docker/.env` and set required secrets:
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point
 - `src/worker.ts`: Background job processor
-- `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors)
-- `src/modules/`: Feature modules (hr, time, absence, etc.) with routes/service/repository/schemas
-- `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker)
+- `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency)
+- `src/modules/`: Feature modules (hr, time, absence, talent, lms, cases, onboarding, workflows, portal, auth) - each with routes.ts, service.ts, repository.ts, schemas.ts
+- `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker)
 - `src/lib/`: Shared utilities (transaction handling)
+- `src/test/`: Integration tests (rls, idempotency, outbox, effective-dating, state-machine)
 
 ### Frontend Layers (packages/web)
-- `app/routes/`: React Router v7 file-based routes
-- `app/components/`: Reusable UI components
+- `app/routes/`: React Router v7 file-based routes with route groups: `(auth)/`, `(app)/`, `(admin)/`
+- `app/components/`: Reusable UI components (ui/, layouts/)
 - `app/hooks/`: Custom hooks (use-permissions, use-tenant)
-- `app/lib/`: Utilities (api-client, query-client, auth, theme)
+- `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql`. Currently includes 85+ migrations covering all modules.
+Migrations are numbered `NNNN_description.sql`. Currently includes 87 migrations covering all modules.
 
 ## Critical Patterns (Non-Negotiable)
 
@@ -154,6 +155,17 @@ Use these agents (defined in `.claude/agents/`) for domain-specific work:
 - `time-attendance-module-developer`: Time events, schedules, timesheets, geo-fence
 - `hris-absence-module-builder`: Leave types, balances, accruals, ledger patterns
 - `hris-frontend-architect`: React components, React Query hooks, permission routing
+
+## Shared Package Exports (@hris/shared)
+
+Import paths available from the shared package:
+- `@hris/shared` - Main entry point
+- `@hris/shared/types` - TypeScript types for all modules (hr, time, absence, talent, etc.)
+- `@hris/shared/constants` - Shared constants
+- `@hris/shared/utils` - Utility functions (dates, crypto, validation, effective-dating)
+- `@hris/shared/errors` - Error codes and messages organized by module
+- `@hris/shared/schemas` - Shared TypeBox/Zod schemas
+- `@hris/shared/state-machines` - Employee lifecycle and performance cycle state machines
 
 ## Key Documentation
 
