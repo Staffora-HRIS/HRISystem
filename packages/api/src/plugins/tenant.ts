@@ -1,0 +1,386 @@
+/**
+ * Tenant Resolution Plugin
+ *
+ * Middleware for multi-tenant context resolution.
+ * Features:
+ * - Extract tenant from X-Tenant-ID header or session
+ * - Validate tenant exists and is active
+ * - Decorate request with tenant context
+ * - Set tenant context in database connection
+ */
+
+import { Elysia, t } from "elysia";
+import { type DatabaseClient } from "./db";
+import { type CacheClient, CacheTTL } from "./cache";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/**
+ * Tenant information from database
+ */
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: "active" | "suspended" | "deleted";
+  settings: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Tenant context attached to requests
+ */
+export interface TenantContext {
+  tenant: Tenant;
+  tenantId: string;
+}
+
+/**
+ * Tenant resolution sources
+ */
+export type TenantSource = "header" | "session" | "subdomain";
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+/**
+ * Tenant-related error codes
+ */
+export const TenantErrorCodes = {
+  MISSING_TENANT: "MISSING_TENANT",
+  INVALID_TENANT: "INVALID_TENANT",
+  TENANT_NOT_FOUND: "TENANT_NOT_FOUND",
+  TENANT_SUSPENDED: "TENANT_SUSPENDED",
+  TENANT_DELETED: "TENANT_DELETED",
+} as const;
+
+/**
+ * Tenant resolution error
+ */
+export class TenantError extends Error {
+  constructor(
+    public code: keyof typeof TenantErrorCodes,
+    message: string,
+    public statusCode: number = 400
+  ) {
+    super(message);
+    this.name = "TenantError";
+  }
+}
+
+// =============================================================================
+// Tenant Service
+// =============================================================================
+
+/**
+ * Service for tenant operations
+ */
+export class TenantService {
+  constructor(
+    private db: DatabaseClient,
+    private cache: CacheClient
+  ) {}
+
+  /**
+   * Get tenant by ID
+   */
+  async getById(tenantId: string): Promise<Tenant | null> {
+    // Try cache first
+    const cacheKey = `tenant:${tenantId}`;
+    const cached = await this.cache.get<Tenant>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Query database
+    const results = await this.db.withSystemContext(async (tx) => {
+      return await tx<Tenant[]>`
+        SELECT id, name, slug, status, settings, created_at, updated_at
+        FROM app.tenants
+        WHERE id = ${tenantId}::uuid
+      `;
+    });
+
+    if (results.length === 0) {
+      return null;
+    }
+
+    const tenant = results[0] as Tenant;
+
+    // Cache the result
+    await this.cache.set(cacheKey, tenant, CacheTTL.LONG);
+
+    return tenant;
+  }
+
+  /**
+   * Get tenant by slug
+   */
+  async getBySlug(slug: string): Promise<Tenant | null> {
+    // Try cache first
+    const cacheKey = `tenant:slug:${slug}`;
+    const cached = await this.cache.get<Tenant>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Query database
+    const results = await this.db.withSystemContext(async (tx) => {
+      return await tx<Tenant[]>`
+        SELECT id, name, slug, status, settings, created_at, updated_at
+        FROM app.tenants
+        WHERE slug = ${slug}
+      `;
+    });
+
+    if (results.length === 0) {
+      return null;
+    }
+
+    const tenant = results[0] as Tenant;
+
+    // Cache the result
+    await this.cache.set(cacheKey, tenant, CacheTTL.LONG);
+
+    return tenant;
+  }
+
+  /**
+   * Validate and get tenant, throwing appropriate errors
+   */
+  async validateTenant(tenantId: string): Promise<Tenant> {
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(tenantId)) {
+      throw new TenantError(
+        "INVALID_TENANT",
+        "Invalid tenant ID format",
+        400
+      );
+    }
+
+    const tenant = await this.getById(tenantId);
+
+    if (!tenant) {
+      throw new TenantError(
+        "TENANT_NOT_FOUND",
+        "Tenant not found",
+        404
+      );
+    }
+
+    if (tenant.status === "suspended") {
+      throw new TenantError(
+        "TENANT_SUSPENDED",
+        "Tenant is suspended. Please contact support.",
+        403
+      );
+    }
+
+    if (tenant.status === "deleted") {
+      throw new TenantError(
+        "TENANT_DELETED",
+        "Tenant has been deleted",
+        404
+      );
+    }
+
+    return tenant;
+  }
+
+  /**
+   * Invalidate tenant cache
+   */
+  async invalidateCache(tenantId: string): Promise<void> {
+    const tenant = await this.getById(tenantId);
+    await this.cache.del(`tenant:${tenantId}`);
+    if (tenant) {
+      await this.cache.del(`tenant:slug:${tenant.slug}`);
+    }
+  }
+}
+
+// =============================================================================
+// Tenant Resolution
+// =============================================================================
+
+/**
+ * Options for tenant resolution
+ */
+export interface TenantResolutionOptions {
+  /** Header name for tenant ID (default: X-Tenant-ID) */
+  headerName?: string;
+  /** Whether to allow missing tenant (for public routes) */
+  optional?: boolean;
+  /** Routes to skip tenant resolution (regex patterns) */
+  skipRoutes?: RegExp[];
+}
+
+/**
+ * Default routes that don't require tenant context
+ */
+const DEFAULT_SKIP_ROUTES = [
+  /^\/$/,           // Root
+  /^\/health/,      // Health checks
+  /^\/ready/,       // Readiness
+  /^\/live/,        // Liveness
+  /^\/docs/,        // API docs
+  /^\/api\/v1\/auth\/login/,  // Login doesn't need tenant yet
+  /^\/api\/v1\/auth\/register/, // Registration
+];
+
+/**
+ * Resolve tenant from request
+ */
+export function resolveTenant(
+  headers: Headers,
+  session: { currentTenantId?: string } | null,
+  options: TenantResolutionOptions = {}
+): { tenantId: string | null; source: TenantSource | null } {
+  const { headerName = "X-Tenant-ID" } = options;
+
+  // 1. Try header first (explicit tenant selection)
+  const headerValue = headers.get(headerName);
+  if (headerValue) {
+    return { tenantId: headerValue, source: "header" };
+  }
+
+  // 2. Try session (stored tenant from previous selection)
+  if (session?.currentTenantId) {
+    return { tenantId: session.currentTenantId, source: "session" };
+  }
+
+  // 3. No tenant found
+  return { tenantId: null, source: null };
+}
+
+// =============================================================================
+// Elysia Plugin
+// =============================================================================
+
+/**
+ * Tenant resolution plugin for Elysia
+ *
+ * Resolves tenant context from request and validates it.
+ * Adds tenant information to the request context.
+ *
+ * Usage:
+ * ```ts
+ * const app = new Elysia()
+ *   .use(dbPlugin())
+ *   .use(cachePlugin())
+ *   .use(tenantPlugin())
+ *   .get('/example', ({ tenant }) => {
+ *     return { tenantId: tenant.id };
+ *   });
+ * ```
+ */
+export function tenantPlugin(options: TenantResolutionOptions = {}) {
+  const { headerName = "X-Tenant-ID", skipRoutes = [] } = options;
+  const allSkipRoutes = [...DEFAULT_SKIP_ROUTES, ...skipRoutes];
+
+  return new Elysia({ name: "tenant" })
+    // Tenant service for direct access
+    .derive((ctx) => {
+      const { db, cache } = ctx as any;
+      return {
+        tenantService: new TenantService(db, cache),
+      };
+    })
+
+    // Tenant context resolution
+    .derive(
+      async ({
+        request,
+        path,
+        tenantService,
+        set,
+      }): Promise<{ tenant: Tenant | null; tenantId: string | null }> => {
+        // Check if route should skip tenant resolution
+        const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(path));
+        if (shouldSkip) {
+          return { tenant: null, tenantId: null };
+        }
+
+        // Resolve tenant from request
+        // Note: session will be available after auth plugin is added
+        const { tenantId, source } = resolveTenant(
+          request.headers,
+          null, // Session will be added by auth plugin
+          { headerName }
+        );
+
+        // If no tenant ID and not optional, error
+        if (!tenantId) {
+          if (options.optional) {
+            return { tenant: null, tenantId: null };
+          }
+
+          set.status = 400;
+          throw new TenantError(
+            "MISSING_TENANT",
+            `Tenant context required. Provide ${headerName} header.`,
+            400
+          );
+        }
+
+        // Validate and get tenant
+        try {
+          const tenant = await tenantService.validateTenant(tenantId);
+          return { tenant, tenantId: tenant.id };
+        } catch (error) {
+          if (error instanceof TenantError) {
+            set.status = error.statusCode;
+            throw error;
+          }
+          throw error;
+        }
+      }
+    )
+
+    // Error handler for tenant errors
+    .onError(({ error, set }) => {
+      if (error instanceof TenantError) {
+        set.status = error.statusCode;
+        return {
+          error: {
+            code: error.code,
+            message: error.message,
+            requestId: "", // Will be added by error plugin
+          },
+        };
+      }
+    });
+}
+
+/**
+ * Guard that requires tenant context
+ * Use this on routes that absolutely need a tenant
+ */
+export function requireTenant() {
+  return new Elysia({ name: "require-tenant" }).derive((ctx) => {
+    const { tenant, set } = ctx as any;
+    if (!tenant) {
+      set.status = 400;
+      throw new TenantError(
+        "MISSING_TENANT",
+        "This endpoint requires tenant context",
+        400
+      );
+    }
+    return { tenant: tenant as Tenant };
+  });
+}
+
+/**
+ * Type guard to check if tenant context exists
+ */
+export function hasTenant(
+  context: { tenant: Tenant | null }
+): context is { tenant: Tenant } {
+  return context.tenant !== null;
+}
