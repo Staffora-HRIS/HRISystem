@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: hris-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hris_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-hris}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hris} -d ${POSTGRES_DB:-hris}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - hris-network
+
+  redis:
+    image: redis:7
+    container_name: hris-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - hris-network
+
+  api:
+    build:
+      context: ..
+      dockerfile: packages/api/Dockerfile
+    container_name: hris-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET:-dev_session_secret_32chars_min}
+      CSRF_SECRET: ${CSRF_SECRET:-dev_csrf_secret_32chars_min}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev_better_auth_secret_32chars}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - hris-network
+
+  worker:
+    build:
+      context: ..
+      dockerfile: packages/api/Dockerfile
+    container_name: hris-worker
+    restart: unless-stopped
+    command: ["bun", "run", "src/worker.ts"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
+      REDIS_URL: redis://redis:6379
+      WORKER_TYPE: all
+      WORKER_HEALTH_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - hris-network
+
+  web:
+    build:
+      context: ..
+      dockerfile: packages/web/Dockerfile
+    container_name: hris-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+    networks:
+      - hris-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  hris-network:
+    driver: bridge
