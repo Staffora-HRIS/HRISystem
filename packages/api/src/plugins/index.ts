@@ -34,6 +34,9 @@ export { CacheClient } from "./cache";
 export { rateLimitPlugin } from "./rate-limit";
 export type { RateLimitPluginOptions } from "./rate-limit";
 
+export { securityHeadersPlugin, apiSecurityHeaders, webAppSecurityHeaders } from "./security-headers";
+export type { SecurityHeadersOptions, ContentSecurityPolicy } from "./security-headers";
+
 export { tenantPlugin, requireTenant, hasTenant, TenantService, TenantError, TenantErrorCodes } from "./tenant";
 export type { Tenant, TenantContext as TenantCtx, TenantSource, TenantResolutionOptions } from "./tenant";
 

@@ -15,6 +15,7 @@ import {
   cachePlugin,
   errorsPlugin,
   rateLimitPlugin,
+  securityHeadersPlugin,
   tenantPlugin,
   authPlugin,
   rbacPlugin,
@@ -45,6 +46,7 @@ import { systemRoutes } from "./modules/system";
 const config = {
   port: Number(process.env["PORT"]) || 3000,
   nodeEnv: process.env["NODE_ENV"] || "development",
+  isProduction: process.env["NODE_ENV"] === "production",
   // CORS origin - comma-separated in env or default dev port
   corsOrigins: process.env["CORS_ORIGIN"]?.split(",").map(s => s.trim()) || [
     "http://localhost:5173",
@@ -63,7 +65,16 @@ export const app = new Elysia()
   // CORS configuration (must be first)
   .use(
     cors({
-      origin: config.corsOrigins,
+      origin: config.isProduction
+        ? config.corsOrigins // Strict origin check in production
+        : (request) => {
+            // In development, allow any localhost origin
+            const origin = request.headers.get("origin");
+            if (origin?.includes("localhost") || origin?.includes("127.0.0.1")) {
+              return true;
+            }
+            return config.corsOrigins.includes(origin ?? "");
+          },
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
@@ -72,9 +83,46 @@ export const app = new Elysia()
         "X-CSRF-Token",
         "X-Tenant-ID",
         "Idempotency-Key",
+        "Cache-Control",
+        "Accept",
+        "Accept-Language",
+      ],
+      exposeHeaders: [
+        "X-Request-ID",
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Window",
+        "Retry-After",
       ],
       credentials: true,
-      maxAge: 86400,
+      maxAge: config.isProduction ? 86400 : 600, // 24h in prod, 10min in dev
+      preflight: true,
+    })
+  )
+
+  // Security headers (after CORS, before other plugins)
+  .use(
+    securityHeadersPlugin({
+      enabled: true,
+      enableHSTS: config.isProduction,
+      hstsMaxAge: 31536000, // 1 year
+      hstsIncludeSubDomains: true,
+      hstsPreload: false, // Enable only after testing
+      frameOptions: "DENY",
+      referrerPolicy: "strict-origin-when-cross-origin",
+      csp: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline for Swagger UI
+        styleSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline for Swagger UI
+        imgSrc: ["'self'", "data:", "blob:"],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'", ...config.corsOrigins],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: config.isProduction,
+      },
     })
   )
 
