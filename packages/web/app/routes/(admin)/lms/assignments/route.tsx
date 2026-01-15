@@ -25,12 +25,12 @@ export default function LmsAssignmentsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-enrollments"],
-    queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/api/v1/lms/enrollments"),
+    queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/lms/enrollments"),
   });
 
   const assignMutation = useMutation({
     mutationFn: (data: { courseId: string; employeeId: string; dueDate?: string }) =>
-      api.post("/api/v1/lms/enrollments", data),
+      api.post("/lms/enrollments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-enrollments"] });
       setShowAssign(false);

@@ -4,6 +4,7 @@ import { MessageSquare, Plus, Clock, CheckCircle } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface HRCase {
@@ -23,15 +24,16 @@ export default function MyCasesPage() {
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState<string>("all");
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-cases"],
-    queryFn: () => api.get<{ cases: HRCase[]; count: number }>("/api/v1/cases/my-cases"),
+    queryFn: () => api.get<{ cases: HRCase[]; count: number }>("/cases/my-cases"),
   });
 
   const createMutation = useMutation({
     mutationFn: (data: { category: string; subject: string; description: string; priority: string }) =>
-      api.post("/api/v1/cases", data),
+      api.post("/cases", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-cases"] });
       setShowNew(false);
@@ -107,7 +109,6 @@ export default function MyCasesPage() {
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select id="category" name="category" required aria-label="Category" className="w-full rounded-md border border-gray-300 p-2">
-                    <option value="payroll">Payroll</option>
                     <option value="benefits">Benefits</option>
                     <option value="leave">Leave</option>
                     <option value="workplace">Workplace</option>
@@ -181,7 +182,17 @@ export default function MyCasesPage() {
                       {hrCase.assigneeName && <span>Assigned to: {hrCase.assigneeName}</span>}
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Details</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      toast.info("Case details", {
+                        message: `Case details view is not available yet for ${hrCase.caseNumber}.`,
+                      })
+                    }
+                  >
+                    View Details
+                  </Button>
                 </div>
               </CardBody>
             </Card>

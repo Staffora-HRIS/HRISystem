@@ -4,6 +4,12 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import { createMockCacheClient, createMockDatabaseClient } from "../../helpers/mocks";
+import {
+  buildAuthErrorResponse,
+  isDatabaseConnectionError,
+  normalizeBetterAuthResponse,
+  setDatabaseReachabilityCheckForTests,
+} from "../../../lib/better-auth-handler";
 
 describe("RBAC Plugin", () => {
   let cache: ReturnType<typeof createMockCacheClient>;
@@ -108,5 +114,75 @@ describe("RBAC Plugin", () => {
       expect(constraints.costCenters.includes("CC-001")).toBe(true);
       expect(constraints.costCenters.includes("CC-999")).toBe(false);
     });
+  });
+});
+
+describe("Better Auth Handler - DB outage mapping", () => {
+  beforeEach(() => {
+    // Keep unit tests hermetic: never hit a real Postgres instance.
+    setDatabaseReachabilityCheckForTests(async () => true);
+  });
+
+  it("should detect ECONNREFUSED nested inside AggregateError", () => {
+    const err = {
+      name: "AggregateError",
+      errors: [{ code: "ECONNREFUSED" }],
+    };
+
+    expect(isDatabaseConnectionError(err)).toBe(true);
+  });
+
+  it("should return 503 with AUTH_DB_UNAVAILABLE for DB connection failures", async () => {
+    const err = {
+      code: "ECONNREFUSED",
+      message: "connect ECONNREFUSED 127.0.0.1:5432",
+    };
+
+    const res = buildAuthErrorResponse(err);
+    expect(res.status).toBe(503);
+
+    const body = await res.json();
+    expect(body).toMatchObject({
+      error: "Authentication service unavailable",
+      code: "AUTH_DB_UNAVAILABLE",
+    });
+  });
+
+  it("should remap a Better Auth 500 response to 503 when body indicates DB outage", async () => {
+    const res = new Response("connect ECONNREFUSED 127.0.0.1:5432", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+
+    const normalized = await normalizeBetterAuthResponse(res);
+    expect(normalized.status).toBe(503);
+
+    const body = await normalized.json();
+    expect(body).toMatchObject({
+      error: "Authentication service unavailable",
+      code: "AUTH_DB_UNAVAILABLE",
+    });
+  });
+
+  it("should remap a Better Auth 500 response to 503 when DB is unreachable even if body is generic", async () => {
+    setDatabaseReachabilityCheckForTests(async () => false);
+
+    const res = new Response("Internal Server Error", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+
+    const normalized = await normalizeBetterAuthResponse(res);
+    expect(normalized.status).toBe(503);
+  });
+
+  it("should return 500 for non-DB errors", async () => {
+    setDatabaseReachabilityCheckForTests(async () => true);
+    const err = new Error("Unexpected error");
+    const res = buildAuthErrorResponse(err);
+    expect(res.status).toBe(500);
+
+    const body = await res.json();
+    expect(body).toMatchObject({ error: "Authentication service error" });
   });
 });

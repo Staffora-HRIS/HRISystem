@@ -51,6 +51,14 @@ const TenantResponseSchema = t.Object({
   isPrimary: t.Boolean(),
 });
 
+const TenantListItemSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  slug: t.String(),
+  isPrimary: t.Boolean(),
+  role: t.String(),
+});
+
 const MeResponseSchema = t.Object({
   user: UserResponseSchema,
   session: SessionResponseSchema,
@@ -101,7 +109,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
 
       try {
         const userWithTenants = await authService.getUserWithTenants(user.id);
-        const currentTenantId = await authService.getSessionTenant(session.id);
+        const currentTenantId = await authService.getSessionTenant(session.id, user.id);
 
         // Find current tenant from user's tenants
         const currentTenant = userWithTenants?.tenants.find(
@@ -153,6 +161,60 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
     }
   )
 
+  // GET /auth/tenants - List tenants user can access
+  .get(
+    "/tenants",
+    async (ctx) => {
+      const { authService, user, session, set, requestId } = ctx as any;
+
+      if (!user || !session) {
+        set.status = 401;
+        return {
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Not authenticated",
+            requestId: requestId || "",
+          },
+        };
+      }
+
+      try {
+        const userWithTenants = await authService.getUserWithTenants(user.id);
+        const tenants = userWithTenants?.tenants ?? [];
+
+        return tenants.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          isPrimary: !!t.isPrimary,
+          role: t.isPrimary ? "primary" : "member",
+        }));
+      } catch (error) {
+        console.error("Get tenants error:", error);
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "Failed to get tenants",
+            requestId: requestId || "",
+          },
+        };
+      }
+    },
+    {
+      response: {
+        200: t.Array(TenantListItemSchema),
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Auth"],
+        summary: "List user tenants",
+        description: "List tenants the current user can access",
+      },
+    }
+  )
+
   // POST /auth/switch-tenant - Switch tenant context
   .post(
     "/switch-tenant",
@@ -172,7 +234,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
 
       try {
         const tenantId = (body as any).tenantId;
-        const canSwitch = await authService.switchTenant(user.id, tenantId);
+        const canSwitch = await authService.switchTenant(user.id, session.id, tenantId);
 
         if (!canSwitch) {
           set.status = 403;

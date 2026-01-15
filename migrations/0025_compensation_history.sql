@@ -391,7 +391,7 @@ CREATE OR REPLACE FUNCTION app.get_compensation_statistics(
 )
 RETURNS TABLE (
     total_employees bigint,
-    total_payroll numeric(15, 2),
+    total_compensation numeric(15, 2),
     avg_salary numeric(15, 2),
     min_salary numeric(15, 2),
     max_salary numeric(15, 2),
@@ -414,7 +414,7 @@ BEGIN
     )
     SELECT
         COUNT(*)::bigint AS total_employees,
-        SUM(annual_salary) AS total_payroll,
+        SUM(annual_salary) AS total_compensation,
         ROUND(AVG(annual_salary), 2) AS avg_salary,
         MIN(annual_salary) AS min_salary,
         MAX(annual_salary) AS max_salary,

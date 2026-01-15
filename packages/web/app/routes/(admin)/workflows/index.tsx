@@ -21,7 +21,7 @@ interface WorkflowDefinition {
 export default function WorkflowsAdminPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["workflow-definitions"],
-    queryFn: () => api.get<{ definitions: WorkflowDefinition[]; count: number }>("/api/v1/workflows/definitions"),
+    queryFn: () => api.get<{ definitions: WorkflowDefinition[]; count: number }>("/workflows/definitions"),
   });
 
   const definitions = data?.definitions || [];

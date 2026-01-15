@@ -4,6 +4,7 @@ import { BookOpen, Clock, CheckCircle, Play, Award } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Enrollment {
@@ -24,10 +25,11 @@ interface Enrollment {
 
 export default function MyLearningPage() {
   const [filter, setFilter] = useState<string>("all");
+  const toast = useToast();
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-learning"],
-    queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/api/v1/lms/my-learning"),
+    queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/lms/my-learning"),
   });
 
   const enrollments = data?.enrollments || [];
@@ -51,7 +53,26 @@ export default function MyLearningPage() {
   };
 
   const handleStart = async (enrollmentId: string) => {
-    await api.post(`/api/v1/lms/enrollments/${enrollmentId}/start`);
+    try {
+      await api.post(`/lms/enrollments/${enrollmentId}/start`);
+      toast.success("Course started");
+    } catch {
+      toast.error("Failed to start course", {
+        message: "Please try again in a moment.",
+      });
+    }
+  };
+
+  const handleContinue = (enrollment: Enrollment) => {
+    toast.info("Continue learning", {
+      message: `Course player is not available yet for "${enrollment.title}".`,
+    });
+  };
+
+  const handleViewCertificate = (enrollment: Enrollment) => {
+    toast.info("Certificate", {
+      message: `Certificate download is not available yet for "${enrollment.title}".`,
+    });
   };
 
   return (
@@ -128,17 +149,25 @@ export default function MyLearningPage() {
                 )}
 
                 {enrollment.status === "enrolled" && (
-                  <Button className="w-full" onClick={() => handleStart(enrollment.id)}>
+                  <Button className="w-full" onClick={() => void handleStart(enrollment.id)}>
                     Start Course
                   </Button>
                 )}
                 {enrollment.status === "in_progress" && (
-                  <Button className="w-full" variant="outline">
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => handleContinue(enrollment)}
+                  >
                     Continue Learning
                   </Button>
                 )}
                 {enrollment.status === "completed" && (
-                  <Button className="w-full" variant="secondary">
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    onClick={() => handleViewCertificate(enrollment)}
+                  >
                     View Certificate
                   </Button>
                 )}

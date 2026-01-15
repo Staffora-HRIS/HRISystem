@@ -37,6 +37,7 @@ export interface Session {
   updatedAt: Date;
   ipAddress?: string | null;
   userAgent?: string | null;
+  currentTenantId?: string | null;
 }
 
 /**
@@ -125,13 +126,13 @@ export class AuthService {
     const result = await this.db.query<{
       id: string;
       email: string;
-      email_verified: boolean;
+      emailVerified: boolean;
       name: string | null;
       image: string | null;
-      created_at: Date;
-      updated_at: Date;
+      createdAt: Date;
+      updatedAt: Date;
       status: string;
-      mfa_enabled: boolean;
+      mfaEnabled: boolean;
       tenants: Array<{
         id: string;
         name: string;
@@ -176,13 +177,13 @@ export class AuthService {
     return {
       id: row.id,
       email: row.email,
-      emailVerified: row.email_verified,
+      emailVerified: row.emailVerified,
       name: row.name,
       image: row.image,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
       status: row.status,
-      mfaEnabled: row.mfa_enabled,
+      mfaEnabled: row.mfaEnabled,
       tenants: (row.tenants || []).map((t: any) => ({
         id: t.id,
         name: t.name,
@@ -207,24 +208,51 @@ export class AuthService {
   /**
    * Get user's current session tenant
    */
-  async getSessionTenant(sessionId: string): Promise<string | null> {
+  async getSessionTenant(sessionId: string, userId?: string | null): Promise<string | null> {
     // Check cache first
     if (this.cache) {
       const cached = await this.cache.get<string>(`session:tenant:${sessionId}`);
       if (cached) return cached;
     }
 
-    // Query from user_tenants (get primary tenant)
-    const result = await this.db.query<{ tenant_id: string }>`
-      SELECT ut.tenant_id::text
-      FROM app."session" s
-      JOIN app.user_tenants ut ON ut.user_id = s."userId"::uuid
-      WHERE s.id = ${sessionId}
-      AND ut.is_primary = true
+    // Prefer explicit session tenant if set
+    const sessionRows = await this.db.query<{ currentTenantId: string | null }>`
+      SELECT "currentTenantId"::text as current_tenant_id
+      FROM app."session"
+      WHERE id = ${sessionId}
       LIMIT 1
     `;
 
-    const tenantId = result[0]?.tenant_id ?? null;
+    const explicitTenantId = sessionRows[0]?.currentTenantId ?? null;
+    if (explicitTenantId) {
+      if (this.cache) {
+        await this.cache.set(`session:tenant:${sessionId}`, explicitTenantId, 300);
+      }
+      return explicitTenantId;
+    }
+
+    // Fallback to user's primary tenant
+    if (!userId) return null;
+
+    const primary = await this.db.query<{ tenant_id: string }>`
+      SELECT tenant_id::text as tenant_id
+      FROM app.user_tenants
+      WHERE user_id = ${userId}::uuid
+        AND is_primary = true
+        AND status = 'active'
+      LIMIT 1
+    `;
+
+    const tenantId = primary[0]?.tenant_id ?? null;
+
+    // Persist fallback onto session so future requests can resolve from session alone
+    if (tenantId) {
+      await this.db.query`
+        UPDATE app."session"
+        SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+        WHERE id = ${sessionId}
+      `;
+    }
 
     // Cache the result
     if (this.cache && tenantId) {
@@ -237,7 +265,7 @@ export class AuthService {
   /**
    * Switch session to a different tenant
    */
-  async switchTenant(userId: string, tenantId: string): Promise<boolean> {
+  async switchTenant(userId: string, sessionId: string, tenantId: string): Promise<boolean> {
     // Verify user has access to this tenant
     const result = await this.db.query<{ has_access: boolean }>`
       SELECT EXISTS (
@@ -248,7 +276,21 @@ export class AuthService {
       ) as has_access
     `;
 
-    return result[0]?.has_access ?? false;
+    const hasAccess = result[0]?.has_access ?? false;
+    if (!hasAccess) return false;
+
+    // Persist selection onto Better Auth session
+    await this.db.query`
+      UPDATE app."session"
+      SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+      WHERE id = ${sessionId}
+    `;
+
+    if (this.cache) {
+      await this.cache.set(`session:tenant:${sessionId}`, tenantId, 300);
+    }
+
+    return true;
   }
 }
 
@@ -259,18 +301,40 @@ export function authPlugin(options: AuthPluginOptions = {}) {
   const auth = getBetterAuth();
 
   return new Elysia({ name: "auth" })
-    .derive(async (ctx) => {
+    .derive({ as: "global" }, async (ctx) => {
       const { request } = ctx;
       const db = (ctx as any).db as DatabaseClient;
       const cache = (ctx as any).cache as CacheClient | undefined;
 
-      try {
-        // Get session from Better Auth
-        const sessionResult = await auth.api.getSession({
-          headers: request.headers,
-        });
+      const isResponseLike = (value: unknown): value is Response => {
+        if (!value || typeof value !== "object") return false;
+        const anyVal = value as any;
+        return (
+          typeof anyVal.status === "number" &&
+          typeof anyVal.json === "function" &&
+          typeof anyVal.text === "function" &&
+          typeof anyVal.headers?.get === "function"
+        );
+      };
 
-        if (!sessionResult || !sessionResult.session || !sessionResult.user) {
+      try {
+        // Resolve session using the same code path as the public /api/auth/get-session
+        // endpoint. Cloning from the original request keeps Cookie handling consistent.
+        const url = new URL(request.url);
+        url.pathname = "/api/auth/get-session";
+        url.search = "";
+
+        const cookieHeader = request.headers.get("cookie") ?? "";
+        const handlerRes = await auth.handler(
+          new Request(url.toString(), {
+            method: "GET",
+            headers: cookieHeader ? { Cookie: cookieHeader } : undefined,
+          })
+        );
+
+        const sessionData: any = handlerRes.status === 200 ? await handlerRes.json() : null;
+
+        if (!sessionData || !sessionData.session || !sessionData.user) {
           return {
             user: null,
             session: null,
@@ -279,7 +343,7 @@ export function authPlugin(options: AuthPluginOptions = {}) {
           };
         }
 
-        const { session, user } = sessionResult;
+        const { session, user } = sessionData;
 
         return {
           user: user as User,

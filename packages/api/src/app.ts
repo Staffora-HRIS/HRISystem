@@ -14,6 +14,7 @@ import {
   dbPlugin,
   cachePlugin,
   errorsPlugin,
+  rateLimitPlugin,
   tenantPlugin,
   authPlugin,
   rbacPlugin,
@@ -33,6 +34,10 @@ import { talentRoutes } from "./modules/talent";
 import { lmsRoutes } from "./modules/lms";
 import { casesRoutes } from "./modules/cases";
 import { onboardingRoutes } from "./modules/onboarding";
+import { tenantRoutes } from "./modules/tenant";
+import { securityRoutes } from "./modules/security";
+import { dashboardRoutes } from "./modules/dashboard";
+import { systemRoutes } from "./modules/system";
 
 /**
  * Environment configuration with validation
@@ -45,7 +50,6 @@ const config = {
     "http://localhost:5173",
   ],
 } as const;
-
 
 /**
  * Application start time for uptime calculation
@@ -108,6 +112,8 @@ export const app = new Elysia()
   .use(errorsPlugin())
   .use(dbPlugin())
   .use(cachePlugin())
+
+  .use(rateLimitPlugin())
 
   // Better Auth routes (mounted before other auth for /api/auth/* endpoints)
   .use(betterAuthPlugin())
@@ -329,8 +335,8 @@ export const app = new Elysia()
   })
 
   // Auth, tenant, and security plugins
-  .use(tenantPlugin({ optional: true }))
   .use(authPlugin())
+  .use(tenantPlugin({ optional: true }))
   .use(rbacPlugin())
   .use(idempotencyPlugin())
   .use(auditPlugin())
@@ -340,6 +346,12 @@ export const app = new Elysia()
     api
       // Auth routes (before other modules)
       .use(authRoutes)
+      // Tenant + Security (used by frontend hooks)
+      .use(tenantRoutes)
+      .use(securityRoutes)
+      // Dashboard + System
+      .use(dashboardRoutes)
+      .use(systemRoutes)
       // Core modules
       .use(hrRoutes)
       .use(timeRoutes)

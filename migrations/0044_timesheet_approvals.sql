@@ -433,7 +433,7 @@ COMMENT ON FUNCTION app.reject_timesheet_with_approval IS 'Rejects a timesheet a
 CREATE OR REPLACE FUNCTION app.lock_timesheet_with_approval(
     p_timesheet_id uuid,
     p_user_id uuid,
-    p_comment text DEFAULT 'Locked for payroll processing',
+    p_comment text DEFAULT 'Locked after finalization',
     p_ip_address varchar(45) DEFAULT NULL,
     p_user_agent text DEFAULT NULL
 )

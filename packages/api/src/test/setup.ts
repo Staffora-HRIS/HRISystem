@@ -7,21 +7,113 @@
  * - Transaction management for test isolation
  */
 
-import postgres, { type TransactionSql } from "postgres";
+import postgres from "postgres";
 import Redis from "ioredis";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
  const hasOwn = (obj: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(obj, key);
 
- function setEnvIfMissing(key: string, value: string): void {
+ type TransactionSql = any;
+
+function setEnvIfMissing(key: string, value: string): void {
   if (process.env[key] === undefined) process.env[key] = value;
- }
+}
 
- export async function ensureTestInfra(): Promise<void> {
+export async function ensureTestInfra(): Promise<void> {
   await preflight();
- }
+}
 
- async function loadDockerEnv(): Promise<void> {
+function getRepoRootDir(): string {
+  return path.resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function tryStartDockerComposeServices(): boolean {
+  const repoRoot = getRepoRootDir();
+  const composeFile = path.join("docker", "docker-compose.yml");
+
+  const cmd = [
+    "docker",
+    "compose",
+    "-f",
+    composeFile,
+    "up",
+    "-d",
+    "postgres",
+    "redis",
+  ];
+
+  try {
+    const proc = Bun.spawnSync(cmd, {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPostgresReady(timeoutMs = 30_000): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const db = postgres({
+      host: TEST_CONFIG.database.host,
+      port: TEST_CONFIG.database.port,
+      database: TEST_CONFIG.database.database,
+      username: TEST_CONFIG.database.adminUsername,
+      password: TEST_CONFIG.database.adminPassword,
+      max: 1,
+      idle_timeout: 2,
+      connect_timeout: 2,
+    });
+
+    try {
+      await db`SELECT 1`;
+      await db.end({ timeout: 2 }).catch(() => {});
+      return true;
+    } catch {
+      await db.end({ timeout: 2 }).catch(() => {});
+      await sleep(500);
+    }
+  }
+
+  return false;
+}
+
+async function waitForRedisReady(timeoutMs = 30_000): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const redis = new Redis({
+      host: TEST_CONFIG.redis.host,
+      port: TEST_CONFIG.redis.port,
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: true,
+      connectTimeout: 2000,
+      lazyConnect: true,
+    });
+
+    try {
+      await redis.connect();
+      await redis.ping();
+      redis.disconnect();
+      return true;
+    } catch {
+      redis.disconnect();
+      await sleep(500);
+    }
+  }
+
+  return false;
+}
+
+async function loadDockerEnv(): Promise<void> {
   // For local dev, we prefer docker/.env but it is gitignored.
   // This keeps test setup friction low while still allowing overrides.
   const dockerEnvPath = new URL("../../../../docker/.env", import.meta.url);
@@ -54,9 +146,9 @@ import Redis from "ioredis";
   } catch {
     // Ignore parsing errors; env vars can still be provided by the caller.
   }
- }
+}
 
- await loadDockerEnv();
+await loadDockerEnv();
 
 // =============================================================================
 // Configuration
@@ -82,12 +174,12 @@ export const TEST_CONFIG = {
   },
 };
 
- // If you use the repo's docker-compose defaults, align tests to them.
- setEnvIfMissing("TEST_DB_ADMIN_USER", "hris");
- setEnvIfMissing("TEST_DB_ADMIN_PASSWORD", "hris_dev_password");
- setEnvIfMissing("TEST_DB_USER", "hris_app");
- setEnvIfMissing("TEST_DB_PASSWORD", "hris_dev_password");
- setEnvIfMissing("TEST_DB_NAME", "hris");
+// If you use the repo's docker-compose defaults, align tests to them.
+setEnvIfMissing("TEST_DB_ADMIN_USER", "hris");
+setEnvIfMissing("TEST_DB_ADMIN_PASSWORD", "hris_dev_password");
+setEnvIfMissing("TEST_DB_USER", "hris_app");
+setEnvIfMissing("TEST_DB_PASSWORD", "hris_dev_password");
+setEnvIfMissing("TEST_DB_NAME", "hris");
 
 // =============================================================================
 // Database Client
@@ -96,37 +188,37 @@ export const TEST_CONFIG = {
 let testDb: ReturnType<typeof postgres> | null = null;
 let testRedis: Redis | null = null;
 
- let didPreflight = false;
- let infraAvailable = false;
- let infraError: string | null = null;
+let didPreflight = false;
+let infraAvailable = false;
+let infraError: string | null = null;
 
- /**
-  * Check if test infrastructure (database + Redis) is available
-  */
- export function isInfraAvailable(): boolean {
-   return infraAvailable;
- }
+/**
+ * Check if test infrastructure (database + Redis) is available
+ */
+export function isInfraAvailable(): boolean {
+  return infraAvailable;
+}
 
- /**
-  * Get the error message if infrastructure is not available
-  */
- export function getInfraError(): string | null {
-   return infraError;
- }
+/**
+ * Get the error message if infrastructure is not available
+ */
+export function getInfraError(): string | null {
+  return infraError;
+}
 
- /**
-  * Skip helper for tests that require infrastructure
-  * Use in beforeAll: if (skipIfNoInfra()) return;
-  */
- export function skipIfNoInfra(): boolean {
-   if (!infraAvailable) {
-     console.log("[SKIP] Test skipped - infrastructure not available");
-     return true;
-   }
-   return false;
- }
+/**
+ * Skip helper for tests that require infrastructure
+ * Use in beforeAll: if (skipIfNoInfra()) return;
+ */
+export function skipIfNoInfra(): boolean {
+  if (!infraAvailable) {
+    console.log("[SKIP] Test skipped - infrastructure not available");
+    return true;
+  }
+  return false;
+}
 
- async function preflight(): Promise<void> {
+async function preflight(): Promise<void> {
   if (didPreflight) return;
   didPreflight = true;
 
@@ -209,13 +301,29 @@ let testRedis: Redis | null = null;
         "$$;"
     );
   } catch (err) {
-    const host = TEST_CONFIG.database.host;
-    const port = TEST_CONFIG.database.port;
-    const name = TEST_CONFIG.database.database;
-    infraError = `[tests] Cannot connect to Postgres (host=${host} port=${port} db=${name}). Run 'bun run docker:up' and 'bun run migrate:up'.`;
-    infraAvailable = false;
-    await db.end({ timeout: 2 }).catch(() => {});
-    return;
+    const started = tryStartDockerComposeServices();
+    if (started) {
+      const ready = await waitForPostgresReady();
+      if (ready) {
+        try {
+          await db`SELECT 1`;
+        } catch {
+          // fall through to infraError
+        }
+      }
+    }
+
+    try {
+      await db`SELECT 1`;
+    } catch {
+      const host = TEST_CONFIG.database.host;
+      const port = TEST_CONFIG.database.port;
+      const name = TEST_CONFIG.database.database;
+      infraError = `[tests] Cannot connect to Postgres (host=${host} port=${port} db=${name}). Run 'bun run docker:up' and 'bun run migrate:up'.`;
+      infraAvailable = false;
+      await db.end({ timeout: 2 }).catch(() => {});
+      return;
+    }
   } finally {
     await db.end({ timeout: 2 }).catch(() => {});
   }
@@ -235,6 +343,22 @@ let testRedis: Redis | null = null;
     infraAvailable = true;
     infraError = null;
   } catch (err) {
+    const started = tryStartDockerComposeServices();
+    if (started) {
+      const ready = await waitForRedisReady();
+      if (ready) {
+        try {
+          await redis.connect();
+          await redis.ping();
+          infraAvailable = true;
+          infraError = null;
+          return;
+        } catch {
+          // fall through to infraError
+        }
+      }
+    }
+
     const host = TEST_CONFIG.redis.host;
     const port = TEST_CONFIG.redis.port;
     infraError = `[tests] Cannot connect to Redis (host=${host} port=${port}). Run 'bun run docker:up'.`;
@@ -242,7 +366,7 @@ let testRedis: Redis | null = null;
   } finally {
     redis.disconnect();
   }
- }
+}
 
 /**
  * Get or create test database connection
@@ -378,19 +502,19 @@ export async function createTestUser(
       ON CONFLICT (id) DO NOTHING
     `;
 
-    const roles = await tx<{ id: string }[]>`
+    const systemRoles = await tx<{ id: string }[]>`
       SELECT id FROM app.roles
-      WHERE tenant_id = ${tenantId}::uuid OR tenant_id IS NULL
-      ORDER BY tenant_id NULLS FIRST
+      WHERE tenant_id IS NULL AND name = 'super_admin'
       LIMIT 1
     `;
 
-    roleId = roles[0]?.id;
+    roleId = systemRoles[0]?.id;
     if (!roleId) {
-      roleId = crypto.randomUUID();
+      roleId = "a0000000-0000-0000-0000-000000000001";
       await tx`
-        INSERT INTO app.roles (id, tenant_id, name, description, is_system)
-        VALUES (${roleId}::uuid, ${tenantId}::uuid, 'Test Role', 'Test role', false)
+        INSERT INTO app.roles (id, tenant_id, name, description, is_system, permissions)
+        VALUES (${roleId}::uuid, NULL, 'super_admin', 'Platform super administrator (tests)', true, '{"*:*": true}'::jsonb)
+        ON CONFLICT (tenant_id, name) DO NOTHING
       `;
     }
 
@@ -444,14 +568,14 @@ export async function withSystemContext<T>(
   db: ReturnType<typeof postgres>,
   fn: (tx: TransactionSql) => Promise<T>
 ): Promise<T> {
-  return await db.begin(async (tx) => {
+  return await db.begin(async (tx: any) => {
     await tx`SELECT app.enable_system_context()`;
     try {
       return await fn(tx);
     } finally {
       await tx`SELECT app.disable_system_context()`;
     }
-  });
+  }) as unknown as T;
 }
 
 // =============================================================================
@@ -465,7 +589,7 @@ export async function withTestTransaction<T>(
   db: ReturnType<typeof postgres>,
   fn: (tx: TransactionSql) => Promise<T>
 ): Promise<T> {
-  return await db.begin(async (tx) => {
+  return (await db.begin(async (tx: any) => {
     try {
       const result = await fn(tx);
       // Rollback by throwing
@@ -481,7 +605,7 @@ export async function withTestTransaction<T>(
       return (e as { result: T }).result;
     }
     throw e;
-  });
+  })) as unknown as T;
 }
 
 // UUID validation regex

@@ -9,8 +9,25 @@ import type { Route } from "./+types/home";
 
 export async function loader({ request }: Route.LoaderArgs) {
   // Check if user is authenticated by looking for session cookie
-  const cookies = request.headers.get("Cookie") || "";
-  const hasSession = cookies.includes("session=");
+  const cookies = (() => {
+    for (const [key, value] of request.headers) {
+      if (key.toLowerCase() === "cookie") return value;
+    }
+    return "";
+  })();
+  const hasSessionToken = cookies.includes("hris.session_token=");
+  const hasSessionData = cookies.includes("hris.session_data=");
+  const hasLegacySession = cookies.includes("session=");
+  const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
+
+  if (process.env["NODE_ENV"] !== "production") {
+    console.log("[web][home] cookieCheck", {
+      hasSessionToken,
+      hasSessionData,
+      hasLegacySession,
+      cookieLength: cookies.length,
+    });
+  }
 
   if (hasSession) {
     throw redirect("/dashboard");

@@ -15,14 +15,33 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
     }
 
+    const userName = typeof user.name === "string" ? user.name : null;
+    const nameParts = userName ? userName.split(" ").filter(Boolean) : [];
+    const fallbackFirstName = nameParts[0] ?? null;
+    const fallbackLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
+
     try {
       // Get employee record for current user
       const [employee] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx) => {
         return tx`
-          SELECT e.*, p.title as position_title, o.name as org_unit_name
+          SELECT
+            e.*,
+            ep.first_name,
+            ep.last_name,
+            p.title as position_title,
+            o.name as org_unit_name
           FROM app.employees e
-          LEFT JOIN app.positions p ON p.id = e.position_id
-          LEFT JOIN app.org_units o ON o.id = e.org_unit_id
+          LEFT JOIN app.employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.tenant_id = e.tenant_id
+            AND ep.effective_to IS NULL
+          LEFT JOIN app.position_assignments pa
+            ON pa.employee_id = e.id
+            AND pa.tenant_id = e.tenant_id
+            AND pa.is_primary = true
+            AND pa.effective_to IS NULL
+          LEFT JOIN app.positions p ON p.id = pa.position_id
+          LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
           WHERE e.user_id = ${user.id}::uuid AND e.tenant_id = ${tenant.id}::uuid
           LIMIT 1
         `;
@@ -30,14 +49,24 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
 
       if (!employee) {
         return {
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: fallbackFirstName,
+            lastName: fallbackLastName,
+          },
           employee: null,
           tenant: { id: tenant.id, name: tenant.name },
         };
       }
 
       return {
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: employee.firstName ?? fallbackFirstName,
+          lastName: employee.lastName ?? fallbackLastName,
+        },
         employee: {
           id: employee.id,
           employeeNumber: employee.employeeNumber,
@@ -68,16 +97,39 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       const team = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx) => {
         return tx`
-          SELECT e.id, e.employee_number, e.first_name, e.last_name, 
-                 e.status, p.title as position_title
-          FROM app.employees e
-          LEFT JOIN app.positions p ON p.id = e.position_id
-          WHERE e.manager_id = (
-            SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
+          WITH manager_employee AS (
+            SELECT id
+            FROM app.employees
+            WHERE user_id = ${user.id}::uuid
+              AND tenant_id = ${tenant.id}::uuid
+            LIMIT 1
           )
-          AND e.tenant_id = ${tenant.id}::uuid
-          AND e.status = 'active'
-          ORDER BY e.last_name, e.first_name
+          SELECT
+            e.id,
+            e.employee_number,
+            ep.first_name,
+            ep.last_name,
+            e.status,
+            p.title as position_title
+          FROM app.reporting_lines rl
+          INNER JOIN manager_employee me ON me.id = rl.manager_id
+          INNER JOIN app.employees e ON e.id = rl.employee_id
+          LEFT JOIN app.employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.tenant_id = e.tenant_id
+            AND ep.effective_to IS NULL
+          LEFT JOIN app.position_assignments pa
+            ON pa.employee_id = e.id
+            AND pa.tenant_id = e.tenant_id
+            AND pa.is_primary = true
+            AND pa.effective_to IS NULL
+          LEFT JOIN app.positions p ON p.id = pa.position_id
+          WHERE rl.tenant_id = ${tenant.id}::uuid
+            AND rl.effective_to IS NULL
+            AND rl.is_primary = true
+            AND e.tenant_id = ${tenant.id}::uuid
+            AND e.status = 'active'
+          ORDER BY ep.last_name, ep.first_name
         `;
       });
 
@@ -153,17 +205,40 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       // Get pending leave requests for approval
       const leaveApprovals = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx) => {
         return tx`
-          SELECT lr.id, lr.employee_id, e.first_name, e.last_name,
-                 lt.name as leave_type, lr.start_date, lr.end_date, lr.total_days,
-                 lr.reason, lr.created_at, 'leave_request' as approval_type
+          WITH manager_employee AS (
+            SELECT id
+            FROM app.employees
+            WHERE user_id = ${user.id}::uuid
+              AND tenant_id = ${tenant.id}::uuid
+            LIMIT 1
+          )
+          SELECT
+            lr.id,
+            lr.employee_id,
+            ep.first_name,
+            ep.last_name,
+            lt.name as leave_type,
+            lr.start_date,
+            lr.end_date,
+            lr.total_days,
+            lr.reason,
+            lr.created_at,
+            'leave_request' as approval_type
           FROM app.leave_requests lr
-          JOIN app.employees e ON e.id = lr.employee_id
-          JOIN app.leave_types lt ON lt.id = lr.leave_type_id
+          INNER JOIN app.employees e ON e.id = lr.employee_id
+          INNER JOIN app.reporting_lines rl
+            ON rl.employee_id = e.id
+            AND rl.tenant_id = e.tenant_id
+            AND rl.effective_to IS NULL
+            AND rl.is_primary = true
+          INNER JOIN manager_employee me ON me.id = rl.manager_id
+          LEFT JOIN app.employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.tenant_id = e.tenant_id
+            AND ep.effective_to IS NULL
+          INNER JOIN app.leave_types lt ON lt.id = lr.leave_type_id
           WHERE lr.status = 'pending'
             AND lr.tenant_id = ${tenant.id}::uuid
-            AND e.manager_id = (
-              SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
-            )
           ORDER BY lr.created_at ASC
           LIMIT 50
         `;
@@ -172,16 +247,37 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       // Get pending timesheet approvals
       const timesheetApprovals = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx) => {
         return tx`
-          SELECT ts.id, ts.employee_id, e.first_name, e.last_name,
-                 ts.period_start, ts.period_end, ts.total_regular_hours,
-                 ts.submitted_at, 'timesheet' as approval_type
+          WITH manager_employee AS (
+            SELECT id
+            FROM app.employees
+            WHERE user_id = ${user.id}::uuid
+              AND tenant_id = ${tenant.id}::uuid
+            LIMIT 1
+          )
+          SELECT
+            ts.id,
+            ts.employee_id,
+            ep.first_name,
+            ep.last_name,
+            ts.period_start,
+            ts.period_end,
+            ts.total_regular_hours,
+            ts.submitted_at,
+            'timesheet' as approval_type
           FROM app.timesheets ts
-          JOIN app.employees e ON e.id = ts.employee_id
+          INNER JOIN app.employees e ON e.id = ts.employee_id
+          INNER JOIN app.reporting_lines rl
+            ON rl.employee_id = e.id
+            AND rl.tenant_id = e.tenant_id
+            AND rl.effective_to IS NULL
+            AND rl.is_primary = true
+          INNER JOIN manager_employee me ON me.id = rl.manager_id
+          LEFT JOIN app.employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.tenant_id = e.tenant_id
+            AND ep.effective_to IS NULL
           WHERE ts.status = 'submitted'
             AND ts.tenant_id = ${tenant.id}::uuid
-            AND e.manager_id = (
-              SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
-            )
           ORDER BY ts.submitted_at ASC
           LIMIT 50
         `;
@@ -249,16 +345,28 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
         return tx`
           SELECT COUNT(*) as count FROM app.leave_requests lr
           JOIN app.employees e ON e.id = lr.employee_id
-          WHERE lr.status = 'pending' AND lr.tenant_id = ${tenant.id}::uuid
-            AND e.manager_id = (SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid)
+          JOIN app.reporting_lines rl
+            ON rl.employee_id = e.id
+            AND rl.tenant_id = e.tenant_id
+            AND rl.effective_to IS NULL
+            AND rl.is_primary = true
+          WHERE lr.status = 'pending'
+            AND lr.tenant_id = ${tenant.id}::uuid
+            AND rl.manager_id = (SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid)
         `;
       });
 
       const [teamCount] = await db.withTransaction(ctx, async (tx) => {
         return tx`
-          SELECT COUNT(*) as count FROM app.employees
-          WHERE manager_id = (SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid)
-            AND tenant_id = ${tenant.id}::uuid AND status = 'active'
+          SELECT COUNT(*) as count
+          FROM app.reporting_lines rl
+          JOIN app.employees e ON e.id = rl.employee_id
+          WHERE rl.tenant_id = ${tenant.id}::uuid
+            AND rl.effective_to IS NULL
+            AND rl.is_primary = true
+            AND rl.manager_id = (SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid)
+            AND e.tenant_id = ${tenant.id}::uuid
+            AND e.status = 'active'
         `;
       });
 

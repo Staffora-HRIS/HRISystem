@@ -111,8 +111,6 @@ export interface TenantFeatures {
   timeAttendanceEnabled: boolean;
   /** Enable absence management module */
   absenceManagementEnabled: boolean;
-  /** Enable payroll module */
-  payrollEnabled: boolean;
   /** Enable performance management module */
   performanceEnabled: boolean;
   /** Enable learning management module */
@@ -185,8 +183,6 @@ export interface TenantIntegrationSettings {
   sso?: SsoConfiguration;
   /** HRIS integrations */
   hrisIntegrations?: string[];
-  /** Payroll integrations */
-  payrollIntegrations?: string[];
   /** Communication integrations (Slack, Teams, etc.) */
   communicationIntegrations?: string[];
 }
