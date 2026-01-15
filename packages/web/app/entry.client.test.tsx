@@ -7,9 +7,16 @@ vi.mock("react-dom/client", () => ({
   hydrateRoot: hydrateRootMock,
 }));
 
-vi.mock("./lib/hydration", () => ({
-  sanitizeDocumentForReactHydration: sanitizeDocumentForReactHydrationMock,
-}));
+vi.mock("./lib/hydration", async () => {
+  const actual = await vi.importActual<typeof import("./lib/hydration")>(
+    "./lib/hydration"
+  );
+
+  return {
+    ...actual,
+    sanitizeDocumentForReactHydration: sanitizeDocumentForReactHydrationMock,
+  };
+});
 
 vi.mock("react-router/dom", () => ({
   HydratedRouter: () => null,

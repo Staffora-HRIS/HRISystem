@@ -106,7 +106,7 @@ function mapErrorToStatus(code: string): number {
 /**
  * Create HR routes plugin
  */
-export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
+export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
   // ===========================================================================
   // Plugin Setup - Service Instantiation
   // ===========================================================================
@@ -144,7 +144,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       };
     },
     {
-      beforeHandle: [requirePermission("org_units", "read")],
+      beforeHandle: [requirePermission("org", "read")],
       query: t.Composite([
         t.Partial(OrgUnitFiltersSchema),
         t.Partial(PaginationQuerySchema),
@@ -178,7 +178,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return result.data;
     },
     {
-      beforeHandle: [requirePermission("org_units", "read")],
+      beforeHandle: [requirePermission("org", "read")],
       query: t.Object({
         root_id: t.Optional(UuidSchema),
       }),
@@ -211,7 +211,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return result.data;
     },
     {
-      beforeHandle: [requirePermission("org_units", "read")],
+      beforeHandle: [requirePermission("org", "read")],
       params: IdParamsSchema,
       response: {
         200: OrgUnitResponseSchema,
@@ -231,7 +231,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
   .post(
     "/org-units",
     async (ctx) => {
-      const { hrService, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { hrService, body, headers, tenantContext, audit, requestId, error, set } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
       const result = await hrService.createOrgUnit(
@@ -256,14 +256,15 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
         });
       }
 
+      set.status = 201;
       return result.data;
     },
     {
-      beforeHandle: [requirePermission("org_units", "write")],
+      beforeHandle: [requirePermission("org", "write")],
       body: CreateOrgUnitSchema,
       headers: OptionalIdempotencyHeaderSchema,
       response: {
-        200: OrgUnitResponseSchema,
+        201: OrgUnitResponseSchema,
         400: ErrorResponseSchema,
         409: ErrorResponseSchema,
         500: ErrorResponseSchema,
@@ -315,7 +316,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return result.data;
     },
     {
-      beforeHandle: [requirePermission("org_units", "write")],
+      beforeHandle: [requirePermission("org", "write")],
       params: IdParamsSchema,
       body: UpdateOrgUnitSchema,
       headers: OptionalIdempotencyHeaderSchema,
@@ -366,12 +367,11 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return { success: true as const, message: "Org unit deleted successfully" };
     },
     {
-      beforeHandle: [requirePermission("org_units", "delete")],
+      beforeHandle: [requirePermission("org", "write")],
       params: IdParamsSchema,
       headers: OptionalIdempotencyHeaderSchema,
       response: {
         200: DeleteSuccessSchema,
-        400: ErrorResponseSchema,
         404: ErrorResponseSchema,
         500: ErrorResponseSchema,
       },
@@ -598,12 +598,11 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return { success: true as const, message: "Position deleted successfully" };
     },
     {
-      beforeHandle: [requirePermission("positions", "delete")],
+      beforeHandle: [requirePermission("positions", "write")],
       params: IdParamsSchema,
       headers: OptionalIdempotencyHeaderSchema,
       response: {
         200: DeleteSuccessSchema,
-        400: ErrorResponseSchema,
         404: ErrorResponseSchema,
         500: ErrorResponseSchema,
       },
@@ -1012,7 +1011,7 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       return result.data;
     },
     {
-      beforeHandle: [requirePermission("employees:compensation", "write")],
+      beforeHandle: [requirePermission("compensation", "write")],
       params: IdParamsSchema,
       body: UpdateEmployeeCompensationSchema,
       headers: OptionalIdempotencyHeaderSchema,
@@ -1249,15 +1248,12 @@ export const hrRoutes = new Elysia({ prefix: "/api/v1/hr", name: "hr-routes" })
       };
     },
     {
-      beforeHandle: [requirePermission("employees:history", "read") as any],
+      beforeHandle: [requirePermission("employees", "read") as any],
       params: t.Object({
         id: UuidSchema,
         dimension: HistoryDimensionSchema,
       }),
-      query: t.Object({
-        from: t.Optional(DateSchema),
-        to: t.Optional(DateSchema),
-      }),
+      query: t.Partial(PaginationQuerySchema),
       response: {
         200: EmployeeHistoryResponseSchema,
         400: ErrorResponseSchema,

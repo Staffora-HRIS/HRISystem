@@ -303,7 +303,25 @@ export class IdempotencyService {
   ): Promise<void> {
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
     const responseBody = JSON.stringify(response.body);
-    const responseHeaders = JSON.stringify(response.headers);
+    const responseHeadersJson = JSON.stringify(response.headers);
+
+    const existing = await this.db.withSystemContext(async (tx) => {
+      return await tx<Array<{ id: string; requestHash: string }>>`
+        SELECT id::text as id, request_hash as "requestHash"
+        FROM app.idempotency_keys
+        WHERE tenant_id = ${tenantId}::uuid
+          AND user_id = ${userId}::uuid
+          AND route_key = ${routeKey}
+          AND idempotency_key = ${idempotencyKey}
+        LIMIT 1
+      `;
+    });
+
+    const anyExisting = (existing[0] ?? null) as any;
+    const requestHash =
+      (anyExisting && typeof anyExisting.requestHash === "string" && anyExisting.requestHash) ||
+      (anyExisting && typeof anyExisting.request_hash === "string" && anyExisting.request_hash) ||
+      "";
 
     await this.db.withSystemContext(async (tx) => {
       await tx`
@@ -311,7 +329,7 @@ export class IdempotencyService {
         SET
           response_status = ${response.status},
           response_body = ${responseBody}::jsonb,
-          response_headers = ${responseHeaders}::jsonb,
+          response_headers = ${responseHeadersJson}::jsonb,
           processing = false,
           processing_started_at = NULL,
           expires_at = ${expiresAt}
@@ -325,12 +343,12 @@ export class IdempotencyService {
     // Update cache
     const cacheKey = this.getCacheKey(tenantId, userId, routeKey, idempotencyKey);
     const record: IdempotencyRecord = {
-      id: crypto.randomUUID(),
+      id: existing[0]?.id ?? crypto.randomUUID(),
       tenantId,
       userId,
       routeKey,
       idempotencyKey,
-      requestHash: "",
+      requestHash,
       responseStatus: response.status,
       responseBody,
       responseHeaders: response.headers,
@@ -414,6 +432,7 @@ const DEFAULT_SKIP_ROUTES = [
   /^\/ready/,
   /^\/live/,
   /^\/docs/,
+  /^\/api\/auth(?:\/|$)/,
   /^\/api\/v1\/auth\//,
 ];
 
@@ -450,7 +469,7 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
 
   return new Elysia({ name: "idempotency" })
     // Idempotency service
-    .derive((ctx) => {
+    .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
       return {
         idempotencyService: new IdempotencyService(db, cache),
@@ -459,6 +478,7 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
 
     // Check idempotency on mutating requests
     .derive(
+      { as: "global" },
       async (ctx) => {
         const {
           request,
@@ -468,10 +488,17 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
           user,
           set,
         } = ctx as any;
+
+        let requestPath = typeof path === "string" ? path : "";
+        try {
+          requestPath = new URL(request.url).pathname;
+        } catch {
+          // ignore
+        }
         // Default context for non-mutating requests
         const defaultContext: IdempotencyContext = {
           idempotencyKey: null,
-          routeKey: `${request.method}:${path}`,
+          routeKey: `${request.method}:${requestPath}`,
           isReplay: false,
           cachedResponse: null,
         };
@@ -482,7 +509,7 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
         }
 
         // Skip for certain routes
-        const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(path));
+        const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(requestPath));
         if (shouldSkip) {
           return { idempotency: defaultContext };
         }
@@ -513,19 +540,57 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
           );
         }
 
-        const routeKey = `${request.method}:${path}`;
+        const routeKey = `${request.method}:${requestPath}`;
 
-        // Clone and read body for hashing
-        let bodyText = "";
-        try {
-          const cloned = request.clone();
-          bodyText = await cloned.text();
-        } catch {
-          // No body
+        const isPlainObject = (value: any): value is Record<string, unknown> => {
+          if (!value || typeof value !== "object") return false;
+          if (Array.isArray(value)) return false;
+          if (value instanceof Date) return false;
+          const proto = Object.getPrototypeOf(value);
+          return proto === Object.prototype || proto === null;
+        };
+
+        const canonicalize = (value: any): any => {
+          if (Array.isArray(value)) {
+            return value.map(canonicalize);
+          }
+
+          if (isPlainObject(value)) {
+            const out: Record<string, unknown> = {};
+            for (const key of Object.keys(value).sort()) {
+              out[key] = canonicalize(value[key]);
+            }
+            return out;
+          }
+
+          return value;
+        };
+
+        let bodyForHash: unknown = null;
+
+        if (!request.bodyUsed) {
+          try {
+            const raw = await request.clone().text();
+            if (raw) {
+              try {
+                bodyForHash = canonicalize(JSON.parse(raw));
+              } catch {
+                bodyForHash = raw;
+              }
+            }
+          } catch {
+            // ignore
+          }
         }
-        const requestHash = idempotencyService.hashRequest(
-          bodyText ? JSON.parse(bodyText) : null
-        );
+
+        if (bodyForHash === null) {
+          const parsedBody = (ctx as any).body;
+          if (parsedBody !== undefined) {
+            bodyForHash = canonicalize(parsedBody);
+          }
+        }
+
+        const requestHash = idempotencyService.hashRequest(bodyForHash);
 
         // Check if key has been used
         const checkResult = await idempotencyService.check(
@@ -584,49 +649,84 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
       }
     )
 
-    // Store response after successful mutation
-    .onAfterResponse(
-      async (ctx) => {
-        const {
-          response,
-          set,
-          idempotency,
-          idempotencyService,
-          tenantId,
-          user,
-        } = ctx as any;
-        // Only store for actual processing (not replays)
-        if (!idempotency?.idempotencyKey || idempotency.isReplay) {
-          return;
+    .onBeforeHandle({ as: "global" }, async (ctx) => {
+      const { idempotency, set } = ctx as any;
+      if (idempotency?.isReplay && idempotency.cachedResponse) {
+        set.status = idempotency.cachedResponse.status;
+        if (idempotency.cachedResponse.headers) {
+          for (const [key, value] of Object.entries(idempotency.cachedResponse.headers)) {
+            set.headers[key] = value;
+          }
         }
-
-        if (!user || !tenantId) {
-          return;
-        }
-
-        // Store the response
-        try {
-          await idempotencyService.complete(
-            tenantId,
-            user.id,
-            idempotency.routeKey,
-            idempotency.idempotencyKey,
-            {
-              status: set.status as number ?? 200,
-              body: response,
-              headers: {},
-            },
-            ttlHours
-          );
-        } catch (error) {
-          // Log but don't fail the request
-          console.error("[Idempotency] Failed to store response:", error);
-        }
+        return idempotency.cachedResponse.body;
       }
-    )
+    })
+
+    // Store response after successful mutation
+    .onAfterHandle({ as: "global" }, async (ctx) => {
+      const { set, idempotency, idempotencyService, tenantId, user } = ctx as any;
+      const response = (ctx as any).responseValue;
+
+      // Only store for actual processing (not replays)
+      if (!idempotency?.idempotencyKey || idempotency.isReplay) {
+        return;
+      }
+
+      if (!user || !tenantId) {
+        return;
+      }
+
+      // Store the response
+      try {
+        const isResponseLike = (value: unknown): value is Response => {
+          if (!value || typeof value !== "object") return false;
+          const anyVal = value as any;
+          return (
+            typeof anyVal.status === "number" &&
+            typeof anyVal.headers?.get === "function" &&
+            typeof anyVal.clone === "function"
+          );
+        };
+
+        const status = typeof set?.status === "number" ? set.status : 200;
+        if (status >= 400) {
+          return;
+        }
+
+        const normalizedBody =
+          response === undefined || isResponseLike(response) ? null : response;
+
+        const normalizedHeaders: Record<string, string> = {};
+        try {
+          if (set?.headers) {
+            for (const [key, value] of Object.entries(set.headers)) {
+              if (typeof value === "string") normalizedHeaders[key] = value;
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        await idempotencyService.complete(
+          tenantId,
+          user.id,
+          idempotency.routeKey,
+          idempotency.idempotencyKey,
+          {
+            status,
+            body: normalizedBody,
+            headers: normalizedHeaders,
+          },
+          ttlHours
+        );
+      } catch (error) {
+        // Log but don't fail the request
+        console.error("[Idempotency] Failed to store response:", error);
+      }
+    })
 
     // Release lock on error
-    .onError(async (ctx) => {
+    .onError({ as: "global" }, async (ctx) => {
       const { error, idempotency, idempotencyService, tenantId, user } = ctx as any;
       if (!idempotency?.idempotencyKey || idempotency.isReplay) {
         return;

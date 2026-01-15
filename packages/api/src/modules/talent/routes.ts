@@ -168,7 +168,7 @@ function mapErrorToStatus(code: string): number {
 // Talent Routes
 // =============================================================================
 
-export const talentRoutes = new Elysia({ prefix: "/api/v1/talent", name: "talent-routes" })
+export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes" })
 
   // ===========================================================================
   // Plugin Setup - Derive tenant context

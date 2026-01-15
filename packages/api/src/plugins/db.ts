@@ -205,36 +205,39 @@ export class DatabaseClient {
   ): Promise<T> {
     const { isolationLevel, accessMode } = options;
 
-    return (await this.sql.begin(
-      isolationLevel || "read committed",
-      async (tx) => {
-        // Set transaction options if specified
-        if (accessMode) {
-          await tx`SET TRANSACTION ${this.sql(accessMode)}`;
-        }
-
-        // Set tenant context for RLS
-        await tx`SELECT app.set_tenant_context(${context.tenantId}::uuid, ${context.userId || null}::uuid)`;
-
-        try {
-          // Execute the callback
-          const result = await callback(tx);
-
-          // Clear context
-          await tx`SELECT app.clear_tenant_context()`;
-
-          return result;
-        } catch (error) {
-          // Clear context even on error (for logging purposes)
-          try {
-            await tx`SELECT app.clear_tenant_context()`;
-          } catch {
-            // Ignore errors during cleanup
-          }
-          throw error;
-        }
+    return (await this.sql.begin(async (tx) => {
+      if (!context || typeof (context as any).tenantId !== "string" || !(context as any).tenantId) {
+        throw new Error("Tenant context required for transaction");
       }
-    )) as T;
+
+      if (isolationLevel) {
+        await tx.unsafe(
+          `SET TRANSACTION ISOLATION LEVEL ${isolationLevel.toUpperCase()}`
+        );
+      }
+
+      if (accessMode) {
+        await tx.unsafe(`SET TRANSACTION ${accessMode.toUpperCase()}`);
+      }
+
+      // Set tenant context for RLS
+      await tx`SELECT app.set_tenant_context(${context.tenantId}::uuid, ${context.userId || null}::uuid)`;
+
+      try {
+        const result = await callback(tx);
+
+        await tx`SELECT app.clear_tenant_context()`;
+
+        return result;
+      } catch (error) {
+        try {
+          await tx`SELECT app.clear_tenant_context()`;
+        } catch {
+          // Ignore errors during cleanup
+        }
+        throw error;
+      }
+    })) as T;
   }
 
   /**

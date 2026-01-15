@@ -34,12 +34,12 @@ export default function ManagerPerformancePage() {
 
   const { data: goalsData } = useQuery({
     queryKey: ["team-goals"],
-    queryFn: () => api.get<{ goals: Goal[]; count: number }>("/api/v1/talent/goals"),
+    queryFn: () => api.get<{ goals: Goal[]; count: number }>("/talent/goals"),
   });
 
   const { data: reviewsData } = useQuery({
     queryKey: ["team-reviews"],
-    queryFn: () => api.get<{ reviews: Review[]; count: number }>("/api/v1/talent/reviews"),
+    queryFn: () => api.get<{ reviews: Review[]; count: number }>("/talent/reviews"),
   });
 
   const goals = goalsData?.goals || [];
@@ -152,19 +152,12 @@ export default function ManagerPerformancePage() {
                             <span>Progress</span>
                             <span>{goal.progress}%</span>
                           </div>
-                          <div 
-                            className="w-full bg-gray-200 rounded-full h-2 overflow-hidden"
-                            role="progressbar"
+                          <progress
                             aria-label="Goal progress"
-                            aria-valuenow={goal.progress}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                          >
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all"
-                              style={{ width: `${goal.progress}%` }}
-                            />
-                          </div>
+                            value={goal.progress}
+                            max={100}
+                            className="h-2 w-full overflow-hidden rounded-full bg-gray-200 [&::-webkit-progress-bar]:bg-gray-200 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"
+                          />
                         </div>
                       </div>
                       <Button variant="outline" size="sm">View</Button>

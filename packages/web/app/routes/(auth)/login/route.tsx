@@ -11,7 +11,7 @@ import { Card, CardHeader, CardBody } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Spinner } from "../../../components/ui/spinner";
-import { signInWithEmail, useSession } from "../../../lib/better-auth";
+import { signInWithEmail, useSession, getCurrentSession } from "../../../lib/better-auth";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -32,12 +32,29 @@ export default function LoginPage() {
     }
   }, [session, isSessionLoading, navigate, redirectTo]);
 
+  const waitForSession = async () => {
+    for (let i = 0; i < 10; i++) {
+      const result = await getCurrentSession();
+      if (result.data?.session) return;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    throw new Error("Session not established. Please try again.");
+  };
+
   const loginMutation = useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
       const result = await signInWithEmail(data.email, data.password);
       if (result.error) {
         throw new Error(result.error.message || "Login failed");
       }
+
+      // If Better Auth indicates a redirect (e.g. MFA), don't wait for session here.
+      // Otherwise, wait until the session is actually readable before redirecting
+      // to avoid the first /dashboard request being unauthenticated.
+      if (!result.data?.redirect) {
+        await waitForSession();
+      }
+
       return result.data;
     },
     onSuccess: (data) => {
@@ -45,8 +62,6 @@ export default function LoginPage() {
       if (data?.redirect) {
         navigate(data.url || "/mfa", { state: { from: redirectTo } });
       } else {
-        // Use hard redirect to ensure session cookie is read fresh
-        // React Router navigate doesn't always trigger useSession to refetch
         window.location.href = redirectTo;
       }
     },

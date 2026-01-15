@@ -24,7 +24,6 @@ export type ReportCategory =
   | "hr"
   | "time_attendance"
   | "absence"
-  | "payroll"
   | "performance"
   | "recruiting"
   | "learning"

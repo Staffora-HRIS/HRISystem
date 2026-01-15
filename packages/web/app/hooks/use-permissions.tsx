@@ -45,11 +45,25 @@ export function usePermissions() {
   const roles = useMemo(() => data?.roles ?? [], [data?.roles]);
 
   /**
-   * Check if user has a specific permission
+   * Check if user has a specific permission key.
+   * Supports wildcards returned by the backend ("*", "resource:*", "*:*").
    */
   const hasPermission = useCallback(
     (permission: string): boolean => {
-      return permissions.includes(permission);
+      if (permissions.includes("*")) return true;
+      if (permissions.includes("*:*")) return true;
+      if (permissions.includes(permission)) return true;
+
+      const parts = permission.split(":");
+      if (parts.length >= 2) {
+        const resource = parts.slice(0, -1).join(":");
+        const action = parts[parts.length - 1];
+
+        if (permissions.includes(`${resource}:*`)) return true;
+        if (permissions.includes(`*:${action}`)) return true;
+      }
+
+      return false;
     },
     [permissions]
   );
@@ -59,16 +73,9 @@ export function usePermissions() {
    */
   const can = useCallback(
     (resource: string, action: string): boolean => {
-      const permission = `${resource}:${action}`;
-      // Check exact match
-      if (permissions.includes(permission)) return true;
-      // Check wildcard (resource:*)
-      if (permissions.includes(`${resource}:*`)) return true;
-      // Check super wildcard (*)
-      if (permissions.includes("*")) return true;
-      return false;
+      return hasPermission(`${resource}:${action}`);
     },
-    [permissions]
+    [hasPermission]
   );
 
   /**
@@ -115,14 +122,24 @@ export function usePermissions() {
    * Check if user is admin
    */
   const isAdmin = useMemo(() => {
-    return hasRole("admin") || hasRole("super_admin") || hasPermission("*");
+    return (
+      hasRole("super_admin") ||
+      hasRole("tenant_admin") ||
+      hasRole("hr_admin") ||
+      hasPermission("*")
+    );
   }, [hasRole, hasPermission]);
 
   /**
    * Check if user is manager
    */
   const isManager = useMemo(() => {
-    return hasRole("manager") || hasRole("admin") || hasRole("super_admin");
+    return (
+      hasRole("manager") ||
+      hasRole("hr_admin") ||
+      hasRole("tenant_admin") ||
+      hasRole("super_admin")
+    );
   }, [hasRole]);
 
   return {
@@ -170,44 +187,44 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/me/cases": [],
 
   // Manager portal - requires manager role or specific permissions
-  "/manager": ["manager:*"],
-  "/manager/team": ["manager:team:read"],
-  "/manager/approvals": ["manager:approvals:read"],
-  "/manager/schedules": ["manager:schedules:read"],
-  "/manager/performance": ["manager:performance:read"],
+  "/manager": ["team:read"],
+  "/manager/team": ["team:read"],
+  "/manager/approvals": ["time:approve", "absence:approve"],
+  "/manager/schedules": ["time:read"],
+  "/manager/performance": ["reports:read"],
 
   // Admin - HR
-  "/admin/dashboard": ["admin:dashboard:read"],
-  "/admin/hr": ["hr:*"],
-  "/admin/hr/employees": ["hr:employees:read"],
-  "/admin/hr/positions": ["hr:positions:read"],
-  "/admin/hr/departments": ["hr:departments:read"],
-  "/admin/hr/organization": ["hr:organization:read"],
+  "/admin/dashboard": ["dashboards:read"],
+  "/admin/hr": ["employees:read", "org:read", "positions:read"],
+  "/admin/hr/employees": ["employees:read"],
+  "/admin/hr/positions": ["positions:read"],
+  "/admin/hr/departments": ["org:read"],
+  "/admin/hr/organization": ["org:read"],
 
   // Admin - Workflows
-  "/admin/workflows": ["workflows:*"],
-  "/admin/workflows/builder": ["workflows:builder:read"],
-  "/admin/workflows/templates": ["workflows:templates:read"],
+  "/admin/workflows": ["workflows:read"],
+  "/admin/workflows/builder": ["workflows:write"],
+  "/admin/workflows/templates": ["workflows:read"],
 
   // Admin - Security
-  "/admin/security": ["security:*"],
-  "/admin/security/users": ["security:users:read"],
-  "/admin/security/roles": ["security:roles:read"],
-  "/admin/security/permissions": ["security:permissions:read"],
-  "/admin/security/audit-log": ["security:audit-log:read"],
+  "/admin/security": ["users:read", "roles:read", "audit:read"],
+  "/admin/security/users": ["users:read"],
+  "/admin/security/roles": ["roles:read"],
+  "/admin/security/permissions": ["roles:read"],
+  "/admin/security/audit-log": ["audit:read"],
 
   // Admin - Reports
-  "/admin/reports": ["reports:*"],
+  "/admin/reports": ["reports:read"],
 
   // Admin - LMS
-  "/admin/lms": ["lms:admin:*"],
-  "/admin/lms/courses": ["lms:courses:read"],
-  "/admin/lms/assignments": ["lms:assignments:read"],
+  "/admin/lms": ["courses:read"],
+  "/admin/lms/courses": ["courses:read"],
+  "/admin/lms/assignments": ["learning:assign"],
 
   // Admin - Settings
-  "/admin/settings": ["admin:settings:*"],
-  "/admin/settings/tenant": ["admin:settings:tenant:read"],
-  "/admin/settings/integrations": ["admin:settings:integrations:read"],
+  "/admin/settings": ["settings:read"],
+  "/admin/settings/tenant": ["tenant:read"],
+  "/admin/settings/integrations": ["settings:read"],
 };
 
 /**

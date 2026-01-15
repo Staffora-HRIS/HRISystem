@@ -48,7 +48,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "admin:dashboard:read",
+        permission: "dashboards:read",
       },
     ],
   },
@@ -68,7 +68,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "hr:employees:read",
+        permission: "employees:read",
       },
       {
         name: "Positions",
@@ -83,7 +83,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "hr:positions:read",
+        permission: "positions:read",
       },
       {
         name: "Departments",
@@ -98,7 +98,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "hr:departments:read",
+        permission: "org:read",
       },
       {
         name: "Organization",
@@ -113,7 +113,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "hr:organization:read",
+        permission: "org:read",
       },
     ],
   },
@@ -133,7 +133,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "workflows:builder:read",
+        permission: "workflows:write",
       },
       {
         name: "Templates",
@@ -148,7 +148,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "workflows:templates:read",
+        permission: "workflows:read",
       },
     ],
   },
@@ -168,7 +168,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "security:users:read",
+        permission: "users:read",
       },
       {
         name: "Roles",
@@ -183,7 +183,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "security:roles:read",
+        permission: "roles:read",
       },
       {
         name: "Permissions",
@@ -198,7 +198,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "security:permissions:read",
+        permission: "roles:read",
       },
       {
         name: "Audit Log",
@@ -213,7 +213,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "security:audit-log:read",
+        permission: "audit:read",
       },
     ],
   },
@@ -233,7 +233,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "reports:*",
+        permission: "reports:read",
       },
     ],
   },
@@ -253,7 +253,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "lms:courses:read",
+        permission: "courses:read",
       },
       {
         name: "Assignments",
@@ -268,7 +268,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "lms:assignments:read",
+        permission: "learning:assign",
       },
     ],
   },
@@ -294,7 +294,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "admin:settings:tenant:read",
+        permission: "tenant:read",
       },
       {
         name: "Integrations",
@@ -309,7 +309,7 @@ const adminNavGroups: NavGroup[] = [
             />
           </svg>
         ),
-        permission: "admin:settings:integrations:read",
+        permission: "settings:read",
       },
     ],
   },

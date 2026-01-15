@@ -19,7 +19,6 @@ import type {
 export type CaseTypeCategory =
   | "hr_inquiry"
   | "benefits"
-  | "payroll"
   | "compliance"
   | "employee_relations"
   | "accommodation"

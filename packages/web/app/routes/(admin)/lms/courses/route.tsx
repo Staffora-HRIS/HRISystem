@@ -18,7 +18,7 @@ export default function CreateCoursePage() {
   const [contentUrl, setContentUrl] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post("/api/v1/lms/courses", data),
+    mutationFn: (data: Record<string, unknown>) => api.post("/lms/courses", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-courses"] });
       navigate("/admin/lms");
