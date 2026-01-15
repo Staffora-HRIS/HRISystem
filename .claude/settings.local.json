@@ -14,7 +14,10 @@
       "Bash(git push:*)",
       "Bash(bun run lint:*)",
       "Bash(bun test:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(bun run:*)"
     ]
   }
 }

@@ -1,0 +1,534 @@
+/**
+ * LMS Module - Service Layer
+ *
+ * Business logic for Learning Management System.
+ * Handles validation, domain rules, and outbox events.
+ */
+
+import { LMSRepository, type TenantContext, type PaginationOptions } from "./repository";
+import type {
+  CreateCourse,
+  UpdateCourse,
+  CourseResponse,
+  CreateEnrollment,
+  UpdateEnrollment,
+  EnrollmentResponse,
+} from "./schemas";
+
+export interface ServiceResult<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
+}
+
+export class LMSService {
+  constructor(
+    private repository: LMSRepository,
+    private db: any
+  ) {}
+
+  // ===========================================================================
+  // Course Operations
+  // ===========================================================================
+
+  async listCourses(
+    ctx: TenantContext,
+    filters: {
+      category?: string;
+      status?: string;
+      contentType?: string;
+      isRequired?: boolean;
+      search?: string;
+    },
+    pagination: PaginationOptions
+  ) {
+    return this.repository.listCourses(ctx, filters, pagination);
+  }
+
+  async getCourse(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<CourseResponse>> {
+    const course = await this.repository.getCourseById(ctx, id);
+
+    if (!course) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    return { success: true, data: course };
+  }
+
+  async createCourse(
+    ctx: TenantContext,
+    data: CreateCourse,
+    idempotencyKey?: string
+  ): Promise<ServiceResult<CourseResponse>> {
+    try {
+      const course = await this.repository.createCourse(ctx, data);
+
+      // Emit domain event for course creation
+      await this.emitDomainEvent(ctx, {
+        aggregateType: "course",
+        aggregateId: course.id,
+        eventType: "lms.course.created",
+        payload: { course, actor: ctx.userId },
+      });
+
+      return { success: true, data: course };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: "CREATE_FAILED",
+          message: error.message || "Failed to create course",
+        },
+      };
+    }
+  }
+
+  async updateCourse(
+    ctx: TenantContext,
+    id: string,
+    data: UpdateCourse,
+    idempotencyKey?: string
+  ): Promise<ServiceResult<CourseResponse>> {
+    const existing = await this.repository.getCourseById(ctx, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    try {
+      const course = await this.repository.updateCourse(ctx, id, data);
+
+      if (!course) {
+        return {
+          success: false,
+          error: {
+            code: "UPDATE_FAILED",
+            message: "Failed to update course",
+          },
+        };
+      }
+
+      // Emit domain event for course update
+      await this.emitDomainEvent(ctx, {
+        aggregateType: "course",
+        aggregateId: course.id,
+        eventType: "lms.course.updated",
+        payload: { course, previousValues: existing, actor: ctx.userId },
+      });
+
+      return { success: true, data: course };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: "UPDATE_FAILED",
+          message: error.message || "Failed to update course",
+        },
+      };
+    }
+  }
+
+  async publishCourse(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<CourseResponse>> {
+    const course = await this.repository.getCourseById(ctx, id);
+    if (!course) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    if (course.status === "published") {
+      return {
+        success: false,
+        error: {
+          code: "ALREADY_PUBLISHED",
+          message: "Course is already published",
+        },
+      };
+    }
+
+    // Validate course has required content
+    if (!course.title) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_COURSE",
+          message: "Course must have a title before publishing",
+        },
+      };
+    }
+
+    return this.updateCourse(ctx, id, { status: "published" });
+  }
+
+  async archiveCourse(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<boolean>> {
+    const course = await this.repository.getCourseById(ctx, id);
+    if (!course) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    const deleted = await this.repository.deleteCourse(ctx, id);
+
+    if (deleted) {
+      await this.emitDomainEvent(ctx, {
+        aggregateType: "course",
+        aggregateId: id,
+        eventType: "lms.course.archived",
+        payload: { courseId: id, actor: ctx.userId },
+      });
+    }
+
+    return { success: deleted, data: deleted };
+  }
+
+  // ===========================================================================
+  // Enrollment Operations
+  // ===========================================================================
+
+  async listEnrollments(
+    ctx: TenantContext,
+    filters: {
+      courseId?: string;
+      employeeId?: string;
+      status?: string;
+      isOverdue?: boolean;
+    },
+    pagination: PaginationOptions
+  ) {
+    return this.repository.listEnrollments(ctx, filters, pagination);
+  }
+
+  async getEnrollment(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    const enrollment = await this.repository.getEnrollmentById(ctx, id);
+
+    if (!enrollment) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Enrollment not found",
+        },
+      };
+    }
+
+    return { success: true, data: enrollment };
+  }
+
+  async getMyLearning(
+    ctx: TenantContext,
+    employeeId: string
+  ): Promise<EnrollmentResponse[]> {
+    return this.repository.getEmployeeEnrollments(ctx, employeeId);
+  }
+
+  async enrollEmployee(
+    ctx: TenantContext,
+    data: CreateEnrollment,
+    idempotencyKey?: string
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    // Verify course exists and is published
+    const course = await this.repository.getCourseById(ctx, data.courseId);
+    if (!course) {
+      return {
+        success: false,
+        error: {
+          code: "COURSE_NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    if (course.status !== "published") {
+      return {
+        success: false,
+        error: {
+          code: "COURSE_NOT_PUBLISHED",
+          message: "Cannot enroll in unpublished course",
+        },
+      };
+    }
+
+    try {
+      const enrollment = await this.repository.createEnrollment(ctx, data);
+
+      // Emit domain event
+      await this.emitDomainEvent(ctx, {
+        aggregateType: "enrollment",
+        aggregateId: enrollment.id,
+        eventType: "lms.employee.enrolled",
+        payload: {
+          enrollment,
+          courseId: data.courseId,
+          employeeId: data.employeeId,
+          actor: ctx.userId,
+        },
+      });
+
+      return { success: true, data: enrollment };
+    } catch (error: any) {
+      // Check for duplicate enrollment
+      if (error.message?.includes("duplicate") || error.code === "23505") {
+        return {
+          success: false,
+          error: {
+            code: "ALREADY_ENROLLED",
+            message: "Employee is already enrolled in this course",
+          },
+        };
+      }
+
+      return {
+        success: false,
+        error: {
+          code: "ENROLLMENT_FAILED",
+          message: error.message || "Failed to enroll employee",
+        },
+      };
+    }
+  }
+
+  async startCourse(
+    ctx: TenantContext,
+    enrollmentId: string
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    const enrollment = await this.repository.getEnrollmentById(ctx, enrollmentId);
+
+    if (!enrollment) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Enrollment not found",
+        },
+      };
+    }
+
+    if (enrollment.status !== "enrolled") {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_STATUS",
+          message: `Cannot start course from status: ${enrollment.status}`,
+        },
+      };
+    }
+
+    const updated = await this.repository.startEnrollment(ctx, enrollmentId);
+
+    if (!updated) {
+      return {
+        success: false,
+        error: {
+          code: "START_FAILED",
+          message: "Failed to start course",
+        },
+      };
+    }
+
+    await this.emitDomainEvent(ctx, {
+      aggregateType: "enrollment",
+      aggregateId: enrollmentId,
+      eventType: "lms.course.started",
+      payload: {
+        enrollmentId,
+        courseId: enrollment.courseId,
+        employeeId: enrollment.employeeId,
+        actor: ctx.userId,
+      },
+    });
+
+    return { success: true, data: updated };
+  }
+
+  async updateProgress(
+    ctx: TenantContext,
+    enrollmentId: string,
+    progress: number
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    const enrollment = await this.repository.getEnrollmentById(ctx, enrollmentId);
+
+    if (!enrollment) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Enrollment not found",
+        },
+      };
+    }
+
+    if (!["enrolled", "in_progress"].includes(enrollment.status)) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_STATUS",
+          message: `Cannot update progress for status: ${enrollment.status}`,
+        },
+      };
+    }
+
+    // Auto-start if not started
+    let currentEnrollment = enrollment;
+    if (enrollment.status === "enrolled") {
+      const started = await this.repository.startEnrollment(ctx, enrollmentId);
+      if (started) {
+        currentEnrollment = started;
+      }
+    }
+
+    const updated = await this.repository.updateEnrollment(ctx, enrollmentId, { progress });
+
+    return { success: true, data: updated || currentEnrollment };
+  }
+
+  async completeCourse(
+    ctx: TenantContext,
+    enrollmentId: string,
+    score?: number
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    const enrollment = await this.repository.getEnrollmentById(ctx, enrollmentId);
+
+    if (!enrollment) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Enrollment not found",
+        },
+      };
+    }
+
+    if (!["enrolled", "in_progress"].includes(enrollment.status)) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_STATUS",
+          message: `Cannot complete course from status: ${enrollment.status}`,
+        },
+      };
+    }
+
+    const updated = await this.repository.completeEnrollment(ctx, enrollmentId, score);
+
+    if (!updated) {
+      return {
+        success: false,
+        error: {
+          code: "COMPLETE_FAILED",
+          message: "Failed to complete course",
+        },
+      };
+    }
+
+    // Emit completion event
+    await this.emitDomainEvent(ctx, {
+      aggregateType: "enrollment",
+      aggregateId: enrollmentId,
+      eventType: "lms.course.completed",
+      payload: {
+        enrollmentId,
+        courseId: enrollment.courseId,
+        employeeId: enrollment.employeeId,
+        score,
+        actor: ctx.userId,
+      },
+    });
+
+    return { success: true, data: updated };
+  }
+
+  // ===========================================================================
+  // Analytics Operations
+  // ===========================================================================
+
+  async getCourseAnalytics(ctx: TenantContext, courseId: string) {
+    const course = await this.repository.getCourseById(ctx, courseId);
+    if (!course) {
+      return {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Course not found",
+        },
+      };
+    }
+
+    const analytics = await this.repository.getCourseAnalytics(ctx, courseId);
+    return { success: true, data: analytics };
+  }
+
+  async getEmployeeLearningStats(ctx: TenantContext, employeeId: string) {
+    const stats = await this.repository.getEmployeeLearningStats(ctx, employeeId);
+    return { success: true, data: stats };
+  }
+
+  // ===========================================================================
+  // Helper Methods
+  // ===========================================================================
+
+  private async emitDomainEvent(
+    ctx: TenantContext,
+    event: {
+      aggregateType: string;
+      aggregateId: string;
+      eventType: string;
+      payload: Record<string, unknown>;
+    }
+  ) {
+    try {
+      await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: any) => {
+          return tx`
+            INSERT INTO app.domain_outbox (
+              id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
+            ) VALUES (
+              gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
+              ${event.aggregateId}::uuid, ${event.eventType},
+              ${JSON.stringify(event.payload)}::jsonb, now()
+            )
+          `;
+        }
+      );
+    } catch (error) {
+      // Log but don't fail the main operation
+      console.error("Failed to emit domain event:", error);
+    }
+  }
+}

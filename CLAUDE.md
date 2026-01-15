@@ -23,8 +23,8 @@ bun install
 # Start infrastructure only (postgres + redis)
 bun run docker:up
 
-# Start all services including API and worker
-docker compose -f docker/docker-compose.yml --profile full up -d
+# Start all services (postgres, redis, api, worker, web)
+docker compose -f docker/docker-compose.yml up -d
 
 # View container logs
 bun run docker:logs
@@ -60,6 +60,9 @@ bun run build:web     # Frontend only
 
 # Seed database (after migrations)
 bun run db:seed
+
+# Bootstrap root tenant and admin user (first-time setup)
+bun run --filter @hris/api bootstrap:root
 ```
 
 ## Environment Setup
@@ -149,6 +152,22 @@ Store transitions immutably for audit.
 - Error codes defined in `packages/shared/src/errors/codes.ts`
 - TypeBox schemas for request/response validation in each module
 
+## Testing Structure
+
+Test categories in `packages/api/src/test/`:
+- `integration/` - RLS, idempotency, outbox, effective-dating, state-machine tests
+- `unit/` - Service, plugin, and job unit tests
+- `e2e/` - End-to-end flows (employee lifecycle)
+- `security/` - Injection attacks, authentication tests
+- `performance/` - Query performance benchmarks
+- `chaos/` - Database failure scenarios
+
+Test helpers in `packages/api/src/test/helpers/`:
+- `factories.ts` - Test data factories
+- `api-client.ts` - Test API client
+- `assertions.ts` - Custom assertions
+- `mocks.ts` - Mock utilities
+
 ## Testing Requirements
 
 Integration tests MUST verify:
@@ -166,6 +185,20 @@ Use these agents (defined in `.claude/agents/`) for domain-specific work:
 - `time-attendance-module-developer`: Time events, schedules, timesheets, geo-fence
 - `hris-absence-module-builder`: Leave types, balances, accruals, ledger patterns
 - `hris-frontend-architect`: React components, React Query hooks, permission routing
+
+## Skills (use `/skill-name` in Claude Code)
+
+Skills provide domain-specific guidance. Invoke with `/` prefix:
+- `/api-conventions`: API design, pagination, error handling, TypeBox schemas
+- `/backend-module-development`: Creating Elysia.js modules, services, repositories
+- `/database-migrations-rls`: PostgreSQL migrations with Row-Level Security
+- `/drizzle-orm-patterns`: Database queries, transactions, schema definitions
+- `/effective-dating-patterns`: Time-versioned records, overlap prevention
+- `/outbox-pattern`: Domain event publishing, transactional outbox
+- `/testing-patterns`: Integration tests for RLS, idempotency, outbox
+- `/frontend-react-components`: React components, React Query hooks
+- `/better-auth-integration`: Authentication flows, sessions, MFA
+- `/docker-development`: Container management, local development
 
 ## Shared Package Exports (@hris/shared)
 
