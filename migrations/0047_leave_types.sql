@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS app.leave_types (
     allow_negative_balance boolean NOT NULL DEFAULT false,
 
     -- Whether this leave type is paid
-    -- Affects payroll processing
+    -- Used for downstream entitlement/analytics classification
     is_paid boolean NOT NULL DEFAULT true,
 
     -- Whether this leave type accrues over time
@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_leave_types_tenant_active
     ON app.leave_types(tenant_id)
     WHERE is_active = true;
 
--- Paid leave types (for payroll queries)
+-- Paid leave types (for reporting/analytics)
 CREATE INDEX IF NOT EXISTS idx_leave_types_tenant_paid
     ON app.leave_types(tenant_id)
     WHERE is_paid = true AND is_active = true;

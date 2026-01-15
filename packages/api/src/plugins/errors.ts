@@ -11,6 +11,7 @@
 
 import { Elysia, type ErrorHandler } from "elysia";
 import { AuthError } from "./auth";
+import { IdempotencyError } from "./idempotency";
 import { TenantError } from "./tenant";
 import { RbacError } from "./rbac";
 
@@ -307,17 +308,55 @@ function mapValidationError(
 export function errorsPlugin() {
   return new Elysia({ name: "errors" })
     // Generate request ID for every request
-    .derive(() => ({
+    .derive({ as: "global" }, () => ({
       requestId: generateRequestId(),
     }))
 
+    .derive({ as: "global" }, (ctx) => {
+      const { set } = ctx as any;
+      return {
+        error: (status: number, body: unknown) => {
+          set.status = status;
+          return body;
+        },
+      };
+    })
+
     // Add request ID to response headers
-    .onAfterHandle(({ requestId, set }) => {
+    .onAfterHandle({ as: "global" }, ({ requestId, set, response }) => {
       set.headers["X-Request-ID"] = requestId;
+
+      if (!response || typeof response !== "object") {
+        return;
+      }
+
+      if (response instanceof Response) {
+        return;
+      }
+
+      if (!("error" in response)) {
+        return;
+      }
+
+      const resp = response as any;
+      const errObj = resp.error;
+      if (!errObj || typeof errObj !== "object") {
+        return;
+      }
+
+      if (!errObj.requestId) {
+        return {
+          ...resp,
+          error: {
+            ...errObj,
+            requestId,
+          },
+        };
+      }
     })
 
     // Global error handler
-    .onError(({ error, requestId, set, code: elysiaCode }) => {
+    .onError({ as: "global" }, ({ error, requestId, set, code: elysiaCode }) => {
       // Add request ID to error response headers
       set.headers["X-Request-ID"] = requestId;
 
@@ -332,11 +371,16 @@ export function errorsPlugin() {
         );
       }
 
-      // Handle auth errors
-      if (error instanceof AuthError) {
+      if (error instanceof IdempotencyError) {
         set.status = error.statusCode;
-        return createErrorResponse(error.code, error.message, requestId);
+        return createErrorResponse(
+          error.code,
+          error.message,
+          requestId,
+          extractErrorDetails(error)
+        );
       }
+
 
       // Handle tenant errors
       if (error instanceof TenantError) {

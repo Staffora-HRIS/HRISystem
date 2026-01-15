@@ -12,8 +12,8 @@ import {
   type ReactNode,
 } from "react";
 
-type Theme = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
+export type Theme = "light" | "dark" | "system";
+export type ResolvedTheme = "light" | "dark";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -31,13 +31,32 @@ function getSystemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+export function parseTheme(value: string | null | undefined): Theme | null {
+  if (value === "light" || value === "dark" || value === "system") return value;
+  return null;
+}
+
+function getCookieTheme(): Theme | null {
+  if (typeof document === "undefined") return null;
+
+  const cookie = document.cookie || "";
+  const match = cookie.match(/(?:^|;\s*)hris-theme=([^;]+)/);
+  const raw = match?.[1] ? decodeURIComponent(match[1]) : null;
+  return parseTheme(raw);
+}
+
+export function getInitialResolvedTheme(defaultTheme: Theme): ResolvedTheme {
+  return defaultTheme === "dark" ? "dark" : "light";
+}
+
 function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "light";
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark" || stored === "system") {
-    return stored;
-  }
-  return "light";
+
+  const parsed = parseTheme(stored);
+  if (parsed) return parsed;
+
+  return getCookieTheme() ?? "light";
 }
 
 function resolveTheme(theme: Theme): ResolvedTheme {
@@ -53,14 +72,19 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return defaultTheme;
-    return getStoredTheme();
-  });
+  // IMPORTANT: The initial render must match SSR markup to avoid hydration mismatches.
+  // We intentionally start with `defaultTheme` even on the client, then read localStorage
+  // after mount to apply the user's stored/system preference.
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
 
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveTheme(theme)
+    getInitialResolvedTheme(defaultTheme)
   );
+
+  // Load stored theme on the client after mount.
+  useEffect(() => {
+    setThemeState(getStoredTheme());
+  }, []);
 
   // Update resolved theme when system preference changes
   useEffect(() => {
@@ -90,7 +114,11 @@ export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProvide
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, newTheme);
+
+      document.cookie = `${STORAGE_KEY}=${encodeURIComponent(newTheme)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    }
   }, []);
 
   const toggleTheme = useCallback(() => {

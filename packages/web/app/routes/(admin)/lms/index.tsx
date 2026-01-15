@@ -21,7 +21,7 @@ interface Course {
 export default function LmsAdminPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-courses"],
-    queryFn: () => api.get<{ courses: Course[]; count: number }>("/api/v1/lms/courses"),
+    queryFn: () => api.get<{ courses: Course[]; count: number }>("/lms/courses"),
   });
 
   const courses = data?.courses || [];

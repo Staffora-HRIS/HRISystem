@@ -25,7 +25,7 @@ export default function WorkflowBuilderPage() {
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
 
   const createMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post("/api/v1/workflows/definitions", data),
+    mutationFn: (data: Record<string, unknown>) => api.post("/workflows/definitions", data),
     onSuccess: () => navigate("/admin/workflows"),
   });
 

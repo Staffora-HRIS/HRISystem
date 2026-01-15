@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enterprise multi-tenant HRIS (Human Resource Information System) platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, and Onboarding. Payroll is explicitly out of scope.
+Enterprise multi-tenant HRIS (Human Resource Information System) platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, and Onboarding.
 
 **Tech Stack (Mandatory):**
 - Frontend: React 18 + React Router v7 (framework mode) + React Query + Tailwind CSS

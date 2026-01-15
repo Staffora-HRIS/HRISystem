@@ -13,7 +13,7 @@
 -- -----------------------------------------------------------------------------
 -- Timesheet headers representing a pay period for an employee
 -- Contains aggregated totals and approval status
--- Once approved, cannot be modified (locked for payroll)
+-- Once approved, cannot be modified (locked after finalization)
 CREATE TABLE IF NOT EXISTS app.timesheets (
     -- Primary identifier
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS app.timesheets (
     rejected_by uuid REFERENCES app.users(id) ON DELETE SET NULL,
     rejection_reason text,
 
-    -- Lock tracking (after payroll processing)
+    -- Lock tracking (after finalization)
     locked_at timestamptz,
 
     -- Standard timestamps
@@ -168,7 +168,7 @@ CREATE TRIGGER update_timesheets_updated_at
 --   draft -> submitted (employee submits for approval)
 --   submitted -> approved (manager approves)
 --   submitted -> rejected (manager rejects, returns to draft for corrections)
---   approved -> locked (after payroll processing, immutable)
+--   approved -> locked (after finalization, immutable)
 --   rejected -> draft (employee can make corrections and resubmit)
 -- IMPORTANT: Once locked, timesheet CANNOT be modified
 CREATE OR REPLACE FUNCTION app.validate_timesheet_status_transition()
@@ -469,7 +469,7 @@ $$;
 
 COMMENT ON FUNCTION app.reject_timesheet IS 'Rejects a submitted timesheet with a reason';
 
--- Function to lock timesheet (after payroll)
+-- Function to lock timesheet (after finalization)
 CREATE OR REPLACE FUNCTION app.lock_timesheet(
     p_timesheet_id uuid
 )
@@ -504,7 +504,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION app.lock_timesheet IS 'Locks an approved timesheet (after payroll processing)';
+COMMENT ON FUNCTION app.lock_timesheet IS 'Locks an approved timesheet (after finalization)';
 
 -- Function to get employee's timesheets
 CREATE OR REPLACE FUNCTION app.get_employee_timesheets(
@@ -607,7 +607,7 @@ COMMENT ON COLUMN app.timesheets.approved_by IS 'Who approved the timesheet';
 COMMENT ON COLUMN app.timesheets.rejected_at IS 'When timesheet was rejected';
 COMMENT ON COLUMN app.timesheets.rejected_by IS 'Who rejected the timesheet';
 COMMENT ON COLUMN app.timesheets.rejection_reason IS 'Reason for rejection';
-COMMENT ON COLUMN app.timesheets.locked_at IS 'When timesheet was locked (after payroll)';
+COMMENT ON COLUMN app.timesheets.locked_at IS 'When timesheet was locked (after finalization)';
 COMMENT ON FUNCTION app.validate_timesheet_status_transition IS 'Trigger function enforcing valid timesheet status transitions and immutability';
 
 -- =============================================================================

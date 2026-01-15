@@ -303,7 +303,7 @@ class OutboxProcessor {
     console.log(`[Handler] Employee updated: ${employeeId}`);
 
     // Sync with external systems - log the sync request
-    // In production, this would call external APIs (payroll, benefits providers, etc.)
+    // In production, this would call external APIs (benefits providers, identity providers, etc.)
     if (changes) {
       console.log(`[Handler] Syncing changes to external systems: ${Object.keys(changes).join(", ")}`);
 
@@ -532,8 +532,8 @@ class OutboxProcessor {
 
     const emp = employees[0];
 
-    // 1. Log for payroll export (payroll is out of scope, but we track for export)
-    await this.queueAnalyticsEvent(event.tenantId, "timesheet.approved_for_payroll", {
+    // 1. Log for downstream export/processing
+    await this.queueAnalyticsEvent(event.tenantId, "timesheet.approved_finalized", {
       timesheetId,
       employeeId,
       approverId,

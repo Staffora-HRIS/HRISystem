@@ -1571,22 +1571,58 @@ export class HRService {
   // ===========================================================================
 
   private mapOrgUnitToResponse(row: OrgUnitRow): OrgUnitResponse {
+    const formatDateOnly = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString().split("T")[0]!;
+      }
+
+      if (typeof value === "string") {
+        return value.includes("T") ? value.split("T")[0]! : value;
+      }
+
+      return "";
+    };
+
+    const formatDateTime = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      if (typeof value === "string") {
+        return value;
+      }
+
+      return new Date(0).toISOString();
+    };
+
+    const effectiveFromRaw = (row as any).effectiveFrom ?? (row as any).effective_from;
+    const effectiveToRaw = (row as any).effectiveTo ?? (row as any).effective_to;
+    const createdAtRaw = (row as any).createdAt ?? (row as any).created_at;
+    const updatedAtRaw = (row as any).updatedAt ?? (row as any).updated_at;
+
+    const tenantIdRaw = (row as any).tenantId ?? (row as any).tenant_id;
+    const parentIdRaw = (row as any).parentId ?? (row as any).parent_id ?? null;
+    const managerPositionIdRaw =
+      (row as any).managerPositionId ?? (row as any).manager_position_id ?? null;
+    const costCenterIdRaw = (row as any).costCenterId ?? (row as any).cost_center_id ?? null;
+    const isActiveRaw = (row as any).isActive ?? (row as any).is_active;
+
     return {
       id: row.id,
-      tenant_id: row.tenantId,
-      parent_id: row.parentId,
+      tenant_id: tenantIdRaw,
+      parent_id: parentIdRaw,
       code: row.code,
       name: row.name,
       description: row.description,
       level: row.level,
       path: row.path,
-      manager_position_id: row.managerPositionId,
-      cost_center_id: row.costCenterId,
-      is_active: row.isActive,
-      effective_from: row.effectiveFrom.toISOString().split("T")[0]!,
-      effective_to: row.effectiveTo?.toISOString().split("T")[0] || null,
-      created_at: row.createdAt.toISOString(),
-      updated_at: row.updatedAt.toISOString(),
+      manager_position_id: managerPositionIdRaw,
+      cost_center_id: costCenterIdRaw,
+      is_active: typeof isActiveRaw === "boolean" ? isActiveRaw : true,
+      effective_from: formatDateOnly(effectiveFromRaw),
+      effective_to: effectiveToRaw ? formatDateOnly(effectiveToRaw) : null,
+      created_at: formatDateTime(createdAtRaw),
+      updated_at: formatDateTime(updatedAtRaw),
     };
   }
 

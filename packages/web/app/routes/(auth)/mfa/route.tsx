@@ -162,6 +162,7 @@ export default function MfaPage() {
             ref={(el) => (inputRefs.current[index] = el)}
             type="text"
             inputMode="numeric"
+            aria-label={`Verification code digit ${index + 1}`}
             maxLength={1}
             value={digit}
             onChange={(e) => handleInputChange(index, e.target.value)}
@@ -220,12 +221,17 @@ export default function MfaPage() {
       <div className="mt-8 space-y-2 text-sm text-gray-500 dark:text-gray-400">
         <p>
           Lost access to your authenticator app?{" "}
-          <Link
-            to="/recovery"
+          <button
+            type="button"
+            onClick={() =>
+              toast.info("Recovery codes", {
+                message: "Recovery code flow is not available yet.",
+              })
+            }
             className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
           >
             Use recovery code
-          </Link>
+          </button>
         </p>
         <p>
           <Link

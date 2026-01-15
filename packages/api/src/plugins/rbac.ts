@@ -154,7 +154,13 @@ export class RbacService {
     // Get roles for user
     const roles = await this.db.withSystemContext(async (tx) => {
       return await tx<Role[]>`
-        SELECT role_id, role_name, is_system, constraints, effective_from, effective_to
+        SELECT
+          role_id as "roleId",
+          role_name as "roleName",
+          is_system as "isSystem",
+          constraints,
+          effective_from as "effectiveFrom",
+          effective_to as "effectiveTo"
         FROM app.get_user_roles(${tenantId}::uuid, ${userId}::uuid)
       `;
     });
@@ -162,13 +168,23 @@ export class RbacService {
     // Get permissions from roles
     const permissions = await this.db.withSystemContext(async (tx) => {
       return await tx<Permission[]>`
-        SELECT permission_key, resource, action, requires_mfa, role_name, constraints
+        SELECT
+          permission_key as "permissionKey",
+          resource,
+          action,
+          requires_mfa as "requiresMfa",
+          role_name as "roleName",
+          constraints
         FROM app.get_user_permissions(${tenantId}::uuid, ${userId}::uuid)
       `;
     });
 
     // Check for special roles
-    const roleNames = new Set((roles as Role[]).map((r) => r.roleName));
+    const roleNames = new Set(
+      (roles as any[])
+        .map((r) => r?.roleName ?? r?.role_name ?? r?.name)
+        .filter((v): v is string => typeof v === "string")
+    );
     const isSuperAdmin = roleNames.has("super_admin");
     const isTenantAdmin = roleNames.has("tenant_admin");
 
@@ -406,7 +422,7 @@ export class RbacService {
 export function rbacPlugin() {
   return new Elysia({ name: "rbac" })
     // RBAC service for direct access
-    .derive((ctx) => {
+    .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
       return {
         rbacService: new RbacService(db, cache),
@@ -414,7 +430,7 @@ export function rbacPlugin() {
     })
 
     // Load permissions for authenticated users with tenant context
-    .derive(async (ctx) => {
+    .derive({ as: "global" }, async (ctx) => {
       const { user, tenant, rbacService } = ctx as any;
       if (!user || !tenant) {
         return {

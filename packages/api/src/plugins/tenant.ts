@@ -229,6 +229,8 @@ const DEFAULT_SKIP_ROUTES = [
   /^\/ready/,       // Readiness
   /^\/live/,        // Liveness
   /^\/docs/,        // API docs
+  /^\/api\/auth/,   // Better Auth endpoints
+  /^\/api\/v1\/auth(?:\/|$)/,
   /^\/api\/v1\/auth\/login/,  // Login doesn't need tenant yet
   /^\/api\/v1\/auth\/register/, // Registration
 ];
@@ -285,7 +287,7 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
 
   return new Elysia({ name: "tenant" })
     // Tenant service for direct access
-    .derive((ctx) => {
+    .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
       return {
         tenantService: new TenantService(db, cache),
@@ -294,12 +296,10 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
 
     // Tenant context resolution
     .derive(
-      async ({
-        request,
-        path,
-        tenantService,
-        set,
-      }): Promise<{ tenant: Tenant | null; tenantId: string | null }> => {
+      { as: "global" },
+      async (ctx): Promise<{ tenant: Tenant | null; tenantId: string | null }> => {
+        const { request, path, tenantService, set } = ctx as any;
+        const session = (ctx as any).session ?? null;
         // Check if route should skip tenant resolution
         const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(path));
         if (shouldSkip) {
@@ -308,11 +308,7 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
 
         // Resolve tenant from request
         // Note: session will be available after auth plugin is added
-        const { tenantId, source } = resolveTenant(
-          request.headers,
-          null, // Session will be added by auth plugin
-          { headerName }
-        );
+        const { tenantId } = resolveTenant(request.headers, session, { headerName });
 
         // If no tenant ID and not optional, error
         if (!tenantId) {
@@ -341,6 +337,22 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
         }
       }
     )
+
+    .derive({ as: "global" }, (ctx) => {
+      const { tenantId } = ctx as any;
+      const user = (ctx as any).user as { id: string } | null | undefined;
+
+      if (typeof tenantId !== "string" || !tenantId) {
+        return { tenantContext: null as { tenantId: string; userId?: string } | null };
+      }
+
+      return {
+        tenantContext: {
+          tenantId,
+          userId: typeof user?.id === "string" ? user.id : undefined,
+        },
+      };
+    })
 
     // Error handler for tenant errors
     .onError(({ error, set }) => {

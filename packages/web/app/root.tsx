@@ -38,10 +38,10 @@ export function meta(): Route.MetaDescriptors {
 }
 
 function Document({ children }: { children: React.ReactNode }) {
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   return (
-    <html lang="en" className={theme} suppressHydrationWarning>
+    <html lang="en" className={resolvedTheme} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <Meta />
@@ -51,8 +51,13 @@ function Document({ children }: { children: React.ReactNode }) {
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = localStorage.getItem('hris-theme') || 'light';
-                document.documentElement.classList.add(theme);
+                const stored = localStorage.getItem('hris-theme') || 'light';
+                const resolved = stored === 'system'
+                  ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                  : (stored === 'dark' ? 'dark' : 'light');
+                document.cookie = 'hris-theme=' + encodeURIComponent(stored) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+                document.documentElement.classList.remove('light', 'dark');
+                document.documentElement.classList.add(resolved);
               })();
             `,
           }}

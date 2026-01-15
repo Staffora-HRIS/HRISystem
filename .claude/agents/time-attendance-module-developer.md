@@ -112,7 +112,7 @@ Emit domain events for cross-module integration:
 - `time.event.recorded` - After successful time event insertion
 - `time.schedule.published` - When schedule becomes active
 - `time.timesheet.submitted` - Triggers approval workflow
-- `time.timesheet.approved` - Notifies payroll integration
+- `time.timesheet.approved` - Notifies downstream systems
 - `time.timesheet.rejected` - Notifies employee
 
 ## API Route Standards
@@ -148,6 +148,6 @@ Write tests for:
 Be aware of future integrations:
 - **Absence Module**: Will overlay leave/absence on schedules
 - **Workflows Module**: Timesheet approvals will use workflow engine
-- **Payroll**: Approved timesheets feed into payroll calculations
+
 
 Design your interfaces to accommodate these integrations without breaking changes.

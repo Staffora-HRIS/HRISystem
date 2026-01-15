@@ -156,4 +156,29 @@ describe("405 Error Prevention - API Client", () => {
     expect(url).toContain("/api/v1/auth/login");
     expect(url).not.toContain("localhost:5173");
   });
+
+  it("should NOT double-prefix when endpoint starts with api/v1 without a leading slash", async () => {
+    delete import.meta.env.VITE_API_URL;
+
+    const { ApiClient } = await import("../api-client");
+    const client = new ApiClient();
+
+    const buildUrl = (client as any).buildUrl.bind(client);
+    const url = buildUrl("api/v1/cases/my-cases");
+
+    expect(url).toContain("/api/v1/cases/my-cases");
+    expect(url).not.toContain("/api/v1/api/v1/");
+  });
+
+  it("should NOT double-prefix when endpoint equals api/v1 without a leading slash", async () => {
+    delete import.meta.env.VITE_API_URL;
+
+    const { ApiClient } = await import("../api-client");
+    const client = new ApiClient();
+
+    const buildUrl = (client as any).buildUrl.bind(client);
+    const url = buildUrl("api/v1");
+
+    expect(url).toBe("http://localhost:3000/api/v1");
+  });
 });

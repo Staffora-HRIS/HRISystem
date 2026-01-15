@@ -197,9 +197,40 @@ class ApiClient {
   private buildUrl(endpoint: string, params?: RequestConfig["params"]): string {
     // If endpoint is already a full URL, use it directly
     // Otherwise, append to baseUrl
-    const fullUrl = endpoint.startsWith("http")
-      ? endpoint
-      : `${this.baseUrl}${endpoint}`;
+    if (endpoint.startsWith("http")) {
+      const url = new URL(endpoint);
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            url.searchParams.append(key, String(value));
+          }
+        });
+      }
+      return url.toString();
+    }
+
+    // Defensive normalization:
+    // - this.baseUrl already includes `/api/v1`
+    // - some call sites historically passed `/api/v1/...` which produced `/api/v1/api/v1/...`
+    const apiPrefix = "/api/v1";
+    const apiPrefixNoLeadingSlash = "api/v1";
+    let normalizedEndpoint = endpoint;
+
+    if (normalizedEndpoint === apiPrefix) {
+      normalizedEndpoint = "";
+    } else if (normalizedEndpoint.startsWith(`${apiPrefix}/`)) {
+      normalizedEndpoint = normalizedEndpoint.slice(apiPrefix.length);
+    } else if (normalizedEndpoint === apiPrefixNoLeadingSlash) {
+      normalizedEndpoint = "";
+    } else if (normalizedEndpoint.startsWith(`${apiPrefixNoLeadingSlash}/`)) {
+      normalizedEndpoint = normalizedEndpoint.slice(apiPrefixNoLeadingSlash.length);
+    }
+
+    if (normalizedEndpoint !== "" && !normalizedEndpoint.startsWith("/")) {
+      normalizedEndpoint = `/${normalizedEndpoint}`;
+    }
+
+    const fullUrl = `${this.baseUrl}${normalizedEndpoint}`;
 
     const url = new URL(fullUrl);
 
@@ -282,7 +313,37 @@ class ApiClient {
         let errorData: { code: string; message: string; details?: Record<string, unknown> };
 
         try {
-          errorData = await response.json();
+          const raw = await response.json();
+          // Backend convention: { error: { code, message, requestId, details? } }
+          if (
+            raw &&
+            typeof raw === "object" &&
+            "error" in raw &&
+            (raw as any).error &&
+            typeof (raw as any).error === "object"
+          ) {
+            const wrapped = (raw as any).error as any;
+            errorData = {
+              code: String(wrapped.code ?? "UNKNOWN_ERROR"),
+              message: String((wrapped.message ?? response.statusText) || "An unexpected error occurred"),
+              details:
+                wrapped.details && typeof wrapped.details === "object" ? (wrapped.details as Record<string, unknown>) : undefined,
+            };
+          } else if (raw && typeof raw === "object" && "code" in raw && "message" in raw) {
+            errorData = {
+              code: String((raw as any).code ?? "UNKNOWN_ERROR"),
+              message: String((((raw as any).message as unknown) ?? response.statusText) || "An unexpected error occurred"),
+              details:
+                (raw as any).details && typeof (raw as any).details === "object"
+                  ? ((raw as any).details as Record<string, unknown>)
+                  : undefined,
+            };
+          } else {
+            errorData = {
+              code: "UNKNOWN_ERROR",
+              message: response.statusText || "An unexpected error occurred",
+            };
+          }
         } catch {
           errorData = {
             code: "UNKNOWN_ERROR",

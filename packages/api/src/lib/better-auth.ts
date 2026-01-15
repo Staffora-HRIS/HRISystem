@@ -11,8 +11,10 @@
 
 import { betterAuth } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
+import { APIError } from "better-auth/api";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
+import { getDatabaseUrl } from "../config/database";
 
 /**
  * Check if a hash is bcrypt format (starts with $2a$, $2b$, or $2y$)
@@ -77,7 +79,7 @@ const getAuthConfig = () => ({
  * Better Auth requires a standard pg Pool, not the postgres.js client
  */
 function createPgPool(): Pool {
-  const databaseUrl = process.env["DATABASE_URL"] || "postgres://hris:hris_dev_password@localhost:5432/hris";
+  const databaseUrl = getDatabaseUrl();
   return new Pool({
     connectionString: databaseUrl,
     max: 10,
@@ -114,6 +116,121 @@ export function createBetterAuth() {
     // Use pg Pool with app schema
     database: pool,
 
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            const email = user.email.trim().toLowerCase();
+            const uuidRegex =
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+            const existing = await pool.query<{ id: string }>(
+              "SELECT id::text as id FROM app.users WHERE email = $1",
+              [email]
+            );
+
+            const existingId = existing.rows[0]?.id;
+
+            // Ensure Better Auth uses UUID string ids so our RBAC + tenant system can
+            // safely cast userId/sessionId to uuid.
+            //
+            // If an app.users record already exists for this email, we MUST reuse its
+            // UUID to keep identity stable across app.users (uuid) and app."user" (text).
+            const id = existingId
+              ? existingId
+              : uuidRegex.test(String(user.id))
+                ? String(user.id)
+                : crypto.randomUUID();
+
+            return {
+              data: {
+                ...user,
+                id,
+                email,
+              },
+            };
+          },
+          after: async (user) => {
+            const email = user.email.trim().toLowerCase();
+
+            await pool.query(
+              `
+                INSERT INTO app.users (
+                  id,
+                  email,
+                  email_verified,
+                  password_hash,
+                  name,
+                  image,
+                  mfa_enabled,
+                  status,
+                  created_at,
+                  updated_at
+                )
+                VALUES (
+                  $1::uuid,
+                  $2,
+                  $3,
+                  NULL,
+                  $4,
+                  $5,
+                  $6,
+                  $7,
+                  now(),
+                  now()
+                )
+                ON CONFLICT (email) DO UPDATE
+                SET
+                  email_verified = EXCLUDED.email_verified,
+                  name = EXCLUDED.name,
+                  image = EXCLUDED.image,
+                  mfa_enabled = EXCLUDED.mfa_enabled,
+                  status = EXCLUDED.status,
+                  updated_at = now()
+              `,
+              [
+                user.id,
+                email,
+                Boolean((user as any).emailVerified ?? false),
+                user.name ?? email,
+                user.image ?? null,
+                Boolean((user as any).mfaEnabled ?? false),
+                ((user as any).status ?? "active") as string,
+              ]
+            );
+          },
+        },
+        update: {
+          after: async (user) => {
+            const email = user.email.trim().toLowerCase();
+            await pool.query(
+              `
+                UPDATE app.users
+                SET
+                  email = $2,
+                  email_verified = $3,
+                  name = $4,
+                  image = $5,
+                  mfa_enabled = $6,
+                  status = $7,
+                  updated_at = now()
+                WHERE id = $1::uuid
+              `,
+              [
+                user.id,
+                email,
+                Boolean((user as any).emailVerified ?? false),
+                user.name ?? email,
+                user.image ?? null,
+                Boolean((user as any).mfaEnabled ?? false),
+                ((user as any).status ?? "active") as string,
+              ]
+            );
+          },
+        },
+      },
+    },
+
     // Email/password authentication with custom password handling
     // Supports both bcrypt (legacy) and scrypt (Better Auth default) hashes
     emailAndPassword: {
@@ -130,6 +247,12 @@ export function createBetterAuth() {
     // Session configuration - table is "session" in app schema
     session: {
       modelName: "session",
+      additionalFields: {
+        currentTenantId: {
+          type: "string",
+          required: false,
+        },
+      },
       cookieCache: {
         enabled: true,
         maxAge: 5 * 60, // 5 minutes cache
@@ -140,6 +263,9 @@ export function createBetterAuth() {
 
     // Cookie configuration
     advanced: {
+      database: {
+        generateId: () => crypto.randomUUID(),
+      },
       cookiePrefix: "hris",
       useSecureCookies: process.env["NODE_ENV"] === "production",
       defaultCookieAttributes: {

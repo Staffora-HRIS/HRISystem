@@ -50,6 +50,17 @@ export interface AuditContext {
   requestId: string;
 }
 
+export interface AuditHelper {
+  log: (options: {
+    action: string;
+    resourceType: string;
+    resourceId?: string;
+    oldValues?: Record<string, unknown>;
+    newValues?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  }) => Promise<string>;
+}
+
 /**
  * Options for logging an audit entry
  */
@@ -457,7 +468,7 @@ export function sanitizeAuditData(
 export function auditPlugin() {
   return new Elysia({ name: "audit" })
     // Audit service for direct access
-    .derive((ctx) => {
+    .derive({ as: "global" }, (ctx) => {
       const { db } = ctx as any;
       return {
         auditService: new AuditService(db),
@@ -465,16 +476,33 @@ export function auditPlugin() {
     })
 
     // Create audit context for the request
-    .derive((ctx) => {
-      const { request, tenant, user, session, requestId } = ctx as any;
+    .derive({ as: "global" }, (ctx) => {
+      const { request, tenant, user, session, requestId, auditService } = ctx as any;
+
+      const context = createAuditContext(
+        request,
+        tenant || null,
+        user || null,
+        session || null,
+        requestId
+      );
+
+      const audit: AuditHelper = {
+        log: async (options) => {
+          if (!context.tenantId) return "";
+          return auditService.log(context, {
+            action: options.action,
+            resourceType: options.resourceType,
+            resourceId: options.resourceId,
+            oldValue: options.oldValues,
+            newValue: options.newValues,
+            metadata: options.metadata,
+          });
+        },
+      };
+
       return {
-        audit: createAuditContext(
-          request,
-          tenant || null,
-          user || null,
-          session || null,
-          requestId
-        ),
+        audit,
       } as Record<string, unknown>;
     });
 }

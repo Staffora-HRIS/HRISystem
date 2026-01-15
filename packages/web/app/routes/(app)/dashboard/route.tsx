@@ -5,10 +5,12 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router";
 import { Card, CardBody, StatCard, ListCard } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Spinner } from "../../../components/ui/spinner";
+import { useToast } from "../../../components/ui/toast";
 import { api } from "../../../lib/api-client";
 
 interface DashboardSummary {
@@ -27,6 +29,9 @@ interface Task {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const toast = useToast();
+
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ["portal", "dashboard"],
     queryFn: () => api.get<{ summary: DashboardSummary }>("/portal/dashboard"),
@@ -61,8 +66,10 @@ export default function DashboardPage() {
           <p className="text-gray-500">Here's what's happening today</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">Request Time Off</Button>
-          <Button>Clock In</Button>
+          <Button variant="outline" onClick={() => navigate("/me/leave")}>
+            Request Time Off
+          </Button>
+          <Button onClick={() => navigate("/me/time")}>Clock In</Button>
         </div>
       </div>
 
@@ -88,7 +95,19 @@ export default function DashboardPage() {
         items={tasks?.tasks || []}
         emptyMessage="No pending tasks"
         maxItems={5}
-        action={<Button variant="ghost" size="sm">View All</Button>}
+        action={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              toast.info("Tasks", {
+                message: "Task list view is not available yet.",
+              })
+            }
+          >
+            View All
+          </Button>
+        }
         renderItem={(task: Task) => (
           <div className="flex items-center justify-between">
             <div>
@@ -101,7 +120,17 @@ export default function DashboardPage() {
               <Badge variant={task.priority === "high" ? "error" : "default"}>
                 {task.priority}
               </Badge>
-              <Button size="sm" variant="outline">View</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  toast.info("Task details", {
+                    message: "Task details view is not available yet.",
+                  })
+                }
+              >
+                View
+              </Button>
             </div>
           </div>
         )}
@@ -109,30 +138,38 @@ export default function DashboardPage() {
 
       {/* Quick Links */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card hoverable clickable>
-          <CardBody className="flex flex-col items-center justify-center py-6">
-            <span className="text-2xl mb-2">📅</span>
-            <span className="font-medium">My Schedule</span>
-          </CardBody>
-        </Card>
-        <Card hoverable clickable>
-          <CardBody className="flex flex-col items-center justify-center py-6">
-            <span className="text-2xl mb-2">⏰</span>
-            <span className="font-medium">Timesheets</span>
-          </CardBody>
-        </Card>
-        <Card hoverable clickable>
-          <CardBody className="flex flex-col items-center justify-center py-6">
-            <span className="text-2xl mb-2">🏖️</span>
-            <span className="font-medium">Time Off</span>
-          </CardBody>
-        </Card>
-        <Card hoverable clickable>
-          <CardBody className="flex flex-col items-center justify-center py-6">
-            <span className="text-2xl mb-2">👤</span>
-            <span className="font-medium">My Profile</span>
-          </CardBody>
-        </Card>
+        <Link to="/me/time" className="block">
+          <Card hoverable>
+            <CardBody className="flex flex-col items-center justify-center py-6">
+              <span className="text-2xl mb-2">📅</span>
+              <span className="font-medium">My Schedule</span>
+            </CardBody>
+          </Card>
+        </Link>
+        <Link to="/me/time" className="block">
+          <Card hoverable>
+            <CardBody className="flex flex-col items-center justify-center py-6">
+              <span className="text-2xl mb-2">⏰</span>
+              <span className="font-medium">Timesheets</span>
+            </CardBody>
+          </Card>
+        </Link>
+        <Link to="/me/leave" className="block">
+          <Card hoverable>
+            <CardBody className="flex flex-col items-center justify-center py-6">
+              <span className="text-2xl mb-2">🏖️</span>
+              <span className="font-medium">Time Off</span>
+            </CardBody>
+          </Card>
+        </Link>
+        <Link to="/me/profile" className="block">
+          <Card hoverable>
+            <CardBody className="flex flex-col items-center justify-center py-6">
+              <span className="text-2xl mb-2">👤</span>
+              <span className="font-medium">My Profile</span>
+            </CardBody>
+          </Card>
+        </Link>
       </div>
     </div>
   );

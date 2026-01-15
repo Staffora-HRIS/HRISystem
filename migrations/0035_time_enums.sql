@@ -59,7 +59,7 @@ COMMENT ON TYPE app.device_type IS 'Source device types for time events (web, mo
 --   draft -> submitted (employee submits for approval)
 --   submitted -> approved (manager approves)
 --   submitted -> rejected (manager rejects, returns to draft)
---   approved -> locked (payroll processed, cannot be modified)
+--   approved -> locked (finalized, cannot be modified)
 -- Note: Once locked, timesheet cannot be modified (use adjustments instead)
 DO $$
 BEGIN
@@ -69,7 +69,7 @@ BEGIN
             'submitted',    -- Submitted for approval
             'approved',     -- Approved by manager
             'rejected',     -- Rejected, returned for corrections
-            'locked'        -- Locked after payroll processing
+            'locked'        -- Locked after finalization
         );
     END IF;
 END $$;
@@ -132,7 +132,7 @@ BEGIN
             'submit',       -- Employee submits timesheet for approval
             'approve',      -- Manager approves timesheet
             'reject',       -- Manager rejects timesheet
-            'lock',         -- System locks timesheet after payroll
+            'lock',         -- System locks timesheet after finalization
             'unlock'        -- System unlocks for correction (rare, requires audit)
         );
     END IF;

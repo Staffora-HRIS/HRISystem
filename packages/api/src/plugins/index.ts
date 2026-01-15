@@ -31,15 +31,15 @@ export { cachePlugin, getCacheClient, closeCacheClient, CacheTTL, CacheKeys } fr
 export type { CacheConfig } from "./cache";
 export { CacheClient } from "./cache";
 
-// Tenant resolution
+export { rateLimitPlugin } from "./rate-limit";
+export type { RateLimitPluginOptions } from "./rate-limit";
+
 export { tenantPlugin, requireTenant, hasTenant, TenantService, TenantError, TenantErrorCodes } from "./tenant";
 export type { Tenant, TenantContext as TenantCtx, TenantSource, TenantResolutionOptions } from "./tenant";
 
-// Authentication (Better Auth)
 export { authPlugin, requireAuth, requireMfa, requireCsrf, AuthService, AuthError, AuthErrorCodes } from "./auth-better";
 export type { User, Session, AuthContext, UnauthContext, AuthState, UserWithTenants, AuthPluginOptions } from "./auth-better";
 
-// Authorization
 export { rbacPlugin, requirePermission, requireAnyPermission, requireAllPermissions, hasPermission, RbacService, RbacError, RbacErrorCodes } from "./rbac";
 export type { Permission, PermissionConstraints, Role, EffectivePermissions, PermissionCheckResult } from "./rbac";
 
