@@ -1221,6 +1221,138 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
   )
 
   // ===========================================================================
+  // Org Chart Routes
+  // ===========================================================================
+
+  // GET /org-chart - Get org chart data
+  .get(
+    "/org-chart",
+    async (ctx) => {
+      const { hrService, query, tenantContext, error } = ctx as any;
+      const result = await hrService.getOrgChart(tenantContext, query.root_employee_id);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("org", "read")],
+      query: t.Object({
+        root_employee_id: t.Optional(UuidSchema),
+      }),
+      response: {
+        200: t.Object({
+          nodes: t.Array(t.Object({
+            id: t.String(),
+            employee_id: t.String(),
+            name: t.String(),
+            title: t.Optional(t.String()),
+            department: t.Optional(t.String()),
+            photo_url: t.Optional(t.String()),
+            manager_id: t.Optional(t.String()),
+            level: t.Number(),
+            direct_reports_count: t.Number(),
+          })),
+          edges: t.Array(t.Object({
+            from: t.String(),
+            to: t.String(),
+          })),
+        }),
+        400: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Org Chart"],
+        summary: "Get org chart data",
+        description: "Get organizational chart data with employee hierarchy",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /org-chart/direct-reports/:employeeId - Get direct reports
+  .get(
+    "/org-chart/direct-reports/:employeeId",
+    async (ctx) => {
+      const { hrService, params, tenantContext, error } = ctx as any;
+      const result = await hrService.getDirectReports(tenantContext, params.employeeId);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        return error(status, { error: result.error });
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: t.Object({ employeeId: UuidSchema }),
+      response: {
+        200: t.Object({
+          items: t.Array(t.Object({
+            id: t.String(),
+            employee_id: t.String(),
+            name: t.String(),
+            title: t.Optional(t.String()),
+            department: t.Optional(t.String()),
+            photo_url: t.Optional(t.String()),
+          })),
+        }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Org Chart"],
+        summary: "Get direct reports",
+        description: "Get list of employees who report directly to specified employee",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /org-chart/reporting-chain/:employeeId - Get reporting chain
+  .get(
+    "/org-chart/reporting-chain/:employeeId",
+    async (ctx) => {
+      const { hrService, params, tenantContext, error } = ctx as any;
+      const result = await hrService.getReportingChain(tenantContext, params.employeeId);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        return error(status, { error: result.error });
+      }
+
+      return { chain: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: t.Object({ employeeId: UuidSchema }),
+      response: {
+        200: t.Object({
+          chain: t.Array(t.Object({
+            id: t.String(),
+            employee_id: t.String(),
+            name: t.String(),
+            title: t.Optional(t.String()),
+            level: t.Number(),
+          })),
+        }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Org Chart"],
+        summary: "Get reporting chain",
+        description: "Get the full reporting chain from employee up to CEO",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
   // History Routes
   // ===========================================================================
 

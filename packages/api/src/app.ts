@@ -39,6 +39,11 @@ import { tenantRoutes } from "./modules/tenant";
 import { securityRoutes } from "./modules/security";
 import { dashboardRoutes } from "./modules/dashboard";
 import { systemRoutes } from "./modules/system";
+import { benefitsRoutes } from "./modules/benefits";
+import { documentsRoutes } from "./modules/documents";
+import { successionRoutes } from "./modules/succession";
+import { analyticsRoutes } from "./modules/analytics";
+import { competenciesRoutes } from "./modules/competencies";
 
 /**
  * Environment configuration with validation
@@ -412,6 +417,16 @@ export const app = new Elysia()
       .use(casesRoutes)
       // Onboarding
       .use(onboardingRoutes)
+      // Benefits Administration
+      .use(benefitsRoutes)
+      // Documents
+      .use(documentsRoutes)
+      // Succession Planning
+      .use(successionRoutes)
+      // Analytics
+      .use(analyticsRoutes)
+      // Competencies
+      .use(competenciesRoutes)
       // Portal aggregations
       .use(portalRoutes)
   )
