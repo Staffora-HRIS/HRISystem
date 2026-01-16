@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { Users, Briefcase, Target, TrendingUp, UserPlus } from "lucide-react";
+import { Users, Briefcase, Target, TrendingUp, UserPlus, Award } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -88,6 +88,18 @@ export default function TalentAdminPage() {
             <Button variant="outline">
               <Target className="h-4 w-4 mr-2" />
               Performance
+            </Button>
+          </Link>
+          <Link to="/admin/talent/succession">
+            <Button variant="outline">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Succession
+            </Button>
+          </Link>
+          <Link to="/admin/talent/competencies">
+            <Button variant="outline">
+              <Award className="h-4 w-4 mr-2" />
+              Competencies
             </Button>
           </Link>
         </div>

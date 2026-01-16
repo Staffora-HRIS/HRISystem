@@ -83,7 +83,7 @@ Copy `docker/.env.example` to `docker/.env` and set required secrets:
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point
 - `src/worker.ts`: Background job processor entry point
-- `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency)
+- `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency, rate-limit, security-headers)
 - `src/modules/`: Feature modules (hr, time, absence, talent, lms, cases, onboarding, workflows, portal, auth) - each with routes.ts, service.ts, repository.ts, schemas.ts
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
@@ -105,7 +105,7 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql`. Currently includes 96 migrations covering all modules. See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql`. Currently includes 99 migrations covering all modules. See `migrations/README.md` for conventions.
 
 ## Critical Patterns (Non-Negotiable)
 
@@ -140,8 +140,12 @@ await tx.insert(domainOutbox).values({
 All mutating endpoints require `Idempotency-Key` header. Scope: `(tenant_id, user_id, route_key)`. Expire after 24-72 hours.
 
 ### 5. State Machines
-Employee lifecycle: `pending → active → on_leave ↔ active → terminated`
-Performance cycle: defined in `packages/shared/src/state-machines/`
+All state machines defined in `packages/shared/src/state-machines/`:
+- **Employee lifecycle**: `pending → active → on_leave ↔ active → terminated`
+- **Leave request**: `draft → pending → approved/rejected/cancelled`
+- **Case management**: `open → in_progress → resolved → closed` (with escalation and reopening)
+- **Workflow**: `draft → pending → in_progress → completed/cancelled/failed`
+
 Store transitions immutably for audit.
 
 ## API Conventions
@@ -156,6 +160,7 @@ Store transitions immutably for audit.
 
 Test categories in `packages/api/src/test/`:
 - `integration/` - RLS, idempotency, outbox, effective-dating, state-machine tests
+- `integration/routes/` - Route tests for hr, cases, talent, lms, onboarding modules
 - `unit/` - Service, plugin, and job unit tests
 - `e2e/` - End-to-end flows (employee lifecycle)
 - `security/` - Injection attacks, authentication tests
