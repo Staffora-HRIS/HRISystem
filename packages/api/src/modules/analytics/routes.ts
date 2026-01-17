@@ -462,6 +462,129 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Reports Route - Standard Reports Catalog
+  // ===========================================================================
+
+  // GET /analytics/reports - Get list of standard reports
+  .get(
+    "/reports",
+    async (ctx) => {
+      const { tenantContext, set } = ctx as any;
+      
+      // Return a static catalog of available standard reports
+      const reports = [
+        {
+          id: "headcount-summary",
+          name: "Headcount Summary",
+          description: "Current headcount by department, status, and employment type",
+          category: "workforce",
+          last_run: null,
+        },
+        {
+          id: "turnover-analysis",
+          name: "Turnover Analysis",
+          description: "Employee turnover rates and trends by department and reason",
+          category: "workforce",
+          last_run: null,
+        },
+        {
+          id: "new-hires",
+          name: "New Hires Report",
+          description: "List of new hires within a specified date range",
+          category: "workforce",
+          last_run: null,
+        },
+        {
+          id: "terminations",
+          name: "Terminations Report",
+          description: "List of terminations with reasons and exit interview data",
+          category: "workforce",
+          last_run: null,
+        },
+        {
+          id: "absence-utilization",
+          name: "Absence Utilization",
+          description: "Leave balance utilization and absence patterns",
+          category: "absence",
+          last_run: null,
+        },
+        {
+          id: "time-attendance",
+          name: "Time & Attendance Summary",
+          description: "Overtime, tardiness, and attendance patterns",
+          category: "time",
+          last_run: null,
+        },
+        {
+          id: "benefits-enrollment",
+          name: "Benefits Enrollment",
+          description: "Current benefit plan enrollments and costs",
+          category: "benefits",
+          last_run: null,
+        },
+        {
+          id: "training-completion",
+          name: "Training Completion",
+          description: "Training and compliance course completion rates",
+          category: "learning",
+          last_run: null,
+        },
+        {
+          id: "performance-ratings",
+          name: "Performance Ratings Distribution",
+          description: "Performance review ratings by department and manager",
+          category: "talent",
+          last_run: null,
+        },
+        {
+          id: "compensation-analysis",
+          name: "Compensation Analysis",
+          description: "Salary distribution, comp ratios, and pay equity analysis",
+          category: "compensation",
+          last_run: null,
+        },
+        {
+          id: "org-structure",
+          name: "Organization Structure",
+          description: "Current organizational hierarchy and spans of control",
+          category: "organization",
+          last_run: null,
+        },
+        {
+          id: "audit-log",
+          name: "Audit Log Export",
+          description: "System activity and change audit trail",
+          category: "compliance",
+          last_run: null,
+        },
+      ];
+      
+      return { items: reports };
+    },
+    {
+      beforeHandle: [requirePermission("analytics", "read")],
+      response: {
+        200: t.Object({
+          items: t.Array(t.Object({
+            id: t.String(),
+            name: t.String(),
+            description: t.String(),
+            category: t.String(),
+            last_run: t.Union([t.String(), t.Null()]),
+          })),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Analytics"],
+        summary: "Get standard reports catalog",
+        description: "Get list of available standard reports",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type AnalyticsRoutes = typeof analyticsRoutes;

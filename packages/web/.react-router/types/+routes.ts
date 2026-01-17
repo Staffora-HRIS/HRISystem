@@ -53,6 +53,12 @@ type Pages = {
   "/me/cases": {
     params: {};
   };
+  "/me/competencies": {
+    params: {};
+  };
+  "/me/onboarding": {
+    params: {};
+  };
   "/manager": {
     params: {};
   };
@@ -89,6 +95,59 @@ type Pages = {
     params: {};
   };
   "/admin/hr/organization": {
+    params: {};
+  };
+  "/admin/hr/org-chart": {
+    params: {};
+  };
+  "/admin/time": {
+    params: {};
+  };
+  "/admin/time/timesheets": {
+    params: {};
+  };
+  "/admin/time/schedules": {
+    params: {};
+  };
+  "/admin/absence": {
+    params: {};
+  };
+  "/admin/talent": {
+    params: {};
+  };
+  "/admin/talent/performance": {
+    params: {};
+  };
+  "/admin/talent/competencies": {
+    params: {};
+  };
+  "/admin/talent/succession": {
+    params: {};
+  };
+  "/admin/talent/recruitment": {
+    params: {};
+  };
+  "/admin/talent/recruitment/candidates": {
+    params: {};
+  };
+  "/admin/benefits": {
+    params: {};
+  };
+  "/admin/cases": {
+    params: {};
+  };
+  "/admin/cases/:caseId": {
+    params: {
+      "caseId": string;
+    };
+  };
+  "/admin/onboarding": {
+    params: {};
+  };
+  "/admin/onboarding/templates": {
+    params: {};
+  };
+  "/admin/analytics": {
     params: {};
   };
   "/admin/workflows": {
@@ -151,7 +210,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/:reportId" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/integrations" | "/*";
+    page: "/" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/:reportId" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/integrations" | "/*";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -179,7 +238,7 @@ type RouteFiles = {
   };
   "routes/(app)/layout.tsx": {
     id: "routes/(app)/layout";
-    page: "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance";
+    page: "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance";
   };
   "routes/(app)/dashboard/route.tsx": {
     id: "routes/(app)/dashboard/route";
@@ -217,6 +276,14 @@ type RouteFiles = {
     id: "routes/(app)/me/cases/route";
     page: "/me/cases";
   };
+  "routes/(app)/me/competencies/route.tsx": {
+    id: "routes/(app)/me/competencies/route";
+    page: "/me/competencies";
+  };
+  "routes/(app)/me/onboarding/route.tsx": {
+    id: "routes/(app)/me/onboarding/route";
+    page: "/me/onboarding";
+  };
   "routes/(app)/manager/index.tsx": {
     id: "routes/(app)/manager/index";
     page: "/manager";
@@ -239,7 +306,7 @@ type RouteFiles = {
   };
   "routes/(admin)/layout.tsx": {
     id: "routes/(admin)/layout";
-    page: "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/:reportId" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/integrations";
+    page: "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/:reportId" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/integrations";
   };
   "routes/(admin)/dashboard/route.tsx": {
     id: "routes/(admin)/dashboard/route";
@@ -268,6 +335,74 @@ type RouteFiles = {
   "routes/(admin)/hr/organization/route.tsx": {
     id: "routes/(admin)/hr/organization/route";
     page: "/admin/hr/organization";
+  };
+  "routes/(admin)/hr/org-chart/route.tsx": {
+    id: "routes/(admin)/hr/org-chart/route";
+    page: "/admin/hr/org-chart";
+  };
+  "routes/(admin)/time/index.tsx": {
+    id: "routes/(admin)/time/index";
+    page: "/admin/time";
+  };
+  "routes/(admin)/time/timesheets/route.tsx": {
+    id: "routes/(admin)/time/timesheets/route";
+    page: "/admin/time/timesheets";
+  };
+  "routes/(admin)/time/schedules/route.tsx": {
+    id: "routes/(admin)/time/schedules/route";
+    page: "/admin/time/schedules";
+  };
+  "routes/(admin)/absence/index.tsx": {
+    id: "routes/(admin)/absence/index";
+    page: "/admin/absence";
+  };
+  "routes/(admin)/talent/index.tsx": {
+    id: "routes/(admin)/talent/index";
+    page: "/admin/talent";
+  };
+  "routes/(admin)/talent/performance/route.tsx": {
+    id: "routes/(admin)/talent/performance/route";
+    page: "/admin/talent/performance";
+  };
+  "routes/(admin)/talent/competencies/route.tsx": {
+    id: "routes/(admin)/talent/competencies/route";
+    page: "/admin/talent/competencies";
+  };
+  "routes/(admin)/talent/succession/route.tsx": {
+    id: "routes/(admin)/talent/succession/route";
+    page: "/admin/talent/succession";
+  };
+  "routes/(admin)/talent/recruitment/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/route";
+    page: "/admin/talent/recruitment";
+  };
+  "routes/(admin)/talent/recruitment/candidates/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/candidates/route";
+    page: "/admin/talent/recruitment/candidates";
+  };
+  "routes/(admin)/benefits/route.tsx": {
+    id: "routes/(admin)/benefits/route";
+    page: "/admin/benefits";
+  };
+  "routes/(admin)/cases/index.tsx": {
+    id: "routes/(admin)/cases/index";
+    page: "/admin/cases";
+  };
+  "routes/(admin)/cases/[caseId]/route.tsx": {
+    id: "routes/(admin)/cases/[caseId]/route";
+    page: "/admin/cases/:caseId";
+  };
+  "routes/(admin)/onboarding/index.tsx": {
+    id: "routes/(admin)/onboarding/index";
+    page: "/admin/onboarding";
+  };
+  "routes/(admin)/onboarding/templates/route.tsx": {
+    id: "routes/(admin)/onboarding/templates/route";
+    page: "/admin/onboarding/templates";
+  };
+  "routes/(admin)/analytics/route.tsx": {
+    id: "routes/(admin)/analytics/route";
+    page: "/admin/analytics";
   };
   "routes/(admin)/workflows/index.tsx": {
     id: "routes/(admin)/workflows/index";
@@ -357,6 +492,8 @@ type RouteModules = {
   "routes/(app)/me/documents/route": typeof import("./app/routes/(app)/me/documents/route.tsx");
   "routes/(app)/me/learning/route": typeof import("./app/routes/(app)/me/learning/route.tsx");
   "routes/(app)/me/cases/route": typeof import("./app/routes/(app)/me/cases/route.tsx");
+  "routes/(app)/me/competencies/route": typeof import("./app/routes/(app)/me/competencies/route.tsx");
+  "routes/(app)/me/onboarding/route": typeof import("./app/routes/(app)/me/onboarding/route.tsx");
   "routes/(app)/manager/index": typeof import("./app/routes/(app)/manager/index.tsx");
   "routes/(app)/manager/team/route": typeof import("./app/routes/(app)/manager/team/route.tsx");
   "routes/(app)/manager/approvals/route": typeof import("./app/routes/(app)/manager/approvals/route.tsx");
@@ -370,6 +507,23 @@ type RouteModules = {
   "routes/(admin)/hr/positions/route": typeof import("./app/routes/(admin)/hr/positions/route.tsx");
   "routes/(admin)/hr/departments/route": typeof import("./app/routes/(admin)/hr/departments/route.tsx");
   "routes/(admin)/hr/organization/route": typeof import("./app/routes/(admin)/hr/organization/route.tsx");
+  "routes/(admin)/hr/org-chart/route": typeof import("./app/routes/(admin)/hr/org-chart/route.tsx");
+  "routes/(admin)/time/index": typeof import("./app/routes/(admin)/time/index.tsx");
+  "routes/(admin)/time/timesheets/route": typeof import("./app/routes/(admin)/time/timesheets/route.tsx");
+  "routes/(admin)/time/schedules/route": typeof import("./app/routes/(admin)/time/schedules/route.tsx");
+  "routes/(admin)/absence/index": typeof import("./app/routes/(admin)/absence/index.tsx");
+  "routes/(admin)/talent/index": typeof import("./app/routes/(admin)/talent/index.tsx");
+  "routes/(admin)/talent/performance/route": typeof import("./app/routes/(admin)/talent/performance/route.tsx");
+  "routes/(admin)/talent/competencies/route": typeof import("./app/routes/(admin)/talent/competencies/route.tsx");
+  "routes/(admin)/talent/succession/route": typeof import("./app/routes/(admin)/talent/succession/route.tsx");
+  "routes/(admin)/talent/recruitment/route": typeof import("./app/routes/(admin)/talent/recruitment/route.tsx");
+  "routes/(admin)/talent/recruitment/candidates/route": typeof import("./app/routes/(admin)/talent/recruitment/candidates/route.tsx");
+  "routes/(admin)/benefits/route": typeof import("./app/routes/(admin)/benefits/route.tsx");
+  "routes/(admin)/cases/index": typeof import("./app/routes/(admin)/cases/index.tsx");
+  "routes/(admin)/cases/[caseId]/route": typeof import("./app/routes/(admin)/cases/[caseId]/route.tsx");
+  "routes/(admin)/onboarding/index": typeof import("./app/routes/(admin)/onboarding/index.tsx");
+  "routes/(admin)/onboarding/templates/route": typeof import("./app/routes/(admin)/onboarding/templates/route.tsx");
+  "routes/(admin)/analytics/route": typeof import("./app/routes/(admin)/analytics/route.tsx");
   "routes/(admin)/workflows/index": typeof import("./app/routes/(admin)/workflows/index.tsx");
   "routes/(admin)/workflows/builder/route": typeof import("./app/routes/(admin)/workflows/builder/route.tsx");
   "routes/(admin)/workflows/templates/route": typeof import("./app/routes/(admin)/workflows/templates/route.tsx");

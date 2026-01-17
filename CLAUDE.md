@@ -84,7 +84,7 @@ Copy `docker/.env.example` to `docker/.env` and set required secrets:
 - `src/app.ts`: Main Elysia entry point
 - `src/worker.ts`: Background job processor entry point
 - `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency, rate-limit, security-headers)
-- `src/modules/`: Feature modules (hr, time, absence, talent, lms, cases, onboarding, workflows, portal, auth) - each with routes.ts, service.ts, repository.ts, schemas.ts
+- `src/modules/`: Feature modules (absence, analytics, auth, benefits, cases, competencies, dashboard, documents, hr, lms, onboarding, portal, recruitment, security, succession, system, talent, tenant, time, workflows) - each with routes.ts, service.ts, repository.ts, schemas.ts
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
 - `src/lib/`: Shared utilities (transaction handling)
@@ -105,7 +105,7 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql`. Currently includes 99 migrations covering all modules. See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql`. Currently includes 120+ migrations covering all modules. See `migrations/README.md` for conventions.
 
 ## Critical Patterns (Non-Negotiable)
 
@@ -145,6 +145,7 @@ All state machines defined in `packages/shared/src/state-machines/`:
 - **Leave request**: `draft → pending → approved/rejected/cancelled`
 - **Case management**: `open → in_progress → resolved → closed` (with escalation and reopening)
 - **Workflow**: `draft → pending → in_progress → completed/cancelled/failed`
+- **Performance cycle**: `draft → active → review → calibration → completed`
 
 Store transitions immutably for audit.
 
