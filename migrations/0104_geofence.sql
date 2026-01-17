@@ -54,7 +54,7 @@ ALTER TABLE app.time_events
 CREATE TABLE IF NOT EXISTS app.geofence_violations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES app.tenants(id) ON DELETE CASCADE,
-    time_event_id uuid NOT NULL REFERENCES app.time_events(id) ON DELETE CASCADE,
+    time_event_id uuid NOT NULL, -- No FK due to partitioned time_events table
     employee_id uuid NOT NULL REFERENCES app.employees(id) ON DELETE CASCADE,
 
     -- Expected location

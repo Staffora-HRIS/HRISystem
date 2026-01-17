@@ -26,6 +26,8 @@ export default [
       route("documents", "routes/(app)/me/documents/route.tsx"),
       route("learning", "routes/(app)/me/learning/route.tsx"),
       route("cases", "routes/(app)/me/cases/route.tsx"),
+      route("competencies", "routes/(app)/me/competencies/route.tsx"),
+      route("onboarding", "routes/(app)/me/onboarding/route.tsx"),
     ]),
 
     // Manager portal (/manager/*)
@@ -51,7 +53,46 @@ export default [
         route("positions", "routes/(admin)/hr/positions/route.tsx"),
         route("departments", "routes/(admin)/hr/departments/route.tsx"),
         route("organization", "routes/(admin)/hr/organization/route.tsx"),
+        route("org-chart", "routes/(admin)/hr/org-chart/route.tsx"),
       ]),
+
+      // Time & Attendance
+      ...prefix("time", [
+        index("routes/(admin)/time/index.tsx"),
+        route("timesheets", "routes/(admin)/time/timesheets/route.tsx"),
+        route("schedules", "routes/(admin)/time/schedules/route.tsx"),
+      ]),
+
+      // Absence Management
+      route("absence", "routes/(admin)/absence/index.tsx"),
+
+      // Talent Management
+      ...prefix("talent", [
+        index("routes/(admin)/talent/index.tsx"),
+        route("performance", "routes/(admin)/talent/performance/route.tsx"),
+        route("competencies", "routes/(admin)/talent/competencies/route.tsx"),
+        route("succession", "routes/(admin)/talent/succession/route.tsx"),
+        route("recruitment", "routes/(admin)/talent/recruitment/route.tsx"),
+        route("recruitment/candidates", "routes/(admin)/talent/recruitment/candidates/route.tsx"),
+      ]),
+
+      // Benefits Administration
+      route("benefits", "routes/(admin)/benefits/route.tsx"),
+
+      // Cases Administration
+      ...prefix("cases", [
+        index("routes/(admin)/cases/index.tsx"),
+        route(":caseId", "routes/(admin)/cases/[caseId]/route.tsx"),
+      ]),
+
+      // Onboarding Administration
+      ...prefix("onboarding", [
+        index("routes/(admin)/onboarding/index.tsx"),
+        route("templates", "routes/(admin)/onboarding/templates/route.tsx"),
+      ]),
+
+      // Analytics
+      route("analytics", "routes/(admin)/analytics/route.tsx"),
 
       // Workflow Administration
       ...prefix("workflows", [

@@ -37,6 +37,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const apiOrigin =
+    process.env["INTERNAL_API_URL"] ||
     process.env["API_URL"] ||
     process.env["BETTER_AUTH_URL"] ||
     "http://localhost:3000";

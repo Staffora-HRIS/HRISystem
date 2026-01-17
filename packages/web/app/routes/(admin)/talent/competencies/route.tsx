@@ -6,7 +6,6 @@ import {
   Plus,
   Award,
   Search,
-  Filter,
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";

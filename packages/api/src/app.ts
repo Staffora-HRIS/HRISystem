@@ -36,7 +36,12 @@ import { lmsRoutes } from "./modules/lms";
 import { casesRoutes } from "./modules/cases";
 import { onboardingRoutes } from "./modules/onboarding";
 import { tenantRoutes } from "./modules/tenant";
-import { securityRoutes } from "./modules/security";
+import {
+  securityRoutes,
+  fieldPermissionRoutes,
+  portalRoutes as securityPortalRoutes,
+  managerRoutes,
+} from "./modules/security";
 import { dashboardRoutes } from "./modules/dashboard";
 import { systemRoutes } from "./modules/system";
 import { benefitsRoutes } from "./modules/benefits";
@@ -44,6 +49,7 @@ import { documentsRoutes } from "./modules/documents";
 import { successionRoutes } from "./modules/succession";
 import { analyticsRoutes } from "./modules/analytics";
 import { competenciesRoutes } from "./modules/competencies";
+import { recruitmentRoutes } from "./modules/recruitment";
 
 /**
  * Environment configuration with validation
@@ -402,6 +408,9 @@ export const app = new Elysia()
       // Tenant + Security (used by frontend hooks)
       .use(tenantRoutes)
       .use(securityRoutes)
+      .use(fieldPermissionRoutes)
+      .use(securityPortalRoutes)
+      .use(managerRoutes)
       // Dashboard + System
       .use(dashboardRoutes)
       .use(systemRoutes)
@@ -427,6 +436,8 @@ export const app = new Elysia()
       .use(analyticsRoutes)
       // Competencies
       .use(competenciesRoutes)
+      // Recruitment
+      .use(recruitmentRoutes)
       // Portal aggregations
       .use(portalRoutes)
   )

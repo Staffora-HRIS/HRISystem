@@ -111,16 +111,32 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
         }
       );
 
+      // Handle both camelCase (TypeScript) and snake_case (PostgreSQL) column names
       return rows.map((r) => {
-        const actor = r.actorName || r.actorEmail || "System";
-        const resource = r.resourceId ? `${r.resourceType} ${r.resourceId}` : r.resourceType;
+        const raw = r as Record<string, unknown>;
+        const actorName = raw.actorName ?? raw.actor_name;
+        const actorEmail = raw.actorEmail ?? raw.actor_email;
+        const resourceId = raw.resourceId ?? raw.resource_id;
+        const resourceType = raw.resourceType ?? raw.resource_type;
+        const createdAt = raw.createdAt ?? raw.created_at;
+        const requestId = raw.requestId ?? raw.request_id;
+
+        const actor = actorName || actorEmail || "System";
+        const resource = resourceId ? `${resourceType} ${resourceId}` : String(resourceType);
+
+        const toISOString = (value: unknown): string => {
+          if (value instanceof Date) return value.toISOString();
+          if (typeof value === "string") return value;
+          return new Date().toISOString();
+        };
+
         return {
           id: r.id,
           action: r.action,
           resource,
-          actor,
-          timestamp: r.createdAt.toISOString(),
-          details: r.requestId ? `request:${r.requestId}` : undefined,
+          actor: String(actor),
+          timestamp: toISOString(createdAt),
+          details: requestId ? `request:${requestId}` : undefined,
         };
       });
     },
@@ -208,18 +224,34 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
         }
       );
 
-      return rows.map((r) => ({
-        id: r.id,
-        email: r.email,
-        name: r.name,
-        status: r.status,
-        emailVerified: r.emailVerified,
-        mfaEnabled: r.mfaEnabled,
-        joinedAt: r.joinedAt.toISOString(),
-        isPrimary: r.isPrimary,
-        roles: r.roles ?? [],
-        createdAt: r.createdAt.toISOString(),
-      }));
+      // Handle both camelCase (TypeScript) and snake_case (PostgreSQL) column names
+      return rows.map((r) => {
+        const raw = r as Record<string, unknown>;
+        const emailVerified = raw.emailVerified ?? raw.email_verified;
+        const mfaEnabled = raw.mfaEnabled ?? raw.mfa_enabled;
+        const joinedAt = raw.joinedAt ?? raw.joined_at;
+        const isPrimary = raw.isPrimary ?? raw.is_primary;
+        const createdAt = raw.createdAt ?? raw.created_at;
+
+        const toISOString = (value: unknown): string => {
+          if (value instanceof Date) return value.toISOString();
+          if (typeof value === "string") return value;
+          return new Date().toISOString();
+        };
+
+        return {
+          id: r.id,
+          email: r.email,
+          name: r.name,
+          status: r.status,
+          emailVerified: Boolean(emailVerified),
+          mfaEnabled: Boolean(mfaEnabled),
+          joinedAt: toISOString(joinedAt),
+          isPrimary: Boolean(isPrimary),
+          roles: r.roles ?? [],
+          createdAt: toISOString(createdAt),
+        };
+      });
     },
     {
       beforeHandle: [requirePermission("users", "read")],
@@ -268,14 +300,22 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
         }
       );
 
-      return rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        description: r.description,
-        isSystem: r.isSystem,
-        tenantId: r.tenantId,
-        permissionsCount: r.permissionsCount,
-      }));
+      // Handle both camelCase (TypeScript) and snake_case (PostgreSQL) column names
+      return rows.map((r) => {
+        const raw = r as Record<string, unknown>;
+        const isSystem = raw.isSystem ?? raw.is_system;
+        const tenantId = raw.tenantId ?? raw.tenant_id;
+        const permissionsCount = raw.permissionsCount ?? raw.permissions_count;
+
+        return {
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          isSystem: Boolean(isSystem),
+          tenantId: tenantId ? String(tenantId) : null,
+          permissionsCount: Number(permissionsCount ?? 0),
+        };
+      });
     },
     {
       beforeHandle: [requirePermission("roles", "read")],

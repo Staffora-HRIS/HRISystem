@@ -215,6 +215,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+      INTERNAL_API_URL: http://hris-api:3000
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:

@@ -96,9 +96,24 @@ type ErrorInterceptor = (error: ApiError) => ApiError | Promise<ApiError>;
  * FIX: Always return a full URL pointing to the API server.
  * Relative URLs like "/api/v1" cause requests to go to the frontend origin,
  * resulting in 405 Method Not Allowed errors.
+ *
+ * For server-side rendering (SSR) in Docker, we need to use the Docker
+ * internal hostname (hris-api) instead of localhost.
  */
 function getApiBaseUrl(): string {
-  // Check for environment variable first
+  // Check if we're running server-side (SSR)
+  const isServer = typeof window === "undefined";
+
+  // Server-side: Check for internal API URL first (Docker networking)
+  if (isServer) {
+    const internalUrl = process.env.INTERNAL_API_URL;
+    if (internalUrl && internalUrl.trim() !== "") {
+      const baseUrl = internalUrl.trim();
+      return baseUrl.endsWith("/api/v1") ? baseUrl : `${baseUrl}/api/v1`;
+    }
+  }
+
+  // Client-side or fallback: Use VITE_API_URL
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl && envUrl.trim() !== "") {
     // Append /api/v1 if the env URL doesn't already include it

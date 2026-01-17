@@ -236,7 +236,8 @@ const DEFAULT_SKIP_ROUTES = [
 ];
 
 /**
- * Resolve tenant from request
+ * Resolve tenant from request (synchronous - header/session only)
+ * For fallback to user's primary tenant, use resolveTenantWithFallback()
  */
 export function resolveTenant(
   headers: Headers,
@@ -257,6 +258,42 @@ export function resolveTenant(
   }
 
   // 3. No tenant found
+  return { tenantId: null, source: null };
+}
+
+/**
+ * Resolve tenant with fallback to user's primary tenant (async)
+ * This is the preferred method when authService is available
+ */
+export async function resolveTenantWithFallback(
+  headers: Headers,
+  session: { id?: string; currentTenantId?: string } | null,
+  userId: string | null,
+  authService: { getSessionTenant: (sessionId: string, userId?: string | null) => Promise<string | null> } | null,
+  options: TenantResolutionOptions = {}
+): Promise<{ tenantId: string | null; source: TenantSource | null }> {
+  const { headerName = "X-Tenant-ID" } = options;
+
+  // 1. Try header first (explicit tenant selection)
+  const headerValue = headers.get(headerName);
+  if (headerValue) {
+    return { tenantId: headerValue, source: "header" };
+  }
+
+  // 2. Try session's currentTenantId directly
+  if (session?.currentTenantId) {
+    return { tenantId: session.currentTenantId, source: "session" };
+  }
+
+  // 3. If we have authService and session, try to get tenant with fallback to user's primary
+  if (authService && session?.id && userId) {
+    const tenantId = await authService.getSessionTenant(session.id, userId);
+    if (tenantId) {
+      return { tenantId, source: "session" };
+    }
+  }
+
+  // 4. No tenant found
   return { tenantId: null, source: null };
 }
 
@@ -300,15 +337,24 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
       async (ctx): Promise<{ tenant: Tenant | null; tenantId: string | null }> => {
         const { request, path, tenantService, set } = ctx as any;
         const session = (ctx as any).session ?? null;
+        const user = (ctx as any).user ?? null;
+        const authService = (ctx as any).authService ?? null;
+
         // Check if route should skip tenant resolution
         const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(path));
         if (shouldSkip) {
           return { tenant: null, tenantId: null };
         }
 
-        // Resolve tenant from request
-        // Note: session will be available after auth plugin is added
-        const { tenantId } = resolveTenant(request.headers, session, { headerName });
+        // Resolve tenant from request with fallback to user's primary tenant
+        // This ensures authenticated users get their primary tenant automatically
+        const { tenantId } = await resolveTenantWithFallback(
+          request.headers,
+          session,
+          user?.id ?? null,
+          authService,
+          { headerName }
+        );
 
         // If no tenant ID and not optional, error
         if (!tenantId) {
