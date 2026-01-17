@@ -209,60 +209,78 @@ export class AuthService {
    * Get user's current session tenant
    * FIX: Corrected snake_case/camelCase mismatch that was causing tenant resolution to always fail.
    * The SQL alias must match the property name we access from the result object.
+   * 
+   * FIX: Added try-catch to prevent database errors from bubbling up as 500 Internal Server Errors.
+   * Database errors (e.g., invalid UUID cast, connection issues) are caught and logged,
+   * returning null to allow graceful degradation with proper error messages.
    */
   async getSessionTenant(sessionId: string, userId?: string | null): Promise<string | null> {
-    // Check cache first
-    if (this.cache) {
-      const cached = await this.cache.get<string>(`session:tenant:${sessionId}`);
-      if (cached) return cached;
-    }
-
-    // Prefer explicit session tenant if set
-    // FIX: Changed alias from 'current_tenant_id' to 'currentTenantId' to match TypeScript property access
-    const sessionRows = await this.db.query<{ currentTenantId: string | null }>`
-      SELECT "currentTenantId"::text as "currentTenantId"
-      FROM app."session"
-      WHERE id = ${sessionId}
-      LIMIT 1
-    `;
-
-    const explicitTenantId = sessionRows[0]?.currentTenantId ?? null;
-    if (explicitTenantId) {
+    try {
+      // Check cache first
       if (this.cache) {
-        await this.cache.set(`session:tenant:${sessionId}`, explicitTenantId, 300);
+        const cached = await this.cache.get<string>(`session:tenant:${sessionId}`);
+        if (cached) return cached;
       }
-      return explicitTenantId;
-    }
 
-    // Fallback to user's primary tenant
-    if (!userId) return null;
-
-    const primary = await this.db.query<{ tenant_id: string }>`
-      SELECT tenant_id::text as tenant_id
-      FROM app.user_tenants
-      WHERE user_id = ${userId}::uuid
-        AND is_primary = true
-        AND status = 'active'
-      LIMIT 1
-    `;
-
-    const tenantId = primary[0]?.tenant_id ?? null;
-
-    // Persist fallback onto session so future requests can resolve from session alone
-    if (tenantId) {
-      await this.db.query`
-        UPDATE app."session"
-        SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+      // Prefer explicit session tenant if set
+      // FIX: Changed alias from 'current_tenant_id' to 'currentTenantId' to match TypeScript property access
+      const sessionRows = await this.db.query<{ currentTenantId: string | null }>`
+        SELECT "currentTenantId"::text as "currentTenantId"
+        FROM app."session"
         WHERE id = ${sessionId}
+        LIMIT 1
       `;
-    }
 
-    // Cache the result
-    if (this.cache && tenantId) {
-      await this.cache.set(`session:tenant:${sessionId}`, tenantId, 300);
-    }
+      const explicitTenantId = sessionRows[0]?.currentTenantId ?? null;
+      if (explicitTenantId) {
+        if (this.cache) {
+          await this.cache.set(`session:tenant:${sessionId}`, explicitTenantId, 300);
+        }
+        return explicitTenantId;
+      }
 
-    return tenantId;
+      // Fallback to user's primary tenant
+      if (!userId) return null;
+
+      // Validate userId is a valid UUID format before querying to prevent SQL errors
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        console.warn(`[AuthService.getSessionTenant] Invalid UUID format for userId: ${userId}`);
+        return null;
+      }
+
+      const primary = await this.db.query<{ tenant_id: string }>`
+        SELECT tenant_id::text as tenant_id
+        FROM app.user_tenants
+        WHERE user_id = ${userId}::uuid
+          AND is_primary = true
+          AND status = 'active'
+        LIMIT 1
+      `;
+
+      const tenantId = primary[0]?.tenant_id ?? null;
+
+      // Persist fallback onto session so future requests can resolve from session alone
+      if (tenantId) {
+        await this.db.query`
+          UPDATE app."session"
+          SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+          WHERE id = ${sessionId}
+        `;
+      }
+
+      // Cache the result
+      if (this.cache && tenantId) {
+        await this.cache.set(`session:tenant:${sessionId}`, tenantId, 300);
+      }
+
+      return tenantId;
+    } catch (error) {
+      // Log the error for debugging but don't let it bubble up as 500
+      // This allows the tenant resolution to fail gracefully with a proper "Missing Tenant" error
+      console.error(`[AuthService.getSessionTenant] Error resolving tenant for session ${sessionId}:`, error);
+      return null;
+    }
   }
 
   /**
