@@ -1444,6 +1444,240 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Self-Service Portal Routes (My Benefits)
+  // ===========================================================================
+
+  // GET /my-enrollments - Get current user's benefit enrollments
+  .get(
+    "/my-enrollments",
+    async (ctx) => {
+      const { benefitsService, user, tenant, db, set } = ctx as any;
+
+      // Require authentication and tenant context
+      if (!user || !tenant) {
+        set.status = 401;
+        return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+      }
+
+      try {
+        // Get employee ID for current user
+        const [employee] = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT id FROM app.employees
+              WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
+              LIMIT 1
+            `;
+          }
+        );
+
+        if (!employee) {
+          return { items: [], message: "No employee record found" };
+        }
+
+        const tenantContext = { tenantId: tenant.id, userId: user.id };
+        const result = await benefitsService.getEmployeeEnrollments(tenantContext, employee.id);
+
+        if (!result.success) {
+          set.status = 500;
+          return { error: result.error };
+        }
+
+        return { items: result.data };
+      } catch (error) {
+        console.error("Benefits /my-enrollments error:", error);
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: "Failed to get enrollments" } };
+      }
+    },
+    {
+      response: {
+        200: t.Object({
+          items: t.Array(EnrollmentResponse),
+          message: t.Optional(t.String()),
+        }),
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Benefits - Self Service"],
+        summary: "Get my enrollments",
+        description: "Get current user's benefit enrollments",
+      },
+    }
+  )
+
+  // GET /my-life-events - Get current user's life events
+  .get(
+    "/my-life-events",
+    async (ctx) => {
+      const { benefitsService, user, tenant, db, set } = ctx as any;
+
+      // Require authentication and tenant context
+      if (!user || !tenant) {
+        set.status = 401;
+        return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+      }
+
+      try {
+        // Get employee ID for current user
+        const [employee] = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT id FROM app.employees
+              WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
+              LIMIT 1
+            `;
+          }
+        );
+
+        if (!employee) {
+          return { items: [], message: "No employee record found" };
+        }
+
+        // Query life events for this employee
+        const lifeEvents = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT 
+                id, employee_id, event_type, event_date, 
+                enrollment_deadline, status, notes,
+                created_at, updated_at
+              FROM app.benefit_life_events
+              WHERE employee_id = ${employee.id}::uuid 
+                AND tenant_id = ${tenant.id}::uuid
+              ORDER BY event_date DESC
+              LIMIT 50
+            `;
+          }
+        );
+
+        return {
+          items: lifeEvents.map((e: any) => ({
+            id: e.id,
+            employeeId: e.employeeId,
+            eventType: e.eventType,
+            eventDate: e.eventDate,
+            enrollmentDeadline: e.enrollmentDeadline,
+            status: e.status,
+            notes: e.notes,
+            createdAt: e.createdAt,
+            updatedAt: e.updatedAt,
+          })),
+        };
+      } catch (error) {
+        console.error("Benefits /my-life-events error:", error);
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: "Failed to get life events" } };
+      }
+    },
+    {
+      response: {
+        200: t.Object({
+          items: t.Array(t.Object({
+            id: t.String(),
+            employeeId: t.String(),
+            eventType: t.String(),
+            eventDate: t.String(),
+            enrollmentDeadline: t.Union([t.String(), t.Null()]),
+            status: t.String(),
+            notes: t.Union([t.String(), t.Null()]),
+            createdAt: t.String(),
+            updatedAt: t.String(),
+          })),
+          message: t.Optional(t.String()),
+        }),
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Benefits - Self Service"],
+        summary: "Get my life events",
+        description: "Get current user's benefit life events",
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Stats Route - Enrollment Statistics
+  // ===========================================================================
+
+  // GET /stats - Get enrollment statistics
+  .get(
+    "/stats",
+    async (ctx) => {
+      const { db, tenantContext, error, set } = ctx as any;
+      
+      try {
+        const stats = await db.withTransaction(tenantContext, async (tx: any) => {
+          // Get total eligible employees (active employees)
+          const [totalRow] = await tx`
+            SELECT COUNT(*)::int as count
+            FROM app.employees
+            WHERE status = 'active'
+          `;
+          
+          // Get enrolled employees (employees with at least one active enrollment)
+          const [enrolledRow] = await tx`
+            SELECT COUNT(DISTINCT employee_id)::int as count
+            FROM app.benefit_enrollments
+            WHERE status = 'active'
+              AND (effective_to IS NULL OR effective_to > CURRENT_DATE)
+          `;
+          
+          // Get pending enrollments
+          const [pendingEnrollmentsRow] = await tx`
+            SELECT COUNT(*)::int as count
+            FROM app.benefit_enrollments
+            WHERE status = 'pending'
+          `;
+          
+          // Get pending life events
+          const [pendingLifeEventsRow] = await tx`
+            SELECT COUNT(*)::int as count
+            FROM app.benefit_life_events
+            WHERE status = 'pending'
+          `;
+          
+          return {
+            total_employees: totalRow?.count ?? 0,
+            enrolled_employees: enrolledRow?.count ?? 0,
+            pending_enrollments: pendingEnrollmentsRow?.count ?? 0,
+            pending_life_events: pendingLifeEventsRow?.count ?? 0,
+          };
+        });
+        
+        return stats;
+      } catch (err) {
+        console.error("Benefits /stats error:", err);
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: "Failed to get benefits stats" } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("benefits:enrollments", "read")],
+      response: {
+        200: t.Object({
+          total_employees: t.Number(),
+          enrolled_employees: t.Number(),
+          pending_enrollments: t.Number(),
+          pending_life_events: t.Number(),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Benefits"],
+        summary: "Get enrollment statistics",
+        description: "Get overall benefits enrollment statistics",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type BenefitsRoutes = typeof benefitsRoutes;

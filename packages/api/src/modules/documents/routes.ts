@@ -494,6 +494,162 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Self-Service Portal Routes (My Documents)
+  // ===========================================================================
+
+  // GET /my-summary - Get current user's document summary
+  .get(
+    "/my-summary",
+    async (ctx) => {
+      const { user, tenant, db, set } = ctx as any;
+
+      // Require authentication and tenant context
+      if (!user || !tenant) {
+        set.status = 401;
+        return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+      }
+
+      try {
+        // Get employee ID for current user
+        const [employee] = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT id FROM app.employees
+              WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid
+              LIMIT 1
+            `;
+          }
+        );
+
+        if (!employee) {
+          return {
+            totalDocuments: 0,
+            byCategory: [],
+            recentDocuments: [],
+            expiringDocuments: [],
+            message: "No employee record found",
+          };
+        }
+
+        // Get document counts by category
+        const categoryCounts = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT category, COUNT(*)::int as count
+              FROM app.documents
+              WHERE employee_id = ${employee.id}::uuid 
+                AND tenant_id = ${tenant.id}::uuid
+                AND status = 'active'
+              GROUP BY category
+              ORDER BY count DESC
+            `;
+          }
+        );
+
+        // Get recent documents
+        const recentDocs = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT id, name, category, mime_type, file_size, created_at
+              FROM app.documents
+              WHERE employee_id = ${employee.id}::uuid 
+                AND tenant_id = ${tenant.id}::uuid
+                AND status = 'active'
+              ORDER BY created_at DESC
+              LIMIT 5
+            `;
+          }
+        );
+
+        // Get expiring documents (within 30 days)
+        const expiringDocs = await db.withTransaction(
+          { tenantId: tenant.id, userId: user.id },
+          async (tx: any) => {
+            return tx`
+              SELECT id, name, category, expires_at
+              FROM app.documents
+              WHERE employee_id = ${employee.id}::uuid 
+                AND tenant_id = ${tenant.id}::uuid
+                AND status = 'active'
+                AND expires_at IS NOT NULL
+                AND expires_at <= NOW() + INTERVAL '30 days'
+              ORDER BY expires_at ASC
+              LIMIT 10
+            `;
+          }
+        );
+
+        const totalDocuments = categoryCounts.reduce(
+          (sum: number, c: any) => sum + (c.count || 0),
+          0
+        );
+
+        return {
+          totalDocuments,
+          byCategory: categoryCounts.map((c: any) => ({
+            category: c.category,
+            count: c.count,
+          })),
+          recentDocuments: recentDocs.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            category: d.category,
+            mimeType: d.mimeType,
+            fileSize: d.fileSize,
+            createdAt: d.createdAt,
+          })),
+          expiringDocuments: expiringDocs.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            category: d.category,
+            expiresAt: d.expiresAt,
+          })),
+        };
+      } catch (error) {
+        console.error("Documents /my-summary error:", error);
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: "Failed to get document summary" } };
+      }
+    },
+    {
+      response: {
+        200: t.Object({
+          totalDocuments: t.Number(),
+          byCategory: t.Array(t.Object({
+            category: t.String(),
+            count: t.Number(),
+          })),
+          recentDocuments: t.Array(t.Object({
+            id: t.String(),
+            name: t.String(),
+            category: t.String(),
+            mimeType: t.Union([t.String(), t.Null()]),
+            fileSize: t.Union([t.Number(), t.Null()]),
+            createdAt: t.String(),
+          })),
+          expiringDocuments: t.Array(t.Object({
+            id: t.String(),
+            name: t.String(),
+            category: t.String(),
+            expiresAt: t.String(),
+          })),
+          message: t.Optional(t.String()),
+        }),
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Documents - Self Service"],
+        summary: "Get my document summary",
+        description: "Get summary of current user's documents including counts, recent, and expiring",
+      },
+    }
   );
 
 export type DocumentsRoutes = typeof documentsRoutes;

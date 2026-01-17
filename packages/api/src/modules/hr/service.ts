@@ -640,17 +640,41 @@ export class HRService {
     const result = await this.repository.findEmployees(context, filters, pagination);
 
     return {
-      items: result.items.map((emp) => ({
-        id: emp.id,
-        employee_number: emp.employeeNumber,
-        status: emp.status,
-        hire_date: emp.hireDate.toISOString().split("T")[0]!,
-        full_name: emp.fullName || "",
-        display_name: emp.displayName || "",
-        position_title: emp.positionTitle,
-        org_unit_name: emp.orgUnitName,
-        manager_name: emp.managerName,
-      })),
+      items: result.items.map((emp) => {
+        // Handle both camelCase (TypeScript interface) and snake_case (PostgreSQL columns)
+        const rawEmp = emp as Record<string, unknown>;
+
+        const employeeNumber = rawEmp.employeeNumber ?? rawEmp.employee_number;
+        const hireDate = rawEmp.hireDate ?? rawEmp.hire_date;
+        const fullName = rawEmp.fullName ?? rawEmp.full_name;
+        const displayName = rawEmp.displayName ?? rawEmp.display_name;
+        const positionTitle = rawEmp.positionTitle ?? rawEmp.position_title;
+        const orgUnitName = rawEmp.orgUnitName ?? rawEmp.org_unit_name;
+        const managerName = rawEmp.managerName ?? rawEmp.manager_name;
+
+        // Helper to safely convert date to YYYY-MM-DD string
+        const toDateString = (value: unknown): string => {
+          if (value instanceof Date) {
+            return value.toISOString().split("T")[0]!;
+          }
+          if (typeof value === "string") {
+            return value.includes("T") ? value.split("T")[0]! : value;
+          }
+          return "";
+        };
+
+        return {
+          id: emp.id,
+          employee_number: String(employeeNumber || ""),
+          status: emp.status,
+          hire_date: toDateString(hireDate),
+          full_name: fullName ? String(fullName) : "",
+          display_name: displayName ? String(displayName) : "",
+          position_title: positionTitle ? String(positionTitle) : null,
+          org_unit_name: orgUnitName ? String(orgUnitName) : null,
+          manager_name: managerName ? String(managerName) : null,
+        };
+      }),
       nextCursor: result.nextCursor,
       hasMore: result.hasMore,
     };
@@ -1627,25 +1651,53 @@ export class HRService {
   }
 
   private mapPositionToResponse(row: PositionRow): PositionResponse {
+    // Handle both camelCase (TypeScript interface) and snake_case (PostgreSQL columns)
+    // PostgreSQL returns snake_case, but our interface expects camelCase
+    const rawRow = row as Record<string, unknown>;
+
+    const tenantId = rawRow.tenantId ?? rawRow.tenant_id;
+    const orgUnitId = rawRow.orgUnitId ?? rawRow.org_unit_id;
+    const orgUnitName = rawRow.orgUnitName ?? rawRow.org_unit_name;
+    const jobGrade = rawRow.jobGrade ?? rawRow.job_grade;
+    const minSalary = rawRow.minSalary ?? rawRow.min_salary;
+    const maxSalary = rawRow.maxSalary ?? rawRow.max_salary;
+    const isManager = rawRow.isManager ?? rawRow.is_manager;
+    const currentHeadcount = rawRow.currentHeadcount ?? rawRow.current_headcount;
+    const reportsToPositionId = rawRow.reportsToPositionId ?? rawRow.reports_to_position_id;
+    const isActive = rawRow.isActive ?? rawRow.is_active;
+    const createdAt = rawRow.createdAt ?? rawRow.created_at;
+    const updatedAt = rawRow.updatedAt ?? rawRow.updated_at;
+
+    // Helper to safely convert to ISO string
+    const toISOString = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+      if (typeof value === "string") {
+        return value;
+      }
+      return new Date().toISOString();
+    };
+
     return {
       id: row.id,
-      tenant_id: row.tenantId,
+      tenant_id: String(tenantId),
       code: row.code,
       title: row.title,
       description: row.description,
-      org_unit_id: row.orgUnitId,
-      org_unit_name: row.orgUnitName,
-      job_grade: row.jobGrade,
-      min_salary: row.minSalary ? parseFloat(row.minSalary) : null,
-      max_salary: row.maxSalary ? parseFloat(row.maxSalary) : null,
+      org_unit_id: orgUnitId ? String(orgUnitId) : null,
+      org_unit_name: orgUnitName ? String(orgUnitName) : undefined,
+      job_grade: jobGrade ? String(jobGrade) : null,
+      min_salary: minSalary ? parseFloat(String(minSalary)) : null,
+      max_salary: maxSalary ? parseFloat(String(maxSalary)) : null,
       currency: row.currency,
-      is_manager: row.isManager,
+      is_manager: Boolean(isManager),
       headcount: row.headcount,
-      current_headcount: row.currentHeadcount,
-      reports_to_position_id: row.reportsToPositionId,
-      is_active: row.isActive,
-      created_at: row.createdAt.toISOString(),
-      updated_at: row.updatedAt.toISOString(),
+      current_headcount: currentHeadcount != null ? Number(currentHeadcount) : undefined,
+      reports_to_position_id: reportsToPositionId ? String(reportsToPositionId) : null,
+      is_active: isActive !== false,
+      created_at: toISOString(createdAt),
+      updated_at: toISOString(updatedAt),
     };
   }
 
@@ -1668,79 +1720,172 @@ export class HRService {
     const compensation = result.compensation;
     const manager = result.manager;
 
+    // Helper to safely convert date to YYYY-MM-DD string
+    const toDateString = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString().split("T")[0]!;
+      }
+      if (typeof value === "string") {
+        return value.includes("T") ? value.split("T")[0]! : value;
+      }
+      return "";
+    };
+
+    // Helper to safely convert to ISO string
+    const toISOString = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+      if (typeof value === "string") {
+        return value;
+      }
+      return new Date().toISOString();
+    };
+
+    // Handle both camelCase (TypeScript interface) and snake_case (PostgreSQL columns) for employee
+    const rawEmp = emp as Record<string, unknown>;
+    const tenantId = rawEmp.tenantId ?? rawEmp.tenant_id;
+    const employeeNumber = rawEmp.employeeNumber ?? rawEmp.employee_number;
+    const userId = rawEmp.userId ?? rawEmp.user_id;
+    const hireDate = rawEmp.hireDate ?? rawEmp.hire_date;
+    const terminationDate = rawEmp.terminationDate ?? rawEmp.termination_date;
+    const terminationReason = rawEmp.terminationReason ?? rawEmp.termination_reason;
+    const createdAt = rawEmp.createdAt ?? rawEmp.created_at;
+    const updatedAt = rawEmp.updatedAt ?? rawEmp.updated_at;
+
+    // Map personal data with snake_case fallbacks
+    const mapPersonal = () => {
+      if (!personal) return undefined;
+      const rawPersonal = personal as Record<string, unknown>;
+      const firstName = rawPersonal.firstName ?? rawPersonal.first_name ?? "";
+      const lastName = rawPersonal.lastName ?? rawPersonal.last_name ?? "";
+      const middleName = rawPersonal.middleName ?? rawPersonal.middle_name;
+      const preferredName = rawPersonal.preferredName ?? rawPersonal.preferred_name;
+      const dateOfBirth = rawPersonal.dateOfBirth ?? rawPersonal.date_of_birth;
+      const maritalStatus = rawPersonal.maritalStatus ?? rawPersonal.marital_status;
+      const effectiveFrom = rawPersonal.effectiveFrom ?? rawPersonal.effective_from;
+
+      return {
+        first_name: String(firstName),
+        last_name: String(lastName),
+        middle_name: middleName ? String(middleName) : null,
+        preferred_name: preferredName ? String(preferredName) : null,
+        full_name: middleName
+          ? `${firstName} ${middleName} ${lastName}`
+          : `${firstName} ${lastName}`,
+        display_name: `${preferredName || firstName} ${lastName}`,
+        date_of_birth: dateOfBirth ? toDateString(dateOfBirth) : null,
+        gender: (rawPersonal.gender ?? null) as EmployeeResponse["personal"] extends { gender: infer G } ? G : never,
+        marital_status: (maritalStatus ?? null) as EmployeeResponse["personal"] extends { marital_status: infer M } ? M : never,
+        nationality: (rawPersonal.nationality ?? null) as string | null,
+        effective_from: toDateString(effectiveFrom),
+      };
+    };
+
+    // Map contract data with snake_case fallbacks
+    const mapContract = () => {
+      if (!contract) return undefined;
+      const rawContract = contract as Record<string, unknown>;
+      const contractType = rawContract.contractType ?? rawContract.contract_type;
+      const employmentType = rawContract.employmentType ?? rawContract.employment_type;
+      const workingHoursPerWeek = rawContract.workingHoursPerWeek ?? rawContract.working_hours_per_week;
+      const probationEndDate = rawContract.probationEndDate ?? rawContract.probation_end_date;
+      const noticePeriodDays = rawContract.noticePeriodDays ?? rawContract.notice_period_days;
+      const effectiveFrom = rawContract.effectiveFrom ?? rawContract.effective_from;
+
+      return {
+        contract_type: String(contractType) as import("./schemas").ContractType,
+        employment_type: String(employmentType) as import("./schemas").EmploymentType,
+        fte: parseFloat(String(rawContract.fte)),
+        working_hours_per_week: workingHoursPerWeek
+          ? parseFloat(String(workingHoursPerWeek))
+          : null,
+        probation_end_date: probationEndDate ? toDateString(probationEndDate) : null,
+        notice_period_days: noticePeriodDays ? Number(noticePeriodDays) : null,
+        effective_from: toDateString(effectiveFrom),
+      };
+    };
+
+    // Map position data with snake_case fallbacks
+    const mapPosition = () => {
+      if (!position) return undefined;
+      const rawPosition = position as Record<string, unknown>;
+      const positionId = rawPosition.positionId ?? rawPosition.position_id;
+      const positionCode = rawPosition.positionCode ?? rawPosition.position_code;
+      const positionTitle = rawPosition.positionTitle ?? rawPosition.position_title;
+      const orgUnitId = rawPosition.orgUnitId ?? rawPosition.org_unit_id;
+      const orgUnitName = rawPosition.orgUnitName ?? rawPosition.org_unit_name;
+      const jobGrade = rawPosition.jobGrade ?? rawPosition.job_grade;
+      const isPrimary = rawPosition.isPrimary ?? rawPosition.is_primary;
+      const effectiveFrom = rawPosition.effectiveFrom ?? rawPosition.effective_from;
+
+      return {
+        position_id: String(positionId),
+        position_code: positionCode ? String(positionCode) : "",
+        position_title: positionTitle ? String(positionTitle) : "",
+        org_unit_id: String(orgUnitId),
+        org_unit_name: orgUnitName ? String(orgUnitName) : "",
+        job_grade: jobGrade ? String(jobGrade) : null,
+        is_primary: Boolean(isPrimary),
+        effective_from: toDateString(effectiveFrom),
+      };
+    };
+
+    // Map compensation data with snake_case fallbacks
+    const mapCompensation = () => {
+      if (!compensation) return undefined;
+      const rawComp = compensation as Record<string, unknown>;
+      const baseSalary = rawComp.baseSalary ?? rawComp.base_salary;
+      const payFrequency = rawComp.payFrequency ?? rawComp.pay_frequency;
+      const effectiveFrom = rawComp.effectiveFrom ?? rawComp.effective_from;
+
+      return {
+        base_salary: parseFloat(String(baseSalary)),
+        currency: String(rawComp.currency),
+        pay_frequency: String(payFrequency),
+        annual_salary: annualSalary || parseFloat(String(baseSalary)) * 12,
+        effective_from: toDateString(effectiveFrom),
+      };
+    };
+
+    // Map manager data with snake_case fallbacks
+    const mapManager = () => {
+      if (!manager) return null;
+      const rawManager = manager as Record<string, unknown>;
+      const managerId = rawManager.managerId ?? rawManager.manager_id;
+      const managerNumber = rawManager.managerNumber ?? rawManager.manager_number;
+      const managerName = rawManager.managerName ?? rawManager.manager_name;
+      const relationshipType = rawManager.relationshipType ?? rawManager.relationship_type;
+      const isPrimary = rawManager.isPrimary ?? rawManager.is_primary;
+      const effectiveFrom = rawManager.effectiveFrom ?? rawManager.effective_from;
+
+      return {
+        manager_id: String(managerId),
+        manager_number: managerNumber ? String(managerNumber) : "",
+        manager_name: managerName ? String(managerName) : "",
+        relationship_type: String(relationshipType),
+        is_primary: Boolean(isPrimary),
+        effective_from: toDateString(effectiveFrom),
+      };
+    };
+
     return {
       id: emp.id,
-      tenant_id: emp.tenantId,
-      employee_number: emp.employeeNumber,
-      user_id: emp.userId,
+      tenant_id: String(tenantId),
+      employee_number: String(employeeNumber),
+      user_id: userId ? String(userId) : null,
       status: emp.status,
-      hire_date: emp.hireDate.toISOString().split("T")[0]!,
-      termination_date: emp.terminationDate?.toISOString().split("T")[0] || null,
-      termination_reason: emp.terminationReason,
+      hire_date: toDateString(hireDate),
+      termination_date: terminationDate ? toDateString(terminationDate) : null,
+      termination_reason: terminationReason ? String(terminationReason) : null,
       tenure_years: tenure,
-      personal: personal
-        ? {
-            first_name: personal.firstName,
-            last_name: personal.lastName,
-            middle_name: personal.middleName,
-            preferred_name: personal.preferredName,
-            full_name: personal.middleName
-              ? `${personal.firstName} ${personal.middleName} ${personal.lastName}`
-              : `${personal.firstName} ${personal.lastName}`,
-            display_name: `${personal.preferredName || personal.firstName} ${personal.lastName}`,
-            date_of_birth: personal.dateOfBirth?.toISOString().split("T")[0] || null,
-            gender: personal.gender as EmployeeResponse["personal"] extends { gender: infer G } ? G : never,
-            marital_status: personal.maritalStatus as EmployeeResponse["personal"] extends { marital_status: infer M } ? M : never,
-            nationality: personal.nationality,
-            effective_from: personal.effectiveFrom.toISOString().split("T")[0]!,
-          }
-        : undefined,
-      contract: contract
-        ? {
-            contract_type: contract.contractType as import("./schemas").ContractType,
-            employment_type: contract.employmentType as import("./schemas").EmploymentType,
-            fte: parseFloat(contract.fte),
-            working_hours_per_week: contract.workingHoursPerWeek
-              ? parseFloat(contract.workingHoursPerWeek)
-              : null,
-            probation_end_date: contract.probationEndDate?.toISOString().split("T")[0] || null,
-            notice_period_days: contract.noticePeriodDays,
-            effective_from: contract.effectiveFrom.toISOString().split("T")[0]!,
-          }
-        : undefined,
-      position: position
-        ? {
-            position_id: position.positionId,
-            position_code: position.positionCode || "",
-            position_title: position.positionTitle || "",
-            org_unit_id: position.orgUnitId,
-            org_unit_name: position.orgUnitName || "",
-            job_grade: position.jobGrade || null,
-            is_primary: position.isPrimary,
-            effective_from: position.effectiveFrom.toISOString().split("T")[0]!,
-          }
-        : undefined,
-      compensation: compensation
-        ? {
-            base_salary: parseFloat(compensation.baseSalary),
-            currency: compensation.currency,
-            pay_frequency: compensation.payFrequency,
-            annual_salary: annualSalary || parseFloat(compensation.baseSalary) * 12,
-            effective_from: compensation.effectiveFrom.toISOString().split("T")[0]!,
-          }
-        : undefined,
-      manager: manager
-        ? {
-            manager_id: manager.managerId,
-            manager_number: manager.managerNumber || "",
-            manager_name: manager.managerName || "",
-            relationship_type: manager.relationshipType,
-            is_primary: manager.isPrimary,
-            effective_from: manager.effectiveFrom.toISOString().split("T")[0]!,
-          }
-        : null,
-      created_at: emp.createdAt.toISOString(),
-      updated_at: emp.updatedAt.toISOString(),
+      personal: mapPersonal(),
+      contract: mapContract(),
+      position: mapPosition(),
+      compensation: mapCompensation(),
+      manager: mapManager(),
+      created_at: toISOString(createdAt),
+      updated_at: toISOString(updatedAt),
     };
   }
 

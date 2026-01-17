@@ -207,6 +207,8 @@ export class AuthService {
 
   /**
    * Get user's current session tenant
+   * FIX: Corrected snake_case/camelCase mismatch that was causing tenant resolution to always fail.
+   * The SQL alias must match the property name we access from the result object.
    */
   async getSessionTenant(sessionId: string, userId?: string | null): Promise<string | null> {
     // Check cache first
@@ -216,8 +218,9 @@ export class AuthService {
     }
 
     // Prefer explicit session tenant if set
+    // FIX: Changed alias from 'current_tenant_id' to 'currentTenantId' to match TypeScript property access
     const sessionRows = await this.db.query<{ currentTenantId: string | null }>`
-      SELECT "currentTenantId"::text as current_tenant_id
+      SELECT "currentTenantId"::text as "currentTenantId"
       FROM app."session"
       WHERE id = ${sessionId}
       LIMIT 1

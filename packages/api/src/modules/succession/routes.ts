@@ -553,6 +553,96 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Pipeline Stats Route
+  // ===========================================================================
+
+  // GET /succession/pipeline/stats - Get pipeline statistics
+  .get(
+    "/pipeline/stats",
+    async (ctx) => {
+      const { db, tenantContext, error, set } = ctx as any;
+      
+      try {
+        const stats = await db.withTransaction(tenantContext, async (tx: any) => {
+          // Get total critical positions (positions marked as critical or with succession plans)
+          const [criticalRow] = await tx`
+            SELECT COUNT(DISTINCT sp.position_id)::int as count
+            FROM app.succession_plans sp
+            WHERE sp.is_active = true
+          `;
+          
+          // Get covered positions (have at least one ready-now candidate)
+          const [coveredRow] = await tx`
+            SELECT COUNT(DISTINCT sp.position_id)::int as count
+            FROM app.succession_plans sp
+            JOIN app.succession_candidates sc ON sc.plan_id = sp.id
+            WHERE sp.is_active = true
+              AND sc.is_active = true
+              AND sc.readiness_level = 'ready_now'
+          `;
+          
+          // Get ready now candidates
+          const [readyNowRow] = await tx`
+            SELECT COUNT(*)::int as count
+            FROM app.succession_candidates sc
+            JOIN app.succession_plans sp ON sp.id = sc.plan_id
+            WHERE sp.is_active = true
+              AND sc.is_active = true
+              AND sc.readiness_level = 'ready_now'
+          `;
+          
+          // Get high risk positions (critical with no successors)
+          const [highRiskRow] = await tx`
+            SELECT COUNT(*)::int as count
+            FROM app.succession_plans sp
+            WHERE sp.is_active = true
+              AND NOT EXISTS (
+                SELECT 1 FROM app.succession_candidates sc 
+                WHERE sc.plan_id = sp.id AND sc.is_active = true
+              )
+          `;
+          
+          const totalCritical = criticalRow?.count ?? 0;
+          const covered = coveredRow?.count ?? 0;
+          
+          return {
+            total_critical_positions: totalCritical,
+            covered_positions: covered,
+            uncovered_positions: totalCritical - covered,
+            ready_now_candidates: readyNowRow?.count ?? 0,
+            high_risk_positions: highRiskRow?.count ?? 0,
+          };
+        });
+        
+        return stats;
+      } catch (err) {
+        console.error("Succession /pipeline/stats error:", err);
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: "Failed to get pipeline stats" } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("succession", "read")],
+      response: {
+        200: t.Object({
+          total_critical_positions: t.Number(),
+          covered_positions: t.Number(),
+          uncovered_positions: t.Number(),
+          ready_now_candidates: t.Number(),
+          high_risk_positions: t.Number(),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Succession"],
+        summary: "Get pipeline statistics",
+        description: "Get succession pipeline summary statistics",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type SuccessionRoutes = typeof successionRoutes;
