@@ -435,6 +435,25 @@ export function requireTenant() {
 }
 
 /**
+ * Middleware function for beforeHandle that requires tenant context
+ * Use this in beforeHandle arrays: { beforeHandle: [requireTenantContext] }
+ * 
+ * FIX: This guard ensures routes that need tenant context get a proper 400 error
+ * instead of crashing with a 500 when tenant is null.
+ */
+export function requireTenantContext(ctx: any): void {
+  const { tenant, set } = ctx;
+  if (!tenant) {
+    set.status = 400;
+    throw new TenantError(
+      "MISSING_TENANT",
+      "Tenant context required. Provide X-Tenant-ID header or ensure you have selected a tenant.",
+      400
+    );
+  }
+}
+
+/**
  * Type guard to check if tenant context exists
  */
 export function hasTenant(
