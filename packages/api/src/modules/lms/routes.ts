@@ -2,20 +2,48 @@
  * LMS (Learning Management System) Routes
  *
  * Courses, enrollments, completions
+ * 
+ * FIX: Added proper tenant null checking to return appropriate error codes.
+ * When tenant is null, returns 400 MISSING_TENANT instead of crashing with 500.
  */
 
 import { Elysia, t } from "elysia";
 
 const UuidSchema = t.String({ format: "uuid" });
 
+/**
+ * Helper to check auth and tenant context, returning appropriate errors.
+ * Returns error response object if check fails, null if checks pass.
+ */
+function checkContext(ctx: any): { status: number; body: any } | null {
+  const { tenant, user, set } = ctx;
+  
+  if (!user) {
+    return {
+      status: 401,
+      body: { error: { code: "UNAUTHORIZED", message: "Authentication required" } }
+    };
+  }
+  
+  if (!tenant) {
+    return {
+      status: 400,
+      body: { error: { code: "MISSING_TENANT", message: "Tenant context required. Please select a tenant or provide X-Tenant-ID header." } }
+    };
+  }
+  
+  return null;
+}
+
 export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   // Courses
   .get("/courses", async (ctx) => {
     const { tenant, user, db, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -48,9 +76,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   .post("/courses", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -89,9 +118,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   .get("/courses/:id", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -122,9 +152,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
   // Enrollments
   .get("/enrollments", async (ctx) => {
     const { tenant, user, db, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -160,9 +191,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   .post("/enrollments", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -194,9 +226,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   .post("/enrollments/:id/start", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -227,9 +260,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   .post("/enrollments/:id/complete", async (ctx) => {
     const { tenant, user, db, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
@@ -265,9 +299,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
   // My Learning
   .get("/my-learning", async (ctx) => {
     const { tenant, user, db, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    const authError = checkContext(ctx);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
     }
 
     try {
