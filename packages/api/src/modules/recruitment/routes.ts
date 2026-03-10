@@ -122,7 +122,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -152,7 +152,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return await recruitmentService.getRequisitionStats(tenantContext);
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -184,7 +184,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -217,7 +217,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return { stages: pipeline };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -260,7 +260,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -309,7 +309,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -348,7 +348,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -386,7 +386,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -424,7 +424,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return requisition;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -473,7 +473,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -503,7 +503,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return await recruitmentService.getCandidateStats(tenantContext);
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -535,7 +535,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return candidate;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -584,7 +584,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
           });
         }
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -633,7 +633,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         return candidate;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -693,7 +693,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
           });
         }
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
