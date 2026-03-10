@@ -315,7 +315,30 @@ export class OnboardingService {
     }
 
     try {
-      const instance = await this.repository.updateInstance(ctx, id, data);
+      const instance = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.updateInstance(ctx, id, data);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_instance",
+            aggregateId: id,
+            eventType: "onboarding.updated",
+            payload: {
+              instanceId: id,
+              changes: data,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!instance) {
         return {
@@ -326,18 +349,6 @@ export class OnboardingService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_instance",
-        aggregateId: id,
-        eventType: "onboarding.updated",
-        payload: {
-          instanceId: id,
-          changes: data,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: instance };
     } catch (error: any) {
@@ -405,12 +416,36 @@ export class OnboardingService {
     }
 
     try {
-      const updatedTask = await this.repository.completeTask(
-        ctx,
-        instanceId,
-        taskId,
-        notes,
-        formData
+      const updatedTask = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.completeTask(
+            ctx,
+            instanceId,
+            taskId,
+            notes,
+            formData
+          );
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_instance",
+            aggregateId: instanceId,
+            eventType: "onboarding.task.completed",
+            payload: {
+              instanceId,
+              taskId,
+              employeeId: instance.employeeId,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
       );
 
       if (!updatedTask) {
@@ -422,19 +457,6 @@ export class OnboardingService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_instance",
-        aggregateId: instanceId,
-        eventType: "onboarding.task.completed",
-        payload: {
-          instanceId,
-          taskId,
-          employeeId: instance.employeeId,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: updatedTask };
     } catch (error: any) {
@@ -487,7 +509,31 @@ export class OnboardingService {
     }
 
     try {
-      const updatedTask = await this.repository.skipTask(ctx, instanceId, taskId, reason);
+      const updatedTask = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.skipTask(ctx, instanceId, taskId, reason);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_instance",
+            aggregateId: instanceId,
+            eventType: "onboarding.task.skipped",
+            payload: {
+              instanceId,
+              taskId,
+              reason,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!updatedTask) {
         return {
@@ -498,19 +544,6 @@ export class OnboardingService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_instance",
-        aggregateId: instanceId,
-        eventType: "onboarding.task.skipped",
-        payload: {
-          instanceId,
-          taskId,
-          reason,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: updatedTask };
     } catch (error: any) {
@@ -537,6 +570,7 @@ export class OnboardingService {
   // ===========================================================================
 
   private async emitDomainEvent(
+    tx: TransactionSql,
     ctx: TenantContext,
     event: {
       aggregateType: string;
@@ -544,24 +578,15 @@ export class OnboardingService {
       eventType: string;
       payload: Record<string, unknown>;
     }
-  ) {
-    try {
-      await this.db.withTransaction(
-        { tenantId: ctx.tenantId, userId: ctx.userId },
-        async (tx: any) => {
-          return tx`
-            INSERT INTO app.domain_outbox (
-              id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
-            ) VALUES (
-              gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
-              ${event.aggregateId}::uuid, ${event.eventType},
-              ${JSON.stringify(event.payload)}::jsonb, now()
-            )
-          `;
-        }
-      );
-    } catch (error) {
-      console.error("Failed to emit domain event:", error);
-    }
+  ): Promise<void> {
+    await tx`
+      INSERT INTO app.domain_outbox (
+        id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
+      ) VALUES (
+        gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
+        ${event.aggregateId}::uuid, ${event.eventType},
+        ${JSON.stringify(event.payload)}::jsonb, now()
+      )
+    `;
   }
 }
