@@ -7,6 +7,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { CasesRepository } from "./repository";
 import { CasesService } from "./service";
 import { mapErrorToStatus } from "../../lib/route-helpers";
@@ -44,11 +45,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
   })
 
   .get("/", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, query, set } = ctx as any;
 
     try {
       const { cursor, limit, ...filters } = query;
@@ -77,15 +74,12 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "List cases" }
   })
 
   .post("/", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, body, set } = ctx as any;
 
     const result = await casesService.createCase(tenantContext, body);
 
@@ -109,15 +103,12 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
         t.Literal("urgent"),
       ])),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Create case" }
   })
 
   .get("/:id", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, params, set } = ctx as any;
 
     const result = await casesService.getCase(tenantContext, params.id);
 
@@ -129,15 +120,12 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Get case by ID" }
   })
 
   .patch("/:id", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, params, body, set } = ctx as any;
 
     const result = await casesService.updateCase(tenantContext, params.id, body);
 
@@ -155,16 +143,13 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       assigneeId: t.Optional(UuidSchema),
       resolution: t.Optional(t.String({ maxLength: 5000 })),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Update case" }
   })
 
   // Case Comments
   .get("/:id/comments", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, params, set } = ctx as any;
 
     try {
       const comments = await casesService.listComments(tenantContext, params.id);
@@ -175,15 +160,12 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     }
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Get case comments" }
   })
 
   .post("/:id/comments", async (ctx) => {
-    const { tenant, user, casesService, tenantContext, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, tenantContext, params, body, set } = ctx as any;
 
     const result = await casesService.addComment(tenantContext, params.id, body);
 
@@ -200,16 +182,13 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       content: t.String({ minLength: 1, maxLength: 5000 }),
       isInternal: t.Optional(t.Boolean()),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Add case comment" }
   })
 
   // My Cases
   .get("/my-cases", async (ctx) => {
-    const { tenant, user, casesService, casesRepository, tenantContext, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { casesService, casesRepository, tenantContext, set } = ctx as any;
 
     try {
       const employeeId = await casesRepository.getEmployeeIdByUserId(tenantContext);
@@ -225,6 +204,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Cases"], summary: "Get my cases" }
   });
 
