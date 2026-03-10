@@ -5,6 +5,7 @@
  * Handles validation, state transitions, and domain events.
  */
 
+import type { TransactionSql } from "postgres";
 import { CasesRepository, type TenantContext, type PaginationOptions } from "./repository";
 import type {
   CreateCase,
@@ -14,16 +15,8 @@ import type {
   CommentResponse,
   CaseStatus,
 } from "./schemas";
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 // Valid state transitions for case status
 const VALID_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
@@ -69,7 +62,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -88,7 +81,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -107,21 +100,28 @@ export class CasesService {
     idempotencyKey?: string
   ): Promise<ServiceResult<CaseResponse>> {
     try {
-      const hrCase = await this.repository.createCase(ctx, data);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createCase(ctx, data);
 
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: hrCase.id,
-        eventType: "cases.case.created",
-        payload: {
-          case: hrCase,
-          requesterId: data.requesterId,
-          category: data.category,
-          priority: data.priority || "medium",
-          actor: ctx.userId,
-        },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: result.id,
+            eventType: "cases.case.created",
+            payload: {
+              case: result,
+              requesterId: data.requesterId,
+              category: data.category,
+              priority: data.priority || "medium",
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -146,7 +146,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -159,7 +159,7 @@ export class CasesService {
         return {
           success: false,
           error: {
-            code: "INVALID_TRANSITION",
+            code: ErrorCodes.STATE_MACHINE_VIOLATION,
             message: `Cannot transition from ${existing.status} to ${data.status}`,
             details: { validTransitions },
           },
@@ -168,7 +168,31 @@ export class CasesService {
     }
 
     try {
-      const hrCase = await this.repository.updateCase(ctx, id, data);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.updateCase(ctx, id, data);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: id,
+            eventType: "cases.case.updated",
+            payload: {
+              case: result,
+              previousStatus: existing.status,
+              changes: data,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!hrCase) {
         return {
@@ -179,19 +203,6 @@ export class CasesService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: id,
-        eventType: "cases.case.updated",
-        payload: {
-          case: hrCase,
-          previousStatus: existing.status,
-          changes: data,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -216,7 +227,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -233,7 +244,39 @@ export class CasesService {
     }
 
     try {
-      const hrCase = await this.repository.assignCase(ctx, id, assigneeId);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.assignCase(ctx, id, assigneeId);
+
+          if (!result) {
+            return null;
+          }
+
+          // Add assignment comment if note provided
+          if (note) {
+            await this.repository.createComment(ctx, id, {
+              content: `Case assigned: ${note}`,
+              isInternal: true,
+            });
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: id,
+            eventType: "cases.case.assigned",
+            payload: {
+              caseId: id,
+              assigneeId,
+              previousAssigneeId: existing.assigneeId,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!hrCase) {
         return {
@@ -244,27 +287,6 @@ export class CasesService {
           },
         };
       }
-
-      // Add assignment comment if note provided
-      if (note) {
-        await this.repository.createComment(ctx, id, {
-          content: `Case assigned: ${note}`,
-          isInternal: true,
-        });
-      }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: id,
-        eventType: "cases.case.assigned",
-        payload: {
-          caseId: id,
-          assigneeId,
-          previousAssigneeId: existing.assigneeId,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -289,7 +311,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -306,7 +328,37 @@ export class CasesService {
     }
 
     try {
-      const hrCase = await this.repository.escalateCase(ctx, id, escalateTo);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.escalateCase(ctx, id, escalateTo);
+
+          if (!result) {
+            return null;
+          }
+
+          // Add escalation comment
+          await this.repository.createComment(ctx, id, {
+            content: `Case escalated: ${reason}`,
+            isInternal: true,
+          });
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: id,
+            eventType: "cases.case.escalated",
+            payload: {
+              caseId: id,
+              reason,
+              escalateTo,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!hrCase) {
         return {
@@ -317,25 +369,6 @@ export class CasesService {
           },
         };
       }
-
-      // Add escalation comment
-      await this.repository.createComment(ctx, id, {
-        content: `Case escalated: ${reason}`,
-        isInternal: true,
-      });
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: id,
-        eventType: "cases.case.escalated",
-        payload: {
-          caseId: id,
-          reason,
-          escalateTo,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -359,7 +392,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -376,7 +409,31 @@ export class CasesService {
     }
 
     try {
-      const hrCase = await this.repository.resolveCase(ctx, id, resolution);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.resolveCase(ctx, id, resolution);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: id,
+            eventType: "cases.case.resolved",
+            payload: {
+              caseId: id,
+              resolution,
+              requesterId: existing.requesterId,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!hrCase) {
         return {
@@ -387,19 +444,6 @@ export class CasesService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: id,
-        eventType: "cases.case.resolved",
-        payload: {
-          caseId: id,
-          resolution,
-          requesterId: existing.requesterId,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -419,7 +463,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -436,7 +480,29 @@ export class CasesService {
     }
 
     try {
-      const hrCase = await this.repository.closeCase(ctx, id);
+      const hrCase = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.closeCase(ctx, id);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: id,
+            eventType: "cases.case.closed",
+            payload: {
+              caseId: id,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!hrCase) {
         return {
@@ -447,17 +513,6 @@ export class CasesService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: id,
-        eventType: "cases.case.closed",
-        payload: {
-          caseId: id,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: hrCase };
     } catch (error: any) {
@@ -489,7 +544,7 @@ export class CasesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Case not found",
         },
       };
@@ -506,20 +561,27 @@ export class CasesService {
     }
 
     try {
-      const comment = await this.repository.createComment(ctx, caseId, data);
+      const comment = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createComment(ctx, caseId, data);
 
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "case",
-        aggregateId: caseId,
-        eventType: "cases.comment.added",
-        payload: {
-          caseId,
-          commentId: comment.id,
-          isInternal: data.isInternal || false,
-          actor: ctx.userId,
-        },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: caseId,
+            eventType: "cases.comment.added",
+            payload: {
+              caseId,
+              commentId: result.id,
+              isInternal: data.isInternal || false,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: comment };
     } catch (error: any) {
@@ -546,6 +608,7 @@ export class CasesService {
   // ===========================================================================
 
   private async emitDomainEvent(
+    tx: TransactionSql,
     ctx: TenantContext,
     event: {
       aggregateType: string;
@@ -553,24 +616,15 @@ export class CasesService {
       eventType: string;
       payload: Record<string, unknown>;
     }
-  ) {
-    try {
-      await this.db.withTransaction(
-        { tenantId: ctx.tenantId, userId: ctx.userId },
-        async (tx: any) => {
-          return tx`
-            INSERT INTO app.domain_outbox (
-              id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
-            ) VALUES (
-              gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
-              ${event.aggregateId}::uuid, ${event.eventType},
-              ${JSON.stringify(event.payload)}::jsonb, now()
-            )
-          `;
-        }
-      );
-    } catch (error) {
-      console.error("Failed to emit domain event:", error);
-    }
+  ): Promise<void> {
+    await tx`
+      INSERT INTO app.domain_outbox (
+        id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
+      ) VALUES (
+        gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
+        ${event.aggregateId}::uuid, ${event.eventType},
+        ${JSON.stringify(event.payload)}::jsonb, now()
+      )
+    `;
   }
 }

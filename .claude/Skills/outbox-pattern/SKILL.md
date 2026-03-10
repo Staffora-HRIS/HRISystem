@@ -10,43 +10,33 @@ description: Implement transactional outbox for reliable domain event publishing
 2. **Reliability**: No lost events even if message broker is down
 3. **Consistency**: Event only published if business write succeeds
 
-## Database Schema
+## Database Table
 ```sql
-CREATE TABLE app.domain_outbox (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,
-    aggregate_type VARCHAR(100) NOT NULL,
-    aggregate_id UUID NOT NULL,
-    event_type VARCHAR(255) NOT NULL,
-    payload JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    processed_at TIMESTAMPTZ,
-    published_at TIMESTAMPTZ,
-    error TEXT,
-    retry_count INTEGER NOT NULL DEFAULT 0
-);
+-- app.domain_outbox (already exists in migrations)
+-- Columns: id, tenant_id, aggregate_type, aggregate_id, event_type, payload (jsonb),
+--          created_at, processed_at, published_at, error, retry_count
 ```
 
-## Writing Events (Service Layer)
+## Writing Events (Service Layer — postgres.js)
 ```typescript
-async createEmployee(data: Input, ctx: Context) {
-  return db.transaction(async (tx) => {
+async createEmployee(ctx: TenantContext, data: Input) {
+  return await this.db.begin(async (tx) => {
     // 1. Business write
-    const [employee] = await tx.insert(employees).values({
-      ...data,
-      tenantId: ctx.tenantId,
-    }).returning();
+    const rows = await tx`
+      INSERT INTO app.employees (tenant_id, employee_number, status, hire_date)
+      VALUES (${ctx.tenantId}, ${data.employeeNumber}, 'pending', ${data.hireDate})
+      RETURNING *
+    `;
+    const employee = rows[0];
 
     // 2. Write event to outbox (SAME TRANSACTION)
-    await tx.insert(domainOutbox).values({
-      id: crypto.randomUUID(),
-      tenantId: ctx.tenantId,
-      aggregateType: 'employee',
-      aggregateId: employee.id,
-      eventType: 'hr.employee.created',
-      payload: { employee, actor: ctx.userId, timestamp: new Date().toISOString() },
-      createdAt: new Date(),
-    });
+    await tx`
+      INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+      VALUES (${crypto.randomUUID()}, ${ctx.tenantId}, 'employee', ${employee.id},
+              'hr.employee.created',
+              ${JSON.stringify({ employee, actor: ctx.userId, timestamp: new Date().toISOString() })}::jsonb,
+              now())
+    `;
 
     return employee;
   });
@@ -64,31 +54,34 @@ time.timesheet.approved
 absence.leave_request.approved
 talent.performance_review.completed
 lms.course.completed
+cases.case.escalated
 ```
 
 ## Outbox Processor (Worker)
 ```typescript
 // packages/api/src/jobs/outbox-processor.ts
+// Polls unprocessed events, publishes to Redis Streams
 async function processOutbox() {
-  const events = await db.query.domainOutbox.findMany({
-    where: isNull(domainOutbox.processedAt),
-    orderBy: [asc(domainOutbox.createdAt)],
-    limit: 100,
-  });
+  const events = await db`
+    SELECT * FROM app.domain_outbox
+    WHERE processed_at IS NULL
+    ORDER BY created_at ASC
+    LIMIT 100
+  `;
 
   for (const event of events) {
     try {
-      await redis.xadd(`events:${event.eventType}`, '*', 'payload', JSON.stringify(event.payload));
-      await db.update(domainOutbox).set({ processedAt: new Date(), publishedAt: new Date() }).where(eq(domainOutbox.id, event.id));
+      await redis.xadd(`events:${event.event_type}`, '*', 'payload', JSON.stringify(event.payload));
+      await db`UPDATE app.domain_outbox SET processed_at = now(), published_at = now() WHERE id = ${event.id}`;
     } catch (error) {
-      await db.update(domainOutbox).set({ retryCount: event.retryCount + 1, error: error.message }).where(eq(domainOutbox.id, event.id));
+      await db`UPDATE app.domain_outbox SET retry_count = retry_count + 1, error = ${String(error)} WHERE id = ${event.id}`;
     }
   }
 }
 ```
 
 ## Best Practices
-1. Always use transactions
-2. Make handlers idempotent
-3. Include enough context in payload
-4. Process events in order by createdAt
+1. Always write event in same transaction as business data
+2. Make event handlers idempotent
+3. Include enough context in payload for consumers
+4. Process events in order by created_at

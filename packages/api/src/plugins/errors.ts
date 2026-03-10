@@ -10,7 +10,7 @@
  */
 
 import { Elysia, type ErrorHandler } from "elysia";
-import { AuthError } from "./auth";
+import { AuthError } from "./auth-better";
 import { IdempotencyError } from "./idempotency";
 import { TenantError } from "./tenant";
 import { RbacError } from "./rbac";
@@ -457,23 +457,6 @@ export function errorsPlugin() {
 // =============================================================================
 
 /**
- * Validate that a value is a valid UUID
- */
-export function isValidUuid(value: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(value);
-}
-
-/**
- * Validate that a value is a valid email
- */
-export function isValidEmail(value: string): boolean {
-  const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-  return emailRegex.test(value);
-}
-
-/**
  * Assert that a condition is true, or throw a validation error
  */
 export function assertValid(
@@ -499,52 +482,3 @@ export function assertFound<T>(
   }
 }
 
-// =============================================================================
-// Result Type (for Railway Oriented Programming)
-// =============================================================================
-
-/**
- * Success result
- */
-export interface Ok<T> {
-  ok: true;
-  value: T;
-}
-
-/**
- * Error result
- */
-export interface Err<E> {
-  ok: false;
-  error: E;
-}
-
-export type Result<T, E = AppError> = Ok<T> | Err<E>;
-
-/**
- * Create a success result
- */
-export function ok<T>(value: T): Ok<T> {
-  return { ok: true, value };
-}
-
-/**
- * Create an error result
- */
-export function err<E>(error: E): Err<E> {
-  return { ok: false, error };
-}
-
-/**
- * Check if a result is successful
- */
-export function isOk<T, E>(result: Result<T, E>): result is Ok<T> {
-  return result.ok;
-}
-
-/**
- * Check if a result is an error
- */
-export function isErr<T, E>(result: Result<T, E>): result is Err<E> {
-  return !result.ok;
-}

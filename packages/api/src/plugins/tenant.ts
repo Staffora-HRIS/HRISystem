@@ -111,8 +111,8 @@ export class TenantService {
 
     const tenant = results[0] as Tenant;
 
-    // Cache the result
-    await this.cache.set(cacheKey, tenant, CacheTTL.LONG);
+    // Cache the result (5 minutes max to limit exposure window if tenant becomes suspended)
+    await this.cache.set(cacheKey, tenant, CacheTTL.SESSION);
 
     return tenant;
   }
@@ -143,8 +143,8 @@ export class TenantService {
 
     const tenant = results[0] as Tenant;
 
-    // Cache the result
-    await this.cache.set(cacheKey, tenant, CacheTTL.LONG);
+    // Cache the result (5 minutes max to limit exposure window if tenant becomes suspended)
+    await this.cache.set(cacheKey, tenant, CacheTTL.SESSION);
 
     return tenant;
   }
@@ -174,6 +174,8 @@ export class TenantService {
     }
 
     if (tenant.status === "suspended") {
+      // Invalidate cache for suspended tenants so status changes take effect immediately
+      await this.cache.del(`tenant:${tenantId}`);
       throw new TenantError(
         "TENANT_SUSPENDED",
         "Tenant is suspended. Please contact support.",
@@ -182,6 +184,8 @@ export class TenantService {
     }
 
     if (tenant.status === "deleted") {
+      // Invalidate cache for deleted tenants so status changes take effect immediately
+      await this.cache.del(`tenant:${tenantId}`);
       throw new TenantError(
         "TENANT_DELETED",
         "Tenant has been deleted",
@@ -322,12 +326,18 @@ export function tenantPlugin(options: TenantResolutionOptions = {}) {
   const { headerName = "X-Tenant-ID", skipRoutes = [] } = options;
   const allSkipRoutes = [...DEFAULT_SKIP_ROUTES, ...skipRoutes];
 
+  // Singleton: created once when plugin is initialized, reused across all requests
+  let tenantServiceSingleton: TenantService | null = null;
+
   return new Elysia({ name: "tenant" })
-    // Tenant service for direct access
+    // Tenant service for direct access (singleton)
     .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
+      if (!tenantServiceSingleton) {
+        tenantServiceSingleton = new TenantService(db, cache);
+      }
       return {
-        tenantService: new TenantService(db, cache),
+        tenantService: tenantServiceSingleton,
       };
     })
 

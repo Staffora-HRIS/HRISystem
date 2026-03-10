@@ -670,6 +670,19 @@ securityRoutes
         });
       }
 
+      // Only allow modification of tenant-owned roles, not system roles
+      if (!oldRole.tenantId) {
+        return error(403, {
+          error: { code: "FORBIDDEN", message: "Cannot modify system roles", requestId },
+        });
+      }
+
+      if (oldRole.tenantId !== tenant.id) {
+        return error(404, {
+          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+        });
+      }
+
       const granted = await db.withSystemContext(async (tx: any) => {
         const rows = await tx<{ id: string }[]>`
           SELECT app.grant_permission_to_role(
@@ -718,7 +731,7 @@ securityRoutes
   .delete(
     "/roles/:id/permissions",
     async (ctx) => {
-      const { user, db, params, query, audit, requestId, error } = ctx as any;
+      const { tenant, user, db, params, query, audit, requestId, error } = ctx as any;
       const roleId = params.id;
       const resource = String(query.resource ?? "").trim();
       const action = String(query.action ?? "").trim();
@@ -726,6 +739,41 @@ securityRoutes
       if (!resource || !action) {
         return error(400, {
           error: { code: "VALIDATION_ERROR", message: "resource and action are required", requestId },
+        });
+      }
+
+      // Verify role belongs to current tenant before modifying with system context
+      const [targetRole] = await db.withTransaction(
+        { tenantId: tenant.id, userId: user.id },
+        async (tx: any) => {
+          return await tx<
+            Array<{ id: string; name: string; isSystem: boolean; tenantId: string | null }>
+          >`
+            SELECT id::text as id, name, is_system, tenant_id::text as tenant_id
+            FROM app.roles
+            WHERE id = ${roleId}::uuid
+              AND (tenant_id = ${tenant.id}::uuid OR tenant_id IS NULL)
+            LIMIT 1
+          `;
+        }
+      );
+
+      if (!targetRole?.id) {
+        return error(404, {
+          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+        });
+      }
+
+      // Only allow modification of tenant-owned roles, not system roles
+      if (!targetRole.tenantId) {
+        return error(403, {
+          error: { code: "FORBIDDEN", message: "Cannot modify system roles", requestId },
+        });
+      }
+
+      if (targetRole.tenantId !== tenant.id) {
+        return error(404, {
+          error: { code: "NOT_FOUND", message: "Role not found", requestId },
         });
       }
 

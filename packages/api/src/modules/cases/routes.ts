@@ -1,42 +1,69 @@
 /**
  * Cases Module Routes
  *
- * HR Cases/Tickets management
+ * HR Cases/Tickets management.
+ * All routes delegate to CasesService for business logic,
+ * including state machine validation for status transitions.
  */
 
 import { Elysia, t } from "elysia";
+import { CasesRepository } from "./repository";
+import { CasesService } from "./service";
+import { mapErrorToStatus } from "../../lib/route-helpers";
+import { CaseStatusSchema, CasePrioritySchema } from "./schemas";
 
 const UuidSchema = t.String({ format: "uuid" });
 
+/** Module-specific error code overrides */
+const CASES_ERROR_CODES: Record<string, number> = {
+  CASE_CLOSED: 409,
+  CANNOT_ESCALATE: 409,
+  CANNOT_RESOLVE: 409,
+  CANNOT_CLOSE: 409,
+  INVALID_TRANSITION: 409,
+  CREATE_FAILED: 500,
+  UPDATE_FAILED: 500,
+  COMMENT_FAILED: 500,
+};
+
 export const casesRoutes = new Elysia({ prefix: "/cases" })
 
+  // Wire up service and repository via derive
+  .derive((ctx) => {
+    const { db } = ctx as any;
+    const repository = new CasesRepository(db);
+    const service = new CasesService(repository, db);
+
+    const { tenant, user } = ctx as any;
+    const tenantContext = {
+      tenantId: tenant?.id || "",
+      userId: user?.id,
+    };
+
+    return { casesService: service, casesRepository: repository, tenantContext };
+  })
+
   .get("/", async (ctx) => {
-    const { tenant, user, db, query, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, query, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
     try {
-      const cases = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT c.*, e.first_name || ' ' || e.last_name as requester_name,
-                 a.first_name || ' ' || a.last_name as assignee_name
-          FROM app.cases c
-          LEFT JOIN app.employees e ON e.id = c.requester_id
-          LEFT JOIN app.users a ON a.id = c.assignee_id
-          WHERE c.tenant_id = ${tenant.id}::uuid
-          ${query.category ? tx`AND c.category = ${query.category}` : tx``}
-          ${query.status ? tx`AND c.status = ${query.status}` : tx``}
-          ${query.priority ? tx`AND c.priority = ${query.priority}` : tx``}
-          ${query.assigneeId ? tx`AND c.assignee_id = ${query.assigneeId}::uuid` : tx``}
-          ORDER BY 
-            CASE c.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-            c.created_at DESC
-          LIMIT ${query.limit !== undefined && query.limit !== null ? Number(query.limit) : 20}
-        `;
-      });
-      return { cases, count: cases.length };
+      const { cursor, limit, ...filters } = query;
+      const result = await casesService.listCases(
+        tenantContext,
+        filters,
+        { cursor, limit: limit !== undefined && limit !== null ? Number(limit) : undefined }
+      );
+
+      return {
+        cases: result.items,
+        count: result.items.length,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
     } catch (error: any) {
       set.status = 500;
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
@@ -54,33 +81,21 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
   })
 
   .post("/", async (ctx) => {
-    const { tenant, user, db, body, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, body, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
-    try {
-      const [hrCase] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        const caseNumber = `CASE-${Date.now().toString(36).toUpperCase()}`;
-        return tx`
-          INSERT INTO app.cases (
-            id, tenant_id, case_number, requester_id, category, subject,
-            description, priority, status, created_by
-          ) VALUES (
-            gen_random_uuid(), ${tenant.id}::uuid, ${caseNumber},
-            ${(body as any).requesterId}::uuid, ${(body as any).category}, ${(body as any).subject},
-            ${(body as any).description || null}, ${(body as any).priority || 'medium'}, 'open', ${user.id}::uuid
-          )
-          RETURNING *
-        `;
-      });
-      set.status = 201;
-      return hrCase;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    const result = await casesService.createCase(tenantContext, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
     }
+
+    set.status = 201;
+    return result.data;
   }, {
     body: t.Object({
       requesterId: UuidSchema,
@@ -98,99 +113,61 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
   })
 
   .get("/:id", async (ctx) => {
-    const { tenant, user, db, params, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, params, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
-    try {
-      const [hrCase] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT c.*, e.first_name || ' ' || e.last_name as requester_name,
-                 a.first_name || ' ' || a.last_name as assignee_name
-          FROM app.cases c
-          LEFT JOIN app.employees e ON e.id = c.requester_id
-          LEFT JOIN app.users a ON a.id = c.assignee_id
-          WHERE c.id = ${params.id}::uuid AND c.tenant_id = ${tenant.id}::uuid
-        `;
-      });
+    const result = await casesService.getCase(tenantContext, params.id);
 
-      if (!hrCase) {
-        set.status = 404;
-        return { error: { code: "NOT_FOUND", message: "Case not found" } };
-      }
-      return hrCase;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
     }
+
+    return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
     detail: { tags: ["Cases"], summary: "Get case by ID" }
   })
 
   .patch("/:id", async (ctx) => {
-    const { tenant, user, db, params, body, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, params, body, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
-    try {
-      const [hrCase] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            status = COALESCE(${(body as any).status}, status),
-            priority = COALESCE(${(body as any).priority}, priority),
-            assignee_id = COALESCE(${(body as any).assigneeId}::uuid, assignee_id),
-            resolution = COALESCE(${(body as any).resolution}, resolution),
-            resolved_at = CASE WHEN ${(body as any).status} = 'resolved' THEN now() ELSE resolved_at END,
-            closed_at = CASE WHEN ${(body as any).status} = 'closed' THEN now() ELSE closed_at END,
-            updated_at = now()
-          WHERE id = ${params.id}::uuid AND tenant_id = ${tenant.id}::uuid
-          RETURNING *
-        `;
-      });
+    const result = await casesService.updateCase(tenantContext, params.id, body);
 
-      if (!hrCase) {
-        set.status = 404;
-        return { error: { code: "NOT_FOUND", message: "Case not found" } };
-      }
-      return hrCase;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
     }
+
+    return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
     body: t.Object({
-      status: t.Optional(t.String()),
-      priority: t.Optional(t.String()),
+      status: t.Optional(CaseStatusSchema),
+      priority: t.Optional(CasePrioritySchema),
       assigneeId: t.Optional(UuidSchema),
-      resolution: t.Optional(t.String()),
+      resolution: t.Optional(t.String({ maxLength: 5000 })),
     }),
     detail: { tags: ["Cases"], summary: "Update case" }
   })
 
   // Case Comments
   .get("/:id/comments", async (ctx) => {
-    const { tenant, user, db, params, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, params, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
     try {
-      const comments = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT cc.*, u.first_name || ' ' || u.last_name as author_name
-          FROM app.case_comments cc
-          JOIN app.users u ON u.id = cc.author_id
-          WHERE cc.case_id = ${params.id}::uuid
-          ORDER BY cc.created_at ASC
-        `;
-      });
+      const comments = await casesService.listComments(tenantContext, params.id);
       return { comments, count: comments.length };
     } catch (error: any) {
       set.status = 500;
@@ -202,30 +179,21 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
   })
 
   .post("/:id/comments", async (ctx) => {
-    const { tenant, user, db, params, body, set } = ctx as any;
+    const { tenant, user, casesService, tenantContext, params, body, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
-    try {
-      const [comment] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          INSERT INTO app.case_comments (
-            id, case_id, author_id, content, is_internal
-          ) VALUES (
-            gen_random_uuid(), ${params.id}::uuid, ${user.id}::uuid,
-            ${(body as any).content}, ${(body as any).isInternal || false}
-          )
-          RETURNING *
-        `;
-      });
-      set.status = 201;
-      return comment;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    const result = await casesService.addComment(tenantContext, params.id, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
     }
+
+    set.status = 201;
+    return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
     body: t.Object({
@@ -237,31 +205,20 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
 
   // My Cases
   .get("/my-cases", async (ctx) => {
-    const { tenant, user, db, set } = ctx as any;
+    const { tenant, user, casesService, casesRepository, tenantContext, set } = ctx as any;
     if (!tenant || !user) {
       set.status = 401;
       return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
     }
 
     try {
-      const [employee] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid`;
-      });
+      const employeeId = await casesRepository.getEmployeeIdByUserId(tenantContext);
 
-      if (!employee) {
+      if (!employeeId) {
         return { cases: [], count: 0 };
       }
 
-      const cases = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT c.*, a.first_name || ' ' || a.last_name as assignee_name
-          FROM app.cases c
-          LEFT JOIN app.users a ON a.id = c.assignee_id
-          WHERE c.requester_id = ${employee.id}::uuid AND c.tenant_id = ${tenant.id}::uuid
-          ORDER BY c.created_at DESC
-        `;
-      });
-
+      const cases = await casesService.getMyCases(tenantContext, employeeId);
       return { cases, count: cases.length };
     } catch (error: any) {
       set.status = 500;

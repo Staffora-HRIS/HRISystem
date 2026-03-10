@@ -240,7 +240,7 @@ export default function MyLeavePage() {
                       Submitted {new Date(r.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm">View</Button>
+                  <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Leave request detail view will be available in a future update." })}>View</Button>
                 </div>
               </CardBody>
             </Card>

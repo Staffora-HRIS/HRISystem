@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { CompetencyCard } from "~/components/competencies";
 import { api } from "~/lib/api-client";
 
@@ -35,6 +36,8 @@ interface CompetencyGap {
 }
 
 export default function MyCompetenciesPage() {
+  const toast = useToast();
+
   const { data: competencies, isLoading: isLoadingCompetencies } = useQuery({
     queryKey: ["my-competencies"],
     queryFn: () => api.get<EmployeeCompetency[]>("/competencies/employees/me"),
@@ -134,7 +137,7 @@ export default function MyCompetenciesPage() {
                 <TrendingUp className="h-5 w-5 text-yellow-600" />
                 Development Priorities
               </h3>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Development plans will be available in a future update." })}>
                 View Development Plan
               </Button>
             </div>
@@ -187,7 +190,7 @@ export default function MyCompetenciesPage() {
               <Award className="h-5 w-5 text-blue-600" />
               My Assessed Competencies
             </h3>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Self-assessment requests will be available in a future update." })}>
               Request Self-Assessment
             </Button>
           </div>

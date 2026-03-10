@@ -110,8 +110,8 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       category: t.Optional(t.String()),
       durationMinutes: t.Optional(t.Number()),
       contentType: t.Optional(t.String()),
-      contentUrl: t.Optional(t.String()),
-      thumbnailUrl: t.Optional(t.String()),
+      contentUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
+      thumbnailUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
     }),
     detail: { tags: ["LMS"], summary: "Create course" }
   })

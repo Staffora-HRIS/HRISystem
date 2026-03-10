@@ -74,7 +74,7 @@ class OutboxProcessor {
       try {
         await this.processBatch();
       } catch (error) {
-        console.error("[OutboxProcessor] Error processing batch:", error);
+        console.error("[OutboxProcessor] Error processing batch:", error instanceof Error ? error.message : String(error));
       }
 
       await this.sleep(POLL_INTERVAL_MS);
@@ -135,7 +135,8 @@ class OutboxProcessor {
       await this.markProcessed(event.id);
       console.log(`[OutboxProcessor] Processed event: ${event.eventType} (${event.id})`);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = rawMessage.substring(0, 500).replace(/password|secret|token|key/gi, "[REDACTED]");
       console.error(`[OutboxProcessor] Failed to process event ${event.id}:`, errorMessage);
 
       // Increment retry count
@@ -901,7 +902,7 @@ process.on("SIGTERM", async () => {
 
 // Start processing
 processor.start().catch((error) => {
-  console.error("[OutboxProcessor] Fatal error:", error);
+  console.error("[OutboxProcessor] Fatal error:", error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
 

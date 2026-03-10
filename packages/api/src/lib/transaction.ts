@@ -11,17 +11,13 @@
 import { type DatabaseClient, type TransactionSql, hashRequestBody } from "../plugins/db";
 import { type AuditService } from "../plugins/audit";
 
+import type { TenantContext } from "../types/service-result";
+
+export type { TenantContext } from "../types/service-result";
+
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Tenant context for transactions
- */
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
 
 /**
  * Domain event to be written to outbox

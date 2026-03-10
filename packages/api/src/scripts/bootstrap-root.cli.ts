@@ -26,7 +26,9 @@ const db = postgres(loadDatabaseUrl(), { max: 1, connection: { search_path: "app
 
 try {
   const result = await bootstrapRoot(db, { email, password, name, tenantId, tenantSlug, tenantName });
-  console.log(JSON.stringify({ ...result, password }, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  console.log(`\nGenerated password: ${password}`);
+  console.log("Save this password now — it will not be shown again.");
 } finally {
   await db.end({ timeout: 2 });
 }

@@ -6,6 +6,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { ErrorResponseSchema } from "../../lib/route-helpers";
 import { RecruitmentRepository } from "./repository";
 import { RecruitmentService } from "./service";
 import {
@@ -27,14 +28,6 @@ import {
 // =============================================================================
 // Response Schemas
 // =============================================================================
-
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
 
 const RequisitionResponseSchema = t.Object({
   id: UuidSchema,

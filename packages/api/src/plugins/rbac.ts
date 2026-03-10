@@ -12,7 +12,7 @@
 import { Elysia } from "elysia";
 import { type DatabaseClient } from "./db";
 import { type CacheClient, CacheTTL, CacheKeys } from "./cache";
-import { type User, type Session, AuthError } from "./auth";
+import { type User, type Session, AuthError } from "./auth-better";
 import { type Tenant } from "./tenant";
 
 // =============================================================================
@@ -420,28 +420,45 @@ export class RbacService {
  * ```
  */
 export function rbacPlugin() {
+  // Singleton: created once when plugin is initialized, reused across all requests
+  let rbacServiceSingleton: RbacService | null = null;
+
   return new Elysia({ name: "rbac" })
-    // RBAC service for direct access
+    // RBAC service for direct access (singleton)
     .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
+      if (!rbacServiceSingleton) {
+        rbacServiceSingleton = new RbacService(db, cache);
+      }
       return {
-        rbacService: new RbacService(db, cache),
+        rbacService: rbacServiceSingleton,
       };
     })
 
-    // Load permissions for authenticated users with tenant context
-    .derive({ as: "global" }, async (ctx) => {
+    // Lazy-load permissions for authenticated users with tenant context.
+    // Permissions are only fetched from Redis/DB when first accessed,
+    // then cached for the lifetime of the request.
+    .derive({ as: "global" }, (ctx) => {
       const { user, tenant, rbacService } = ctx as any;
-      if (!user || !tenant) {
-        return {
-          permissions: null as EffectivePermissions | null,
-        };
-      }
 
-      const permissions = await rbacService.getEffectivePermissions(
-        tenant.id,
-        user.id
-      );
+      let cached: EffectivePermissions | null | undefined;
+
+      const permissions: {
+        get: () => Promise<EffectivePermissions | null>;
+      } = {
+        get: async () => {
+          if (cached !== undefined) return cached;
+          if (!user || !tenant) {
+            cached = null;
+            return cached;
+          }
+          cached = await rbacService.getEffectivePermissions(
+            tenant.id,
+            user.id
+          );
+          return cached;
+        },
+      };
 
       return { permissions };
     })

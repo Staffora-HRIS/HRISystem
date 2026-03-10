@@ -190,13 +190,9 @@ export interface PaginatedResult<T> {
   total?: number;
 }
 
-/**
- * Tenant context for repository operations
- */
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
+import type { TenantContext } from "../../types/service-result";
+
+export type { TenantContext } from "../../types/service-result";
 
 // =============================================================================
 // HR Repository

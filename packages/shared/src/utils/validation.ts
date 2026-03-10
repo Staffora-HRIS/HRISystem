@@ -380,24 +380,6 @@ export function isValidSlug(slug: string): boolean {
   return slugRegex.test(slug) && slug.length >= 2 && slug.length <= 100;
 }
 
-/**
- * Convert a string to a valid slug.
- *
- * @param input - The string to convert
- * @returns URL-safe slug
- */
-export function toSlug(input: string): string {
-  if (!input || typeof input !== "string") {
-    return "";
-  }
-
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "") // Remove non-word chars
-    .replace(/[\s_-]+/g, "-") // Replace spaces/underscores with hyphens
-    .replace(/^-+|-+$/g, ""); // Trim hyphens from start/end
-}
 
 // =============================================================================
 // Employee Number Validation

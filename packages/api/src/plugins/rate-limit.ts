@@ -17,6 +17,26 @@ const DEFAULT_SKIP_ROUTES = [
   /^\/docs/,
 ];
 
+/**
+ * Auth endpoints that require aggressive rate limiting to prevent
+ * brute-force attacks, credential stuffing, and account enumeration.
+ */
+const AUTH_RATE_LIMIT_ROUTES: { pattern: RegExp; maxRequests: number; windowSeconds: number }[] = [
+  { pattern: /^\/api\/auth\/sign-in/, maxRequests: 5, windowSeconds: 60 },
+  { pattern: /^\/api\/auth\/sign-up/, maxRequests: 3, windowSeconds: 60 },
+  { pattern: /^\/api\/auth\/forgot-password/, maxRequests: 3, windowSeconds: 60 },
+  { pattern: /^\/api\/auth\/verify-/, maxRequests: 5, windowSeconds: 60 },
+];
+
+function matchAuthRoute(path: string): { maxRequests: number; windowSeconds: number } | null {
+  for (const route of AUTH_RATE_LIMIT_ROUTES) {
+    if (route.pattern.test(path)) {
+      return { maxRequests: route.maxRequests, windowSeconds: route.windowSeconds };
+    }
+  }
+  return null;
+}
+
 function getClientIp(request: Request): string | null {
   const forwarded = request.headers.get("X-Forwarded-For");
   if (forwarded) {
@@ -78,7 +98,42 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
       if (!cache?.incrementRateLimit) return;
 
       const ip = getClientIp(request) ?? "unknown";
-      const tenantId = request.headers.get("X-Tenant-ID") ?? (ctx as any).tenantId ?? "public";
+
+      // Check auth-specific rate limiting first (uses IP-only keys)
+      const authLimit = matchAuthRoute(path);
+      if (authLimit) {
+        const authKey = `auth:rate_limit:${ip}:${request.method}:${path}`;
+        try {
+          const { count, exceeded } = await cache.incrementRateLimit(
+            authKey,
+            authLimit.windowSeconds,
+            authLimit.maxRequests
+          );
+
+          set.headers["X-RateLimit-Limit"] = String(authLimit.maxRequests);
+          set.headers["X-RateLimit-Remaining"] = String(
+            Math.max(0, authLimit.maxRequests - count)
+          );
+          set.headers["X-RateLimit-Window"] = String(authLimit.windowSeconds);
+
+          if (exceeded) {
+            set.status = 429;
+            set.headers["Retry-After"] = String(authLimit.windowSeconds);
+            return createErrorResponse(
+              ErrorCodes.TOO_MANY_REQUESTS,
+              "Rate limit exceeded",
+              safeRequestId,
+              { maxRequests: authLimit.maxRequests, windowMs: authLimit.windowSeconds * 1000 }
+            );
+          }
+        } catch (error) {
+          console.warn("[RateLimit] Failed to apply auth rate limiting", error);
+        }
+        // Auth routes still fall through to generic rate limiting below
+      }
+
+      // Generic rate limiting — use only validated tenant context, never the raw header
+      const tenantId = (ctx as any).tenantId ?? "public";
       const userId = (ctx as any).user?.id ?? `ip:${ip}`;
       const endpoint = `${request.method}:${path}`;
       const key = CacheKeys.rateLimit(tenantId, userId, endpoint);

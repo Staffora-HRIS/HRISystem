@@ -10,11 +10,12 @@ import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import type {
   HRRepository,
-  TenantContext,
   OrgUnitRow,
   PositionRow,
   EmployeeRow,
 } from "./repository";
+import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 import type {
   CreateOrgUnit,
   UpdateOrgUnit,
@@ -44,29 +45,6 @@ import type {
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Service result type
- */
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
-
-/**
- * Paginated service result
- */
-export interface PaginatedServiceResult<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-  total?: number;
-}
 
 /**
  * State machine transitions
@@ -171,7 +149,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Org unit not found",
           details: { id },
         },
@@ -283,7 +261,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Org unit not found",
           details: { id },
         },
@@ -361,7 +339,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Org unit not found",
           details: { id },
         },
@@ -441,7 +419,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Position not found",
           details: { id },
         },
@@ -527,7 +505,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Position not found",
           details: { id },
         },
@@ -592,7 +570,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Position not found",
           details: { id },
         },
@@ -693,7 +671,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id },
         },
@@ -724,7 +702,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { employee_number: employeeNumber },
         },
@@ -855,7 +833,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -909,7 +887,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -963,7 +941,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1045,7 +1023,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1114,7 +1092,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1170,7 +1148,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1268,7 +1246,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1283,7 +1261,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "INVALID_TRANSITION",
+          code: ErrorCodes.INVALID_LIFECYCLE_TRANSITION,
           message: `Cannot transition from ${currentStatus} to ${data.to_status}`,
           details: {
             current_status: currentStatus,
@@ -1334,7 +1312,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -1424,7 +1402,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -2048,7 +2026,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },
@@ -2107,7 +2085,7 @@ export class HRService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee not found",
           details: { id: employeeId },
         },

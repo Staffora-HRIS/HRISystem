@@ -15,11 +15,9 @@ import type {
   CreateLearningPath,
   LearningPathResponse,
 } from "./schemas";
+import type { TenantContext } from "../../types/service-result";
 
-export interface TenantContext {
-  tenantId: string;
-  userId: string;
-}
+export type { TenantContext } from "../../types/service-result";
 
 export interface PaginationOptions {
   cursor?: string;
@@ -426,6 +424,25 @@ export class LMSRepository {
     );
 
     return path ? this.mapLearningPathRow(path) : null;
+  }
+
+  // ===========================================================================
+  // Employee Lookup
+  // ===========================================================================
+
+  async getEmployeeIdByUserId(ctx: TenantContext): Promise<string | null> {
+    const [employee] = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT id FROM app.employees
+          WHERE user_id = ${ctx.userId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          LIMIT 1
+        `;
+      }
+    );
+
+    return employee?.id || null;
   }
 
   // ===========================================================================

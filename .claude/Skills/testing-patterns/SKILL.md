@@ -77,7 +77,21 @@ test('valid transitions', () => {
 
 ## Test Setup
 ```typescript
-export async function setTenantContext(tenantId: string) {
-  await db.execute(sql`SET app.current_tenant = '${tenantId}'`);
+// Use set_config with parameterized queries (NOT string interpolation)
+export async function setTenantContext(tenantId: string, userId?: string) {
+  await db`SELECT set_config('app.current_tenant', ${tenantId}, false)`;
+  await db`SELECT set_config('app.current_user', ${userId ?? ''}, false)`;
+}
+
+// Bypass RLS for admin operations in tests
+export async function withSystemContext<T>(
+  db: ReturnType<typeof postgres>,
+  fn: (tx: TransactionSql) => Promise<T>
+): Promise<T> {
+  return await db.begin(async (tx) => {
+    await tx`SELECT app.enable_system_context()`;
+    try { return await fn(tx); }
+    finally { await tx`SELECT app.disable_system_context()`; }
+  });
 }
 ```

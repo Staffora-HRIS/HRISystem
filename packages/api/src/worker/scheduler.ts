@@ -168,41 +168,28 @@ class Scheduler {
   private async accrueLeaveBalances() {
     console.log("[Job] Accruing leave balances...");
 
-    // Get all active leave policies with accrual rules
-    const policies = await this.sql`
-      SELECT DISTINCT lp.*, t.id as tenant_id
+    const currentYear = new Date().getFullYear();
+
+    // Batch-update all qualifying leave balances in a single statement.
+    // Joins policies → balances → employees so we avoid the previous
+    // N+1 pattern (one query per policy × one query per employee).
+    const result = await this.sql`
+      UPDATE app.leave_balances lb
+      SET accrued    = lb.accrued + COALESCE(lp.accrual_rate, 0),
+          balance    = lb.balance + COALESCE(lp.accrual_rate, 0),
+          updated_at = now()
       FROM app.leave_policies lp
       JOIN app.tenants t ON t.id = lp.tenant_id
-      WHERE lp.accrual_frequency IS NOT NULL
-        AND t.status = 'active'
+      JOIN app.employees e ON e.id = lb.employee_id
+      WHERE lb.leave_type_id = lp.leave_type_id
+        AND lb.tenant_id     = lp.tenant_id
+        AND lb.year           = ${currentYear}
+        AND lp.accrual_frequency IS NOT NULL
+        AND t.status  = 'active'
+        AND e.status  = 'active'
     `;
 
-    for (const policy of policies) {
-      // Get employees under this policy
-      const employees = await this.sql`
-        SELECT lb.* FROM app.leave_balances lb
-        JOIN app.employees e ON e.id = lb.employee_id
-        WHERE lb.leave_type_id = ${policy["leaveTypeId"]}::uuid
-          AND lb.year = ${new Date().getFullYear()}
-          AND e.status = 'active'
-      `;
-
-      for (const emp of employees) {
-        // Calculate accrual amount based on frequency
-        const accrualAmount = policy["accrualRate"] || 0;
-
-        // Update balance
-        await this.sql`
-          UPDATE app.leave_balances
-          SET accrued = accrued + ${accrualAmount},
-              balance = balance + ${accrualAmount},
-              updated_at = now()
-          WHERE id = ${emp["id"]}::uuid
-        `;
-      }
-    }
-
-    console.log(`[Job] Processed leave accruals for ${policies.length} policies`);
+    console.log(`[Job] Accrued leave balances for ${result.count} employee-policy rows`);
   }
 
   private async sendTimesheetReminders() {

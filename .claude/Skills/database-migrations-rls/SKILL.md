@@ -20,8 +20,8 @@ bun run migrate:down           # Rollback last migration
 ```sql
 CREATE TABLE IF NOT EXISTS app.training_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES app.tenant(id),
-    employee_id UUID NOT NULL REFERENCES app.employee(id),
+    tenant_id UUID NOT NULL REFERENCES app.tenants(id),
+    employee_id UUID NOT NULL REFERENCES app.employees(id),
     status VARCHAR(50) NOT NULL DEFAULT 'enrolled',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -52,8 +52,8 @@ Every tenant-owned table MUST have:
 ```sql
 CREATE TABLE IF NOT EXISTS app.employee_positions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES app.tenant(id),
-    employee_id UUID NOT NULL REFERENCES app.employee(id),
+    tenant_id UUID NOT NULL REFERENCES app.tenants(id),
+    employee_id UUID NOT NULL REFERENCES app.employees(id),
     effective_from DATE NOT NULL,
     effective_to DATE, -- NULL means current
     

@@ -28,21 +28,8 @@ import type {
 // Types
 // =============================================================================
 
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
-
-export interface PaginatedServiceResult<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
+import type { ServiceResult, PaginatedServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 type DomainEventType =
   | "succession.plan.created"
@@ -119,7 +106,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Succession plan not found",
           details: { id },
         },
@@ -170,7 +157,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Succession plan not found",
           details: { id },
         },
@@ -207,7 +194,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Succession plan not found",
           details: { id },
         },
@@ -243,7 +230,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Succession plan not found",
           details: { planId },
         },
@@ -268,7 +255,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Candidate not found",
           details: { id },
         },
@@ -331,7 +318,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Candidate not found",
           details: { id },
         },
@@ -368,7 +355,7 @@ export class SuccessionService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Candidate not found",
           details: { id },
         },

@@ -13,6 +13,7 @@ import {
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface BenefitPlan {
@@ -59,6 +60,7 @@ function formatCurrency(amount: number): string {
 
 export default function BenefitsAdminPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [planTypeFilter, setPlanTypeFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -92,7 +94,7 @@ export default function BenefitsAdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Benefits export will be available in a future update." })}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -176,7 +178,7 @@ export default function BenefitsAdminPage() {
           <option value="hsa">HSA</option>
           <option value="fsa">FSA</option>
         </select>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Advanced filtering will be available in a future update." })}>
           <Filter className="h-4 w-4 mr-2" />
           More Filters
         </Button>
@@ -313,7 +315,7 @@ export default function BenefitsAdminPage() {
                           <Badge variant="secondary">Inactive</Badge>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/admin/benefits/plans/${plan.id}`)}>
                             View
                           </Button>
                         </td>
@@ -348,7 +350,10 @@ export default function BenefitsAdminPage() {
                 </Button>
                 <Button
                   className="flex-1"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    toast.info("Coming Soon", { message: "Benefit plan creation will be available in a future update." });
+                    setShowCreateModal(false);
+                  }}
                 >
                   Create
                 </Button>

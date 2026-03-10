@@ -14,7 +14,7 @@ COPY packages/web/package.json ./packages/web/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Copy source files
 COPY packages/shared ./packages/shared
@@ -34,12 +34,21 @@ COPY --from=builder /app/packages/web/build ./build
 COPY --from=builder /app/packages/web/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+USER nextjs
+
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5173
 
 # Expose port
 EXPOSE 5173
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5173/ || exit 1
 
 # Start the application
 CMD ["bun", "run", "start"]
