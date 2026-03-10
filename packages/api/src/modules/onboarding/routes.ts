@@ -1,29 +1,63 @@
 /**
  * Onboarding Module Routes
  *
- * Onboarding checklists and tasks management
+ * Onboarding checklists and tasks management.
+ * All routes delegate to OnboardingService for business logic.
  */
 
 import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { OnboardingRepository } from "./repository";
+import { OnboardingService } from "./service";
+import { mapErrorToStatus } from "../../lib/route-helpers";
 
 const UuidSchema = t.String({ format: "uuid" });
 
+/** Module-specific error code overrides */
+const ONBOARDING_ERROR_CODES: Record<string, number> = {
+  TEMPLATE_NOT_FOUND: 404,
+  TEMPLATE_INACTIVE: 409,
+  ALREADY_ONBOARDING: 409,
+  INSTANCE_CLOSED: 409,
+  TASK_NOT_FOUND: 404,
+  ALREADY_COMPLETED: 409,
+  CANNOT_SKIP_REQUIRED: 409,
+  CREATE_FAILED: 500,
+  UPDATE_FAILED: 500,
+  START_FAILED: 500,
+  COMPLETE_FAILED: 500,
+  SKIP_FAILED: 500,
+};
+
 export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
+
+  // Wire up service and repository via derive
+  .derive((ctx) => {
+    const { db } = ctx as any;
+    const repository = new OnboardingRepository(db);
+    const service = new OnboardingService(repository, db);
+
+    const { tenant, user } = ctx as any;
+    const tenantContext = {
+      tenantId: tenant?.id || "",
+      userId: user?.id,
+    };
+
+    return { onboardingService: service, onboardingRepository: repository, tenantContext };
+  })
 
   // Checklists (Templates)
   .get("/checklists", async (ctx) => {
-    const { tenant, user, db, set } = ctx as any;
+    const { onboardingService, tenantContext, set } = ctx as any;
 
     try {
-      const checklists = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT * FROM app.onboarding_checklists
-          WHERE tenant_id = ${tenant.id}::uuid
-          ORDER BY name ASC
-        `;
-      });
-      return { checklists, count: checklists.length };
+      const result = await onboardingService.listTemplates(
+        tenantContext,
+        {},
+        { limit: 100 }
+      );
+
+      return { checklists: result.items, count: result.items.length };
     } catch (error: any) {
       set.status = 500;
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
@@ -34,27 +68,23 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   })
 
   .post("/checklists", async (ctx) => {
-    const { tenant, user, db, body, set } = ctx as any;
+    const { onboardingService, tenantContext, body, set } = ctx as any;
 
-    try {
-      const [checklist] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          INSERT INTO app.onboarding_checklists (
-            id, tenant_id, name, description, department_id, position_id, tasks, status
-          ) VALUES (
-            gen_random_uuid(), ${tenant.id}::uuid, ${(body as any).name}, ${(body as any).description || null},
-            ${(body as any).departmentId || null}::uuid, ${(body as any).positionId || null}::uuid,
-            ${JSON.stringify((body as any).tasks || [])}::jsonb, 'active'
-          )
-          RETURNING *
-        `;
-      });
-      set.status = 201;
-      return checklist;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    const result = await onboardingService.createTemplate(tenantContext, {
+      name: body.name,
+      description: body.description,
+      departmentId: body.departmentId,
+      positionId: body.positionId,
+      tasks: body.tasks,
+    });
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
     }
+
+    set.status = 201;
+    return result.data;
   }, {
     body: t.Object({
       name: t.String({ minLength: 1, maxLength: 100 }),
@@ -75,24 +105,22 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
 
   // Employee Onboarding Instances
   .get("/instances", async (ctx) => {
-    const { tenant, user, db, query, set } = ctx as any;
+    const { onboardingService, tenantContext, query, set } = ctx as any;
 
     try {
-      const instances = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT oi.*, e.first_name || ' ' || e.last_name as employee_name,
-                 oc.name as checklist_name
-          FROM app.onboarding_instances oi
-          JOIN app.employees e ON e.id = oi.employee_id
-          JOIN app.onboarding_checklists oc ON oc.id = oi.checklist_id
-          WHERE oi.tenant_id = ${tenant.id}::uuid
-          ${query.status ? tx`AND oi.status = ${query.status}` : tx``}
-          ${query.employeeId ? tx`AND oi.employee_id = ${query.employeeId}::uuid` : tx``}
-          ORDER BY oi.start_date DESC
-          LIMIT ${query.limit !== undefined && query.limit !== null ? Number(query.limit) : 20}
-        `;
-      });
-      return { instances, count: instances.length };
+      const { cursor, limit, ...filters } = query;
+      const result = await onboardingService.listInstances(
+        tenantContext,
+        filters,
+        { cursor, limit: limit !== undefined && limit !== null ? Number(limit) : undefined }
+      );
+
+      return {
+        instances: result.items,
+        count: result.items.length,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
     } catch (error: any) {
       set.status = 500;
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
@@ -109,40 +137,22 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   })
 
   .post("/instances", async (ctx) => {
-    const { tenant, user, db, body, set } = ctx as any;
+    const { onboardingService, tenantContext, body, set } = ctx as any;
 
-    try {
-      // Get checklist tasks
-      const [checklist] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`SELECT tasks FROM app.onboarding_checklists WHERE id = ${(body as any).checklistId}::uuid`;
-      });
+    const result = await onboardingService.startOnboarding(tenantContext, {
+      employeeId: body.employeeId,
+      templateId: body.checklistId,
+      startDate: body.startDate,
+      buddyId: body.buddyId,
+    });
 
-      const tasks = (checklist?.tasks || []).map((task: any, index: number) => ({
-        ...task,
-        taskId: `task-${index}`,
-        status: 'pending',
-        completedAt: null,
-        completedBy: null,
-      }));
-
-      const [instance] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          INSERT INTO app.onboarding_instances (
-            id, tenant_id, employee_id, checklist_id, start_date, buddy_id, tasks, status
-          ) VALUES (
-            gen_random_uuid(), ${tenant.id}::uuid, ${(body as any).employeeId}::uuid,
-            ${(body as any).checklistId}::uuid, ${(body as any).startDate}::date, ${(body as any).buddyId || null}::uuid,
-            ${JSON.stringify(tasks)}::jsonb, 'in_progress'
-          )
-          RETURNING *
-        `;
-      });
-      set.status = 201;
-      return instance;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
     }
+
+    set.status = 201;
+    return result.data;
   }, {
     body: t.Object({
       employeeId: UuidSchema,
@@ -155,30 +165,16 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   })
 
   .get("/instances/:id", async (ctx) => {
-    const { tenant, user, db, params, set } = ctx as any;
+    const { onboardingService, tenantContext, params, set } = ctx as any;
 
-    try {
-      const [instance] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT oi.*, e.first_name || ' ' || e.last_name as employee_name,
-                 oc.name as checklist_name, b.first_name || ' ' || b.last_name as buddy_name
-          FROM app.onboarding_instances oi
-          JOIN app.employees e ON e.id = oi.employee_id
-          JOIN app.onboarding_checklists oc ON oc.id = oi.checklist_id
-          LEFT JOIN app.employees b ON b.id = oi.buddy_id
-          WHERE oi.id = ${params.id}::uuid AND oi.tenant_id = ${tenant.id}::uuid
-        `;
-      });
+    const result = await onboardingService.getInstance(tenantContext, params.id);
 
-      if (!instance) {
-        set.status = 404;
-        return { error: { code: "NOT_FOUND", message: "Onboarding instance not found" } };
-      }
-      return instance;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
     }
+
+    return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
     beforeHandle: [requireAuthContext, requireTenantContext],
@@ -186,83 +182,43 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   })
 
   .post("/instances/:id/tasks/:taskId/complete", async (ctx) => {
-    const { tenant, user, db, params, set } = ctx as any;
+    const { onboardingService, tenantContext, params, set } = ctx as any;
 
-    try {
-      // Get current instance
-      const [instance] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`SELECT tasks FROM app.onboarding_instances WHERE id = ${params.id}::uuid`;
-      });
+    const result = await onboardingService.completeTask(tenantContext, params.id, params.taskId);
 
-      if (!instance) {
-        set.status = 404;
-        return { error: { code: "NOT_FOUND", message: "Onboarding instance not found" } };
-      }
-
-      const tasks = (instance.tasks || []).map((task: any) => {
-        if (task.taskId === params.taskId) {
-          return { ...task, status: 'completed', completedAt: new Date().toISOString(), completedBy: user.id };
-        }
-        return task;
-      });
-
-      const allCompleted = tasks.every((t: any) => t.status === 'completed');
-
-      const [updated] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          UPDATE app.onboarding_instances SET
-            tasks = ${JSON.stringify(tasks)}::jsonb,
-            status = ${allCompleted ? 'completed' : 'in_progress'},
-            completed_at = ${allCompleted ? tx`now()` : tx`NULL`},
-            updated_at = now()
-          WHERE id = ${params.id}::uuid AND tenant_id = ${tenant.id}::uuid
-          RETURNING *
-        `;
-      });
-
-      return updated;
-    } catch (error: any) {
-      set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
     }
+
+    return result.data;
   }, {
     params: t.Object({ id: UuidSchema, taskId: t.String() }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Complete onboarding task" }
   })
 
   // My Onboarding
   .get("/my-onboarding", async (ctx) => {
-    const { tenant, user, db, set } = ctx as any;
+    const { tenant, user, onboardingService, onboardingRepository, tenantContext, set } = ctx as any;
+    if (!tenant || !user) {
+      set.status = 401;
+      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
+    }
 
     try {
-      const [employee] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`SELECT id FROM app.employees WHERE user_id = ${user.id}::uuid AND tenant_id = ${tenant.id}::uuid`;
-      });
+      const employeeId = await onboardingRepository.getEmployeeIdByUserId(tenantContext);
 
-      if (!employee) {
+      if (!employeeId) {
         return { instance: null };
       }
 
-      const [instance] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
-        return tx`
-          SELECT oi.*, oc.name as checklist_name, b.first_name || ' ' || b.last_name as buddy_name
-          FROM app.onboarding_instances oi
-          JOIN app.onboarding_checklists oc ON oc.id = oi.checklist_id
-          LEFT JOIN app.employees b ON b.id = oi.buddy_id
-          WHERE oi.employee_id = ${employee.id}::uuid AND oi.status != 'completed'
-          ORDER BY oi.start_date DESC
-          LIMIT 1
-        `;
-      });
-
-      return { instance };
+      const result = await onboardingService.getMyOnboarding(tenantContext, employeeId);
+      return { instance: result.data || null };
     } catch (error: any) {
       set.status = 500;
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
-    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Get my onboarding" }
   });
 
