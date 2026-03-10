@@ -2,54 +2,23 @@
  * LMS (Learning Management System) Routes
  *
  * Courses, enrollments, completions
- * 
- * FIX: Added proper tenant null checking to return appropriate error codes.
- * When tenant is null, returns 400 MISSING_TENANT instead of crashing with 500.
  */
 
 import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 
 const UuidSchema = t.String({ format: "uuid" });
-
-/**
- * Helper to check auth and tenant context, returning appropriate errors.
- * Returns error response object if check fails, null if checks pass.
- */
-function checkContext(ctx: any): { status: number; body: any } | null {
-  const { tenant, user, set } = ctx;
-  
-  if (!user) {
-    return {
-      status: 401,
-      body: { error: { code: "UNAUTHORIZED", message: "Authentication required" } }
-    };
-  }
-  
-  if (!tenant) {
-    return {
-      status: 400,
-      body: { error: { code: "MISSING_TENANT", message: "Tenant context required. Please select a tenant or provide X-Tenant-ID header." } }
-    };
-  }
-  
-  return null;
-}
 
 export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   // Courses
   .get("/courses", async (ctx) => {
     const { tenant, user, db, query, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const courses = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
         return tx`
-          SELECT c.*, 
+          SELECT c.*,
             (SELECT COUNT(*) FROM app.course_enrollments WHERE course_id = c.id) as enrollment_count
           FROM app.courses c
           WHERE c.tenant_id = ${tenant.id}::uuid
@@ -71,16 +40,12 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "List courses" }
   })
 
   .post("/courses", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [course] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -113,16 +78,12 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       contentUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
       thumbnailUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Create course" }
   })
 
   .get("/courses/:id", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [course] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -146,17 +107,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     }
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Get course by ID" }
   })
 
   // Enrollments
   .get("/enrollments", async (ctx) => {
     const { tenant, user, db, query, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const enrollments = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -186,16 +143,12 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "List enrollments" }
   })
 
   .post("/enrollments", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [enrollment] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -221,16 +174,12 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       employeeId: UuidSchema,
       dueDate: t.Optional(t.String({ format: "date" })),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Create enrollment" }
   })
 
   .post("/enrollments/:id/start", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [enrollment] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -255,16 +204,12 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     }
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Start course" }
   })
 
   .post("/enrollments/:id/complete", async (ctx) => {
     const { tenant, user, db, params, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [enrollment] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -293,17 +238,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     body: t.Optional(t.Object({
       score: t.Optional(t.Number({ minimum: 0, maximum: 100 })),
     })),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Complete course" }
   })
 
   // My Learning
   .get("/my-learning", async (ctx) => {
     const { tenant, user, db, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
 
     try {
       const [employee] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -320,7 +261,7 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
           FROM app.course_enrollments ce
           JOIN app.courses c ON c.id = ce.course_id
           WHERE ce.employee_id = ${employee.id}::uuid AND ce.tenant_id = ${tenant.id}::uuid
-          ORDER BY 
+          ORDER BY
             CASE ce.status WHEN 'in_progress' THEN 1 WHEN 'enrolled' THEN 2 ELSE 3 END,
             ce.due_date ASC NULLS LAST
         `;
@@ -332,6 +273,7 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["LMS"], summary: "Get my learning" }
   });
 
