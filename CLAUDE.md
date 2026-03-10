@@ -93,23 +93,23 @@ Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 - `src/config/`: Application configuration (`database.ts`)
 - `src/lib/`: Shared utilities (transaction handling, better-auth handler)
 - `src/types/`: TypeScript type definitions
-- `src/test/`: Integration tests
-- `src/tests-legacy/`: Old tests (eslint-ignored, do not add new tests here)
+- `src/test/`: Integration, unit, e2e, security, performance, and chaos tests
 
 ### Plugin Registration Order (Critical)
 
-Plugins have dependencies and **must** be registered in this order:
+Plugins have dependencies and **must** be registered in this order in `src/app.ts`:
 
-1. `errorsPlugin` — Error handling, request ID generation
-2. `dbPlugin` — Database connectivity (postgres)
-3. `cachePlugin` — Redis caching
-4. `tenantPlugin` — Tenant resolution (depends on db, cache)
-5. `authPlugin` — Authentication via BetterAuth (depends on db, cache)
-6. `rbacPlugin` — Authorization (depends on db, cache, auth, tenant)
-7. `idempotencyPlugin` — Request deduplication (depends on db, cache, auth, tenant)
-8. `auditPlugin` — Audit logging (depends on db, auth, tenant)
-
-Additional plugins: `rateLimitPlugin`, `securityHeadersPlugin`, `betterAuthPlugin`.
+1. `securityHeadersPlugin` — Security headers (after CORS)
+2. `errorsPlugin` — Error handling, request ID generation
+3. `dbPlugin` — Database connectivity (postgres.js)
+4. `cachePlugin` — Redis caching
+5. `rateLimitPlugin` — Rate limiting (depends on cache)
+6. `betterAuthPlugin` — BetterAuth route handler for `/api/auth/*`
+7. `authPlugin` — Session/user resolution (depends on db, cache)
+8. `tenantPlugin` — Tenant resolution (depends on db, cache, auth)
+9. `rbacPlugin` — Authorization (depends on db, cache, auth, tenant)
+10. `idempotencyPlugin` — Request deduplication (depends on db, cache, auth, tenant)
+11. `auditPlugin` — Audit logging (depends on db, auth, tenant)
 
 ### Worker Subsystem
 Background processing uses Redis Streams for reliable async operations:
@@ -127,11 +127,35 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql` (currently 115 migrations: 0001–0115). All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql` (currently 121 files, numbered 0001–0115 with some duplicate numbers). All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
 
 Two database roles:
 - `hris` — Superuser/admin (used for migrations)
 - `hris_app` — Application role with `NOBYPASSRLS` (used at runtime and in tests so RLS is enforced)
+
+### Database Client Behavior
+The `DatabaseClient` (in `src/plugins/db.ts`) configures postgres.js with:
+- **Search path**: `app,public` — queries can use bare table names (e.g., `employees` not `app.employees`)
+- **Column transform**: Auto-converts `snake_case` ↔ `camelCase` via `postgres.toCamel`/`postgres.fromCamel` — DB columns are `snake_case`, TypeScript properties are `camelCase`
+- **Tenant context**: `db.withTransaction(ctx, callback)` sets RLS context automatically via `app.set_tenant_context()`
+- **System bypass**: `db.withSystemContext(callback)` wraps calls with `enable/disable_system_context()`
+
+## Query Style
+
+All database queries use **postgres.js tagged templates** (NOT Drizzle ORM, NOT raw pg):
+```typescript
+// Reads — db.withTransaction sets RLS context
+const rows = await db.withTransaction(ctx, async (tx) => {
+  return await tx`SELECT * FROM employees WHERE id = ${id}`;
+});
+
+// Writes — outbox in same transaction
+await db.withTransaction(ctx, async (tx) => {
+  const [emp] = await tx`INSERT INTO employees (...) VALUES (...) RETURNING *`;
+  await tx`INSERT INTO domain_outbox (...) VALUES (...)`;
+  return emp;
+});
+```
 
 ## Critical Patterns (Non-Negotiable)
 

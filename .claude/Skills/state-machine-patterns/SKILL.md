@@ -27,7 +27,7 @@ Always validate transitions in the service layer before persisting:
 import { canTransition } from '@hris/shared/state-machines';
 
 async updateEmployeeStatus(id: string, newStatus: EmployeeStatus, reason: string, ctx: Context) {
-  return db.transaction(async (tx) => {
+  return db.withTransaction(ctx, async (tx) => {
     const employee = await repo.findById(tx, id, ctx.tenantId);
     if (!canTransition(employee.status, newStatus)) {
       throw new ConflictError(`Cannot transition from ${employee.status} to ${newStatus}`);
@@ -44,16 +44,11 @@ Each machine has a prefixed variant: `canTransitionCase()`, `canTransitionLeaveR
 Every state change must be recorded in the corresponding status history table (e.g., `app.employee_status_history`) with actor, timestamp, reason, and previous/new status. Never update history rows -- always insert.
 
 ```typescript
-await tx.insert(employeeStatusHistory).values({
-  id: crypto.randomUUID(),
-  tenantId: ctx.tenantId,
-  employeeId: employee.id,
-  fromStatus: employee.status,
-  toStatus: newStatus,
-  reason,
-  changedBy: ctx.userId,
-  changedAt: new Date(),
-});
+await tx`
+  INSERT INTO employee_status_history (id, tenant_id, employee_id, from_status, to_status, reason, changed_by, changed_at)
+  VALUES (${crypto.randomUUID()}, ${ctx.tenantId}, ${employee.id},
+          ${employee.status}, ${newStatus}, ${reason}, ${ctx.userId}, now())
+`;
 ```
 
 ## Outbox Event on Transition
@@ -61,15 +56,13 @@ await tx.insert(employeeStatusHistory).values({
 Every state change must emit a domain event via the outbox in the same transaction:
 
 ```typescript
-await tx.insert(domainOutbox).values({
-  id: crypto.randomUUID(),
-  tenantId: ctx.tenantId,
-  aggregateType: 'employee',
-  aggregateId: employee.id,
-  eventType: 'hr.employee.status_changed',
-  payload: { from: employee.status, to: newStatus, reason, actor: ctx.userId },
-  createdAt: new Date(),
-});
+await tx`
+  INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+  VALUES (${crypto.randomUUID()}, ${ctx.tenantId}, 'employee', ${employee.id},
+          'hr.employee.status_changed',
+          ${JSON.stringify({ from: employee.status, to: newStatus, reason, actor: ctx.userId })}::jsonb,
+          now())
+`;
 ```
 
 ## Testing Transitions

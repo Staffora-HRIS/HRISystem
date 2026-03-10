@@ -46,7 +46,7 @@ You are implementing the Core HR module - the system of record for all employee 
 
 **1. RLS and Multi-Tenancy**
 - Every table MUST have tenant_id column
-- Every table MUST have RLS policy: `USING (tenant_id = current_setting('app.tenant_id')::uuid)`
+- Every table MUST have RLS policy: `USING (tenant_id = current_setting('app.current_tenant')::uuid)`
 - All composite indexes MUST have tenant_id as the first column
 - Never bypass RLS - trust the tenant context set by the auth plugin
 
@@ -69,15 +69,11 @@ Valid transitions:
 **4. Outbox Pattern for Events**
 After each mutation, in the same transaction:
 ```typescript
-await tx.insert(domainOutbox).values({
-  id: crypto.randomUUID(),
-  tenantId: ctx.tenantId,
-  aggregateType: 'employee',
-  aggregateId: employee.id,
-  eventType: 'hr.employee.created',
-  payload: { employee, actor: ctx.userId },
-  createdAt: new Date(),
-});
+await tx`
+  INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+  VALUES (${crypto.randomUUID()}, ${ctx.tenantId}, 'employee', ${employee.id},
+          'hr.employee.created', ${JSON.stringify({ employee, actor: ctx.userId })}::jsonb, now())
+`;
 ```
 
 Event types: hr.employee.created, hr.employee.updated, hr.employee.transferred, hr.employee.promoted, hr.employee.terminated

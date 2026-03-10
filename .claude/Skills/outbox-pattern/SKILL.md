@@ -20,7 +20,7 @@ description: Implement transactional outbox for reliable domain event publishing
 ## Writing Events (Service Layer — postgres.js)
 ```typescript
 async createEmployee(ctx: TenantContext, data: Input) {
-  return await this.db.begin(async (tx) => {
+  return await this.db.withTransaction(ctx, async (tx) => {
     // 1. Business write
     const rows = await tx`
       INSERT INTO app.employees (tenant_id, employee_number, status, hire_date)

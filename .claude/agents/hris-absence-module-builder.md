@@ -33,7 +33,7 @@ All balance changes MUST flow through the `leave_balance_ledger` table:
 ```typescript
 // CORRECT: All balance changes via ledger
 async function adjustBalance(data: BalanceAdjustment) {
-  await db.begin(async (tx) => {
+  await db.withTransaction(ctx, async (tx) => {
     // 1. Insert ledger entry
     await tx`
       INSERT INTO app.leave_balance_ledger (tenant_id, employee_id, leave_type_id, transaction_type, days, reference_type, notes)
