@@ -15,6 +15,7 @@ import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { ErrorCodes } from "../../plugins/errors";
 import {
   // Schemas
   CreateGoalSchema,
@@ -199,7 +200,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -243,14 +244,14 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!goal) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Goal not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
           });
         }
 
         return goal;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -309,7 +310,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return goal;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -349,7 +350,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!oldGoal) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Goal not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
           });
         }
 
@@ -385,7 +386,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return goal;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -426,7 +427,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!oldGoal) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Goal not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
           });
         }
 
@@ -453,7 +454,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return { success: true as const, message: "Goal deleted successfully" };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -511,7 +512,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -550,14 +551,14 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!cycle) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Review cycle not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Review cycle not found" },
           });
         }
 
         return cycle;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -615,7 +616,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return cycle;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -674,7 +675,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -717,14 +718,14 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!review) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Review not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
           });
         }
 
         return review;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -779,7 +780,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return review;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -819,7 +820,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!oldReview) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Review not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
           });
         }
 
@@ -859,7 +860,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return review;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -900,7 +901,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!oldReview) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Review not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
           });
         }
 
@@ -945,7 +946,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return review;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -1001,7 +1002,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         };
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -1040,14 +1041,14 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
 
         if (!competency) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Competency not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Competency not found" },
           });
         }
 
         return competency;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
@@ -1103,7 +1104,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
         return competency;
       } catch (err: any) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: err.message },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
         });
       }
     },
