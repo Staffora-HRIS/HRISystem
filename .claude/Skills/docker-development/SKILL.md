@@ -32,7 +32,8 @@ BETTER_AUTH_SECRET=your_auth_secret
 Host: localhost
 Port: 5432
 Database: hris
-User: postgres
+User: hris
+Password: (from POSTGRES_PASSWORD in docker/.env)
 ```
 
 ## Redis Connection

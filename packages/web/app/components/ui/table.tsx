@@ -82,17 +82,19 @@ export interface DataTableProps<T> {
 // Default empty icon
 const DefaultEmptyIcon = () => (
   <svg
-    className="h-12 w-12 text-gray-400"
+    className="h-16 w-16 text-gray-300 dark:text-gray-600"
     fill="none"
-    viewBox="0 0 24 24"
+    viewBox="0 0 64 64"
     stroke="currentColor"
+    strokeWidth={1.5}
   >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-    />
+    <rect x="8" y="12" width="48" height="40" rx="4" />
+    <line x1="8" y1="24" x2="56" y2="24" />
+    <line x1="24" y1="24" x2="24" y2="52" />
+    <line x1="8" y1="32" x2="56" y2="32" />
+    <line x1="8" y1="40" x2="56" y2="40" />
+    <circle cx="32" cy="44" r="6" strokeDasharray="3 2" />
+    <line x1="29" y1="44" x2="35" y2="44" />
   </svg>
 );
 
@@ -211,7 +213,7 @@ export function DataTable<T>({
   const cellPadding = compact ? "px-3 py-2" : "px-4 py-3";
 
   return (
-    <div className={cn("overflow-hidden rounded-lg", className)}>
+    <div className={cn("relative overflow-hidden rounded-lg", className)}>
       <div className="overflow-x-auto">
         <table
           className={cn(

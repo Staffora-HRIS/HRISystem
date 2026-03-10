@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   Users,
   Mail,
@@ -20,6 +20,7 @@ import {
   Avatar,
   Input,
   Spinner,
+  useToast,
 } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
 
@@ -57,6 +58,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function ManagerTeamPage() {
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
+  const toast = useToast();
 
   const {
     data,
@@ -220,10 +223,18 @@ export default function ManagerTeamPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/admin/hr/employees/${member.id}`)}
+                    >
                       View Profile
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toast.info("More options coming soon")}
+                    >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </div>

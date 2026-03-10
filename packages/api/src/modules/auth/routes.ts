@@ -8,6 +8,7 @@
 
 import { Elysia, t } from "elysia";
 import { AuthService } from "../../plugins";
+import { ErrorResponseSchema } from "../../lib/route-helpers";
 
 // =============================================================================
 // Request Schemas
@@ -20,14 +21,6 @@ const SwitchTenantBodySchema = t.Object({
 // =============================================================================
 // Response Schemas
 // =============================================================================
-
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    requestId: t.String(),
-  }),
-});
 
 const UserResponseSchema = t.Object({
   id: t.String(),
@@ -136,7 +129,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           tenants: userWithTenants?.tenants || [],
         };
       } catch (error) {
-        console.error("Get me error:", error);
+        console.error("Get me error:", error instanceof Error ? error.message : "Unknown error");
         set.status = 500;
         return {
           error: {
@@ -190,7 +183,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           role: t.isPrimary ? "primary" : "member",
         }));
       } catch (error) {
-        console.error("Get tenants error:", error);
+        console.error("Get tenants error:", error instanceof Error ? error.message : "Unknown error");
         set.status = 500;
         return {
           error: {
@@ -249,7 +242,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
 
         return { success: true as const, tenantId };
       } catch (error) {
-        console.error("Switch tenant error:", error);
+        console.error("Switch tenant error:", error instanceof Error ? error.message : "Unknown error");
         set.status = 500;
         return {
           error: {

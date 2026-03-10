@@ -25,7 +25,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
   },
 ];
 
@@ -33,7 +33,7 @@ export function meta(): Route.MetaDescriptors {
   return [
     { title: "HRIS Platform" },
     { name: "description", content: "Human Resource Information System" },
-    { name: "viewport", content: "width=device-width, initial-scale=1" },
+    { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
   ];
 }
 

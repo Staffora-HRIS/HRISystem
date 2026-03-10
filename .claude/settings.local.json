@@ -1,24 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git -C \"C:\\\\Users\\\\jb12b\\\\Documents\\\\GitHub\\\\HRISystem\" log --oneline -10)",
-      "Bash(git -C \"C:\\\\Users\\\\jb12b\\\\Documents\\\\GitHub\\\\HRISystem\" show 8fb23e2 --stat)",
       "Bash(dir:*)",
       "Bash(bun install)",
-      "Bash(bun run typecheck:*)",
-      "Bash(npx tsc:*)",
+      "Bash(bun run:*)",
+      "Bash(bun test:*)",
       "Bash(bun x tsc:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)",
       "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(bun run lint:*)",
-      "Bash(bun test:*)",
-      "Bash(ls:*)",
-      "Bash(done)",
-      "Bash(grep:*)",
-      "Bash(bun run:*)",
-      "Bash(docker compose:*)"
+      "Bash(bun run typecheck:*)",
+      "Bash(docker compose:*)",
+      "Bash(done)"
     ]
   }
 }

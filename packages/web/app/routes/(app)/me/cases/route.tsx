@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router";
 import { MessageSquare, Plus, Clock, CheckCircle } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface HRCase {
@@ -24,7 +24,7 @@ export default function MyCasesPage() {
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState<string>("all");
   const queryClient = useQueryClient();
-  const toast = useToast();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-cases"],
@@ -185,11 +185,7 @@ export default function MyCasesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      toast.info("Case details", {
-                        message: `Case details view is not available yet for ${hrCase.caseNumber}.`,
-                      })
-                    }
+                    onClick={() => navigate(`/admin/cases/${hrCase.id}`)}
                   >
                     View Details
                   </Button>

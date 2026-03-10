@@ -7,6 +7,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { AnalyticsRepository, type TenantContext } from "./repository";
 import { AnalyticsService } from "./service";
 import {
@@ -31,27 +32,12 @@ import {
 } from "./schemas";
 
 /**
- * Error response schema
+ * Module-specific error code overrides (merged into shared mapErrorToStatus)
  */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
-
-/**
- * Map error codes to HTTP status
- */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    INVALID_DATE_RANGE: 400,
-    INVALID_PERIOD: 400,
-  };
-  return statusMap[code] || 500;
-}
+const ANALYTICS_ERROR_CODES: Record<string, number> = {
+  INVALID_DATE_RANGE: 400,
+  INVALID_PERIOD: 400,
+};
 
 /**
  * Create Analytics routes plugin
@@ -78,7 +64,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getExecutiveDashboard(tenantContext);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -107,7 +93,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getManagerDashboard(tenantContext);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -140,7 +126,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getHeadcountSummary(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -170,7 +156,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getHeadcountByDepartment(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -205,7 +191,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -244,7 +230,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getTurnoverSummary(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -275,7 +261,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getTurnoverByDepartment(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -306,7 +292,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getTurnoverByReason(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -341,7 +327,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getAttendanceSummary(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -376,7 +362,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getLeaveSummary(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -407,7 +393,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getLeaveByType(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -442,7 +428,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       const result = await analyticsService.getRecruitmentSummary(tenantContext, query);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 

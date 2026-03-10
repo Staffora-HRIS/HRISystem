@@ -63,15 +63,15 @@ export default function MyLearningPage() {
     }
   };
 
-  const handleContinue = (enrollment: Enrollment) => {
-    toast.info("Continue learning", {
-      message: `Course player is not available yet for "${enrollment.title}".`,
+  const handleContinue = (_enrollment: Enrollment) => {
+    toast.info("Coming Soon", {
+      message: "The course player will be available in a future update.",
     });
   };
 
-  const handleViewCertificate = (enrollment: Enrollment) => {
-    toast.info("Certificate", {
-      message: `Certificate download is not available yet for "${enrollment.title}".`,
+  const handleViewCertificate = (_enrollment: Enrollment) => {
+    toast.info("Coming Soon", {
+      message: "Certificate downloads will be available in a future update.",
     });
   };
 

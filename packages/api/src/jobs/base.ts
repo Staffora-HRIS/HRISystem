@@ -188,7 +188,11 @@ function createJobLogger(jobId: string, jobType: string): JobLogger {
       console.warn(`${timestamp()} ${prefix} WARN: ${message}`, data ? JSON.stringify(data) : "");
     },
     error(message: string, error?: Error | unknown, data?: Record<string, unknown>) {
-      const errorInfo = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error;
+      const errorInfo = {
+        name: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : String(error),
+        ...(process.env["NODE_ENV"] !== "production" && error instanceof Error ? { stack: error.stack } : {}),
+      };
       console.error(`${timestamp()} ${prefix} ERROR: ${message}`, errorInfo, data ? JSON.stringify(data) : "");
     },
     debug(message: string, data?: Record<string, unknown>) {

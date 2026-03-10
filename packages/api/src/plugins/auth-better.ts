@@ -321,11 +321,18 @@ export class AuthService {
 export function authPlugin(options: AuthPluginOptions = {}) {
   const auth = getBetterAuth();
 
+  // Singleton: created once when plugin is initialized, reused across all requests
+  let authServiceSingleton: AuthService | null = null;
+
   return new Elysia({ name: "auth" })
     .derive({ as: "global" }, async (ctx) => {
       const { request } = ctx;
       const db = (ctx as any).db as DatabaseClient;
       const cache = (ctx as any).cache as CacheClient | undefined;
+
+      if (!authServiceSingleton) {
+        authServiceSingleton = new AuthService(db, cache);
+      }
 
       const isResponseLike = (value: unknown): value is Response => {
         if (!value || typeof value !== "object") return false;
@@ -360,7 +367,7 @@ export function authPlugin(options: AuthPluginOptions = {}) {
             user: null,
             session: null,
             isAuthenticated: false as const,
-            authService: new AuthService(db, cache),
+            authService: authServiceSingleton,
           };
         }
 
@@ -370,7 +377,7 @@ export function authPlugin(options: AuthPluginOptions = {}) {
           user: user as User,
           session: session as Session,
           isAuthenticated: true as const,
-          authService: new AuthService(db, cache),
+          authService: authServiceSingleton,
         };
       } catch (error) {
         console.error("Auth plugin error:", error);
@@ -378,7 +385,7 @@ export function authPlugin(options: AuthPluginOptions = {}) {
           user: null,
           session: null,
           isAuthenticated: false as const,
-          authService: new AuthService(db, cache),
+          authService: authServiceSingleton,
         };
       }
     });
@@ -426,6 +433,24 @@ export function requireAuth() {
 }
 
 /**
+ * Middleware function for beforeHandle that requires authentication context.
+ * Use this in beforeHandle arrays: { beforeHandle: [requireAuthContext] }
+ *
+ * Throws a 401 AuthError if user or session is missing.
+ */
+export function requireAuthContext(ctx: any): void {
+  const { user, session, set } = ctx;
+  if (!user || !session) {
+    set.status = 401;
+    throw new AuthError(
+      AuthErrorCodes.INVALID_SESSION,
+      "Authentication required",
+      401
+    );
+  }
+}
+
+/**
  * Require MFA verification
  */
 export function requireMfa() {
@@ -447,10 +472,22 @@ export function requireMfa() {
       const hasMfa = await authService.userHasMfa(user.id);
 
       if (hasMfa) {
-        // Verify MFA was completed for this session by checking session metadata
-        // Better Auth stores twoFactorVerified in session when MFA is completed
+        // Verify MFA was completed for this session by checking session metadata.
+        // TODO: Better Auth's two-factor plugin stores MFA verification status on
+        // the session object, but the exact field name depends on plugin version and
+        // configuration. The field "twoFactorVerified" may not be set by all
+        // Better Auth versions. Verify the Better Auth MFA plugin configuration and
+        // ensure the session schema includes this field. See:
+        // https://www.better-auth.com/docs/plugins/two-factor
         const sessionData = session as { twoFactorVerified?: boolean };
         if (!sessionData?.twoFactorVerified) {
+          // Log a warning since twoFactorVerified may not be populated by Better Auth
+          // depending on plugin configuration. This helps operators diagnose MFA
+          // enforcement issues without silently bypassing the guard.
+          console.warn(
+            "[MFA] twoFactorVerified check may not be enforced - verify Better Auth MFA plugin configuration. " +
+            `Session ${session?.id} for user ${user.id} does not have twoFactorVerified set.`
+          );
           set.status = 403;
           throw new AuthError(
             AuthErrorCodes.MFA_REQUIRED,
@@ -465,13 +502,26 @@ export function requireMfa() {
 }
 
 /**
- * CSRF protection (Better Auth handles this internally)
+ * CSRF protection guard
+ *
+ * Validates that mutating requests (POST, PUT, PATCH, DELETE) include
+ * a CSRF token header. Better Auth handles its own CSRF for its auth
+ * endpoints, but application routes must be protected explicitly.
  */
 export function requireCsrf() {
   return new Elysia({ name: "require-csrf" })
-    .derive(({ request }) => {
-      // Better Auth handles CSRF internally via its cookie/header mechanism
-      // This is kept for API compatibility but is essentially a no-op
+    .derive(({ request, set }) => {
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+        const csrfToken = request.headers.get("X-CSRF-Token");
+        if (!csrfToken) {
+          set.status = 403;
+          throw new AuthError(
+            "CSRF_REQUIRED",
+            "CSRF token is required for mutating requests",
+            403
+          );
+        }
+      }
       return {};
     });
 }

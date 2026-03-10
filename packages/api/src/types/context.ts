@@ -8,7 +8,7 @@
 import type { DatabaseClient } from "../plugins/db";
 import type { CacheClient } from "../plugins/cache";
 import type { Tenant } from "../plugins/tenant";
-import type { User, Session } from "../plugins/auth";
+import type { User, Session } from "../plugins/auth-better";
 
 /**
  * Extended context with all plugin-injected properties

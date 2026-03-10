@@ -79,12 +79,13 @@ export const app = new Elysia()
       origin: config.isProduction
         ? config.corsOrigins // Strict origin check in production
         : (request) => {
-            // In development, allow any localhost origin
+            // In development, allow strict localhost/127.0.0.1 origins with any port
             const origin = request.headers.get("origin");
-            if (origin?.includes("localhost") || origin?.includes("127.0.0.1")) {
+            if (!origin) return true;
+            if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
               return true;
             }
-            return config.corsOrigins.includes(origin ?? "");
+            return config.corsOrigins.includes(origin);
           },
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [

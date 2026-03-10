@@ -9,7 +9,6 @@ import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import type {
   BenefitsRepository,
-  TenantContext,
   CarrierRow,
   PlanRow,
   DependentRow,
@@ -17,6 +16,8 @@ import type {
   LifeEventRow,
   OpenEnrollmentRow,
 } from "./repository";
+import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 import type {
   CreateCarrier,
   UpdateCarrier,
@@ -46,22 +47,6 @@ import type {
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
-
-export interface PaginatedServiceResult<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
 
 type DomainEventType =
   | "benefits.carrier.created"
@@ -145,7 +130,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Carrier not found",
           details: { id },
         },
@@ -193,7 +178,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Carrier not found",
           details: { id },
         },
@@ -258,7 +243,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Plan not found",
           details: { id },
         },
@@ -327,7 +312,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Plan not found",
           details: { id },
         },
@@ -401,7 +386,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Dependent not found",
           details: { id },
         },
@@ -427,7 +412,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Dependent not found",
           details: { id },
         },
@@ -476,7 +461,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
           details: { id },
         },
@@ -595,7 +580,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
           details: { id },
         },
@@ -638,7 +623,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
           details: { id },
         },
@@ -705,7 +690,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Life event not found",
           details: { id },
         },
@@ -759,7 +744,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Life event not found",
           details: { id },
         },
@@ -836,7 +821,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Open enrollment period not found",
           details: { id },
         },
@@ -894,7 +879,7 @@ export class BenefitsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Open enrollment period not found",
           details: { id },
         },

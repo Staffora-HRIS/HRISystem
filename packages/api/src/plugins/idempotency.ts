@@ -467,12 +467,18 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
   } = options;
   const allSkipRoutes = [...DEFAULT_SKIP_ROUTES, ...skipRoutes];
 
+  // Singleton: created once when plugin is initialized, reused across all requests
+  let idempotencyServiceSingleton: IdempotencyService | null = null;
+
   return new Elysia({ name: "idempotency" })
-    // Idempotency service
+    // Idempotency service (singleton)
     .derive({ as: "global" }, (ctx) => {
       const { db, cache } = ctx as any;
+      if (!idempotencyServiceSingleton) {
+        idempotencyServiceSingleton = new IdempotencyService(db, cache);
+      }
       return {
-        idempotencyService: new IdempotencyService(db, cache),
+        idempotencyService: idempotencyServiceSingleton,
       } as Record<string, unknown>;
     })
 

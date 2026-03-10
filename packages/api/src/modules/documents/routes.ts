@@ -7,6 +7,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { DocumentsRepository, type TenantContext } from "./repository";
 import { DocumentsService } from "./service";
 import {
@@ -18,17 +19,6 @@ import {
   UploadUrlResponseSchema,
   PaginationQuerySchema,
 } from "./schemas";
-
-/**
- * Error response schema
- */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
 
 /**
  * Success response schema
@@ -51,18 +41,14 @@ const IdParamsSchema = t.Object({
 });
 
 /**
- * Map error codes to HTTP status
+ * Module-specific error code overrides (merged into shared mapErrorToStatus)
  */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    DUPLICATE: 409,
-    INVALID_FILE: 400,
-    FILE_TOO_LARGE: 413,
-    INVALID_MIME_TYPE: 415,
-  };
-  return statusMap[code] || 500;
-}
+const DOCUMENTS_ERROR_CODES: Record<string, number> = {
+  DUPLICATE: 409,
+  INVALID_FILE: 400,
+  FILE_TOO_LARGE: 413,
+  INVALID_MIME_TYPE: 415,
+};
 
 /**
  * Create Documents routes plugin
@@ -128,7 +114,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -164,7 +150,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -173,8 +159,16 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
     {
       beforeHandle: [requirePermission("documents", "write")],
       query: t.Object({
-        file_name: t.String({ minLength: 1 }),
-        mime_type: t.String({ minLength: 1 }),
+        file_name: t.String({
+          minLength: 1,
+          maxLength: 255,
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9._\\-\\s]*$"
+        }),
+        mime_type: t.String({
+          minLength: 1,
+          maxLength: 127,
+          pattern: "^[a-z]+\\/[a-zA-Z0-9.+\\-]+$"
+        }),
       }),
       response: {
         200: UploadUrlResponseSchema,
@@ -198,7 +192,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       const result = await documentsService.getDocument(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -229,7 +223,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       const result = await documentsService.getDownloadUrl(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -276,7 +270,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -326,7 +320,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -374,7 +368,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       const result = await documentsService.deleteDocument(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -419,7 +413,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       const result = await documentsService.listVersions(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -457,7 +451,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", DOCUMENTS_ERROR_CODES);
         return error(status, { error: result.error });
       }
 

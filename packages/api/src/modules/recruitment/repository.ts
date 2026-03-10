@@ -6,14 +6,13 @@
 
 import type { DatabaseClient } from "../../plugins/db";
 
+import type { TenantContext } from "../../types/service-result";
+
+export type { TenantContext } from "../../types/service-result";
+
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
 
 export interface Requisition {
   id: string;

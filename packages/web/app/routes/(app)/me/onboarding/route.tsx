@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle,
   Circle,
@@ -12,6 +12,7 @@ import {
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface OnboardingTask {
@@ -49,9 +50,23 @@ const categoryIcons: Record<string, React.ReactNode> = {
 };
 
 export default function MyOnboardingPage() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
   const { data: onboarding, isLoading } = useQuery({
     queryKey: ["my-onboarding"],
     queryFn: () => api.get<OnboardingInstance>("/onboarding/my-progress"),
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: (taskId: string) => api.post(`/onboarding/tasks/${taskId}/complete`),
+    onSuccess: () => {
+      toast.success("Task completed!");
+      queryClient.invalidateQueries({ queryKey: ["my-onboarding"] });
+    },
+    onError: () => {
+      toast.error("Failed to complete task. Please try again.");
+    },
   });
 
   const progress = onboarding
@@ -63,9 +78,8 @@ export default function MyOnboardingPage() {
   const completedTasks = myTasks.filter((t) => t.status === "completed");
   const otherTasks = onboarding?.tasks.filter((t) => t.assigneeType !== "employee") || [];
 
-  const handleCompleteTask = async (taskId: string) => {
-    // TODO: Implement task completion API call
-    alert(`Complete task: ${taskId}`);
+  const handleCompleteTask = (taskId: string) => {
+    completeMutation.mutate(taskId);
   };
 
   if (isLoading) {
@@ -226,8 +240,8 @@ export default function MyOnboardingPage() {
                         <LinkIcon className="h-4 w-4" />
                       </a>
                     )}
-                    <Button size="sm" onClick={() => handleCompleteTask(task.id)}>
-                      Complete
+                    <Button size="sm" onClick={() => handleCompleteTask(task.id)} disabled={completeMutation.isPending}>
+                      {completeMutation.isPending ? "..." : "Complete"}
                     </Button>
                   </div>
                 </div>

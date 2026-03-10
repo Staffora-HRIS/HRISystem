@@ -4,11 +4,9 @@
 
 import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
+import type { TenantContext } from "../../types/service-result";
 
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
+export type { TenantContext } from "../../types/service-result";
 
 export interface PaginatedResult<T> {
   data: T[];

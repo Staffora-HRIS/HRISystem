@@ -52,6 +52,8 @@ export type EffectiveDatingDimension =
   | "status"
   | "custom";
 
+import { startOfDay, endOfDay } from "./dates";
+
 // =============================================================================
 // Date Normalization
 // =============================================================================
@@ -67,24 +69,6 @@ function normalizeDate(date: Date | string | null | undefined): Date | null {
     return date;
   }
   return new Date(date);
-}
-
-/**
- * Get the start of day for a date (midnight)
- */
-function startOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
-}
-
-/**
- * Get the end of day for a date (23:59:59.999)
- */
-function endOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(23, 59, 59, 999);
-  return result;
 }
 
 // =============================================================================

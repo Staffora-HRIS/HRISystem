@@ -18,34 +18,10 @@ import type {
   TimeEventFilters,
   TimesheetFilters,
 } from "./schemas";
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-export interface PaginatedServiceResult<T> {
-  success: boolean;
-  data?: {
-    items: T[];
-    cursor: string | null;
-    hasMore: boolean;
-  };
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
+type PaginatedResult = ServiceResult<{ items: unknown[]; cursor: string | null; hasMore: boolean }>;
 
 // =============================================================================
 // Error Codes
@@ -112,7 +88,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to create time event",
         },
       };
@@ -122,7 +98,7 @@ export class TimeService {
   async getTimeEvents(
     ctx: TenantContext,
     filters: TimeEventFilters
-  ): Promise<PaginatedServiceResult<unknown>> {
+  ): Promise<PaginatedResult> {
     try {
       const result = await this.repo.getTimeEvents(ctx, {
         employeeId: filters.employeeId,
@@ -147,7 +123,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch time events",
         },
       };
@@ -176,7 +152,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch time event",
         },
       };
@@ -220,7 +196,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to create schedule",
         },
       };
@@ -230,7 +206,7 @@ export class TimeService {
   async getSchedules(
     ctx: TenantContext,
     filters: { orgUnitId?: string; isTemplate?: boolean; cursor?: string; limit?: number }
-  ): Promise<PaginatedServiceResult<unknown>> {
+  ): Promise<PaginatedResult> {
     try {
       const result = await this.repo.getSchedules(ctx, filters);
       return {
@@ -246,7 +222,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch schedules",
         },
       };
@@ -275,7 +251,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch schedule",
         },
       };
@@ -313,7 +289,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to update schedule",
         },
       };
@@ -346,7 +322,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to create shift",
         },
       };
@@ -375,7 +351,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch shift",
         },
       };
@@ -400,7 +376,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch shifts",
         },
       };
@@ -438,7 +414,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to update shift",
         },
       };
@@ -466,7 +442,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to create timesheet",
         },
       };
@@ -476,7 +452,7 @@ export class TimeService {
   async getTimesheets(
     ctx: TenantContext,
     filters: TimesheetFilters
-  ): Promise<PaginatedServiceResult<unknown>> {
+  ): Promise<PaginatedResult> {
     try {
       const result = await this.repo.getTimesheets(ctx, {
         employeeId: filters.employeeId,
@@ -500,7 +476,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch timesheets",
         },
       };
@@ -546,7 +522,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to fetch timesheet",
         },
       };
@@ -600,7 +576,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to update timesheet lines",
         },
       };
@@ -629,7 +605,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to submit timesheet",
         },
       };
@@ -660,7 +636,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to approve timesheet",
         },
       };
@@ -691,7 +667,7 @@ export class TimeService {
       return {
         success: false,
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to reject timesheet",
         },
       };

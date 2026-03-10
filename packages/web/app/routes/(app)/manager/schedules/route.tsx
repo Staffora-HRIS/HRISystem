@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Spinner } from "~/components/ui/spinner";
-import { Button, Badge } from "~/components/ui";
+import { Button, Badge, useToast } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
 
 type Schedule = {
@@ -32,6 +32,7 @@ type SchedulesResponse = {
 
 export default function ManagerSchedulesPage() {
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const toast = useToast();
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
   const {
@@ -228,7 +229,13 @@ export default function ManagerSchedulesPage() {
                         </span>
                       </div>
                     </div>
-                    <Button variant="outline" size="sm">View</Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toast.info("Coming Soon", { message: "Schedule detail view will be available in a future update." })}
+                    >
+                      View
+                    </Button>
                   </div>
                 </CardBody>
               </Card>

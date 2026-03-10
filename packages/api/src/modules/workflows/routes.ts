@@ -3,6 +3,7 @@
  */
 
 import { Elysia } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { WorkflowService } from "./service";
 import { WorkflowRepository } from "./repository";
 import * as schemas from "./schemas";
@@ -18,10 +19,6 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
   // Definition Routes
   .get("/definitions", async (ctx) => {
     const { tenant, user, workflowService, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const result = await workflowService.getDefinitions(
@@ -40,15 +37,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     query: schemas.PaginationQuerySchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "List workflow definitions" }
   })
 
   .post("/definitions", async (ctx) => {
     const { tenant, user, workflowService, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const definition = await workflowService.createDefinition(
@@ -67,15 +61,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.CreateWorkflowDefinitionSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Create workflow definition" }
   })
 
   .get("/definitions/:id", async (ctx) => {
     const { tenant, user, workflowService, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.getDefinitionById({ tenantId: tenant.id, userId: user.id }, params.id);
@@ -89,15 +80,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Get workflow definition by ID" }
   })
 
   .patch("/definitions/:id", async (ctx) => {
     const { tenant, user, workflowService, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.updateDefinition(
@@ -116,15 +104,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
   }, {
     params: schemas.IdParamsSchema,
     body: schemas.UpdateWorkflowDefinitionSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Update workflow definition" }
   })
 
   .post("/definitions/:id/activate", async (ctx) => {
     const { tenant, user, workflowService, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.activateDefinition({ tenantId: tenant.id, userId: user.id }, params.id);
@@ -138,16 +123,13 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Activate workflow definition" }
   })
 
   // Instance Routes
   .get("/instances", async (ctx) => {
     const { tenant, user, workflowService, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.getInstances({ tenantId: tenant.id, userId: user.id }, query);
@@ -157,15 +139,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     query: schemas.WorkflowInstanceFiltersSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "List workflow instances" }
   })
 
   .post("/instances", async (ctx) => {
     const { tenant, user, workflowService, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const instance = await workflowService.startWorkflow(
@@ -188,15 +167,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.CreateWorkflowInstanceSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Start workflow instance" }
   })
 
   .get("/instances/:id", async (ctx) => {
     const { tenant, user, workflowService, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.getInstanceById({ tenantId: tenant.id, userId: user.id }, params.id);
@@ -210,15 +186,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Get workflow instance by ID" }
   })
 
   .get("/instances/:id/steps", async (ctx) => {
     const { tenant, user, workflowService, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const steps = await workflowService.getInstanceSteps({ tenantId: tenant.id, userId: user.id }, params.id);
@@ -233,15 +206,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Get workflow instance steps" }
   })
 
   .post("/instances/:id/cancel", async (ctx) => {
     const { tenant, user, workflowService, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.cancelInstance(
@@ -259,16 +229,13 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Cancel workflow instance" }
   })
 
   // Step Actions
   .post("/steps/:stepId/process", async (ctx) => {
     const { tenant, user, workflowService, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.processStep(
@@ -287,15 +254,12 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.ProcessStepActionSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Process workflow step (approve/reject)" }
   })
 
   .post("/steps/:stepId/reassign", async (ctx) => {
     const { tenant, user, workflowService, params, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       return await workflowService.reassignStep(
@@ -313,16 +277,13 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.ReassignStepSchema,
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Reassign workflow step" }
   })
 
   // My Approvals
   .get("/my-approvals", async (ctx) => {
     const { tenant, user, workflowService, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const approvals = await workflowService.getMyPendingApprovals({ tenantId: tenant.id, userId: user.id }, user.id);
@@ -332,6 +293,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Workflows"], summary: "Get my pending approvals" }
   });
 

@@ -187,9 +187,6 @@ export class DatabaseClient {
       // Execute the query
       const result = (await tx<T[]>(strings, ...(values as any))) as T[];
 
-      // Clear context (optional, transaction will end anyway)
-      await tx`SELECT app.clear_tenant_context()`;
-
       return result;
     })) as T[];
   }
@@ -224,17 +221,8 @@ export class DatabaseClient {
       await tx`SELECT app.set_tenant_context(${context.tenantId}::uuid, ${context.userId || null}::uuid)`;
 
       try {
-        const result = await callback(tx);
-
-        await tx`SELECT app.clear_tenant_context()`;
-
-        return result;
+        return await callback(tx);
       } catch (error) {
-        try {
-          await tx`SELECT app.clear_tenant_context()`;
-        } catch {
-          // Ignore errors during cleanup
-        }
         throw error;
       }
     })) as T;
@@ -381,32 +369,6 @@ export async function hashRequestBody(body: unknown): Promise<string> {
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Utility to build dynamic WHERE clauses
- */
-export function buildWhereClause(
-  sql: Sql<Record<string, unknown>>,
-  conditions: Record<string, unknown>
-): postgres.PendingQuery<any> {
-  const entries = Object.entries(conditions).filter(
-    ([, value]) => value !== undefined && value !== null
-  );
-
-  if (entries.length === 0) {
-    return sql`TRUE`;
-  }
-
-  const fragments = entries.map(([key, value], index) => {
-    const column = sql(key);
-    if (index === 0) {
-      return sql`${column} = ${value as any}`;
-    }
-    return sql`AND ${column} = ${value as any}`;
-  });
-
-  return sql`${fragments}`;
 }
 
 // =============================================================================

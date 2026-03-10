@@ -9,10 +9,11 @@ import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import type {
   DocumentsRepository,
-  TenantContext,
   DocumentRow,
   DocumentVersionRow,
 } from "./repository";
+import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 import type {
   CreateDocument,
   UpdateDocument,
@@ -26,27 +27,33 @@ import type {
 // Types
 // =============================================================================
 
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
-
-export interface PaginatedServiceResult<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
 type DomainEventType =
   | "documents.document.created"
   | "documents.document.updated"
   | "documents.document.deleted"
   | "documents.version.created";
+
+// =============================================================================
+// File Upload Constants
+// =============================================================================
+
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // =============================================================================
 // Service
@@ -115,7 +122,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { id },
         },
@@ -167,7 +174,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { id },
         },
@@ -206,7 +213,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { id },
         },
@@ -242,7 +249,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { documentId },
         },
@@ -268,7 +275,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { documentId },
         },
@@ -311,6 +318,17 @@ export class DocumentsService {
     fileName: string,
     mimeType: string
   ): Promise<ServiceResult<UploadUrlResponse>> {
+    // Validate MIME type against whitelist
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_MIME_TYPE",
+          message: `File type '${mimeType}' is not allowed`,
+        },
+      };
+    }
+
     // In a real implementation, this would generate a presigned S3 URL
     const fileKey = `${context.tenantId}/${Date.now()}-${fileName}`;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
@@ -334,7 +352,7 @@ export class DocumentsService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Document not found",
           details: { documentId },
         },

@@ -5,6 +5,7 @@
  * Handles validation, task workflows, and domain events.
  */
 
+import type { TransactionSql } from "postgres";
 import { OnboardingRepository, type TenantContext, type PaginationOptions } from "./repository";
 import type {
   CreateTemplate,
@@ -15,16 +16,8 @@ import type {
   InstanceResponse,
   InstanceTask,
 } from "./schemas";
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 export class OnboardingService {
   constructor(
@@ -59,7 +52,7 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding template not found",
         },
       };
@@ -74,18 +67,25 @@ export class OnboardingService {
     idempotencyKey?: string
   ): Promise<ServiceResult<TemplateResponse>> {
     try {
-      const template = await this.repository.createTemplate(ctx, data);
+      const template = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createTemplate(ctx, data);
 
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_template",
-        aggregateId: template.id,
-        eventType: "onboarding.template.created",
-        payload: {
-          template,
-          actor: ctx.userId,
-        },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_template",
+            aggregateId: result.id,
+            eventType: "onboarding.template.created",
+            payload: {
+              template: result,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: template };
     } catch (error: any) {
@@ -110,14 +110,37 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding template not found",
         },
       };
     }
 
     try {
-      const template = await this.repository.updateTemplate(ctx, id, data);
+      const template = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.updateTemplate(ctx, id, data);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_template",
+            aggregateId: id,
+            eventType: "onboarding.template.updated",
+            payload: {
+              template: result,
+              changes: data,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       if (!template) {
         return {
@@ -128,18 +151,6 @@ export class OnboardingService {
           },
         };
       }
-
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_template",
-        aggregateId: id,
-        eventType: "onboarding.template.updated",
-        payload: {
-          template,
-          changes: data,
-          actor: ctx.userId,
-        },
-      });
 
       return { success: true, data: template };
     } catch (error: any) {
@@ -182,7 +193,7 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding instance not found",
         },
       };
@@ -242,20 +253,27 @@ export class OnboardingService {
     }
 
     try {
-      const instance = await this.repository.createInstance(ctx, data, template.tasks || []);
+      const instance = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createInstance(ctx, data, template.tasks || []);
 
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "onboarding_instance",
-        aggregateId: instance.id,
-        eventType: "onboarding.started",
-        payload: {
-          instance,
-          employeeId: data.employeeId,
-          templateId: data.templateId,
-          actor: ctx.userId,
-        },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "onboarding_instance",
+            aggregateId: result.id,
+            eventType: "onboarding.started",
+            payload: {
+              instance: result,
+              employeeId: data.employeeId,
+              templateId: data.templateId,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: instance };
     } catch (error: any) {
@@ -280,7 +298,7 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding instance not found",
         },
       };
@@ -349,7 +367,7 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding instance not found",
         },
       };
@@ -441,7 +459,7 @@ export class OnboardingService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Onboarding instance not found",
         },
       };

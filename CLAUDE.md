@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enterprise multi-tenant HRIS (Human Resource Information System) platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, and Onboarding.
+Enterprise multi-tenant HRIS (Human Resource Information System) platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, Onboarding, Benefits, Documents, Succession, Analytics, Competencies, and Recruitment.
 
 **Tech Stack (Mandatory):**
 - Frontend: React 18 + React Router v7 (framework mode) + React Query + Tailwind CSS
 - Backend: Bun + Elysia.js + TypeBox validation
 - Auth: BetterAuth (sessions, MFA, CSRF)
-- Database: PostgreSQL 16 with Row-Level Security (RLS)
+- Database: PostgreSQL 16 with Row-Level Security (RLS), all tables in `app` schema
 - Cache/Queue: Redis 7 (sessions, caching, Streams for jobs)
 - Infrastructure: Docker
 
@@ -41,10 +41,10 @@ bun run migrate:up    # Run pending migrations
 bun run migrate:down  # Rollback last migration
 bun run migrate:create <name>  # Create new migration file
 
-# Run tests
+# Run tests (requires Docker containers running)
 bun test                           # All packages
-bun run test:api                   # API tests only
-bun run test:web                   # Frontend tests only
+bun run test:api                   # API tests only (bun test)
+bun run test:web                   # Frontend tests only (vitest)
 bun test --watch                   # Watch mode
 bun test path/to/file.test.ts     # Single test file
 bun test --test-name-pattern "pattern"  # Filter by test name
@@ -69,26 +69,47 @@ bun run --filter @hris/api bootstrap:root
 
 Copy `docker/.env.example` to `docker/.env` and set required secrets:
 - `POSTGRES_PASSWORD` (required)
-- `SESSION_SECRET` (required)
-- `CSRF_SECRET` (required)
-- `BETTER_AUTH_SECRET` (required)
+- `SESSION_SECRET` (required, 32+ chars)
+- `CSRF_SECRET` (required, 32+ chars)
+- `BETTER_AUTH_SECRET` (required, 32+ chars)
+
+Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 
 ## Architecture
 
 ### Monorepo Structure (Bun workspaces)
 - `packages/api` (@hris/api): Elysia.js backend with plugins pattern
-- `packages/web` (@hris/web): React Router v7 framework mode frontend
+- `packages/web` (@hris/web): React Router v7 framework mode frontend (uses **vitest**, not bun test)
 - `packages/shared` (@hris/shared): Shared types, schemas, error codes, state machines, utilities
 
 ### Backend Layers (packages/api)
-- `src/app.ts`: Main Elysia entry point
+- `src/app.ts`: Main Elysia entry point — registers plugins then mounts all module routes
 - `src/worker.ts`: Background job processor entry point
-- `src/plugins/`: Elysia plugins (db, cache, auth, tenant, rbac, audit, errors, idempotency, rate-limit, security-headers)
-- `src/modules/`: Feature modules (absence, analytics, auth, benefits, cases, competencies, dashboard, documents, hr, lms, onboarding, portal, recruitment, security, succession, system, talent, tenant, time, workflows) - each with routes.ts, service.ts, repository.ts, schemas.ts
+- `src/plugins/`: Elysia plugins (see plugin registration order below)
+- `src/modules/`: Feature modules — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
-- `src/lib/`: Shared utilities (transaction handling)
-- `src/test/`: Integration tests (rls, idempotency, outbox, effective-dating, state-machine)
+- `src/db/`: Database migration runner (`migrate.ts`)
+- `src/config/`: Application configuration (`database.ts`)
+- `src/lib/`: Shared utilities (transaction handling, better-auth handler)
+- `src/types/`: TypeScript type definitions
+- `src/test/`: Integration tests
+- `src/tests-legacy/`: Old tests (eslint-ignored, do not add new tests here)
+
+### Plugin Registration Order (Critical)
+
+Plugins have dependencies and **must** be registered in this order:
+
+1. `errorsPlugin` — Error handling, request ID generation
+2. `dbPlugin` — Database connectivity (postgres)
+3. `cachePlugin` — Redis caching
+4. `tenantPlugin` — Tenant resolution (depends on db, cache)
+5. `authPlugin` — Authentication via BetterAuth (depends on db, cache)
+6. `rbacPlugin` — Authorization (depends on db, cache, auth, tenant)
+7. `idempotencyPlugin` — Request deduplication (depends on db, cache, auth, tenant)
+8. `auditPlugin` — Audit logging (depends on db, auth, tenant)
+
+Additional plugins: `rateLimitPlugin`, `securityHeadersPlugin`, `betterAuthPlugin`.
 
 ### Worker Subsystem
 Background processing uses Redis Streams for reliable async operations:
@@ -96,6 +117,7 @@ Background processing uses Redis Streams for reliable async operations:
 - **Notification Worker**: Sends emails (nodemailer/SMTP) and push notifications (Firebase)
 - **Export Worker**: Generates Excel/CSV files, uploads to S3
 - **PDF Worker**: Generates certificates, letters, case bundles using pdf-lib
+- **Analytics Worker**: Aggregates analytics data
 - **Scheduler**: Cron-based jobs for reminders, notifications, cleanup
 
 ### Frontend Layers (packages/web)
@@ -105,16 +127,28 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql`. Currently includes 120+ migrations covering all modules. See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql` (currently 115 migrations: 0001–0115). All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
+
+Two database roles:
+- `hris` — Superuser/admin (used for migrations)
+- `hris_app` — Application role with `NOBYPASSRLS` (used at runtime and in tests so RLS is enforced)
 
 ## Critical Patterns (Non-Negotiable)
 
 ### 1. Multi-Tenant RLS
 Every tenant-owned table MUST have:
 - `tenant_id uuid NOT NULL` column
-- RLS enabled: `ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;`
-- Isolation policy: `CREATE POLICY tenant_isolation ON table_name USING (tenant_id = current_setting('app.current_tenant')::uuid);`
-- Insert policy: `CREATE POLICY tenant_isolation_insert ON table_name FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant')::uuid);`
+- RLS enabled: `ALTER TABLE app.table_name ENABLE ROW LEVEL SECURITY;`
+- Isolation policy: `CREATE POLICY tenant_isolation ON app.table_name USING (tenant_id = current_setting('app.current_tenant')::uuid);`
+- Insert policy: `CREATE POLICY tenant_isolation_insert ON app.table_name FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant')::uuid);`
+
+To bypass RLS for administrative operations, use system context:
+```sql
+SELECT app.enable_system_context();
+-- ... privileged operations ...
+SELECT app.disable_system_context();
+```
+In TypeScript tests, use `withSystemContext(db, async (tx) => { ... })`.
 
 ### 2. Effective Dating
 HR data that changes over time uses `effective_from` / `effective_to` (NULL = current):
@@ -125,15 +159,11 @@ HR data that changes over time uses `effective_from` / `effective_to` (NULL = cu
 ### 3. Outbox Pattern
 All domain events written to `domain_outbox` in same transaction as business write:
 ```typescript
-await tx.insert(domainOutbox).values({
-  id: crypto.randomUUID(),
-  tenantId: ctx.tenantId,
-  aggregateType: 'employee',
-  aggregateId: employee.id,
-  eventType: 'hr.employee.created',
-  payload: { employee, actor: ctx.userId },
-  createdAt: new Date(),
-});
+await tx`
+  INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+  VALUES (${crypto.randomUUID()}, ${ctx.tenantId}, 'employee', ${employee.id},
+          'hr.employee.created', ${JSON.stringify({ employee, actor: ctx.userId })}::jsonb, now())
+`;
 ```
 
 ### 4. Idempotency
@@ -157,40 +187,107 @@ Store transitions immutably for audit.
 - Error codes defined in `packages/shared/src/errors/codes.ts`
 - TypeBox schemas for request/response validation in each module
 
-## Testing Structure
+## Testing
 
-Test categories in `packages/api/src/test/`:
-- `integration/` - RLS, idempotency, outbox, effective-dating, state-machine tests
-- `integration/routes/` - Route tests for hr, cases, talent, lms, onboarding modules
-- `unit/` - Service, plugin, and job unit tests
-- `e2e/` - End-to-end flows (employee lifecycle)
-- `security/` - Injection attacks, authentication tests
-- `performance/` - Query performance benchmarks
-- `chaos/` - Database failure scenarios
+### Test Infrastructure
+Tests require Docker containers (postgres + redis). The test setup in `src/test/setup.ts` will auto-start Docker services if they aren't running, but `bun run docker:up && bun run migrate:up` should be run first.
 
-Test helpers in `packages/api/src/test/helpers/`:
-- `factories.ts` - Test data factories
-- `api-client.ts` - Test API client
-- `assertions.ts` - Custom assertions
-- `mocks.ts` - Mock utilities
+Tests connect as the `hris_app` role (non-superuser, `NOBYPASSRLS`) so RLS policies are actually enforced during testing.
 
-## Testing Requirements
+### Test Structure (packages/api/src/test/)
+- `integration/` — RLS, idempotency, outbox, effective-dating, state-machine tests
+- `integration/routes/` — Route tests for hr, cases, talent, lms, onboarding modules
+- `unit/` — Service, plugin, and job unit tests
+- `e2e/` — End-to-end flows (employee lifecycle)
+- `security/` — Injection attacks, authentication tests
+- `performance/` — Query performance benchmarks
+- `chaos/` — Database failure scenarios
 
-Integration tests MUST verify:
+### Test Helpers (packages/api/src/test/)
+- `setup.ts` — `ensureTestInfra()`, `createTestContext()`, `getTestDb()`, `getTestRedis()`, `withSystemContext()`, `setTenantContext()`, `expectRlsError()`
+- `helpers/factories.ts` — Test data factories
+- `helpers/api-client.ts` — Test API client
+- `helpers/assertions.ts` — Custom assertions
+- `helpers/mocks.ts` — Mock utilities
+
+### What Integration Tests MUST Verify
 - RLS blocks cross-tenant access
 - Effective-date overlap validation (including concurrency)
 - Idempotency prevents duplicate writes
 - Outbox written atomically with business writes
 - State machine transitions enforced
 
+## Shared Package Exports (@hris/shared)
+
+Import paths available from the shared package:
+- `@hris/shared` — Main entry point
+- `@hris/shared/types` — TypeScript types for all modules
+- `@hris/shared/constants` — Shared constants
+- `@hris/shared/utils` — Utility functions (dates, crypto, validation, effective-dating)
+- `@hris/shared/errors` — Error codes and messages organized by module
+- `@hris/shared/schemas` — Shared TypeBox/Zod schemas
+- `@hris/shared/state-machines` — Employee lifecycle and performance cycle state machines
+
+## Common Workflows
+
+### Adding a New Backend Module
+1. Create `packages/api/src/modules/{module}/` with 5 files: `schemas.ts` → `repository.ts` → `service.ts` → `routes.ts` → `index.ts`
+2. Register module routes in `packages/api/src/app.ts`
+3. Create migration(s) in `migrations/NNNN_description.sql` with RLS
+
+### Adding a Frontend Feature
+1. Create route in `packages/web/app/routes/(admin)/{module}/` or `(app)/`
+2. Create feature components in `packages/web/app/components/{module}/`
+3. Use `api` client from `~/lib/api-client` with React Query hooks
+4. Guard with `useHasPermission()` from `~/hooks/use-permissions`
+
+### Adding Integration Tests
+1. Create test in `packages/api/src/test/integration/`
+2. Import helpers from `../setup` (`createTestTenant`, `createTestUser`, `setTenantContext`, etc.)
+3. Always test RLS isolation, idempotency, and outbox atomicity
+
 ## Specialized Agents
 
-Use these agents (defined in `.claude/agents/`) for domain-specific work:
+Use these agents (defined in `.claude/agents/`, all swarm-enabled) for domain-specific work:
 - `hris-platform-architect`: Docker, migrations, RLS, plugins, RBAC, audit
 - `hris-core-hr-developer`: Employee data, org structure, contracts, effective-dating
 - `time-attendance-module-developer`: Time events, schedules, timesheets, geo-fence
 - `hris-absence-module-builder`: Leave types, balances, accruals, ledger patterns
 - `hris-frontend-architect`: React components, React Query hooks, permission routing
+- `cases-module-developer`: Case management, SLA tracking, escalation workflows
+- `lms-module-developer`: Courses, enrollments, learning paths, certificates
+- `talent-module-developer`: Performance reviews, goals, competencies, calibration
+- `onboarding-module-developer`: Onboarding templates, checklists, document collection
+- `security-module-developer`: Field permissions, portal access, manager hierarchy
+
+## Documentation (`Docs/`)
+
+Detailed documentation is organized in `Docs/` with subfolder READMEs for AI context loading:
+
+```
+Docs/
+├── README.md                  ← Start here: folder map, project summary, critical patterns
+├── guides/                    ← Setup, deployment, frontend usage
+│   ├── README.md              # Quick reference: commands, ports, env vars
+│   ├── GETTING_STARTED.md     # Dev setup, first run, common commands
+│   ├── DEPLOYMENT.md          # Docker, env vars, production checklist
+│   └── FRONTEND.md            # React Router v7, hooks, React Query
+├── architecture/              ← System design and internals
+│   ├── README.md              # Plugin order, module pattern, DB roles, streams
+│   ├── ARCHITECTURE.md        # Mermaid diagrams, request flow, data flow
+│   ├── DATABASE.md            # Schema, migrations, RLS, table catalog
+│   └── WORKER_SYSTEM.md       # Background jobs, Redis Streams, outbox
+├── api/                       ← API surface and contracts
+│   ├── README.md              # Headers, response format, endpoint counts
+│   ├── API_REFERENCE.md       # All 200+ endpoints by module
+│   └── ERROR_CODES.md         # Error codes with messages by module
+└── patterns/                  ← Reusable design patterns
+    ├── README.md              # Pattern summary: RLS, dating, outbox, RBAC
+    ├── STATE_MACHINES.md      # 5 state machines with Mermaid diagrams
+    └── SECURITY.md            # RLS, auth, RBAC, audit, idempotency
+```
+
+When working on a specific area, read the relevant subfolder README first, then drill into the detailed file.
 
 ## Skills (use `/skill-name` in Claude Code)
 
@@ -198,28 +295,11 @@ Skills provide domain-specific guidance. Invoke with `/` prefix:
 - `/api-conventions`: API design, pagination, error handling, TypeBox schemas
 - `/backend-module-development`: Creating Elysia.js modules, services, repositories
 - `/database-migrations-rls`: PostgreSQL migrations with Row-Level Security
-- `/drizzle-orm-patterns`: Database queries, transactions, schema definitions
+- `/postgres-js-patterns`: Database queries, transactions, tagged template SQL
 - `/effective-dating-patterns`: Time-versioned records, overlap prevention
 - `/outbox-pattern`: Domain event publishing, transactional outbox
+- `/state-machine-patterns`: Status workflows, transition enforcement, audit
 - `/testing-patterns`: Integration tests for RLS, idempotency, outbox
 - `/frontend-react-components`: React components, React Query hooks
 - `/better-auth-integration`: Authentication flows, sessions, MFA
 - `/docker-development`: Container management, local development
-
-## Shared Package Exports (@hris/shared)
-
-Import paths available from the shared package:
-- `@hris/shared` - Main entry point
-- `@hris/shared/types` - TypeScript types for all modules (hr, time, absence, talent, etc.)
-- `@hris/shared/constants` - Shared constants
-- `@hris/shared/utils` - Utility functions (dates, crypto, validation, effective-dating)
-- `@hris/shared/errors` - Error codes and messages organized by module
-- `@hris/shared/schemas` - Shared TypeBox/Zod schemas
-- `@hris/shared/state-machines` - Employee lifecycle and performance cycle state machines
-
-## Key Documentation
-
-- `Docs/systemplan.md`: Complete system specification
-- `Docs/Prompt.md`: Implementation directives and deliverables
-- `Docs/FULL_IMPLEMENTATION_REPORT.md`: Implementation status and completed work
-- `migrations/README.md`: Migration conventions and patterns

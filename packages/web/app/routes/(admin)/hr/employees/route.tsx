@@ -213,7 +213,7 @@ export default function AdminEmployeesPage() {
           <p className="text-gray-600">Manage your workforce</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Employee export will be available in a future update." })}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -377,7 +377,7 @@ export default function AdminEmployeesPage() {
             </Button>
             <Button
               onClick={() => {
-                toast.success("Employee hired successfully");
+                toast.info("Coming Soon", { message: "Employee creation via this form will be available in a future update." });
                 setShowHireModal(false);
               }}
             >

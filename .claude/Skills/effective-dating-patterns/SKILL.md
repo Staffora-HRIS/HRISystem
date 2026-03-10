@@ -12,14 +12,14 @@ Effective dating tracks historical changes:
 
 ## Database Schema
 ```sql
-CREATE TABLE app.employee_positions (
+CREATE TABLE app.position_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES app.tenant(id),
-    employee_id UUID NOT NULL REFERENCES app.employee(id),
-    position_id UUID NOT NULL REFERENCES app.position(id),
+    tenant_id UUID NOT NULL REFERENCES app.tenants(id),
+    employee_id UUID NOT NULL REFERENCES app.employees(id),
+    position_id UUID NOT NULL REFERENCES app.positions(id),
     effective_from DATE NOT NULL,
     effective_to DATE, -- NULL means current
-    
+
     -- Prevent overlapping ranges
     CONSTRAINT no_overlap EXCLUDE USING gist (
         employee_id WITH =,
@@ -30,62 +30,73 @@ CREATE TABLE app.employee_positions (
 -- Requires: CREATE EXTENSION IF NOT EXISTS btree_gist;
 ```
 
-## Query Patterns
+## Query Patterns (postgres.js tagged templates)
 
 ### Current Record
 ```typescript
-async getCurrentPosition(employeeId: string) {
-  return db.query.employeePositions.findFirst({
-    where: and(
-      eq(employeePositions.employeeId, employeeId),
-      isNull(employeePositions.effectiveTo)
-    ),
-  });
+async getCurrentPosition(ctx: TenantContext, employeeId: string) {
+  const rows = await this.db`
+    SELECT * FROM app.position_assignments
+    WHERE employee_id = ${employeeId}
+      AND effective_to IS NULL
+  `;
+  return rows[0] ?? null;
 }
 ```
 
 ### As-Of Date
 ```typescript
-async getPositionAsOf(employeeId: string, asOfDate: Date) {
-  return db.query.employeePositions.findFirst({
-    where: and(
-      eq(employeePositions.employeeId, employeeId),
-      lte(employeePositions.effectiveFrom, asOfDate),
-      or(isNull(employeePositions.effectiveTo), gt(employeePositions.effectiveTo, asOfDate))
-    ),
-  });
+async getPositionAsOf(ctx: TenantContext, employeeId: string, asOfDate: string) {
+  const rows = await this.db`
+    SELECT * FROM app.position_assignments
+    WHERE employee_id = ${employeeId}
+      AND effective_from <= ${asOfDate}::date
+      AND (effective_to IS NULL OR effective_to > ${asOfDate}::date)
+  `;
+  return rows[0] ?? null;
 }
 ```
 
 ## Service Layer Validation
 ```typescript
-async updatePosition(employeeId: string, data: Input, ctx: Context) {
-  return db.transaction(async (tx) => {
+async updatePosition(ctx: TenantContext, employeeId: string, data: Input) {
+  return await this.db.begin(async (tx) => {
     // Validate no overlapping records
-    await validateNoOverlap(tx, {
-      tableName: 'employee_positions',
-      employeeId,
-      newRange: { from: data.effectiveFrom, to: data.effectiveTo },
-      excludeId: data.id,
-    });
+    const overlaps = await tx`
+      SELECT id FROM app.position_assignments
+      WHERE employee_id = ${employeeId}
+        AND id != ${data.id ?? '00000000-0000-0000-0000-000000000000'}
+        AND effective_from < ${data.effectiveTo ?? '9999-12-31'}::date
+        AND (effective_to IS NULL OR effective_to > ${data.effectiveFrom}::date)
+    `;
+    if (overlaps.length > 0) throw new ConflictError('Overlapping effective date range');
 
     // Close out current record if needed
-    const current = await this.repo.getCurrentPosition(employeeId);
-    if (current && current.id !== data.id) {
-      const dayBefore = new Date(data.effectiveFrom);
-      dayBefore.setDate(dayBefore.getDate() - 1);
-      await tx.update(employeePositions)
-        .set({ effectiveTo: dayBefore })
-        .where(eq(employeePositions.id, current.id));
+    const current = await tx`
+      SELECT * FROM app.position_assignments
+      WHERE employee_id = ${employeeId} AND effective_to IS NULL
+    `;
+    if (current[0] && current[0].id !== data.id) {
+      await tx`
+        UPDATE app.position_assignments
+        SET effective_to = ${data.effectiveFrom}::date - INTERVAL '1 day'
+        WHERE id = ${current[0].id}
+      `;
     }
 
-    return tx.insert(employeePositions).values({ ...data, tenantId: ctx.tenantId }).returning();
+    const rows = await tx`
+      INSERT INTO app.position_assignments (tenant_id, employee_id, position_id, effective_from, effective_to)
+      VALUES (${ctx.tenantId}, ${employeeId}, ${data.positionId}, ${data.effectiveFrom}, ${data.effectiveTo})
+      RETURNING *
+    `;
+    return rows[0];
   });
 }
 ```
 
 ## Common Effective-Dated Entities
-- `employee_positions` - Job assignments
-- `employee_salaries` - Compensation
-- `employee_managers` - Reporting relationships
-- `employee_contracts` - Employment contracts
+- `app.position_assignments` — Job assignments
+- `app.compensation_history` — Salary records
+- `app.reporting_lines` — Manager relationships
+- `app.employment_contracts` — Contract details
+- `app.employee_personal` — Personal information
