@@ -7,6 +7,7 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorResponseSchema } from "../../lib/route-helpers";
+import { ErrorCodes } from "../../plugins/errors";
 import { RecruitmentRepository } from "./repository";
 import { RecruitmentService } from "./service";
 import {
@@ -177,7 +178,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const requisition = await recruitmentService.getRequisition(tenantContext, params.id);
         if (!requisition) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Requisition not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Requisition not found" },
           });
         }
         return requisition;
@@ -291,7 +292,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const requisition = await recruitmentService.updateRequisition(tenantContext, params.id, body);
         if (!requisition) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Requisition not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Requisition not found" },
           });
         }
 
@@ -341,7 +342,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const requisition = await recruitmentService.openRequisition(tenantContext, params.id);
         if (!requisition) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Requisition not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Requisition not found" },
           });
         }
         return requisition;
@@ -379,7 +380,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const requisition = await recruitmentService.closeRequisition(tenantContext, params.id);
         if (!requisition) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Requisition not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Requisition not found" },
           });
         }
         return requisition;
@@ -417,7 +418,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const requisition = await recruitmentService.cancelRequisition(tenantContext, params.id);
         if (!requisition) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Requisition not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Requisition not found" },
           });
         }
         return requisition;
@@ -528,7 +529,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const candidate = await recruitmentService.getCandidate(tenantContext, params.id);
         if (!candidate) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Candidate not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Candidate not found" },
           });
         }
         return candidate;
@@ -615,7 +616,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         const candidate = await recruitmentService.updateCandidate(tenantContext, params.id, body);
         if (!candidate) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Candidate not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Candidate not found" },
           });
         }
 
@@ -670,7 +671,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         );
         if (!candidate) {
           return error(404, {
-            error: { code: "NOT_FOUND", message: "Candidate not found" },
+            error: { code: ErrorCodes.NOT_FOUND, message: "Candidate not found" },
           });
         }
 
