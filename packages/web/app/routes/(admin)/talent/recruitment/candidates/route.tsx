@@ -18,18 +18,18 @@ import { api } from "~/lib/api-client";
 
 interface Candidate {
   id: string;
-  requisition_id: string;
-  requisition_title?: string;
+  requisitionId: string;
+  requisitionTitle?: string;
   email: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   phone: string | null;
-  current_stage: "applied" | "screening" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
+  currentStage: "applied" | "screening" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
   source: string;
-  resume_url: string | null;
-  linkedin_url: string | null;
+  resumeUrl: string | null;
+  linkedinUrl: string | null;
   rating: number | null;
-  created_at: string;
+  createdAt: string;
 }
 
 interface CandidateStats {
@@ -272,11 +272,11 @@ export default function CandidatesPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 font-medium">
-                        {candidate.first_name[0]}{candidate.last_name[0]}
+                        {candidate.firstName[0]}{candidate.lastName[0]}
                       </div>
                       <div>
                         <h4 className="font-medium text-gray-900">
-                          {candidate.first_name} {candidate.last_name}
+                          {candidate.firstName} {candidate.lastName}
                         </h4>
                         <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
                           <span className="flex items-center gap-1">
@@ -290,19 +290,19 @@ export default function CandidatesPage() {
                             </span>
                           )}
                         </div>
-                        {candidate.requisition_title && (
+                        {candidate.requisitionTitle && (
                           <p className="text-xs text-gray-400 mt-1">
-                            Applied for: {candidate.requisition_title}
+                            Applied for: {candidate.requisitionTitle}
                           </p>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      {getStageBadge(candidate.current_stage)}
+                      {getStageBadge(candidate.currentStage)}
                       {renderRating(candidate.rating)}
                       <div className="flex items-center gap-2 text-xs text-gray-400">
                         <Badge variant="secondary">{sourceLabels[candidate.source] || candidate.source}</Badge>
-                        <span>{new Date(candidate.created_at).toLocaleDateString()}</span>
+                        <span>{new Date(candidate.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </div>

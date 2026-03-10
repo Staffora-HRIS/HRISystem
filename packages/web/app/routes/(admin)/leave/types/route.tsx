@@ -17,7 +17,6 @@ import {
   DataTable,
   type ColumnDef,
   Input,
-  Select,
   Checkbox,
   Modal,
   ModalHeader,
@@ -32,12 +31,15 @@ interface LeaveType {
   name: string;
   code: string;
   description: string | null;
-  category: string;
-  default_balance: number | null;
-  accrual_type: string | null;
-  requires_approval: boolean;
-  is_active: boolean;
-  created_at: string;
+  isPaid: boolean;
+  requiresApproval: boolean;
+  requiresAttachment: boolean;
+  maxConsecutiveDays: number | null;
+  minNoticeDays: number;
+  color: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LeaveTypeListResponse {
@@ -46,68 +48,28 @@ interface LeaveTypeListResponse {
   hasMore: boolean;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  annual: "primary",
-  sick: "warning",
-  personal: "info",
-  parental: "success",
-  bereavement: "secondary",
-  unpaid: "default",
-  compensatory: "outline",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  annual: "Annual",
-  sick: "Sick",
-  personal: "Personal",
-  parental: "Parental",
-  bereavement: "Bereavement",
-  unpaid: "Unpaid",
-  compensatory: "Compensatory",
-};
-
-const ACCRUAL_LABELS: Record<string, string> = {
-  none: "None",
-  monthly: "Monthly",
-  biweekly: "Bi-weekly",
-  annual: "Annual",
-};
-
-const CATEGORY_OPTIONS = [
-  { value: "annual", label: "Annual" },
-  { value: "sick", label: "Sick" },
-  { value: "personal", label: "Personal" },
-  { value: "parental", label: "Parental" },
-  { value: "bereavement", label: "Bereavement" },
-  { value: "unpaid", label: "Unpaid" },
-  { value: "compensatory", label: "Compensatory" },
-];
-
-const ACCRUAL_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "monthly", label: "Monthly" },
-  { value: "biweekly", label: "Bi-weekly" },
-  { value: "annual", label: "Annual" },
-];
-
 interface CreateLeaveTypeForm {
   name: string;
   code: string;
   description: string;
-  category: string;
-  default_balance: string;
-  accrual_type: string;
-  requires_approval: boolean;
+  isPaid: boolean;
+  requiresApproval: boolean;
+  requiresAttachment: boolean;
+  maxConsecutiveDays: string;
+  minNoticeDays: string;
+  color: string;
 }
 
 const initialFormState: CreateLeaveTypeForm = {
   name: "",
   code: "",
   description: "",
-  category: "annual",
-  default_balance: "",
-  accrual_type: "none",
-  requires_approval: true,
+  isPaid: true,
+  requiresApproval: true,
+  requiresAttachment: false,
+  maxConsecutiveDays: "",
+  minNoticeDays: "0",
+  color: "#3B82F6",
 };
 
 export default function AdminLeaveTypesPage() {
@@ -115,21 +77,14 @@ export default function AdminLeaveTypesPage() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState<CreateLeaveTypeForm>(initialFormState);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Fetch leave types
   const { data: leaveTypesData, isLoading } = useQuery({
-    queryKey: ["admin-leave-types", search, categoryFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (categoryFilter) params.set("category", categoryFilter);
-      params.set("limit", "50");
-      return api.get<LeaveTypeListResponse>(`/absence/leave-types?${params}`);
-    },
+    queryKey: ["admin-leave-types", search],
+    queryFn: () => api.get<LeaveTypeListResponse>("/absence/leave-types"),
   });
 
   // Create mutation
@@ -167,10 +122,19 @@ export default function AdminLeaveTypesPage() {
 
   const leaveTypes = leaveTypesData?.items ?? [];
 
+  // Client-side search filter
+  const filteredTypes = search
+    ? leaveTypes.filter(
+        (t) =>
+          t.name.toLowerCase().includes(search.toLowerCase()) ||
+          t.code.toLowerCase().includes(search.toLowerCase())
+      )
+    : leaveTypes;
+
   // Calculate stats
   const totalTypes = leaveTypes.length;
-  const activeTypes = leaveTypes.filter((t) => t.is_active).length;
-  const inactiveTypes = leaveTypes.filter((t) => !t.is_active).length;
+  const activeTypes = leaveTypes.filter((t) => t.isActive).length;
+  const inactiveTypes = leaveTypes.filter((t) => !t.isActive).length;
 
   const handleCreateSubmit = () => {
     if (!formData.name.trim() || !formData.code.trim()) {
@@ -180,13 +144,17 @@ export default function AdminLeaveTypesPage() {
     createMutation.mutate({
       name: formData.name.trim(),
       code: formData.code.trim(),
-      description: formData.description.trim() || null,
-      category: formData.category,
-      default_balance: formData.default_balance
-        ? Number(formData.default_balance)
-        : null,
-      accrual_type: formData.accrual_type,
-      requires_approval: formData.requires_approval,
+      description: formData.description.trim() || undefined,
+      isPaid: formData.isPaid,
+      requiresApproval: formData.requiresApproval,
+      requiresAttachment: formData.requiresAttachment,
+      maxConsecutiveDays: formData.maxConsecutiveDays
+        ? Number(formData.maxConsecutiveDays)
+        : undefined,
+      minNoticeDays: formData.minNoticeDays
+        ? Number(formData.minNoticeDays)
+        : 0,
+      color: formData.color || undefined,
     });
   };
 
@@ -196,8 +164,14 @@ export default function AdminLeaveTypesPage() {
       header: "Name",
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-            <ListChecks className="h-5 w-5 text-blue-600" />
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-lg"
+            style={{ backgroundColor: row.color ? `${row.color}20` : "#EFF6FF" }}
+          >
+            <ListChecks
+              className="h-5 w-5"
+              style={{ color: row.color || "#2563EB" }}
+            />
           </div>
           <div>
             <div className="font-medium text-gray-900">{row.name}</div>
@@ -218,51 +192,29 @@ export default function AdminLeaveTypesPage() {
       ),
     },
     {
-      id: "category",
-      header: "Category",
+      id: "isPaid",
+      header: "Paid",
       cell: ({ row }) => (
-        <Badge
-          variant={
-            (CATEGORY_COLORS[row.category] as
-              | "primary"
-              | "warning"
-              | "info"
-              | "success"
-              | "secondary"
-              | "default"
-              | "outline") ?? "default"
-          }
-        >
-          {CATEGORY_LABELS[row.category] || row.category}
+        <Badge variant={row.isPaid ? "success" : "secondary"}>
+          {row.isPaid ? "Paid" : "Unpaid"}
         </Badge>
       ),
     },
     {
-      id: "default_balance",
-      header: "Default Balance",
+      id: "maxConsecutiveDays",
+      header: "Max Days",
       cell: ({ row }) => (
         <span className="text-sm text-gray-600">
-          {row.default_balance != null ? `${row.default_balance} days` : "-"}
+          {row.maxConsecutiveDays != null ? `${row.maxConsecutiveDays} days` : "-"}
         </span>
       ),
     },
     {
-      id: "accrual_type",
-      header: "Accrual Type",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {row.accrual_type
-            ? ACCRUAL_LABELS[row.accrual_type] || row.accrual_type
-            : "-"}
-        </span>
-      ),
-    },
-    {
-      id: "requires_approval",
+      id: "requiresApproval",
       header: "Requires Approval",
       cell: ({ row }) => (
-        <Badge variant={row.requires_approval ? "info" : "default"}>
-          {row.requires_approval ? "Yes" : "No"}
+        <Badge variant={row.requiresApproval ? "info" : "default"}>
+          {row.requiresApproval ? "Yes" : "No"}
         </Badge>
       ),
     },
@@ -270,8 +222,8 @@ export default function AdminLeaveTypesPage() {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.is_active ? "success" : "secondary"} dot rounded>
-          {row.is_active ? "Active" : "Inactive"}
+        <Badge variant={row.isActive ? "success" : "secondary"} dot rounded>
+          {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
     },
@@ -373,14 +325,6 @@ export default function AdminLeaveTypesPage() {
             className="pl-10"
           />
         </div>
-        <Select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          options={[
-            { value: "", label: "All Categories" },
-            ...CATEGORY_OPTIONS,
-          ]}
-        />
       </div>
 
       {/* Leave Types Table */}
@@ -390,18 +334,18 @@ export default function AdminLeaveTypesPage() {
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
-          ) : leaveTypes.length === 0 ? (
+          ) : filteredTypes.length === 0 ? (
             <div className="text-center py-12">
               <ListChecks className="h-12 w-12 mx-auto text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900">
                 No leave types found
               </h3>
               <p className="text-gray-500 mb-4">
-                {search || categoryFilter
-                  ? "Try adjusting your filters"
+                {search
+                  ? "Try adjusting your search"
                   : "Create your first leave type to get started"}
               </p>
-              {!search && !categoryFilter && (
+              {!search && (
                 <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Leave Type
@@ -410,7 +354,7 @@ export default function AdminLeaveTypesPage() {
             </div>
           ) : (
             <DataTable
-              data={leaveTypes}
+              data={filteredTypes}
               columns={columns}
               getRowId={(row) => row.id}
             />
@@ -462,41 +406,67 @@ export default function AdminLeaveTypesPage() {
                 }
               />
               <div className="grid grid-cols-2 gap-4">
-                <Select
-                  label="Category"
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
-                  options={CATEGORY_OPTIONS}
-                />
                 <Input
-                  label="Default Balance (days)"
+                  label="Max Consecutive Days"
                   type="number"
                   placeholder="e.g. 20"
-                  value={formData.default_balance}
+                  value={formData.maxConsecutiveDays}
                   onChange={(e) =>
-                    setFormData({ ...formData, default_balance: e.target.value })
+                    setFormData({ ...formData, maxConsecutiveDays: e.target.value })
+                  }
+                  min={0}
+                />
+                <Input
+                  label="Min Notice Days"
+                  type="number"
+                  placeholder="e.g. 3"
+                  value={formData.minNoticeDays}
+                  onChange={(e) =>
+                    setFormData({ ...formData, minNoticeDays: e.target.value })
                   }
                   min={0}
                 />
               </div>
-              <Select
-                label="Accrual Type"
-                value={formData.accrual_type}
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Color"
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) =>
+                    setFormData({ ...formData, color: e.target.value })
+                  }
+                />
+              </div>
+              <Checkbox
+                label="Paid Leave"
+                description="This leave type counts as paid time off"
+                checked={formData.isPaid}
                 onChange={(e) =>
-                  setFormData({ ...formData, accrual_type: e.target.value })
+                  setFormData({
+                    ...formData,
+                    isPaid: (e.target as HTMLInputElement).checked,
+                  })
                 }
-                options={ACCRUAL_OPTIONS}
               />
               <Checkbox
                 label="Requires Approval"
                 description="Leave requests of this type must be approved by a manager"
-                checked={formData.requires_approval}
+                checked={formData.requiresApproval}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    requires_approval: (e.target as HTMLInputElement).checked,
+                    requiresApproval: (e.target as HTMLInputElement).checked,
+                  })
+                }
+              />
+              <Checkbox
+                label="Requires Attachment"
+                description="Employees must upload supporting documents"
+                checked={formData.requiresAttachment}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    requiresAttachment: (e.target as HTMLInputElement).checked,
                   })
                 }
               />

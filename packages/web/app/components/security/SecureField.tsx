@@ -420,7 +420,7 @@ export function withFieldPermission<P extends object>(
     }
 
     if (!canView(options.entity, options.field)) {
-      return <>{options.fallback}</> ?? null;
+      return options.fallback ? <>{options.fallback}</> : null;
     }
 
     const isReadOnly = !canEdit(options.entity, options.field);

@@ -38,11 +38,11 @@ export default function OnboardingAdminPage() {
 
   const { data: templatesData } = useQuery({
     queryKey: ["admin-onboarding-templates"],
-    queryFn: () => api.get<{ templates: OnboardingTemplate[]; count: number }>("/onboarding/templates"),
+    queryFn: () => api.get<{ checklists: OnboardingTemplate[]; count: number }>("/onboarding/checklists"),
   });
 
   const instances = instancesData?.instances || [];
-  const templates = templatesData?.templates || [];
+  const templates = templatesData?.checklists || [];
 
   const stats = {
     active: instances.filter(i => i.status === "in_progress").length,

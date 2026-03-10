@@ -13,13 +13,13 @@ interface Requisition {
   code: string;
   title: string;
   department?: string;
-  org_unit_name?: string;
+  orgUnitName?: string;
   location?: string;
-  employment_type?: "full_time" | "part_time" | "contract" | "temporary";
+  employmentType?: "fullTime" | "partTime" | "contract" | "temporary";
   status: "draft" | "open" | "on_hold" | "filled" | "cancelled";
-  candidate_count?: number;
-  hiring_manager_name?: string;
-  created_at: string;
+  candidateCount?: number;
+  hiringManagerName?: string;
+  createdAt: string;
   deadline?: string;
   openings: number;
   filled: number;
@@ -74,8 +74,8 @@ export default function RecruitmentPage() {
 
   const getEmploymentTypeBadge = (type?: string) => {
     switch (type) {
-      case "full_time": return <Badge variant="info">Full-time</Badge>;
-      case "part_time": return <Badge variant="secondary">Part-time</Badge>;
+      case "fullTime": return <Badge variant="info">Full-time</Badge>;
+      case "partTime": return <Badge variant="secondary">Part-time</Badge>;
       case "contract": return <Badge variant="warning">Contract</Badge>;
       case "temporary": return <Badge variant="secondary">Temporary</Badge>;
       default: return null;
@@ -180,14 +180,14 @@ export default function RecruitmentPage() {
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     {getStatusBadge(req.status)}
-                    {getEmploymentTypeBadge(req.employment_type)}
+                    {getEmploymentTypeBadge(req.employmentType)}
                     {getPriorityLabel(req.priority)}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="flex items-center gap-1 text-sm text-gray-500">
                     <Users className="h-4 w-4" />
-                    {req.candidate_count || 0} candidates
+                    {req.candidateCount || 0} candidates
                   </div>
                   <div className="text-xs text-gray-400">
                     {req.filled}/{req.openings} filled
@@ -196,10 +196,10 @@ export default function RecruitmentPage() {
               </CardHeader>
               <CardBody className="space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {(req.org_unit_name || req.department) && (
+                  {(req.orgUnitName || req.department) && (
                     <div className="flex items-center gap-1 text-gray-600">
                       <Building className="h-4 w-4" />
-                      {req.org_unit_name || req.department}
+                      {req.orgUnitName || req.department}
                     </div>
                   )}
                   {req.location && (
@@ -216,12 +216,12 @@ export default function RecruitmentPage() {
                   )}
                   <div className="flex items-center gap-1 text-gray-600">
                     <Calendar className="h-4 w-4" />
-                    Created: {new Date(req.created_at).toLocaleDateString()}
+                    Created: {new Date(req.createdAt).toLocaleDateString()}
                   </div>
                 </div>
-                {req.hiring_manager_name && (
+                {req.hiringManagerName && (
                   <div className="text-sm text-gray-500">
-                    Hiring Manager: {req.hiring_manager_name}
+                    Hiring Manager: {req.hiringManagerName}
                   </div>
                 )}
                 <div className="flex gap-2">

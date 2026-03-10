@@ -458,7 +458,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Approve or reject timesheet" },
     }
-  );
+  )
 
   // ===========================================================================
   // Schedule Assignments

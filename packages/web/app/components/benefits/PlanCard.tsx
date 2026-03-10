@@ -9,19 +9,19 @@ import { cn } from "~/lib/utils";
 
 interface BenefitPlan {
   id: string;
-  plan_type: string;
+  planType: string;
   name: string;
   description: string | null;
   provider: string | null;
-  coverage_level: string;
-  employee_contribution: number;
-  employer_contribution: number;
-  effective_from: string;
-  effective_to: string | null;
-  enrollment_start: string | null;
-  enrollment_end: string | null;
-  is_active: boolean;
-  enrollment_status?: "enrolled" | "pending" | "not_enrolled" | "waived";
+  coverageLevel: string;
+  employeeContribution: number;
+  employerContribution: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  enrollmentStart: string | null;
+  enrollmentEnd: string | null;
+  isActive: boolean;
+  enrollmentStatus?: "enrolled" | "pending" | "not_enrolled" | "waived";
 }
 
 interface PlanCardProps {
@@ -90,14 +90,14 @@ export function PlanCard({
   className,
 }: PlanCardProps) {
   const isEnrollmentOpen =
-    plan.enrollment_start &&
-    plan.enrollment_end &&
-    new Date() >= new Date(plan.enrollment_start) &&
-    new Date() <= new Date(plan.enrollment_end);
+    plan.enrollmentStart &&
+    plan.enrollmentEnd &&
+    new Date() >= new Date(plan.enrollmentStart) &&
+    new Date() <= new Date(plan.enrollmentEnd);
 
-  const totalCost = plan.employee_contribution + plan.employer_contribution;
+  const totalCost = plan.employeeContribution + plan.employerContribution;
   const employerPercentage =
-    totalCost > 0 ? (plan.employer_contribution / totalCost) * 100 : 0;
+    totalCost > 0 ? (plan.employerContribution / totalCost) * 100 : 0;
 
   return (
     <div
@@ -113,12 +113,12 @@ export function PlanCard({
             <span
               className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-medium capitalize",
-                getPlanTypeColor(plan.plan_type)
+                getPlanTypeColor(plan.planType)
               )}
             >
-              {plan.plan_type}
+              {plan.planType}
             </span>
-            {getEnrollmentStatusBadge(plan.enrollment_status)}
+            {getEnrollmentStatusBadge(plan.enrollmentStatus)}
           </div>
           <h3 className="mt-2 text-lg font-semibold text-gray-900">
             {plan.name}
@@ -144,7 +144,7 @@ export function PlanCard({
             Coverage
           </div>
           <p className="mt-1 font-medium capitalize text-gray-900">
-            {plan.coverage_level.replace("_", " + ")}
+            {plan.coverageLevel.replace("_", " + ")}
           </p>
         </div>
         <div className="rounded-lg bg-gray-50 p-3">
@@ -153,7 +153,7 @@ export function PlanCard({
             Your Cost
           </div>
           <p className="mt-1 font-medium text-gray-900">
-            {formatCurrency(plan.employee_contribution)}
+            {formatCurrency(plan.employeeContribution)}
             <span className="text-xs text-gray-500">/mo</span>
           </p>
         </div>
@@ -163,7 +163,7 @@ export function PlanCard({
       <div className="mt-4">
         <div className="flex items-center justify-between text-xs text-gray-500">
           <span>Employer pays {employerPercentage.toFixed(0)}%</span>
-          <span>{formatCurrency(plan.employer_contribution)}/mo</span>
+          <span>{formatCurrency(plan.employerContribution)}/mo</span>
         </div>
         <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200">
           <div
@@ -174,13 +174,13 @@ export function PlanCard({
       </div>
 
       {/* Enrollment Period */}
-      {plan.enrollment_start && plan.enrollment_end && (
+      {plan.enrollmentStart && plan.enrollmentEnd && (
         <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
           <Calendar className="h-4 w-4" />
           <span>
             Enrollment:{" "}
-            {new Date(plan.enrollment_start).toLocaleDateString()} -{" "}
-            {new Date(plan.enrollment_end).toLocaleDateString()}
+            {new Date(plan.enrollmentStart).toLocaleDateString()} -{" "}
+            {new Date(plan.enrollmentEnd).toLocaleDateString()}
           </span>
           {isEnrollmentOpen && (
             <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
@@ -200,8 +200,8 @@ export function PlanCard({
             View Details
           </button>
         )}
-        {plan.enrollment_status !== "enrolled" &&
-          plan.enrollment_status !== "pending" &&
+        {plan.enrollmentStatus !== "enrolled" &&
+          plan.enrollmentStatus !== "pending" &&
           isEnrollmentOpen &&
           onEnroll && (
             <button
@@ -211,8 +211,8 @@ export function PlanCard({
               Enroll Now
             </button>
           )}
-        {plan.enrollment_status !== "waived" &&
-          plan.enrollment_status !== "enrolled" &&
+        {plan.enrollmentStatus !== "waived" &&
+          plan.enrollmentStatus !== "enrolled" &&
           isEnrollmentOpen &&
           onWaive && (
             <button

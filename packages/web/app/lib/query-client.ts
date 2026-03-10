@@ -84,11 +84,19 @@ export const queryKeys = {
   // Manager
   manager: {
     all: () => ["manager", queryKeys._tenantScope()] as const,
+    isManager: () => [...queryKeys.manager.all(), "is-manager"] as const,
+    overview: () => [...queryKeys.manager.all(), "overview"] as const,
     team: () => [...queryKeys.manager.all(), "team"] as const,
     directReports: () => [...queryKeys.manager.team(), "direct-reports"] as const,
+    allSubordinates: (maxDepth?: number) =>
+      [...queryKeys.manager.all(), "all-subordinates", maxDepth] as const,
+    teamMember: (id: string) => [...queryKeys.manager.all(), "team-member", id] as const,
+    isSubordinate: (id: string) => [...queryKeys.manager.all(), "is-subordinate", id] as const,
     approvals: () => [...queryKeys.manager.all(), "approvals"] as const,
     pendingApprovals: (type?: string) =>
       [...queryKeys.manager.approvals(), "pending", type] as const,
+    teamAbsence: (startDate: string, endDate: string) =>
+      [...queryKeys.manager.all(), "team-absence", startDate, endDate] as const,
     schedules: () => [...queryKeys.manager.all(), "schedules"] as const,
     performance: () => [...queryKeys.manager.all(), "performance"] as const,
   },
@@ -170,6 +178,10 @@ export const queryKeys = {
     roles: () => [...queryKeys.security.all(), "roles"] as const,
     role: (id: string) => [...queryKeys.security.roles(), id] as const,
     permissions: () => [...queryKeys.security.all(), "permissions"] as const,
+    fieldPermissions: () =>
+      [...queryKeys.security.all(), "field-permissions"] as const,
+    entityFieldPermissions: (entity: string) =>
+      [...queryKeys.security.all(), "field-permissions", entity] as const,
     auditLog: (filters?: Record<string, unknown>) =>
       [...queryKeys.security.all(), "audit-log", filters] as const,
   },
@@ -201,6 +213,14 @@ export const queryKeys = {
     current: () => [...queryKeys.tenant.all(), "current", queryKeys._tenantScope()] as const,
     settings: () => [...queryKeys.tenant.all(), "settings", queryKeys._tenantScope()] as const,
     list: () => [...queryKeys.tenant.all(), "list"] as const,
+  },
+
+  // Portal
+  portal: {
+    all: () => ["portal", queryKeys._tenantScope()] as const,
+    available: () => [...queryKeys.portal.all(), "available"] as const,
+    navigation: (portalCode: string) =>
+      [...queryKeys.portal.all(), "navigation", portalCode] as const,
   },
 
   // Dashboard

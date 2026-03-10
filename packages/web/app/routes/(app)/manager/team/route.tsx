@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import {
   Users,
   Mail,
@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Search,
   UserCheck,
-  UserX,
   Calendar,
 } from "lucide-react";
 import {

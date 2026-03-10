@@ -13,11 +13,11 @@ import { Button } from "~/components/ui/button";
 import { api } from "~/lib/api-client";
 
 interface HRStats {
-  total_employees: number;
-  active_employees: number;
+  totalEmployees: number;
+  activeEmployees: number;
   departments: number;
   positions: number;
-  pending_hires: number;
+  pendingHires: number;
 }
 
 export default function AdminHrIndexPage() {
@@ -78,12 +78,12 @@ export default function AdminHrIndexPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           title="Total Employees"
-          value={stats?.total_employees || 0}
+          value={stats?.totalEmployees || 0}
           icon={<Users className="h-5 w-5" />}
         />
         <StatCard
           title="Active"
-          value={stats?.active_employees || 0}
+          value={stats?.activeEmployees || 0}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard

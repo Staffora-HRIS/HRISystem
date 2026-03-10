@@ -23,7 +23,7 @@ interface LeaveRequest {
 export default function AbsenceAdminPage() {
   const { data: requestsData, isLoading } = useQuery({
     queryKey: ["admin-leave-requests"],
-    queryFn: () => api.get<{ requests: LeaveRequest[]; count: number }>("/absence/requests"),
+    queryFn: () => api.get<{ items: LeaveRequest[]; nextCursor: string | null; hasMore: boolean }>("/absence/requests"),
   });
 
   const { data: statsData } = useQuery({
@@ -36,7 +36,7 @@ export default function AbsenceAdminPage() {
     }>("/absence/stats"),
   });
 
-  const requests = requestsData?.requests || [];
+  const requests = requestsData?.items || [];
   const pendingRequests = requests.filter(r => r.status === "pending" || r.status === "under_review");
 
   const stats = statsData || {

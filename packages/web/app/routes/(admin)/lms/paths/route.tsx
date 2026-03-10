@@ -35,11 +35,11 @@ interface LearningPath {
   description: string | null;
   category: string;
   status: string;
-  course_count: number;
-  estimated_hours: number | null;
-  is_mandatory: boolean;
-  created_at: string;
-  updated_at: string;
+  courseCount: number;
+  estimatedHours: number | null;
+  isMandatory: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LearningPathsResponse {
@@ -143,7 +143,7 @@ export default function LearningPathsPage() {
       title: formTitle,
       description: formDescription || undefined,
       category: formCategory,
-      is_mandatory: formIsMandatory,
+      isMandatory: formIsMandatory,
     });
   }
 
@@ -196,42 +196,42 @@ export default function LearningPathsPage() {
         },
       },
       {
-        id: "course_count",
+        id: "courseCount",
         header: "Courses",
         align: "center",
         cell: ({ row }) => (
           <span className="text-sm text-gray-700 dark:text-gray-300">
-            {row.course_count}
+            {row.courseCount}
           </span>
         ),
       },
       {
-        id: "estimated_hours",
+        id: "estimatedHours",
         header: "Est. Hours",
         align: "center",
         cell: ({ row }) => (
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {row.estimated_hours != null ? `${row.estimated_hours}h` : "-"}
+            {row.estimatedHours != null ? `${row.estimatedHours}h` : "-"}
           </span>
         ),
       },
       {
-        id: "is_mandatory",
+        id: "isMandatory",
         header: "Mandatory",
         align: "center",
         cell: ({ row }) =>
-          row.is_mandatory ? (
+          row.isMandatory ? (
             <Badge variant="warning">Yes</Badge>
           ) : (
             <Badge variant="secondary">No</Badge>
           ),
       },
       {
-        id: "updated_at",
+        id: "updatedAt",
         header: "Last Updated",
         cell: ({ row }) => (
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {formatDate(row.updated_at)}
+            {formatDate(row.updatedAt)}
           </span>
         ),
       },

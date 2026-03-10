@@ -1003,11 +1003,12 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
+      const effectiveDate = body?.effective_date || new Date().toISOString().split("T")[0]!;
+
       const result = await benefitsService.terminateEnrollment(
         tenantContext,
         params.id,
-        body?.effective_date,
-        idempotencyKey
+        effectiveDate
       );
 
       if (!result.success) {
@@ -1020,12 +1021,12 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
           action: "ENROLLMENT_TERMINATED",
           resourceType: "benefit_enrollment",
           resourceId: params.id,
-          newValues: { effective_date: body?.effective_date },
+          newValues: { effective_date: effectiveDate },
           metadata: { idempotencyKey, requestId },
         });
       }
 
-      return result.data;
+      return { success: true as const, message: "Enrollment terminated successfully" };
     },
     {
       beforeHandle: [requirePermission("benefits:enrollments", "write")],
@@ -1035,7 +1036,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       }),
       headers: OptionalIdempotencyHeaderSchema,
       response: {
-        200: EnrollmentResponse,
+        200: SuccessSchema,
         400: ErrorResponseSchema,
         404: ErrorResponseSchema,
         500: ErrorResponseSchema,
@@ -1059,8 +1060,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
 
       const result = await benefitsService.waiveCoverage(
         tenantContext,
-        body as any,
-        idempotencyKey
+        body as any
       );
 
       if (!result.success) {
@@ -1262,18 +1262,13 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
   .get(
     "/open-enrollment",
     async (ctx) => {
-      const { benefitsService, query, tenantContext } = ctx as any;
-      const { cursor, limit } = query;
-      const parsedLimit = limit !== undefined && limit !== null ? Number(limit) : undefined;
-      const result = await benefitsService.listOpenEnrollmentPeriods(
-        tenantContext,
-        { cursor, limit: parsedLimit }
-      );
+      const { benefitsService, tenantContext } = ctx as any;
+      const result = await benefitsService.listOpenEnrollmentPeriods(tenantContext);
 
       return {
-        items: result.items,
-        nextCursor: result.nextCursor,
-        hasMore: result.hasMore,
+        items: result.success ? result.data : [],
+        nextCursor: null,
+        hasMore: false,
       };
     },
     {
@@ -1391,8 +1386,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         tenantContext,
         params.id,
         (body as any).employee_id,
-        body as any,
-        idempotencyKey
+        body as any
       );
 
       if (!result.success) {

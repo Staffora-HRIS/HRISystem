@@ -26,18 +26,18 @@ import { api } from "~/lib/api-client";
 
 interface BenefitEnrollment {
   id: string;
-  employee_id: string;
-  employee_name: string | null;
-  plan_id: string;
-  plan_name: string | null;
-  plan_type: string | null;
-  coverage_level: string;
+  employeeId: string;
+  employeeName: string | null;
+  planId: string;
+  planName: string | null;
+  planType: string | null;
+  coverageLevel: string;
   status: string;
-  effective_date: string;
-  termination_date: string | null;
-  employee_contribution: number | null;
-  employer_contribution: number | null;
-  created_at: string;
+  effectiveDate: string;
+  terminationDate: string | null;
+  employeeContribution: number | null;
+  employerContribution: number | null;
+  createdAt: string;
 }
 
 interface EnrollmentListResponse {
@@ -116,7 +116,7 @@ export default function BenefitsEnrollmentsPage() {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (statusFilter) params.set("status", statusFilter);
-      if (planTypeFilter) params.set("plan_type", planTypeFilter);
+      if (planTypeFilter) params.set("planType", planTypeFilter);
       params.set("limit", "50");
       return api.get<EnrollmentListResponse>(`/benefits/enrollments?${params}`);
     },
@@ -136,7 +136,7 @@ export default function BenefitsEnrollmentsPage() {
       id: "employee",
       header: "Employee",
       cell: ({ row }) => {
-        const initials = (row.employee_name || "")
+        const initials = (row.employeeName || "")
           .split(" ")
           .map((n) => n[0])
           .join("")
@@ -148,7 +148,7 @@ export default function BenefitsEnrollmentsPage() {
               {initials || "?"}
             </div>
             <div className="font-medium text-gray-900">
-              {row.employee_name || "Unknown"}
+              {row.employeeName || "Unknown"}
             </div>
           </div>
         );
@@ -159,7 +159,7 @@ export default function BenefitsEnrollmentsPage() {
       header: "Plan",
       cell: ({ row }) => (
         <div className="text-sm font-medium text-gray-900">
-          {row.plan_name || "-"}
+          {row.planName || "-"}
         </div>
       ),
     },
@@ -167,7 +167,7 @@ export default function BenefitsEnrollmentsPage() {
       id: "type",
       header: "Type",
       cell: ({ row }) => {
-        const type = row.plan_type || "unknown";
+        const type = row.planType || "unknown";
         return (
           <Badge variant={PLAN_TYPE_BADGE_VARIANT[type] as any}>
             {PLAN_TYPE_LABELS[type] || type}
@@ -180,7 +180,7 @@ export default function BenefitsEnrollmentsPage() {
       header: "Coverage Level",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {COVERAGE_LABELS[row.coverage_level] || row.coverage_level}
+          {COVERAGE_LABELS[row.coverageLevel] || row.coverageLevel}
         </div>
       ),
     },
@@ -198,7 +198,7 @@ export default function BenefitsEnrollmentsPage() {
       header: "Effective Date",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {formatDate(row.effective_date)}
+          {formatDate(row.effectiveDate)}
         </div>
       ),
     },
@@ -208,7 +208,7 @@ export default function BenefitsEnrollmentsPage() {
       align: "right",
       cell: ({ row }) => (
         <div className="text-sm font-medium text-gray-900">
-          {formatCurrency(row.employee_contribution)}
+          {formatCurrency(row.employeeContribution)}
         </div>
       ),
     },
@@ -218,7 +218,7 @@ export default function BenefitsEnrollmentsPage() {
       align: "right",
       cell: ({ row }) => (
         <div className="text-sm font-medium text-green-600">
-          {formatCurrency(row.employer_contribution)}
+          {formatCurrency(row.employerContribution)}
         </div>
       ),
     },

@@ -81,7 +81,7 @@ export function EmployeeQuickView({
   employeeId,
   onClose,
   showCloseButton = true,
-  variant = "card",
+  variant: _variant = "card",
   className,
 }: EmployeeQuickViewProps) {
   const { data: employee, isLoading, error } = useQuery({

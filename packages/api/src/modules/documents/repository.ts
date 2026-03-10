@@ -115,15 +115,15 @@ export class DocumentsRepository {
           d.employee_id as "employeeId",
           app.get_employee_display_name(d.employee_id) as "employeeName",
           d.category,
-          d.name,
+          d.title as "name",
           d.description,
-          d.file_key as "fileKey",
-          d.file_name as "fileName",
+          d.file_path as "fileKey",
+          d.original_filename as "fileName",
           d.file_size as "fileSize",
           d.mime_type as "mimeType",
           d.version,
-          d.status,
-          d.expires_at as "expiresAt",
+          CASE WHEN d.deleted_at IS NOT NULL THEN 'archived' ELSE 'active' END as "status",
+          d.valid_until as "expiresAt",
           d.tags,
           d.uploaded_by as "uploadedBy",
           app.get_user_display_name(d.uploaded_by) as "uploadedByName",
@@ -133,13 +133,19 @@ export class DocumentsRepository {
         WHERE d.tenant_id = ${context.tenantId}::uuid
           ${filters.employee_id ? tx`AND d.employee_id = ${filters.employee_id}::uuid` : tx``}
           ${filters.category ? tx`AND d.category = ${filters.category}` : tx``}
-          ${filters.status ? tx`AND d.status = ${filters.status}` : tx``}
+          ${
+            filters.status === 'archived'
+              ? tx`AND d.deleted_at IS NOT NULL`
+              : filters.status
+                ? tx`AND d.deleted_at IS NULL`
+                : tx`AND d.deleted_at IS NULL`
+          }
           ${
             filters.expiring_within_days
-              ? tx`AND d.expires_at IS NOT NULL AND d.expires_at <= now() + ${filters.expiring_within_days}::integer * interval '1 day'`
+              ? tx`AND d.valid_until IS NOT NULL AND d.valid_until <= now() + ${filters.expiring_within_days}::integer * interval '1 day'`
               : tx``
           }
-          ${filters.search ? tx`AND d.name ILIKE ${"%" + filters.search + "%"}` : tx``}
+          ${filters.search ? tx`AND d.title ILIKE ${"%" + filters.search + "%"}` : tx``}
           ${pagination.cursor ? tx`AND d.id > ${pagination.cursor}::uuid` : tx``}
         ORDER BY d.created_at DESC, d.id
         LIMIT ${limit + 1}
@@ -165,15 +171,15 @@ export class DocumentsRepository {
           d.employee_id as "employeeId",
           app.get_employee_display_name(d.employee_id) as "employeeName",
           d.category,
-          d.name,
+          d.title as "name",
           d.description,
-          d.file_key as "fileKey",
-          d.file_name as "fileName",
+          d.file_path as "fileKey",
+          d.original_filename as "fileName",
           d.file_size as "fileSize",
           d.mime_type as "mimeType",
           d.version,
-          d.status,
-          d.expires_at as "expiresAt",
+          CASE WHEN d.deleted_at IS NOT NULL THEN 'archived' ELSE 'active' END as "status",
+          d.valid_until as "expiresAt",
           d.tags,
           d.uploaded_by as "uploadedBy",
           app.get_user_display_name(d.uploaded_by) as "uploadedByName",
@@ -197,17 +203,17 @@ export class DocumentsRepository {
         SELECT
           dv.id,
           dv.document_id as "documentId",
-          dv.version,
-          dv.file_key as "fileKey",
+          dv.version_number as "version",
+          dv.file_path as "fileKey",
           dv.file_size as "fileSize",
-          dv.uploaded_by as "uploadedBy",
-          app.get_user_display_name(dv.uploaded_by) as "uploadedByName",
+          dv.created_by as "uploadedBy",
+          app.get_user_display_name(dv.created_by) as "uploadedByName",
           dv.created_at as "createdAt"
         FROM app.document_versions dv
         INNER JOIN app.documents d ON dv.document_id = d.id
         WHERE dv.document_id = ${documentId}::uuid
           AND d.tenant_id = ${context.tenantId}::uuid
-        ORDER BY dv.version DESC
+        ORDER BY dv.version_number DESC
       `;
     });
   }
@@ -223,9 +229,9 @@ export class DocumentsRepository {
   ): Promise<DocumentRow> {
     const rows = await tx<DocumentRow[]>`
       INSERT INTO app.documents (
-        tenant_id, employee_id, category, name, description,
-        file_key, file_name, file_size, mime_type,
-        version, status, expires_at, tags, uploaded_by
+        tenant_id, employee_id, category, title, description,
+        file_path, original_filename, file_size, mime_type,
+        version, valid_until, tags, uploaded_by
       )
       VALUES (
         ${context.tenantId}::uuid,
@@ -238,7 +244,6 @@ export class DocumentsRepository {
         ${data.file_size},
         ${data.mime_type},
         1,
-        'active',
         ${data.expires_at ?? null}::date,
         ${data.tags ?? []}::text[],
         ${context.userId}::uuid
@@ -248,15 +253,15 @@ export class DocumentsRepository {
         tenant_id as "tenantId",
         employee_id as "employeeId",
         category,
-        name,
+        title as "name",
         description,
-        file_key as "fileKey",
-        file_name as "fileName",
+        file_path as "fileKey",
+        original_filename as "fileName",
         file_size as "fileSize",
         mime_type as "mimeType",
         version,
-        status,
-        expires_at as "expiresAt",
+        CASE WHEN deleted_at IS NOT NULL THEN 'archived' ELSE 'active' END as "status",
+        valid_until as "expiresAt",
         tags,
         uploaded_by as "uploadedBy",
         created_at as "createdAt",
@@ -275,12 +280,11 @@ export class DocumentsRepository {
     const rows = await tx<DocumentRow[]>`
       UPDATE app.documents
       SET
-        name = COALESCE(${data.name ?? null}, name),
+        title = COALESCE(${data.name ?? null}, title),
         description = COALESCE(${data.description ?? null}, description),
         category = COALESCE(${data.category ?? null}, category),
-        expires_at = COALESCE(${data.expires_at ?? null}::date, expires_at),
+        valid_until = COALESCE(${data.expires_at ?? null}::date, valid_until),
         tags = COALESCE(${data.tags ?? null}::text[], tags),
-        status = COALESCE(${data.status ?? null}, status),
         updated_at = now()
       WHERE id = ${id}::uuid
         AND tenant_id = ${context.tenantId}::uuid
@@ -289,15 +293,15 @@ export class DocumentsRepository {
         tenant_id as "tenantId",
         employee_id as "employeeId",
         category,
-        name,
+        title as "name",
         description,
-        file_key as "fileKey",
-        file_name as "fileName",
+        file_path as "fileKey",
+        original_filename as "fileName",
         file_size as "fileSize",
         mime_type as "mimeType",
         version,
-        status,
-        expires_at as "expiresAt",
+        CASE WHEN deleted_at IS NOT NULL THEN 'archived' ELSE 'active' END as "status",
+        valid_until as "expiresAt",
         tags,
         uploaded_by as "uploadedBy",
         created_at as "createdAt",
@@ -314,9 +318,10 @@ export class DocumentsRepository {
   ): Promise<boolean> {
     const result = await tx`
       UPDATE app.documents
-      SET status = 'archived', updated_at = now()
+      SET deleted_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
         AND tenant_id = ${context.tenantId}::uuid
+        AND deleted_at IS NULL
     `;
 
     return result.count > 0;
@@ -340,9 +345,10 @@ export class DocumentsRepository {
     // Insert version record
     const rows = await tx<DocumentVersionRow[]>`
       INSERT INTO app.document_versions (
-        document_id, version, file_key, file_size, uploaded_by
+        tenant_id, document_id, version_number, file_path, file_size, created_by
       )
       SELECT
+        d.tenant_id,
         ${documentId}::uuid,
         d.version,
         ${fileKey},
@@ -353,10 +359,10 @@ export class DocumentsRepository {
       RETURNING
         id,
         document_id as "documentId",
-        version,
-        file_key as "fileKey",
+        version_number as "version",
+        file_path as "fileKey",
         file_size as "fileSize",
-        uploaded_by as "uploadedBy",
+        created_by as "uploadedBy",
         created_at as "createdAt"
     `;
 
@@ -394,32 +400,32 @@ export class DocumentsRepository {
         FROM app.documents
         WHERE employee_id = ${employee.id}::uuid
           AND tenant_id = ${context.tenantId}::uuid
-          AND status = 'active'
+          AND deleted_at IS NULL
         GROUP BY category
         ORDER BY count DESC
       `;
 
       // Get recent documents
       const recentDocuments = await tx<RecentDocumentRow[]>`
-        SELECT id, name, category, mime_type as "mimeType", file_size as "fileSize", created_at as "createdAt"
+        SELECT id, title as "name", category, mime_type as "mimeType", file_size as "fileSize", created_at as "createdAt"
         FROM app.documents
         WHERE employee_id = ${employee.id}::uuid
           AND tenant_id = ${context.tenantId}::uuid
-          AND status = 'active'
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 5
       `;
 
       // Get expiring documents (within 30 days)
       const expiringDocuments = await tx<ExpiringDocumentRow[]>`
-        SELECT id, name, category, expires_at as "expiresAt"
+        SELECT id, title as "name", category, valid_until as "expiresAt"
         FROM app.documents
         WHERE employee_id = ${employee.id}::uuid
           AND tenant_id = ${context.tenantId}::uuid
-          AND status = 'active'
-          AND expires_at IS NOT NULL
-          AND expires_at <= NOW() + INTERVAL '30 days'
-        ORDER BY expires_at ASC
+          AND deleted_at IS NULL
+          AND valid_until IS NOT NULL
+          AND valid_until <= NOW() + INTERVAL '30 days'
+        ORDER BY valid_until ASC
         LIMIT 10
       `;
 
@@ -448,26 +454,26 @@ export class DocumentsRepository {
           d.employee_id as "employeeId",
           app.get_employee_display_name(d.employee_id) as "employeeName",
           d.category,
-          d.name,
+          d.title as "name",
           d.description,
-          d.file_key as "fileKey",
-          d.file_name as "fileName",
+          d.file_path as "fileKey",
+          d.original_filename as "fileName",
           d.file_size as "fileSize",
           d.mime_type as "mimeType",
           d.version,
-          d.status,
-          d.expires_at as "expiresAt",
+          CASE WHEN d.deleted_at IS NOT NULL THEN 'archived' ELSE 'active' END as "status",
+          d.valid_until as "expiresAt",
           d.tags,
           d.uploaded_by as "uploadedBy",
           d.created_at as "createdAt",
           d.updated_at as "updatedAt"
         FROM app.documents d
         WHERE d.tenant_id = ${context.tenantId}::uuid
-          AND d.status = 'active'
-          AND d.expires_at IS NOT NULL
-          AND d.expires_at <= now() + ${daysAhead}::integer * interval '1 day'
-          AND d.expires_at > now()
-        ORDER BY d.expires_at ASC
+          AND d.deleted_at IS NULL
+          AND d.valid_until IS NOT NULL
+          AND d.valid_until <= now() + ${daysAhead}::integer * interval '1 day'
+          AND d.valid_until > now()
+        ORDER BY d.valid_until ASC
       `;
     });
   }

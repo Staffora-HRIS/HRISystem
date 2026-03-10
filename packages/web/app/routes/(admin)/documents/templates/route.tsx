@@ -31,10 +31,10 @@ interface DocumentTemplate {
   description: string | null;
   category: string;
   format: string;
-  is_active: boolean;
+  isActive: boolean;
   version: number;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface DocumentTemplateListResponse {
@@ -125,8 +125,8 @@ export default function DocumentTemplatesPage() {
 
   const stats = {
     total: templates.length,
-    active: templates.filter((t) => t.is_active).length,
-    inactive: templates.filter((t) => !t.is_active).length,
+    active: templates.filter((t) => t.isActive).length,
+    inactive: templates.filter((t) => !t.isActive).length,
   };
 
   function resetForm() {
@@ -211,8 +211,8 @@ export default function DocumentTemplatesPage() {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.is_active ? "success" : "secondary"}>
-          {row.is_active ? "Active" : "Inactive"}
+        <Badge variant={row.isActive ? "success" : "secondary"}>
+          {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
     },
@@ -221,7 +221,7 @@ export default function DocumentTemplatesPage() {
       header: "Last Updated",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {formatDate(row.updated_at)}
+          {formatDate(row.updatedAt)}
         </div>
       ),
     },

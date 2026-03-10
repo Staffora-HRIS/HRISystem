@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Plus, Calendar, Users, Clock, Edit, Copy } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, Users, Edit, Copy } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -11,12 +11,13 @@ interface Schedule {
   id: string;
   name: string;
   description?: string;
-  scheduleType: "weekly" | "rotating" | "flexible";
-  defaultStartTime: string;
-  defaultEndTime: string;
-  isActive: boolean;
-  employeeCount: number;
+  startDate: string;
+  endDate: string;
+  orgUnitId: string | null;
+  isTemplate: boolean;
+  status: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface ScheduleAssignment {
@@ -29,10 +30,10 @@ interface ScheduleAssignment {
   effectiveTo?: string;
 }
 
-const scheduleTypeLabels: Record<string, string> = {
-  weekly: "Weekly",
-  rotating: "Rotating",
-  flexible: "Flexible",
+const statusLabels: Record<string, string> = {
+  draft: "Draft",
+  active: "Active",
+  archived: "Archived",
 };
 
 export default function SchedulesPage() {
@@ -41,7 +42,7 @@ export default function SchedulesPage() {
 
   const { data: schedulesData, isLoading: schedulesLoading } = useQuery({
     queryKey: ["admin-schedules"],
-    queryFn: () => api.get<{ schedules: Schedule[]; count: number }>("/time/schedules"),
+    queryFn: () => api.get<{ items: Schedule[]; cursor: string | null; hasMore: boolean }>("/time/schedules"),
   });
 
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
@@ -49,7 +50,7 @@ export default function SchedulesPage() {
     queryFn: () => api.get<{ assignments: ScheduleAssignment[]; count: number }>("/time/schedule-assignments"),
   });
 
-  const schedules = schedulesData?.schedules || [];
+  const schedules = schedulesData?.items || [];
   const assignments = assignmentsData?.assignments || [];
 
   return (
@@ -116,10 +117,10 @@ export default function SchedulesPage() {
                   <CardHeader className="flex flex-row items-start justify-between">
                     <div>
                       <h3 className="font-semibold">{schedule.name}</h3>
-                      <Badge variant="secondary">{scheduleTypeLabels[schedule.scheduleType]}</Badge>
+                      {schedule.isTemplate && <Badge variant="secondary">Template</Badge>}
                     </div>
-                    <Badge variant={schedule.isActive ? "success" : "secondary"}>
-                      {schedule.isActive ? "Active" : "Inactive"}
+                    <Badge variant={schedule.status === "active" ? "success" : "secondary"}>
+                      {statusLabels[schedule.status] || schedule.status}
                     </Badge>
                   </CardHeader>
                   <CardBody className="space-y-4">
@@ -128,12 +129,8 @@ export default function SchedulesPage() {
                     </p>
                     <div className="flex items-center gap-4 text-sm text-gray-600">
                       <span className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {schedule.defaultStartTime} - {schedule.defaultEndTime}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        {schedule.employeeCount} employees
+                        <Calendar className="h-4 w-4" />
+                        {new Date(schedule.startDate).toLocaleDateString()} - {new Date(schedule.endDate).toLocaleDateString()}
                       </span>
                     </div>
                     <div className="flex gap-2">

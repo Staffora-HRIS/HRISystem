@@ -10,9 +10,9 @@ import { DocumentList } from "~/components/documents";
 import { api } from "~/lib/api-client";
 
 interface DocumentSummary {
-  total_documents: number;
-  by_category: Record<string, number>;
-  expiring_soon: number;
+  totalDocuments: number;
+  byCategory: Record<string, number>;
+  expiringSoon: number;
 }
 
 export default function MyDocumentsPage() {
@@ -40,7 +40,7 @@ export default function MyDocumentsPage() {
       </div>
 
       {/* Alerts */}
-      {summary?.expiring_soon && summary.expiring_soon > 0 && (
+      {summary?.expiringSoon && summary.expiringSoon > 0 && (
         <Card className="border-yellow-200 bg-yellow-50">
           <CardBody className="flex items-center gap-4">
             <AlertCircle className="h-6 w-6 text-yellow-600" />
@@ -49,8 +49,8 @@ export default function MyDocumentsPage() {
                 Documents Expiring Soon
               </p>
               <p className="text-sm text-yellow-700">
-                You have {summary.expiring_soon} document
-                {summary.expiring_soon !== 1 ? "s" : ""} expiring within the
+                You have {summary.expiringSoon} document
+                {summary.expiringSoon !== 1 ? "s" : ""} expiring within the
                 next 30 days.
               </p>
             </div>
@@ -66,7 +66,7 @@ export default function MyDocumentsPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-gray-900">
-              {summary?.total_documents || 0}
+              {summary?.totalDocuments || 0}
             </p>
             <p className="text-sm text-gray-500">Total Documents</p>
           </CardBody>
@@ -74,7 +74,7 @@ export default function MyDocumentsPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-blue-600">
-              {summary?.by_category?.contract || 0}
+              {summary?.byCategory?.contract || 0}
             </p>
             <p className="text-sm text-gray-500">Contracts</p>
           </CardBody>
@@ -82,7 +82,7 @@ export default function MyDocumentsPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-green-600">
-              {summary?.by_category?.certificate || 0}
+              {summary?.byCategory?.certificate || 0}
             </p>
             <p className="text-sm text-gray-500">Certificates</p>
           </CardBody>
@@ -90,7 +90,7 @@ export default function MyDocumentsPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-purple-600">
-              {summary?.by_category?.id || 0}
+              {summary?.byCategory?.id || 0}
             </p>
             <p className="text-sm text-gray-500">ID Documents</p>
           </CardBody>

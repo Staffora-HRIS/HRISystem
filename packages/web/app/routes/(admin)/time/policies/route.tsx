@@ -30,14 +30,14 @@ interface TimePolicy {
   name: string;
   description: string | null;
   type: string;
-  work_hours_per_day: number;
-  work_days_per_week: number;
-  overtime_enabled: boolean;
-  overtime_threshold_daily: number | null;
-  overtime_threshold_weekly: number | null;
-  break_duration_minutes: number;
-  is_default: boolean;
-  is_active: boolean;
+  workHoursPerDay: number;
+  workDaysPerWeek: number;
+  overtimeEnabled: boolean;
+  overtimeThresholdDaily: number | null;
+  overtimeThresholdWeekly: number | null;
+  breakDurationMinutes: number;
+  isDefault: boolean;
+  isActive: boolean;
 }
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -77,28 +77,28 @@ export default function TimePoliciesPage() {
             name: "Standard Office Hours",
             description: "Default 9-to-5 work schedule for office employees",
             type: "standard",
-            work_hours_per_day: 8,
-            work_days_per_week: 5,
-            overtime_enabled: true,
-            overtime_threshold_daily: 8,
-            overtime_threshold_weekly: 40,
-            break_duration_minutes: 60,
-            is_default: true,
-            is_active: true,
+            workHoursPerDay: 8,
+            workDaysPerWeek: 5,
+            overtimeEnabled: true,
+            overtimeThresholdDaily: 8,
+            overtimeThresholdWeekly: 40,
+            breakDurationMinutes: 60,
+            isDefault: true,
+            isActive: true,
           },
           {
             id: "tp-2",
             name: "Flexible Remote",
             description: "Flexible schedule for remote employees",
             type: "flexible",
-            work_hours_per_day: 8,
-            work_days_per_week: 5,
-            overtime_enabled: false,
-            overtime_threshold_daily: null,
-            overtime_threshold_weekly: null,
-            break_duration_minutes: 30,
-            is_default: false,
-            is_active: true,
+            workHoursPerDay: 8,
+            workDaysPerWeek: 5,
+            overtimeEnabled: false,
+            overtimeThresholdDaily: null,
+            overtimeThresholdWeekly: null,
+            breakDurationMinutes: 30,
+            isDefault: false,
+            isActive: true,
           },
         ] as TimePolicy[],
       };
@@ -133,22 +133,22 @@ export default function TimePoliciesPage() {
       id: "work_hours",
       header: "Hours/Day",
       cell: ({ row }) => (
-        <span className="text-gray-700">{row.work_hours_per_day}h</span>
+        <span className="text-gray-700">{row.workHoursPerDay}h</span>
       ),
     },
     {
       id: "work_days",
       header: "Days/Week",
       cell: ({ row }) => (
-        <span className="text-gray-700">{row.work_days_per_week}</span>
+        <span className="text-gray-700">{row.workDaysPerWeek}</span>
       ),
     },
     {
       id: "overtime",
       header: "Overtime",
       cell: ({ row }) => (
-        <Badge variant={row.overtime_enabled ? "success" : "secondary"}>
-          {row.overtime_enabled ? "Yes" : "No"}
+        <Badge variant={row.overtimeEnabled ? "success" : "secondary"}>
+          {row.overtimeEnabled ? "Yes" : "No"}
         </Badge>
       ),
     },
@@ -156,14 +156,14 @@ export default function TimePoliciesPage() {
       id: "break",
       header: "Break (min)",
       cell: ({ row }) => (
-        <span className="text-gray-700">{row.break_duration_minutes}</span>
+        <span className="text-gray-700">{row.breakDurationMinutes}</span>
       ),
     },
     {
       id: "default",
       header: "Default",
       cell: ({ row }) =>
-        row.is_default ? (
+        row.isDefault ? (
           <Badge variant="primary">Default</Badge>
         ) : (
           <span className="text-gray-400">-</span>
@@ -173,8 +173,8 @@ export default function TimePoliciesPage() {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.is_active ? "success" : "default"} dot>
-          {row.is_active ? "Active" : "Inactive"}
+        <Badge variant={row.isActive ? "success" : "default"} dot>
+          {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
     },
@@ -239,7 +239,7 @@ export default function TimePoliciesPage() {
             <div>
               <p className="text-sm text-gray-500">Active Policies</p>
               <p className="text-2xl font-bold">
-                {policies.filter((p) => p.is_active).length}
+                {policies.filter((p) => p.isActive).length}
               </p>
             </div>
           </CardBody>
@@ -252,7 +252,7 @@ export default function TimePoliciesPage() {
             <div>
               <p className="text-sm text-gray-500">Default Policy</p>
               <p className="text-2xl font-bold">
-                {policies.find((p) => p.is_default)?.name ?? "None"}
+                {policies.find((p) => p.isDefault)?.name ?? "None"}
               </p>
             </div>
           </CardBody>

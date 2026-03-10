@@ -113,7 +113,7 @@ export class LMSRepository {
       async (tx: any) => {
         return tx`
           INSERT INTO app.courses (
-            id, tenant_id, title, description, category, duration_minutes,
+            id, tenant_id, title, description, category, estimated_duration_minutes,
             content_type, content_url, thumbnail_url, passing_score,
             is_required, status, created_by
           ) VALUES (
@@ -144,7 +144,7 @@ export class LMSRepository {
             title = COALESCE(${data.title}, title),
             description = COALESCE(${data.description}, description),
             category = COALESCE(${data.category}, category),
-            duration_minutes = COALESCE(${data.durationMinutes}, duration_minutes),
+            estimated_duration_minutes = COALESCE(${data.durationMinutes}, estimated_duration_minutes),
             content_type = COALESCE(${data.contentType}, content_type),
             content_url = COALESCE(${data.contentUrl}, content_url),
             thumbnail_url = COALESCE(${data.thumbnailUrl}, thumbnail_url),
@@ -264,7 +264,7 @@ export class LMSRepository {
             c.title as course_title,
             c.description as course_description,
             c.category,
-            c.duration_minutes,
+            c.estimated_duration_minutes,
             c.thumbnail_url
           FROM app.assignments a
           JOIN app.courses c ON c.id = a.course_id
@@ -426,6 +426,57 @@ export class LMSRepository {
     return path ? this.mapLearningPathRow(path) : null;
   }
 
+  async createLearningPath(
+    ctx: TenantContext,
+    data: CreateLearningPath
+  ): Promise<LearningPathResponse> {
+    const id = crypto.randomUUID();
+    const code = data.name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").slice(0, 50);
+
+    const path = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        const [row] = await tx<any[]>`
+          INSERT INTO app.learning_paths (
+            id, tenant_id, code, name, description, status, created_by
+          ) VALUES (
+            ${id}::uuid, ${ctx.tenantId}::uuid, ${code}, ${data.name},
+            ${data.description || null}, 'draft', ${ctx.userId}::uuid
+          )
+          RETURNING *
+        `;
+
+        // Link courses to the path
+        if (data.courseIds?.length) {
+          for (let i = 0; i < data.courseIds.length; i++) {
+            await tx`
+              INSERT INTO app.learning_path_courses (
+                id, tenant_id, learning_path_id, course_id, sort_order, is_required
+              ) VALUES (
+                ${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid,
+                ${id}::uuid, ${data.courseIds[i]}::uuid, ${i + 1}, ${data.isRequired ?? false}
+              )
+            `;
+          }
+        }
+
+        await tx`
+          INSERT INTO app.domain_outbox (
+            id, tenant_id, aggregate_type, aggregate_id, event_type, payload
+          ) VALUES (
+            ${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid,
+            'learning_path', ${id}::uuid, 'lms.learning_path.created',
+            ${JSON.stringify({ learningPathId: id, name: data.name })}::jsonb
+          )
+        `;
+
+        return row;
+      }
+    );
+
+    return this.mapLearningPathRow(path);
+  }
+
   // ===========================================================================
   // Employee Lookup
   // ===========================================================================
@@ -522,7 +573,7 @@ export class LMSRepository {
       title: row.title,
       description: row.description,
       category: row.category,
-      durationMinutes: row.durationMinutes,
+      durationMinutes: row.estimatedDurationMinutes,
       contentType: row.contentType,
       contentUrl: row.contentUrl,
       thumbnailUrl: row.thumbnailUrl,

@@ -224,6 +224,78 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
   )
 
   // ===========================================================================
+  // Employee Self-Service Competency Routes (must be before :employeeId)
+  // ===========================================================================
+  .get(
+    "/employees/me",
+    async (ctx) => {
+      const { competenciesService, competenciesRepository, tenantContext, set } = ctx as any;
+
+      // Resolve current user's employee ID
+      const [emp] = await (ctx as any).db.withTransaction(
+        { tenantId: tenantContext.tenantId, userId: tenantContext.userId },
+        async (tx: any) => tx`
+          SELECT id FROM app.employees
+          WHERE user_id = ${tenantContext.userId}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
+          LIMIT 1
+        `
+      );
+
+      if (!emp) {
+        return [];
+      }
+
+      const result = await competenciesService.listEmployeeCompetencies(
+        tenantContext,
+        emp.id
+      );
+
+      if (!result.success) {
+        throw new Error(result.error?.message);
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("competencies", "read")],
+    }
+  )
+  .get(
+    "/employees/me/gaps",
+    async (ctx) => {
+      const { competenciesService, tenantContext, set } = ctx as any;
+
+      // Resolve current user's employee ID
+      const [emp] = await (ctx as any).db.withTransaction(
+        { tenantId: tenantContext.tenantId, userId: tenantContext.userId },
+        async (tx: any) => tx`
+          SELECT id FROM app.employees
+          WHERE user_id = ${tenantContext.userId}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
+          LIMIT 1
+        `
+      );
+
+      if (!emp) {
+        return [];
+      }
+
+      const result = await competenciesService.getCompetencyGaps(
+        tenantContext,
+        emp.id
+      );
+
+      if (!result.success) {
+        throw new Error(result.error?.message);
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("competencies", "read")],
+    }
+  )
+
+  // ===========================================================================
   // Employee Competency Routes
   // ===========================================================================
   .get(

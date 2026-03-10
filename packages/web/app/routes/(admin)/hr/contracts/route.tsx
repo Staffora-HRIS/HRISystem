@@ -25,32 +25,32 @@ import { api } from "~/lib/api-client";
 
 interface EmployeeContract {
   id: string;
-  employee_id: string;
-  employee_name: string | null;
-  employee_number: string;
-  contract_type: string;
-  start_date: string;
-  end_date: string | null;
+  employeeId: string;
+  employeeName: string | null;
+  employeeNumber: string;
+  contractType: string;
+  startDate: string;
+  endDate: string | null;
   status: string;
-  position_title: string | null;
-  org_unit_name: string | null;
+  positionTitle: string | null;
+  orgUnitName: string | null;
   salary: number | null;
   currency: string | null;
 }
 
 interface EmployeeRaw {
   id: string;
-  employee_number: string;
-  full_name: string;
-  display_name: string;
-  hire_date: string;
-  termination_date?: string | null;
+  employeeNumber: string;
+  fullName: string;
+  displayName: string;
+  hireDate: string;
+  terminationDate?: string | null;
   status: string;
-  position_title: string | null;
-  org_unit_name: string | null;
-  employment_type?: string;
-  contract_type?: string;
-  contract_end_date?: string | null;
+  positionTitle: string | null;
+  orgUnitName: string | null;
+  employmentType?: string;
+  contractType?: string;
+  contractEndDate?: string | null;
   salary?: number | null;
   currency?: string | null;
 }
@@ -100,7 +100,7 @@ function formatDate(dateString: string | null): string {
 
 function deriveContractStatus(employee: EmployeeRaw): string {
   if (employee.status === "terminated") return "terminated";
-  const endDate = employee.contract_end_date;
+  const endDate = employee.contractEndDate;
   if (endDate && new Date(endDate) < new Date()) return "expired";
   return "active";
 }
@@ -117,15 +117,15 @@ function isExpiringSoon(endDate: string | null): boolean {
 function mapToContract(emp: EmployeeRaw): EmployeeContract {
   return {
     id: emp.id,
-    employee_id: emp.id,
-    employee_name: emp.display_name || emp.full_name || null,
-    employee_number: emp.employee_number,
-    contract_type: emp.contract_type || emp.employment_type || "full_time",
-    start_date: emp.hire_date,
-    end_date: emp.contract_end_date ?? null,
+    employeeId: emp.id,
+    employeeName: emp.displayName || emp.fullName || null,
+    employeeNumber: emp.employeeNumber,
+    contractType: emp.contractType || emp.employmentType || "full_time",
+    startDate: emp.hireDate,
+    endDate: emp.contractEndDate ?? null,
     status: deriveContractStatus(emp),
-    position_title: emp.position_title,
-    org_unit_name: emp.org_unit_name,
+    positionTitle: emp.positionTitle,
+    orgUnitName: emp.orgUnitName,
     salary: emp.salary ?? null,
     currency: emp.currency ?? null,
   };
@@ -144,7 +144,7 @@ export default function ContractsPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
-      if (contractTypeFilter) params.set("employment_type", contractTypeFilter);
+      if (contractTypeFilter) params.set("employmentType", contractTypeFilter);
       params.set("limit", "50");
       return api.get<EmployeeListResponse>(`/hr/employees?${params}`);
     },
@@ -159,7 +159,7 @@ export default function ContractsPage() {
   const stats = {
     total: contracts.length,
     active: contracts.filter((c) => c.status === "active").length,
-    expiringSoon: contracts.filter((c) => isExpiringSoon(c.end_date)).length,
+    expiringSoon: contracts.filter((c) => isExpiringSoon(c.endDate)).length,
     expired: contracts.filter((c) => c.status === "expired").length,
   };
 
@@ -169,7 +169,7 @@ export default function ContractsPage() {
       header: "Employee (#)",
       cell: ({ row }) => (
         <div className="text-sm font-mono text-gray-500">
-          {row.employee_number}
+          {row.employeeNumber}
         </div>
       ),
     },
@@ -177,7 +177,7 @@ export default function ContractsPage() {
       id: "name",
       header: "Name",
       cell: ({ row }) => {
-        const initials = (row.employee_name || "")
+        const initials = (row.employeeName || "")
           .split(" ")
           .map((n) => n[0])
           .join("")
@@ -189,7 +189,7 @@ export default function ContractsPage() {
               {initials || "?"}
             </div>
             <div className="font-medium text-gray-900">
-              {row.employee_name || "Unknown"}
+              {row.employeeName || "Unknown"}
             </div>
           </div>
         );
@@ -199,8 +199,8 @@ export default function ContractsPage() {
       id: "contractType",
       header: "Contract Type",
       cell: ({ row }) => (
-        <Badge variant={CONTRACT_TYPE_BADGE_VARIANT[row.contract_type] as any}>
-          {CONTRACT_TYPE_LABELS[row.contract_type] || row.contract_type}
+        <Badge variant={CONTRACT_TYPE_BADGE_VARIANT[row.contractType] as any}>
+          {CONTRACT_TYPE_LABELS[row.contractType] || row.contractType}
         </Badge>
       ),
     },
@@ -209,7 +209,7 @@ export default function ContractsPage() {
       header: "Position",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {row.position_title || "-"}
+          {row.positionTitle || "-"}
         </div>
       ),
     },
@@ -218,7 +218,7 @@ export default function ContractsPage() {
       header: "Department",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {row.org_unit_name || "-"}
+          {row.orgUnitName || "-"}
         </div>
       ),
     },
@@ -227,7 +227,7 @@ export default function ContractsPage() {
       header: "Start Date",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {formatDate(row.start_date)}
+          {formatDate(row.startDate)}
         </div>
       ),
     },
@@ -237,9 +237,9 @@ export default function ContractsPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-1">
           <span className="text-sm text-gray-600">
-            {formatDate(row.end_date)}
+            {formatDate(row.endDate)}
           </span>
-          {isExpiringSoon(row.end_date) && (
+          {isExpiringSoon(row.endDate) && (
             <AlertTriangle
               className="h-4 w-4 text-yellow-500"
               aria-label="Expiring soon"
@@ -266,7 +266,7 @@ export default function ContractsPage() {
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/admin/hr/employees/${row.employee_id}`);
+            navigate(`/admin/hr/employees/${row.employeeId}`);
           }}
         >
           <MoreHorizontal className="h-4 w-4" />
@@ -403,7 +403,7 @@ export default function ContractsPage() {
               data={filteredContracts}
               columns={columns}
               onRowClick={(row) =>
-                navigate(`/admin/hr/employees/${row.employee_id}`)
+                navigate(`/admin/hr/employees/${row.employeeId}`)
               }
               getRowId={(row) => row.id}
             />

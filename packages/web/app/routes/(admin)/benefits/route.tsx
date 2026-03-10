@@ -18,26 +18,26 @@ import { api } from "~/lib/api-client";
 
 interface BenefitPlan {
   id: string;
-  plan_type: string;
+  planType: string;
   name: string;
   description: string | null;
   provider: string | null;
-  coverage_level: string;
-  employee_contribution: number;
-  employer_contribution: number;
-  effective_from: string;
-  effective_to: string | null;
-  enrollment_start: string | null;
-  enrollment_end: string | null;
-  is_active: boolean;
-  enrolled_count?: number;
+  coverageLevel: string;
+  employeeContribution: number;
+  employerContribution: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  enrollmentStart: string | null;
+  enrollmentEnd: string | null;
+  isActive: boolean;
+  enrolledCount?: number;
 }
 
 interface EnrollmentStats {
-  total_employees: number;
-  enrolled_employees: number;
-  pending_enrollments: number;
-  pending_life_events: number;
+  totalEmployees: number;
+  enrolledEmployees: number;
+  pendingEnrollments: number;
+  pendingLifeEvents: number;
 }
 
 const PLAN_TYPE_COLORS: Record<string, string> = {
@@ -68,7 +68,7 @@ export default function BenefitsAdminPage() {
     queryKey: ["admin-benefit-plans", planTypeFilter],
     queryFn: () => {
       const params = new URLSearchParams();
-      if (planTypeFilter) params.set("plan_type", planTypeFilter);
+      if (planTypeFilter) params.set("planType", planTypeFilter);
       return api.get<{ items: BenefitPlan[] }>(`/benefits/plans?${params}`);
     },
   });
@@ -78,8 +78,8 @@ export default function BenefitsAdminPage() {
     queryFn: () => api.get<EnrollmentStats>("/benefits/stats"),
   });
 
-  const activePlans = plans?.items.filter((p) => p.is_active) || [];
-  const inactivePlans = plans?.items.filter((p) => !p.is_active) || [];
+  const activePlans = plans?.items.filter((p) => p.isActive) || [];
+  const inactivePlans = plans?.items.filter((p) => !p.isActive) || [];
 
   return (
     <div className="space-y-6">
@@ -115,7 +115,7 @@ export default function BenefitsAdminPage() {
             <div>
               <p className="text-sm text-gray-500">Total Eligible</p>
               <p className="text-2xl font-bold">
-                {stats?.total_employees || 0}
+                {stats?.totalEmployees || 0}
               </p>
             </div>
           </CardBody>
@@ -128,7 +128,7 @@ export default function BenefitsAdminPage() {
             <div>
               <p className="text-sm text-gray-500">Enrolled</p>
               <p className="text-2xl font-bold">
-                {stats?.enrolled_employees || 0}
+                {stats?.enrolledEmployees || 0}
               </p>
             </div>
           </CardBody>
@@ -141,7 +141,7 @@ export default function BenefitsAdminPage() {
             <div>
               <p className="text-sm text-gray-500">Pending Enrollments</p>
               <p className="text-2xl font-bold">
-                {stats?.pending_enrollments || 0}
+                {stats?.pendingEnrollments || 0}
               </p>
             </div>
           </CardBody>
@@ -154,7 +154,7 @@ export default function BenefitsAdminPage() {
             <div>
               <p className="text-sm text-gray-500">Pending Life Events</p>
               <p className="text-2xl font-bold">
-                {stats?.pending_life_events || 0}
+                {stats?.pendingLifeEvents || 0}
               </p>
             </div>
           </CardBody>
@@ -221,11 +221,11 @@ export default function BenefitsAdminPage() {
                       <div>
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                            PLAN_TYPE_COLORS[plan.plan_type] ||
+                            PLAN_TYPE_COLORS[plan.planType] ||
                             "bg-gray-100 text-gray-700"
                           }`}
                         >
-                          {plan.plan_type}
+                          {plan.planType}
                         </span>
                         <h3 className="font-semibold mt-2">{plan.name}</h3>
                         {plan.provider && (
@@ -246,23 +246,23 @@ export default function BenefitsAdminPage() {
                         <div>
                           <p className="text-gray-500">Employee Cost</p>
                           <p className="font-medium">
-                            {formatCurrency(plan.employee_contribution)}/mo
+                            {formatCurrency(plan.employeeContribution)}/mo
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Employer Cost</p>
                           <p className="font-medium text-green-600">
-                            {formatCurrency(plan.employer_contribution)}/mo
+                            {formatCurrency(plan.employerContribution)}/mo
                           </p>
                         </div>
                       </div>
-                      {plan.enrolled_count !== undefined && (
+                      {plan.enrolledCount !== undefined && (
                         <div className="mt-4 pt-4 border-t flex items-center justify-between">
                           <span className="text-sm text-gray-500">
                             Enrolled
                           </span>
                           <span className="font-medium">
-                            {plan.enrolled_count}
+                            {plan.enrolledCount}
                           </span>
                         </div>
                       )}
@@ -306,7 +306,7 @@ export default function BenefitsAdminPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500 capitalize">
-                          {plan.plan_type}
+                          {plan.planType}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {plan.provider || "-"}

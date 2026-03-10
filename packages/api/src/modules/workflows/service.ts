@@ -70,7 +70,6 @@ export class WorkflowService {
     const definition = await this.repository.updateDefinition(ctx, id, {
       name: data.name,
       description: data.description,
-      category: data.category,
     });
 
     if (!definition) {

@@ -36,16 +36,16 @@ export default function ManagerPerformancePage() {
 
   const { data: goalsData } = useQuery({
     queryKey: ["team-goals"],
-    queryFn: () => api.get<{ goals: Goal[]; count: number }>("/talent/goals"),
+    queryFn: () => api.get<{ items: Goal[]; nextCursor: string | null; hasMore: boolean }>("/talent/goals"),
   });
 
   const { data: reviewsData } = useQuery({
     queryKey: ["team-reviews"],
-    queryFn: () => api.get<{ reviews: Review[]; count: number }>("/talent/reviews"),
+    queryFn: () => api.get<{ items: Review[]; nextCursor: string | null; hasMore: boolean }>("/talent/reviews"),
   });
 
-  const goals = goalsData?.goals || [];
-  const reviews = reviewsData?.reviews || [];
+  const goals = goalsData?.items || [];
+  const reviews = reviewsData?.items || [];
 
   const goalStats = {
     total: goals.length,

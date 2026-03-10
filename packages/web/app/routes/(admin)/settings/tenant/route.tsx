@@ -16,7 +16,6 @@ import {
   Select,
   useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
 
 interface TenantSettings {
   id: string;

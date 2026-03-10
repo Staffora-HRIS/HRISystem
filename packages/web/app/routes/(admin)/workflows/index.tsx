@@ -21,10 +21,10 @@ interface WorkflowDefinition {
 export default function WorkflowsAdminPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["workflow-definitions"],
-    queryFn: () => api.get<{ definitions: WorkflowDefinition[]; count: number }>("/workflows/definitions"),
+    queryFn: () => api.get<{ items: WorkflowDefinition[]; nextCursor: string | null; hasMore: boolean }>("/workflows/definitions"),
   });
 
-  const definitions = data?.definitions || [];
+  const definitions = data?.items || [];
 
   const stats = {
     total: definitions.length,

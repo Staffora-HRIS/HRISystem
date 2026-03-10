@@ -8,17 +8,18 @@ import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { User, ChevronDown, ChevronRight, Search, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { api } from "~/lib/api-client";
 
 interface OrgChartNode {
   id: string;
-  employee_id: string;
+  employeeId: string;
   name: string;
   title?: string;
   department?: string;
-  photo_url?: string;
-  manager_id?: string;
+  photoUrl?: string;
+  managerId?: string;
   level: number;
-  direct_reports_count: number;
+  directReportsCount: number;
 }
 
 interface OrgChartData {
@@ -35,7 +36,7 @@ function buildTree(nodes: OrgChartNode[]): Map<string | undefined, OrgChartNode[
   const tree = new Map<string | undefined, OrgChartNode[]>();
 
   for (const node of nodes) {
-    const parentId = node.manager_id;
+    const parentId = node.managerId;
     if (!tree.has(parentId)) {
       tree.set(parentId, []);
     }
@@ -89,9 +90,9 @@ function OrgNode({
       >
         {/* Avatar */}
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-          {node.photo_url ? (
+          {node.photoUrl ? (
             <img
-              src={node.photo_url}
+              src={node.photoUrl}
               alt={node.name}
               className="h-10 w-10 rounded-full object-cover"
             />
@@ -129,9 +130,9 @@ function OrgNode({
         )}
 
         {/* Direct Reports Badge */}
-        {node.direct_reports_count > 0 && (
+        {node.directReportsCount > 0 && (
           <span className="absolute -bottom-2 -right-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1 text-xs font-medium text-white">
-            {node.direct_reports_count}
+            {node.directReportsCount}
           </span>
         )}
       </div>
@@ -168,15 +169,7 @@ export function OrgChartViewer({ className, onNodeClick }: OrgChartViewerProps) 
 
   const { data, isLoading, error } = useQuery<OrgChartData>({
     queryKey: ["org-chart"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/hr/org-chart", {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch org chart");
-      }
-      return response.json();
-    },
+    queryFn: () => api.get<OrgChartData>("/hr/org-chart"),
   });
 
   const tree = useMemo(() => {
