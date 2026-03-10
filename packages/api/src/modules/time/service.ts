@@ -754,6 +754,26 @@ export class TimeService {
     };
   }
 
+  async getScheduleAssignments(ctx: TenantContext) {
+    const rows = await this.repo.getScheduleAssignments(ctx);
+    return {
+      assignments: rows.map((r: any) => ({
+        id: r.id,
+        employeeId: r.employeeId,
+        employeeName: r.employeeName || "Unknown",
+        scheduleId: r.scheduleId,
+        scheduleName: r.scheduleName || "Unknown",
+        effectiveFrom: r.effectiveFrom instanceof Date ? r.effectiveFrom.toISOString().split("T")[0] : r.effectiveFrom,
+        effectiveTo: r.effectiveTo,
+      })),
+      count: rows.length,
+    };
+  }
+
+  async getStats(ctx: TenantContext) {
+    return this.repo.getStats(ctx);
+  }
+
   private formatTimesheet(timesheet: any) {
     return {
       id: timesheet.id,

@@ -17,9 +17,11 @@ import {
   Building2,
   Network,
   Heart,
+  HeartHandshake,
   UserPlus,
   TrendingUp,
   ArrowUpRight,
+  Target,
   Zap,
   LayoutTemplate,
   User,
@@ -28,10 +30,18 @@ import {
   ClipboardList,
   BarChart2,
   FileText,
+  FileCheck,
   BookOpen,
+  GraduationCap,
   ClipboardCheck,
+  UserCheck,
+  Calendar,
+  CalendarClock,
+  Clock,
+  Timer,
   Settings,
   Puzzle,
+  Bell as BellIcon,
   ArrowLeft,
   X,
   Menu,
@@ -40,6 +50,8 @@ import {
   LogOut,
   ChevronRight,
   Bell,
+  Ticket,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useTheme } from "../../lib/theme";
@@ -90,6 +102,12 @@ const adminNavGroups: NavGroup[] = [
         permission: "positions:read",
       },
       {
+        name: "Contracts",
+        href: "/admin/hr/contracts",
+        icon: <ScrollText className="h-5 w-5" />,
+        permission: "employees:read",
+      },
+      {
         name: "Departments",
         href: "/admin/hr/departments",
         icon: <Building2 className="h-5 w-5" />,
@@ -104,12 +122,70 @@ const adminNavGroups: NavGroup[] = [
     ],
   },
   {
+    name: "Time & Attendance",
+    items: [
+      {
+        name: "Schedules",
+        href: "/admin/time/schedules",
+        icon: <CalendarClock className="h-5 w-5" />,
+        permission: "schedules:read",
+      },
+      {
+        name: "Timesheets",
+        href: "/admin/time/timesheets",
+        icon: <Clock className="h-5 w-5" />,
+        permission: "timesheets:read",
+      },
+      {
+        name: "Policies",
+        href: "/admin/time/policies",
+        icon: <Timer className="h-5 w-5" />,
+        permission: "schedules:read",
+      },
+      {
+        name: "Reports",
+        href: "/admin/time/reports",
+        icon: <BarChart2 className="h-5 w-5" />,
+        permission: "reports:read",
+      },
+    ],
+  },
+  {
+    name: "Leave Management",
+    items: [
+      {
+        name: "Leave Requests",
+        href: "/admin/leave/requests",
+        icon: <Calendar className="h-5 w-5" />,
+        permission: "leave:read",
+      },
+      {
+        name: "Leave Types",
+        href: "/admin/leave/types",
+        icon: <CalendarClock className="h-5 w-5" />,
+        permission: "leave:read",
+      },
+      {
+        name: "Policies",
+        href: "/admin/leave/policies",
+        icon: <FileCheck className="h-5 w-5" />,
+        permission: "leave:read",
+      },
+    ],
+  },
+  {
     name: "Benefits",
     items: [
       {
         name: "Plans",
         href: "/admin/benefits",
         icon: <Heart className="h-5 w-5" />,
+        permission: "benefits:read",
+      },
+      {
+        name: "Enrollments",
+        href: "/admin/benefits/enrollments",
+        icon: <HeartHandshake className="h-5 w-5" />,
         permission: "benefits:read",
       },
     ],
@@ -130,10 +206,78 @@ const adminNavGroups: NavGroup[] = [
         permission: "performance:read",
       },
       {
+        name: "Goals",
+        href: "/admin/talent/goals",
+        icon: <Target className="h-5 w-5" />,
+        permission: "talent:read",
+      },
+      {
         name: "Succession",
         href: "/admin/talent/succession",
         icon: <ArrowUpRight className="h-5 w-5" />,
         permission: "succession:read",
+      },
+    ],
+  },
+  {
+    name: "Cases",
+    items: [
+      {
+        name: "All Cases",
+        href: "/admin/cases",
+        icon: <Ticket className="h-5 w-5" />,
+        permission: "cases:read",
+      },
+    ],
+  },
+  {
+    name: "Onboarding",
+    items: [
+      {
+        name: "Templates",
+        href: "/admin/onboarding/templates",
+        icon: <LayoutTemplate className="h-5 w-5" />,
+        permission: "onboarding:read",
+      },
+      {
+        name: "Active",
+        href: "/admin/onboarding/active",
+        icon: <UserCheck className="h-5 w-5" />,
+        permission: "onboarding:read",
+      },
+    ],
+  },
+  {
+    name: "Documents",
+    items: [
+      {
+        name: "Templates",
+        href: "/admin/documents/templates",
+        icon: <FileText className="h-5 w-5" />,
+        permission: "documents:read",
+      },
+    ],
+  },
+  {
+    name: "Learning",
+    items: [
+      {
+        name: "Courses",
+        href: "/admin/lms/courses",
+        icon: <BookOpen className="h-5 w-5" />,
+        permission: "courses:read",
+      },
+      {
+        name: "Learning Paths",
+        href: "/admin/lms/paths",
+        icon: <GraduationCap className="h-5 w-5" />,
+        permission: "courses:read",
+      },
+      {
+        name: "Assignments",
+        href: "/admin/lms/assignments",
+        icon: <ClipboardCheck className="h-5 w-5" />,
+        permission: "learning:assign",
       },
     ],
   },
@@ -201,23 +345,6 @@ const adminNavGroups: NavGroup[] = [
     ],
   },
   {
-    name: "Learning",
-    items: [
-      {
-        name: "Courses",
-        href: "/admin/lms/courses",
-        icon: <BookOpen className="h-5 w-5" />,
-        permission: "courses:read",
-      },
-      {
-        name: "Assignments",
-        href: "/admin/lms/assignments",
-        icon: <ClipboardCheck className="h-5 w-5" />,
-        permission: "learning:assign",
-      },
-    ],
-  },
-  {
     name: "Settings",
     items: [
       {
@@ -225,6 +352,12 @@ const adminNavGroups: NavGroup[] = [
         href: "/admin/settings/tenant",
         icon: <Settings className="h-5 w-5" />,
         permission: "tenant:read",
+      },
+      {
+        name: "Notifications",
+        href: "/admin/settings/notifications",
+        icon: <BellIcon className="h-5 w-5" />,
+        permission: "settings:read",
       },
       {
         name: "Integrations",

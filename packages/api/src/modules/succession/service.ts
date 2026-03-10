@@ -11,6 +11,7 @@ import type {
   TenantContext,
   SuccessionPlanRow,
   CandidateRow,
+  PipelineStatsRow,
 } from "./repository";
 import type {
   CreateSuccessionPlan,
@@ -38,6 +39,14 @@ type DomainEventType =
   | "succession.candidate.added"
   | "succession.candidate.updated"
   | "succession.candidate.removed";
+
+export interface PipelineStatsResponse {
+  total_critical_positions: number;
+  covered_positions: number;
+  uncovered_positions: number;
+  ready_now_candidates: number;
+  high_risk_positions: number;
+}
 
 // =============================================================================
 // Service
@@ -419,6 +428,23 @@ export class SuccessionService {
         candidate_count: 0,
         ready_now_count: 0,
       })),
+    };
+  }
+
+  async getPipelineStats(
+    context: TenantContext
+  ): Promise<ServiceResult<PipelineStatsResponse>> {
+    const stats = await this.repository.getPipelineStats(context);
+
+    return {
+      success: true,
+      data: {
+        total_critical_positions: stats.totalCriticalPositions,
+        covered_positions: stats.coveredPositions,
+        uncovered_positions: stats.uncoveredPositions,
+        ready_now_candidates: stats.readyNowCandidates,
+        high_risk_positions: stats.highRiskPositions,
+      },
     };
   }
 

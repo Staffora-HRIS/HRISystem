@@ -1,5 +1,8 @@
 /**
  * Workflows Repository
+ *
+ * Database operations for workflow management.
+ * Uses the 4-table schema: definitions, versions, instances, tasks.
  */
 
 import type { TransactionSql } from "postgres";
@@ -20,80 +23,118 @@ export interface WorkflowDefinitionRow {
   code: string;
   name: string;
   description: string | null;
-  category: string;
+  category: string | null;
   triggerType: string;
   triggerConfig: Record<string, unknown> | null;
-  steps: Record<string, unknown>[];
-  status: string;
-  version: number;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // Joined from active workflow_version:
+  steps?: Record<string, unknown>[];
+  version?: number;
+  versionId?: string;
+  versionStatus?: string;
 }
 
 export interface WorkflowInstanceRow {
   id: string;
   tenantId: string;
-  workflowDefinitionId: string;
-  workflowName: string;
-  entityType: string;
-  entityId: string;
-  initiatorId: string;
+  definitionId: string;
+  versionId: string;
   status: string;
-  currentStepKey: string | null;
-  contextData: Record<string, unknown> | null;
-  startedAt: Date;
+  context: Record<string, unknown>;
+  currentStepIndex: number;
+  startedAt: Date | null;
   completedAt: Date | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  errorMessage: string | null;
   createdAt: Date;
-  updatedAt: Date;
+  createdBy: string | null;
+  // Joined fields:
+  workflowName?: string;
 }
 
 export interface StepInstanceRow {
   id: string;
-  workflowInstanceId: string;
-  stepKey: string;
-  stepType: string;
+  instanceId: string;
+  stepIndex: number;
   stepName: string;
   status: string;
-  assigneeId: string | null;
+  assignedTo: string | null;
   assigneeName: string | null;
-  dueAt: Date | null;
-  startedAt: Date | null;
+  dueDate: Date | null;
   completedAt: Date | null;
-  decision: string | null;
-  comments: string | null;
+  completedBy: string | null;
+  completionAction: string | null;
+  completionComment: string | null;
+  context: Record<string, unknown>;
   createdAt: Date;
 }
 
 export class WorkflowRepository {
   constructor(private db: DatabaseClient) {}
 
+  // ===========================================================================
   // Workflow Definitions
-  async createDefinition(ctx: TenantContext, data: Partial<WorkflowDefinitionRow>): Promise<WorkflowDefinitionRow> {
+  // ===========================================================================
+
+  async createDefinition(ctx: TenantContext, data: {
+    code: string;
+    name: string;
+    description?: string | null;
+    category?: string | null;
+    triggerType?: string;
+    triggerConfig?: Record<string, unknown> | null;
+    steps?: Record<string, unknown>[];
+  }): Promise<WorkflowDefinitionRow> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
-      const id = crypto.randomUUID();
-      const [row] = await tx<WorkflowDefinitionRow[]>`
+      const defId = crypto.randomUUID();
+
+      // 1. Create the definition
+      const [def] = await tx<WorkflowDefinitionRow[]>`
         INSERT INTO app.workflow_definitions (
           id, tenant_id, code, name, description, category,
-          trigger_type, trigger_config, steps, status, version
+          trigger_type, trigger_config, is_active
         ) VALUES (
-          ${id}::uuid, ${ctx.tenantId}::uuid, ${data.code}, ${data.name},
-          ${data.description || null}, ${data.category},
-          ${data.triggerType}, ${data.triggerConfig ? JSON.stringify(data.triggerConfig) : null}::jsonb,
-          ${JSON.stringify(data.steps || [])}::jsonb, 'draft', ${data.version || 1}
+          ${defId}::uuid, ${ctx.tenantId}::uuid, ${data.code}, ${data.name},
+          ${data.description || null}, ${data.category || null},
+          ${data.triggerType || 'manual'}, ${data.triggerConfig ? JSON.stringify(data.triggerConfig) : '{}'}::jsonb,
+          true
         )
         RETURNING *
       `;
 
-      await this.writeOutbox(tx, ctx.tenantId, "workflow_definition", id, "workflows.definition.created", { definitionId: id });
-      return row as WorkflowDefinitionRow;
+      // 2. Create the initial version (draft) with steps
+      const [ver] = await tx`
+        INSERT INTO app.workflow_versions (
+          tenant_id, definition_id, status, steps
+        ) VALUES (
+          ${ctx.tenantId}::uuid, ${defId}::uuid, 'draft',
+          ${JSON.stringify(data.steps || [])}::jsonb
+        )
+        RETURNING id, version, status, steps
+      `;
+
+      await this.writeOutbox(tx, ctx.tenantId, "workflow_definition", defId, "workflows.definition.created", { definitionId: defId });
+
+      // Return combined result
+      const row = def as WorkflowDefinitionRow;
+      row.steps = ver.steps;
+      row.version = ver.version;
+      row.versionId = ver.id;
+      row.versionStatus = ver.status;
+      return row;
     });
   }
 
   async getDefinitionById(ctx: TenantContext, id: string): Promise<WorkflowDefinitionRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<WorkflowDefinitionRow[]>`
-        SELECT * FROM app.workflow_definitions
-        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
+        FROM app.workflow_definitions wd
+        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        WHERE wd.id = ${id}::uuid AND wd.tenant_id = ${ctx.tenantId}::uuid
       `;
     });
     return rows.length > 0 ? (rows[0] as WorkflowDefinitionRow) : null;
@@ -102,9 +143,10 @@ export class WorkflowRepository {
   async getDefinitionByCode(ctx: TenantContext, code: string): Promise<WorkflowDefinitionRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<WorkflowDefinitionRow[]>`
-        SELECT * FROM app.workflow_definitions
-        WHERE code = ${code} AND tenant_id = ${ctx.tenantId}::uuid AND status = 'active'
-        ORDER BY version DESC LIMIT 1
+        SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
+        FROM app.workflow_definitions wd
+        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        WHERE wd.code = ${code} AND wd.tenant_id = ${ctx.tenantId}::uuid AND wd.is_active = true
       `;
     });
     return rows.length > 0 ? (rows[0] as WorkflowDefinitionRow) : null;
@@ -114,12 +156,14 @@ export class WorkflowRepository {
     const limit = filters.limit || 20;
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<WorkflowDefinitionRow[]>`
-        SELECT * FROM app.workflow_definitions
-        WHERE tenant_id = ${ctx.tenantId}::uuid
-        ${filters.category ? tx`AND category = ${filters.category}` : tx``}
-        ${filters.status ? tx`AND status = ${filters.status}` : tx``}
-        ${filters.cursor ? tx`AND id < ${filters.cursor}::uuid` : tx``}
-        ORDER BY created_at DESC, id DESC
+        SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
+        FROM app.workflow_definitions wd
+        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        WHERE wd.tenant_id = ${ctx.tenantId}::uuid
+        ${filters.category ? tx`AND wd.category = ${filters.category}` : tx``}
+        ${filters.status === 'active' ? tx`AND wd.is_active = true` : filters.status === 'inactive' ? tx`AND wd.is_active = false` : tx``}
+        ${filters.cursor ? tx`AND wd.id < ${filters.cursor}::uuid` : tx``}
+        ORDER BY wd.created_at DESC, wd.id DESC
         LIMIT ${limit + 1}
       `;
     });
@@ -137,8 +181,7 @@ export class WorkflowRepository {
         UPDATE app.workflow_definitions SET
           name = COALESCE(${data.name}, name),
           description = COALESCE(${data.description}, description),
-          status = COALESCE(${data.status}, status),
-          steps = COALESCE(${data.steps ? JSON.stringify(data.steps) : null}::jsonb, steps),
+          category = COALESCE(${data.category}, category),
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         RETURNING *
@@ -154,8 +197,8 @@ export class WorkflowRepository {
   async activateDefinition(ctx: TenantContext, id: string): Promise<WorkflowDefinitionRow | null> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const [row] = await tx<WorkflowDefinitionRow[]>`
-        UPDATE app.workflow_definitions SET status = 'active', updated_at = now()
-        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'draft'
+        UPDATE app.workflow_definitions SET is_active = true, updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND is_active = false
         RETURNING *
       `;
       if (row) {
@@ -165,57 +208,85 @@ export class WorkflowRepository {
     });
   }
 
+  // ===========================================================================
   // Workflow Instances
+  // ===========================================================================
+
   async createInstance(ctx: TenantContext, data: {
-    workflowDefinitionId: string;
-    entityType: string;
-    entityId: string;
-    initiatorId: string;
+    definitionId?: string;
+    workflowDefinitionId?: string; // backward compat alias
+    entityType?: string;
+    entityId?: string;
+    initiatorId?: string;
     contextData?: Record<string, unknown>;
   }): Promise<WorkflowInstanceRow> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const id = crypto.randomUUID();
-      
-      // Get workflow definition
-      const [def] = await tx<WorkflowDefinitionRow[]>`
-        SELECT name, steps FROM app.workflow_definitions WHERE id = ${data.workflowDefinitionId}::uuid
+      const defId = data.definitionId || data.workflowDefinitionId;
+
+      // Get active version for this definition
+      const [ver] = await tx`
+        SELECT wv.id as version_id, wv.steps, wd.name
+        FROM app.workflow_definitions wd
+        JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        WHERE wd.id = ${defId}::uuid AND wd.tenant_id = ${ctx.tenantId}::uuid
       `;
-      
-      const firstStepKey = (def?.steps as any[])?.[0]?.stepKey || null;
+
+      if (!ver) {
+        throw new Error("No active workflow version found for this definition");
+      }
+
+      const steps = ver.steps as any[];
+      const createdBy = data.initiatorId || ctx.userId;
+
+      // Build context: store entity info inside the context jsonb
+      const instanceContext: Record<string, unknown> = {
+        ...(data.contextData || {}),
+      };
+      if (data.entityType || data.entityId) {
+        instanceContext.entity = {
+          type: data.entityType,
+          id: data.entityId,
+        };
+      }
 
       const [row] = await tx<WorkflowInstanceRow[]>`
         INSERT INTO app.workflow_instances (
-          id, tenant_id, workflow_definition_id, entity_type, entity_id,
-          initiator_id, status, current_step_key, context_data, started_at
+          id, tenant_id, definition_id, version_id, status,
+          context, current_step_index, created_by, started_at
         ) VALUES (
-          ${id}::uuid, ${ctx.tenantId}::uuid, ${data.workflowDefinitionId}::uuid,
-          ${data.entityType}, ${data.entityId}::uuid, ${data.initiatorId}::uuid,
-          'in_progress', ${firstStepKey}, ${data.contextData ? JSON.stringify(data.contextData) : null}::jsonb, now()
+          ${id}::uuid, ${ctx.tenantId}::uuid, ${defId}::uuid, ${ver.versionId}::uuid,
+          'in_progress', ${JSON.stringify(instanceContext)}::jsonb, 0,
+          ${createdBy}::uuid, now()
         )
-        RETURNING *, (SELECT name FROM app.workflow_definitions WHERE id = workflow_definition_id) as workflow_name
+        RETURNING *
       `;
 
-      // Create first step instance
-      if (def?.steps && (def.steps as any[]).length > 0) {
-        const firstStep = (def.steps as any[])[0];
+      // Create first step as a workflow_task
+      if (steps && steps.length > 0) {
+        const firstStep = steps[0];
         await tx`
-          INSERT INTO app.workflow_step_instances (
-            id, workflow_instance_id, step_key, step_type, step_name, status, started_at
+          INSERT INTO app.workflow_tasks (
+            id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+            context
           ) VALUES (
-            gen_random_uuid(), ${id}::uuid, ${firstStep.stepKey}, ${firstStep.stepType},
-            ${firstStep.name}, 'active', now()
+            gen_random_uuid(), ${ctx.tenantId}::uuid, ${id}::uuid,
+            0, ${firstStep.name || 'Step 1'}, 'in_progress', ${createdBy}::uuid,
+            ${JSON.stringify({ step_key: firstStep.stepKey, step_type: firstStep.type || firstStep.stepType })}::jsonb
           )
         `;
       }
 
       await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", id, "workflows.instance.started", {
         instanceId: id,
-        definitionId: data.workflowDefinitionId,
+        definitionId: defId,
         entityType: data.entityType,
         entityId: data.entityId,
       });
 
-      return row as WorkflowInstanceRow;
+      const result = row as WorkflowInstanceRow;
+      result.workflowName = ver.name;
+      return result;
     });
   }
 
@@ -224,7 +295,7 @@ export class WorkflowRepository {
       return tx<WorkflowInstanceRow[]>`
         SELECT wi.*, wd.name as workflow_name
         FROM app.workflow_instances wi
-        JOIN app.workflow_definitions wd ON wd.id = wi.workflow_definition_id
+        JOIN app.workflow_definitions wd ON wd.id = wi.definition_id
         WHERE wi.id = ${id}::uuid AND wi.tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -245,15 +316,15 @@ export class WorkflowRepository {
       return tx<WorkflowInstanceRow[]>`
         SELECT wi.*, wd.name as workflow_name
         FROM app.workflow_instances wi
-        JOIN app.workflow_definitions wd ON wd.id = wi.workflow_definition_id
+        JOIN app.workflow_definitions wd ON wd.id = wi.definition_id
         WHERE wi.tenant_id = ${ctx.tenantId}::uuid
-        ${filters.workflowDefinitionId ? tx`AND wi.workflow_definition_id = ${filters.workflowDefinitionId}::uuid` : tx``}
-        ${filters.entityType ? tx`AND wi.entity_type = ${filters.entityType}` : tx``}
-        ${filters.entityId ? tx`AND wi.entity_id = ${filters.entityId}::uuid` : tx``}
+        ${filters.workflowDefinitionId ? tx`AND wi.definition_id = ${filters.workflowDefinitionId}::uuid` : tx``}
+        ${filters.entityType ? tx`AND wi.context->'entity'->>'type' = ${filters.entityType}` : tx``}
+        ${filters.entityId ? tx`AND wi.context->'entity'->>'id' = ${filters.entityId}` : tx``}
         ${filters.status ? tx`AND wi.status = ${filters.status}` : tx``}
-        ${filters.initiatorId ? tx`AND wi.initiator_id = ${filters.initiatorId}::uuid` : tx``}
+        ${filters.initiatorId ? tx`AND wi.created_by = ${filters.initiatorId}::uuid` : tx``}
         ${filters.cursor ? tx`AND wi.id < ${filters.cursor}::uuid` : tx``}
-        ORDER BY wi.started_at DESC, wi.id DESC
+        ORDER BY wi.created_at DESC, wi.id DESC
         LIMIT ${limit + 1}
       `;
     });
@@ -268,29 +339,32 @@ export class WorkflowRepository {
   async getMyPendingApprovals(ctx: TenantContext, userId: string): Promise<StepInstanceRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<StepInstanceRow[]>`
-        SELECT wsi.*, u.first_name || ' ' || u.last_name as assignee_name
-        FROM app.workflow_step_instances wsi
-        JOIN app.workflow_instances wi ON wi.id = wsi.workflow_instance_id
-        LEFT JOIN app.users u ON u.id = wsi.assignee_id
+        SELECT wt.*, u.first_name || ' ' || u.last_name as assignee_name
+        FROM app.workflow_tasks wt
+        JOIN app.workflow_instances wi ON wi.id = wt.instance_id
+        LEFT JOIN app.users u ON u.id = wt.assigned_to
         WHERE wi.tenant_id = ${ctx.tenantId}::uuid
-          AND wsi.assignee_id = ${userId}::uuid
-          AND wsi.status = 'active'
-          AND wsi.step_type = 'approval'
-        ORDER BY wsi.created_at ASC
+          AND wt.assigned_to = ${userId}::uuid
+          AND wt.status IN ('pending', 'assigned', 'in_progress')
+          AND wt.context->>'step_type' = 'approval'
+        ORDER BY wt.created_at ASC
       `;
       return rows as StepInstanceRow[];
     });
   }
 
-  // Step Instances
+  // ===========================================================================
+  // Step Instances (workflow_tasks)
+  // ===========================================================================
+
   async getStepInstances(ctx: TenantContext, instanceId: string): Promise<StepInstanceRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<StepInstanceRow[]>`
-        SELECT wsi.*, u.first_name || ' ' || u.last_name as assignee_name
-        FROM app.workflow_step_instances wsi
-        LEFT JOIN app.users u ON u.id = wsi.assignee_id
-        WHERE wsi.workflow_instance_id = ${instanceId}::uuid
-        ORDER BY wsi.created_at ASC
+        SELECT wt.*, u.first_name || ' ' || u.last_name as assignee_name
+        FROM app.workflow_tasks wt
+        LEFT JOIN app.users u ON u.id = wt.assigned_to
+        WHERE wt.instance_id = ${instanceId}::uuid
+        ORDER BY wt.step_index ASC, wt.created_at ASC
       `;
       return rows as StepInstanceRow[];
     });
@@ -303,63 +377,67 @@ export class WorkflowRepository {
   }): Promise<StepInstanceRow | null> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const [step] = await tx<StepInstanceRow[]>`
-        UPDATE app.workflow_step_instances SET
+        UPDATE app.workflow_tasks SET
           status = 'completed',
-          decision = ${data.decision},
-          comments = ${data.comments || null},
-          completed_at = now()
-        WHERE id = ${stepId}::uuid AND status = 'active'
+          completion_action = ${data.decision},
+          completion_comment = ${data.comments || null},
+          completed_at = now(),
+          completed_by = ${data.processedBy}::uuid
+        WHERE id = ${stepId}::uuid AND status IN ('pending', 'assigned', 'in_progress')
         RETURNING *
       `;
 
       if (step) {
-        // Get instance and definition to determine next step
-        const [instance] = await tx<WorkflowInstanceRow[]>`
-          SELECT wi.*, wd.steps FROM app.workflow_instances wi
-          JOIN app.workflow_definitions wd ON wd.id = wi.workflow_definition_id
-          WHERE wi.id = ${step.workflowInstanceId}::uuid
+        // Get instance and version steps to determine next step
+        const [instance] = await tx`
+          SELECT wi.*, wv.steps
+          FROM app.workflow_instances wi
+          JOIN app.workflow_versions wv ON wv.id = wi.version_id
+          WHERE wi.id = ${step.instanceId}::uuid
         `;
 
         if (instance) {
-          const steps = (instance as any).steps as any[];
-          const currentStepIndex = steps.findIndex((s: any) => s.stepKey === step.stepKey);
-          
+          const steps = instance.steps as any[];
+          const currentStepIndex = step.stepIndex;
+
           if (data.decision === 'approved' && currentStepIndex < steps.length - 1) {
             // Move to next step
             const nextStep = steps[currentStepIndex + 1];
             await tx`
-              INSERT INTO app.workflow_step_instances (
-                id, workflow_instance_id, step_key, step_type, step_name, status, started_at
+              INSERT INTO app.workflow_tasks (
+                id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+                context
               ) VALUES (
-                gen_random_uuid(), ${instance.id}::uuid, ${nextStep.stepKey}, ${nextStep.stepType},
-                ${nextStep.name}, 'active', now()
+                gen_random_uuid(), ${ctx.tenantId}::uuid, ${instance.id}::uuid,
+                ${currentStepIndex + 1}, ${nextStep.name || `Step ${currentStepIndex + 2}`}, 'in_progress', ${data.processedBy}::uuid,
+                ${JSON.stringify({ step_key: nextStep.stepKey, step_type: nextStep.type || nextStep.stepType })}::jsonb
               )
             `;
             await tx`
-              UPDATE app.workflow_instances SET current_step_key = ${nextStep.stepKey}, updated_at = now()
+              UPDATE app.workflow_instances SET current_step_index = ${currentStepIndex + 1}
               WHERE id = ${instance.id}::uuid
             `;
           } else if (data.decision === 'approved') {
             // Workflow completed
             await tx`
-              UPDATE app.workflow_instances SET status = 'completed', completed_at = now(), updated_at = now()
+              UPDATE app.workflow_instances SET status = 'completed', completed_at = now()
               WHERE id = ${instance.id}::uuid
             `;
             await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", instance.id, "workflows.instance.completed", {
               instanceId: instance.id,
-              entityType: instance.entityType,
-              entityId: instance.entityId,
+              entityType: (instance.context as any)?.entity?.type,
+              entityId: (instance.context as any)?.entity?.id,
             });
           } else if (data.decision === 'rejected') {
-            // Workflow rejected
+            // Workflow rejected — cancel it
             await tx`
-              UPDATE app.workflow_instances SET status = 'cancelled', completed_at = now(), updated_at = now()
+              UPDATE app.workflow_instances SET status = 'cancelled', cancelled_at = now(), cancelled_by = ${data.processedBy}::uuid
               WHERE id = ${instance.id}::uuid
             `;
             await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", instance.id, "workflows.instance.rejected", {
               instanceId: instance.id,
-              entityType: instance.entityType,
-              entityId: instance.entityId,
+              entityType: (instance.context as any)?.entity?.type,
+              entityId: (instance.context as any)?.entity?.id,
             });
           }
         }
@@ -378,10 +456,10 @@ export class WorkflowRepository {
   async reassignStep(ctx: TenantContext, stepId: string, newAssigneeId: string, reason?: string): Promise<StepInstanceRow | null> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const [step] = await tx<StepInstanceRow[]>`
-        UPDATE app.workflow_step_instances SET
-          assignee_id = ${newAssigneeId}::uuid,
-          comments = COALESCE(comments || E'\n', '') || ${'Reassigned: ' + (reason || 'No reason provided')}
-        WHERE id = ${stepId}::uuid AND status = 'active'
+        UPDATE app.workflow_tasks SET
+          assigned_to = ${newAssigneeId}::uuid,
+          completion_comment = COALESCE(completion_comment || E'\n', '') || ${'Reassigned: ' + (reason || 'No reason provided')}
+        WHERE id = ${stepId}::uuid AND status IN ('pending', 'assigned', 'in_progress')
         RETURNING *
       `;
 
@@ -402,17 +480,18 @@ export class WorkflowRepository {
       const [row] = await tx<WorkflowInstanceRow[]>`
         UPDATE app.workflow_instances SET
           status = 'cancelled',
-          completed_at = now(),
-          updated_at = now()
+          cancelled_at = now(),
+          cancelled_by = ${ctx.userId}::uuid,
+          error_message = ${reason || null}
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status IN ('pending', 'in_progress')
         RETURNING *
       `;
 
       if (row) {
-        // Cancel all active steps
+        // Cancel all active tasks
         await tx`
-          UPDATE app.workflow_step_instances SET status = 'skipped'
-          WHERE workflow_instance_id = ${id}::uuid AND status IN ('pending', 'active')
+          UPDATE app.workflow_tasks SET status = 'cancelled'
+          WHERE instance_id = ${id}::uuid AND status IN ('pending', 'assigned', 'in_progress')
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", id, "workflows.instance.cancelled", {
@@ -424,6 +503,10 @@ export class WorkflowRepository {
       return row as WorkflowInstanceRow | null;
     });
   }
+
+  // ===========================================================================
+  // Outbox Helper
+  // ===========================================================================
 
   private async writeOutbox(
     tx: TransactionSql,

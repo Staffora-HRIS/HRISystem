@@ -11,6 +11,7 @@ import type {
   DocumentsRepository,
   DocumentRow,
   DocumentVersionRow,
+  MyDocumentsSummaryRow,
 } from "./repository";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
@@ -32,6 +33,26 @@ type DomainEventType =
   | "documents.document.updated"
   | "documents.document.deleted"
   | "documents.version.created";
+
+export interface MyDocumentsSummaryResponse {
+  totalDocuments: number;
+  byCategory: { category: string; count: number }[];
+  recentDocuments: {
+    id: string;
+    name: string;
+    category: string;
+    mimeType: string | null;
+    fileSize: number | null;
+    createdAt: string;
+  }[];
+  expiringDocuments: {
+    id: string;
+    name: string;
+    category: string;
+    expiresAt: string;
+  }[];
+  message?: string;
+}
 
 // =============================================================================
 // File Upload Constants
@@ -381,6 +402,59 @@ export class DocumentsService {
     return {
       success: true,
       data: documents.map(this.mapDocumentToResponse),
+    };
+  }
+
+  // ===========================================================================
+  // My Documents Summary (Self-Service Portal)
+  // ===========================================================================
+
+  async getMyDocumentsSummary(
+    context: TenantContext
+  ): Promise<ServiceResult<MyDocumentsSummaryResponse>> {
+    const summary = await this.repository.getMyDocumentsSummary(context);
+
+    if (!summary.employeeId) {
+      return {
+        success: true,
+        data: {
+          totalDocuments: 0,
+          byCategory: [],
+          recentDocuments: [],
+          expiringDocuments: [],
+          message: "No employee record found",
+        },
+      };
+    }
+
+    const totalDocuments = summary.categoryCounts.reduce(
+      (sum, c) => sum + (c.count || 0),
+      0
+    );
+
+    return {
+      success: true,
+      data: {
+        totalDocuments,
+        byCategory: summary.categoryCounts.map((c) => ({
+          category: c.category,
+          count: c.count,
+        })),
+        recentDocuments: summary.recentDocuments.map((d) => ({
+          id: d.id,
+          name: d.name,
+          category: d.category,
+          mimeType: d.mimeType,
+          fileSize: d.fileSize,
+          createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : String(d.createdAt),
+        })),
+        expiringDocuments: summary.expiringDocuments.map((d) => ({
+          id: d.id,
+          name: d.name,
+          category: d.category,
+          expiresAt: d.expiresAt instanceof Date ? d.expiresAt.toISOString() : String(d.expiresAt),
+        })),
+      },
     };
   }
 

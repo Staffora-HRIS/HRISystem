@@ -5,7 +5,6 @@ import {
   Plus,
   Search,
   Users,
-  DollarSign,
   Edit,
 } from "lucide-react";
 import {
@@ -27,18 +26,23 @@ import { api } from "~/lib/api-client";
 
 interface Position {
   id: string;
+  tenant_id: string;
+  code: string;
   title: string;
-  positionCode: string | null;
-  orgUnitId: string | null;
-  orgUnitName: string | null;
-  jobGrade: string | null;
-  minSalary: string | null;
-  maxSalary: string | null;
-  currency: string | null;
-  targetHeadcount: number;
-  currentHeadcount: number;
-  isActive: boolean;
-  createdAt: string;
+  description: string | null;
+  org_unit_id: string | null;
+  org_unit_name?: string;
+  job_grade: string | null;
+  min_salary: number | null;
+  max_salary: number | null;
+  currency: string;
+  is_manager: boolean;
+  headcount: number;
+  current_headcount?: number;
+  reports_to_position_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 interface PositionListResponse {
@@ -47,13 +51,13 @@ interface PositionListResponse {
   hasMore: boolean;
 }
 
-function formatCurrency(amount: string | null, currency: string | null): string {
-  if (!amount) return "-";
+function formatSalary(amount: number | null, currency: string): string {
+  if (amount == null) return "-";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currency || "USD",
     maximumFractionDigits: 0,
-  }).format(parseFloat(amount));
+  }).format(amount);
 }
 
 export default function AdminPositionsPage() {
@@ -84,9 +88,11 @@ export default function AdminPositionsPage() {
 
   // Calculate stats
   const totalPositions = positions.length;
-  const filledPositions = positions.filter((p) => p.currentHeadcount >= p.targetHeadcount).length;
+  const filledPositions = positions.filter(
+    (p) => (p.current_headcount ?? 0) >= p.headcount
+  ).length;
   const openPositions = positions.reduce(
-    (sum, p) => sum + Math.max(0, p.targetHeadcount - p.currentHeadcount),
+    (sum, p) => sum + Math.max(0, p.headcount - (p.current_headcount ?? 0)),
     0
   );
 
@@ -101,8 +107,8 @@ export default function AdminPositionsPage() {
           </div>
           <div>
             <div className="font-medium text-gray-900">{row.title}</div>
-            {row.positionCode && (
-              <div className="text-sm text-gray-500">{row.positionCode}</div>
+            {row.code && (
+              <div className="text-sm text-gray-500">{row.code}</div>
             )}
           </div>
         </div>
@@ -112,14 +118,14 @@ export default function AdminPositionsPage() {
       id: "department",
       header: "Department",
       cell: ({ row }) => (
-        <span className="text-gray-600">{row.orgUnitName || "-"}</span>
+        <span className="text-gray-600">{row.org_unit_name || "-"}</span>
       ),
     },
     {
       id: "grade",
       header: "Grade",
       cell: ({ row }) => (
-        <span className="text-gray-600">{row.jobGrade || "-"}</span>
+        <span className="text-gray-600">{row.job_grade || "-"}</span>
       ),
     },
     {
@@ -127,10 +133,10 @@ export default function AdminPositionsPage() {
       header: "Salary Range",
       cell: ({ row }) => (
         <div className="text-sm">
-          {row.minSalary || row.maxSalary ? (
+          {row.min_salary != null || row.max_salary != null ? (
             <span className="text-gray-600">
-              {formatCurrency(row.minSalary, row.currency)} -{" "}
-              {formatCurrency(row.maxSalary, row.currency)}
+              {formatSalary(row.min_salary, row.currency)} -{" "}
+              {formatSalary(row.max_salary, row.currency)}
             </span>
           ) : (
             <span className="text-gray-400">-</span>
@@ -141,27 +147,29 @@ export default function AdminPositionsPage() {
     {
       id: "headcount",
       header: "Headcount",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-gray-400" />
-          <span
-            className={
-              row.currentHeadcount < row.targetHeadcount
-                ? "text-orange-600"
-                : "text-gray-600"
-            }
-          >
-            {row.currentHeadcount} / {row.targetHeadcount}
-          </span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const current = row.current_headcount ?? 0;
+        const target = row.headcount;
+        return (
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-gray-400" />
+            <span
+              className={
+                current < target ? "text-orange-600" : "text-gray-600"
+              }
+            >
+              {current} / {target}
+            </span>
+          </div>
+        );
+      },
     },
     {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.isActive ? "success" : "secondary"}>
-          {row.isActive ? "Active" : "Inactive"}
+        <Badge variant={row.is_active ? "success" : "secondary"}>
+          {row.is_active ? "Active" : "Inactive"}
         </Badge>
       ),
     },

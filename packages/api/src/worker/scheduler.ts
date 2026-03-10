@@ -314,8 +314,8 @@ class Scheduler {
       SELECT
         rc.id as cycle_id,
         rc.name as cycle_name,
-        rc.self_review_deadline,
-        rc.manager_review_deadline,
+        rc.review_start,
+        rc.review_end,
         rc.tenant_id,
         r.id as review_id,
         r.employee_id,
@@ -324,17 +324,14 @@ class Scheduler {
         u.id as user_id,
         u.email,
         ep.first_name
-      FROM app.performance_reviews r
-      JOIN app.review_cycles rc ON rc.id = r.cycle_id
+      FROM app.reviews r
+      JOIN app.performance_cycles rc ON rc.id = r.cycle_id
       JOIN app.employees e ON e.id = r.employee_id
       LEFT JOIN app.users u ON u.id = e.user_id
       LEFT JOIN app.employee_personal ep ON ep.employee_id = e.id
-      WHERE rc.status = 'active'
+      WHERE rc.status IN ('active', 'review')
         AND r.status IN ('pending', 'in_progress')
-        AND (
-          (rc.self_review_deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + interval '3 days' AND r.review_type = 'self')
-          OR (rc.manager_review_deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + interval '3 days' AND r.review_type = 'manager')
-        )
+        AND rc.review_end BETWEEN CURRENT_DATE AND CURRENT_DATE + interval '3 days'
     `;
 
     console.log(`[Job] Found ${upcoming.length} pending reviews with upcoming deadlines`);

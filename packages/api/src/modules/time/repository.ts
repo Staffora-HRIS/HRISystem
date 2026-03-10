@@ -665,6 +665,70 @@ export class TimeRepository {
   // Helpers
   // ===========================================================================
 
+  async getScheduleAssignments(ctx: TenantContext): Promise<any[]> {
+    return this.db.withTransaction(ctx, async (tx: any) => {
+      return tx`
+        SELECT
+          sa.id,
+          sa.employee_id,
+          ep.first_name || ' ' || ep.last_name as employee_name,
+          s.schedule_id,
+          sc.name as schedule_name,
+          sa.assignment_date as effective_from,
+          NULL as effective_to
+        FROM app.shift_assignments sa
+        JOIN app.shifts s ON s.id = sa.shift_id
+        JOIN app.schedules sc ON sc.id = s.schedule_id
+        JOIN app.employees e ON e.id = sa.employee_id
+        LEFT JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.effective_to IS NULL
+        WHERE sa.tenant_id = ${ctx.tenantId}::uuid
+          AND sa.is_published = true
+        ORDER BY sa.assignment_date DESC
+        LIMIT 100
+      `;
+    });
+  }
+
+  async getStats(ctx: TenantContext): Promise<{
+    pendingApprovals: number;
+    totalHoursThisWeek: number;
+    overtimeHoursThisWeek: number;
+    activeEmployees: number;
+  }> {
+    return this.db.withTransaction(ctx, async (tx: any) => {
+      const [pending] = await tx`
+        SELECT COUNT(*)::int as count
+        FROM app.timesheets
+        WHERE status = 'submitted'
+          AND tenant_id = ${ctx.tenantId}::uuid
+      `;
+
+      const [hours] = await tx`
+        SELECT
+          COALESCE(SUM(total_regular_hours), 0)::numeric as regular,
+          COALESCE(SUM(total_overtime_hours), 0)::numeric as overtime
+        FROM app.timesheets
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+          AND period_start >= date_trunc('week', CURRENT_DATE)
+          AND period_start < date_trunc('week', CURRENT_DATE) + interval '7 days'
+      `;
+
+      const [active] = await tx`
+        SELECT COUNT(*)::int as count
+        FROM app.employees
+        WHERE status = 'active'
+          AND tenant_id = ${ctx.tenantId}::uuid
+      `;
+
+      return {
+        pendingApprovals: pending?.count ?? 0,
+        totalHoursThisWeek: Number(hours?.regular ?? 0),
+        overtimeHoursThisWeek: Number(hours?.overtime ?? 0),
+        activeEmployees: active?.count ?? 0,
+      };
+    });
+  }
+
   private async writeOutbox(
     tx: TransactionSql,
     tenantId: string,

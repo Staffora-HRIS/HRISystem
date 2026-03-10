@@ -8,8 +8,6 @@ import {
   Download,
   MoreHorizontal,
   Calendar,
-  Mail,
-  Phone,
 } from "lucide-react";
 import {
   Card,
@@ -31,21 +29,14 @@ import { api } from "~/lib/api-client";
 
 interface Employee {
   id: string;
-  employeeNumber: string;
-  firstName: string;
-  lastName: string;
-  preferredName: string | null;
-  email: string;
-  workPhone: string | null;
+  employee_number: string;
   status: string;
-  employmentType: string;
-  hireDate: string;
-  terminationDate: string | null;
-  positionTitle: string | null;
-  departmentName: string | null;
-  managerName: string | null;
-  locationName: string | null;
-  createdAt: string;
+  hire_date: string;
+  full_name: string;
+  display_name: string;
+  position_title: string | null;
+  org_unit_name: string | null;
+  manager_name: string | null;
 }
 
 interface EmployeeListResponse {
@@ -127,54 +118,50 @@ export default function AdminEmployeesPage() {
     {
       id: "employee",
       header: "Employee",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
-            {row.firstName[0]}
-            {row.lastName[0]}
-          </div>
-          <div>
-            <div className="font-medium text-gray-900">
-              {row.firstName} {row.lastName}
+      cell: ({ row }) => {
+        const initials = (row.display_name || row.full_name || "")
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase();
+        return (
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
+              {initials}
             </div>
-            <div className="text-sm text-gray-500">{row.employeeNumber}</div>
+            <div>
+              <div className="font-medium text-gray-900">
+                {row.display_name || row.full_name}
+              </div>
+              <div className="text-sm text-gray-500">{row.employee_number}</div>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       id: "position",
       header: "Position",
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.positionTitle || "-"}</div>
-          <div className="text-sm text-gray-500">{row.departmentName || "-"}</div>
+          <div className="font-medium">{row.position_title || "-"}</div>
+          <div className="text-sm text-gray-500">{row.org_unit_name || "-"}</div>
         </div>
       ),
     },
     {
-      id: "contact",
-      header: "Contact",
+      id: "manager",
+      header: "Manager",
       cell: ({ row }) => (
-        <div className="text-sm">
-          <div className="flex items-center gap-1 text-gray-600">
-            <Mail className="h-3 w-3" />
-            {row.email}
-          </div>
-          {row.workPhone && (
-            <div className="flex items-center gap-1 text-gray-500">
-              <Phone className="h-3 w-3" />
-              {row.workPhone}
-            </div>
-          )}
-        </div>
+        <div className="text-sm text-gray-600">{row.manager_name || "-"}</div>
       ),
     },
     {
       id: "hireDate",
       header: "Hire Date",
       cell: ({ row }) => (
-        <div className="text-sm text-gray-600">{formatDate(row.hireDate)}</div>
+        <div className="text-sm text-gray-600">{formatDate(row.hire_date)}</div>
       ),
     },
     {

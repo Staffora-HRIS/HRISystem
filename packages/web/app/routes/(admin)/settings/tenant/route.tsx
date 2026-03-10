@@ -181,22 +181,22 @@ export default function AdminTenantSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Timezone"
-              value={tenant?.timezone}
+              defaultValue={tenant?.timezone}
               options={TIMEZONES}
             />
             <Select
               label="Date Format"
-              value={tenant?.dateFormat}
+              defaultValue={tenant?.dateFormat}
               options={DATE_FORMATS}
             />
             <Select
               label="Currency"
-              value={tenant?.currency}
+              defaultValue={tenant?.currency}
               options={CURRENCIES}
             />
             <Select
               label="Work Week Starts On"
-              value={tenant?.workWeekStart}
+              defaultValue={tenant?.workWeekStart}
               options={WEEKDAYS}
             />
           </div>
@@ -215,7 +215,7 @@ export default function AdminTenantSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Fiscal Year Start Month"
-              value="01"
+              defaultValue="01"
               options={[
                 { value: "01", label: "January" },
                 { value: "02", label: "February" },
@@ -233,7 +233,7 @@ export default function AdminTenantSettingsPage() {
             />
             <Select
               label="Fiscal Year Start Day"
-              value="1"
+              defaultValue="1"
               options={Array.from({ length: 28 }, (_, i) => ({
                 value: String(i + 1),
                 label: String(i + 1),

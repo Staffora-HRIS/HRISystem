@@ -120,7 +120,7 @@ export default function RecruitmentPage() {
           <StatCard title="Open Positions" value={stats.openCount} icon={<Users className="h-5 w-5" />} />
           <StatCard title="On Hold" value={stats.onHoldCount} icon={<Calendar className="h-5 w-5" />} />
           <StatCard title="Filled" value={stats.filledCount} icon={<BarChart3 className="h-5 w-5" />} />
-          <StatCard title="Openings Remaining" value={stats.totalOpenings - stats.totalFilled} icon={<Users className="h-5 w-5" />} />
+          <StatCard title="Openings Remaining" value={(stats.totalOpenings ?? 0) - (stats.totalFilled ?? 0)} icon={<Users className="h-5 w-5" />} />
         </div>
       )}
 

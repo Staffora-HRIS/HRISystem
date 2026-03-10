@@ -51,6 +51,7 @@ export default [
         route("employees", "routes/(admin)/hr/employees/route.tsx"),
         route("employees/:employeeId", "routes/(admin)/hr/employees/[employeeId]/route.tsx"),
         route("positions", "routes/(admin)/hr/positions/route.tsx"),
+        route("contracts", "routes/(admin)/hr/contracts/route.tsx"),
         route("departments", "routes/(admin)/hr/departments/route.tsx"),
         route("organization", "routes/(admin)/hr/organization/route.tsx"),
         route("org-chart", "routes/(admin)/hr/org-chart/route.tsx"),
@@ -61,15 +62,26 @@ export default [
         index("routes/(admin)/time/index.tsx"),
         route("timesheets", "routes/(admin)/time/timesheets/route.tsx"),
         route("schedules", "routes/(admin)/time/schedules/route.tsx"),
+        route("policies", "routes/(admin)/time/policies/route.tsx"),
+        route("reports", "routes/(admin)/time/reports/route.tsx"),
       ]),
 
-      // Absence Management
+      // Leave Management
+      ...prefix("leave", [
+        index("routes/(admin)/leave/index.tsx"),
+        route("types", "routes/(admin)/leave/types/route.tsx"),
+        route("policies", "routes/(admin)/leave/policies/route.tsx"),
+        route("requests", "routes/(admin)/leave/requests/route.tsx"),
+      ]),
+
+      // Absence Management (legacy)
       route("absence", "routes/(admin)/absence/index.tsx"),
 
       // Talent Management
       ...prefix("talent", [
         index("routes/(admin)/talent/index.tsx"),
         route("performance", "routes/(admin)/talent/performance/route.tsx"),
+        route("goals", "routes/(admin)/talent/goals/route.tsx"),
         route("competencies", "routes/(admin)/talent/competencies/route.tsx"),
         route("succession", "routes/(admin)/talent/succession/route.tsx"),
         route("recruitment", "routes/(admin)/talent/recruitment/route.tsx"),
@@ -77,18 +89,27 @@ export default [
       ]),
 
       // Benefits Administration
-      route("benefits", "routes/(admin)/benefits/route.tsx"),
+      ...prefix("benefits", [
+        index("routes/(admin)/benefits/route.tsx"),
+        route("enrollments", "routes/(admin)/benefits/enrollments/route.tsx"),
+      ]),
 
       // Cases Administration
       ...prefix("cases", [
-        index("routes/(admin)/cases/index.tsx"),
+        index("routes/(admin)/cases/route.tsx"),
         route(":caseId", "routes/(admin)/cases/[caseId]/route.tsx"),
+      ]),
+
+      // Documents Administration
+      ...prefix("documents", [
+        route("templates", "routes/(admin)/documents/templates/route.tsx"),
       ]),
 
       // Onboarding Administration
       ...prefix("onboarding", [
         index("routes/(admin)/onboarding/index.tsx"),
         route("templates", "routes/(admin)/onboarding/templates/route.tsx"),
+        route("active", "routes/(admin)/onboarding/active/route.tsx"),
       ]),
 
       // Analytics
@@ -112,7 +133,7 @@ export default [
 
       // Reports
       ...prefix("reports", [
-        index("routes/(admin)/reports/index.tsx"),
+        index("routes/(admin)/reports/route.tsx"),
         route(":reportId", "routes/(admin)/reports/[reportId]/route.tsx"),
       ]),
 
@@ -120,6 +141,7 @@ export default [
       ...prefix("lms", [
         index("routes/(admin)/lms/index.tsx"),
         route("courses", "routes/(admin)/lms/courses/route.tsx"),
+        route("paths", "routes/(admin)/lms/paths/route.tsx"),
         route("assignments", "routes/(admin)/lms/assignments/route.tsx"),
       ]),
 
@@ -127,6 +149,7 @@ export default [
       ...prefix("settings", [
         index("routes/(admin)/settings/index.tsx"),
         route("tenant", "routes/(admin)/settings/tenant/route.tsx"),
+        route("notifications", "routes/(admin)/settings/notifications/route.tsx"),
         route("integrations", "routes/(admin)/settings/integrations/route.tsx"),
       ]),
     ]),

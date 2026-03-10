@@ -6,7 +6,8 @@
  */
 
 import { Elysia, t } from "elysia";
-import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { requirePermission } from "../../plugins";
+import { ErrorCodes } from "../../plugins/errors";
 import { OnboardingRepository } from "./repository";
 import { OnboardingService } from "./service";
 import { mapErrorToStatus } from "../../lib/route-helpers";
@@ -60,10 +61,10 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       return { checklists: result.items, count: result.items.length };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("onboarding", "read")],
     detail: { tags: ["Onboarding"], summary: "List onboarding checklists" }
   })
 
@@ -99,7 +100,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
         required: t.Optional(t.Boolean()),
       }))),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("onboarding", "write")],
     detail: { tags: ["Onboarding"], summary: "Create onboarding checklist" }
   })
 
@@ -123,7 +124,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: t.Object({
@@ -132,7 +133,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("onboarding", "read")],
     detail: { tags: ["Onboarding"], summary: "List onboarding instances" }
   })
 
@@ -160,7 +161,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       startDate: t.String({ format: "date" }),
       buddyId: t.Optional(UuidSchema),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("onboarding", "write")],
     detail: { tags: ["Onboarding"], summary: "Start onboarding for employee" }
   })
 
@@ -177,7 +178,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("onboarding", "read")],
     detail: { tags: ["Onboarding"], summary: "Get onboarding instance" }
   })
 
@@ -194,16 +195,13 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema, taskId: t.String() }),
+    beforeHandle: [requirePermission("onboarding", "write")],
     detail: { tags: ["Onboarding"], summary: "Complete onboarding task" }
   })
 
   // My Onboarding
   .get("/my-onboarding", async (ctx) => {
-    const { tenant, user, onboardingService, onboardingRepository, tenantContext, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
+    const { onboardingService, onboardingRepository, tenantContext, set } = ctx as any;
 
     try {
       const employeeId = await onboardingRepository.getEmployeeIdByUserId(tenantContext);
@@ -216,9 +214,10 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       return { instance: result.data || null };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
+    beforeHandle: [requirePermission("onboarding", "read")],
     detail: { tags: ["Onboarding"], summary: "Get my onboarding" }
   });
 

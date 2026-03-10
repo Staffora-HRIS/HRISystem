@@ -27,12 +27,12 @@ interface PerformanceCycle {
 export default function TalentAdminPage() {
   const { data: requisitionsData } = useQuery({
     queryKey: ["admin-requisitions"],
-    queryFn: () => api.get<{ requisitions: Requisition[]; count: number }>("/talent/requisitions"),
+    queryFn: () => api.get<{ requisitions: Requisition[]; count: number }>("/recruitment/requisitions"),
   });
 
   const { data: cyclesData } = useQuery({
     queryKey: ["admin-performance-cycles"],
-    queryFn: () => api.get<{ cycles: PerformanceCycle[] }>("/talent/performance/cycles"),
+    queryFn: () => api.get<{ cycles: PerformanceCycle[] }>("/talent/review-cycles"),
   });
 
   const requisitions = requisitionsData?.requisitions || [];

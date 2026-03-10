@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { Clock, Calendar, FileSpreadsheet, AlertTriangle, CheckCircle } from "lucide-react";
+import { Clock, Calendar, FileSpreadsheet, AlertTriangle, CheckCircle, Shield } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -63,6 +63,12 @@ export default function TimeAdminPage() {
           <p className="text-gray-600">Manage timesheets and schedules</p>
         </div>
         <div className="flex gap-2">
+          <Link to="/admin/time/policies">
+            <Button variant="outline">
+              <Shield className="h-4 w-4 mr-2" />
+              Policies
+            </Button>
+          </Link>
           <Link to="/admin/time/schedules">
             <Button variant="outline">
               <Calendar className="h-4 w-4 mr-2" />

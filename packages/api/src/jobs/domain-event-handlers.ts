@@ -276,23 +276,12 @@ async function handleTimeEventRecorded(
   const eventTime = new Date(timeEvent.recordedAt);
   const hour = eventTime.getHours();
 
-  // Example: Flag late arrivals (after 9 AM)
+  // Flag late arrivals (after 9 AM)
   if (timeEvent.eventType === "clock_in" && hour >= 9) {
-    await ctx.db.withSystemContext(async (tx) => {
-      await tx`
-        INSERT INTO app.analytics_events (
-          tenant_id, event_type, event_data, created_at
-        )
-        VALUES (
-          ${event.tenantId}::uuid, 'attendance.late_arrival',
-          ${JSON.stringify({
-            employeeId: timeEvent.employeeId,
-            recordedAt: timeEvent.recordedAt,
-            lateByMinutes: (hour - 9) * 60 + eventTime.getMinutes(),
-          })}::jsonb,
-          now()
-        )
-      `;
+    ctx.log.warn("Late arrival detected", {
+      employeeId: timeEvent.employeeId,
+      recordedAt: timeEvent.recordedAt,
+      lateByMinutes: (hour - 9) * 60 + eventTime.getMinutes(),
     });
   }
 }

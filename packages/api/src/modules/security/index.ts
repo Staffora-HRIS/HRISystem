@@ -16,6 +16,8 @@ export { portalRoutes, type PortalRoutes } from "./portal.routes";
 export { managerRoutes, type ManagerRoutes } from "./manager.routes";
 
 // Services
+export { SecurityService } from "./service";
+export { SecurityRepository } from "./repository";
 export { FieldPermissionService, FieldPermissionError } from "./field-permission.service";
 export { PortalService, PortalAccessError } from "./portal.service";
 export type { PortalNavigationItem } from "./portal.service";

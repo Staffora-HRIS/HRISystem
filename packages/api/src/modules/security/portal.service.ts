@@ -50,12 +50,14 @@ export class PortalService {
   /**
    * Get all available portals in the system
    */
-  async getAllPortals(): Promise<Portal[]> {
-    const rows = await this.db.query<PortalRow>`
-      SELECT id, code, name, description, base_path, is_active, icon
-      FROM app.portals
-      ORDER BY name
-    `;
+  async getAllPortals(ctx: TenantContext): Promise<Portal[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PortalRow[]>`
+        SELECT id, code, name, description, base_path, is_active, icon
+        FROM app.portals
+        ORDER BY name
+      `;
+    });
 
     return rows.map(this.mapPortalRow);
   }
@@ -63,13 +65,15 @@ export class PortalService {
   /**
    * Get active portals
    */
-  async getActivePortals(): Promise<Portal[]> {
-    const rows = await this.db.query<PortalRow>`
-      SELECT id, code, name, description, base_path, is_active, icon
-      FROM app.portals
-      WHERE is_active = true
-      ORDER BY name
-    `;
+  async getActivePortals(ctx: TenantContext): Promise<Portal[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PortalRow[]>`
+        SELECT id, code, name, description, base_path, is_active, icon
+        FROM app.portals
+        WHERE is_active = true
+        ORDER BY name
+      `;
+    });
 
     return rows.map(this.mapPortalRow);
   }
@@ -77,12 +81,14 @@ export class PortalService {
   /**
    * Get portal by code
    */
-  async getPortalByCode(code: PortalType): Promise<Portal | null> {
-    const rows = await this.db.query<PortalRow>`
-      SELECT id, code, name, description, base_path, is_active, icon
-      FROM app.portals
-      WHERE code = ${code}
-    `;
+  async getPortalByCode(ctx: TenantContext, code: PortalType): Promise<Portal | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PortalRow[]>`
+        SELECT id, code, name, description, base_path, is_active, icon
+        FROM app.portals
+        WHERE code = ${code}
+      `;
+    });
 
     return rows.length > 0 ? this.mapPortalRow(rows[0]) : null;
   }

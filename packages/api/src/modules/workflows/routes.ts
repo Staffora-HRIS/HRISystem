@@ -3,7 +3,7 @@
  */
 
 import { Elysia } from "elysia";
-import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
 import { WorkflowService } from "./service";
 import { WorkflowRepository } from "./repository";
@@ -38,7 +38,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     query: schemas.PaginationQuerySchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "List workflow definitions" }
   })
 
@@ -55,14 +55,14 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("VALIDATION_ERROR:")) {
         set.status = 400;
-        return { error: { code: "VALIDATION_ERROR", message: error.message.replace("VALIDATION_ERROR: ", "") } };
+        return { error: { code: ErrorCodes.VALIDATION_ERROR, message: error.message.replace("VALIDATION_ERROR: ", "") } };
       }
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.CreateWorkflowDefinitionSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Create workflow definition" }
   })
 
@@ -81,7 +81,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "Get workflow definition by ID" }
   })
 
@@ -105,7 +105,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
   }, {
     params: schemas.IdParamsSchema,
     body: schemas.UpdateWorkflowDefinitionSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Update workflow definition" }
   })
 
@@ -124,7 +124,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Activate workflow definition" }
   })
 
@@ -140,7 +140,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     query: schemas.WorkflowInstanceFiltersSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "List workflow instances" }
   })
 
@@ -161,14 +161,14 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       }
       if (error.message.startsWith("VALIDATION_ERROR:")) {
         set.status = 400;
-        return { error: { code: "VALIDATION_ERROR", message: error.message.replace("VALIDATION_ERROR: ", "") } };
+        return { error: { code: ErrorCodes.VALIDATION_ERROR, message: error.message.replace("VALIDATION_ERROR: ", "") } };
       }
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.CreateWorkflowInstanceSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Start workflow instance" }
   })
 
@@ -187,7 +187,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "Get workflow instance by ID" }
   })
 
@@ -207,7 +207,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "Get workflow instance steps" }
   })
 
@@ -230,7 +230,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     params: schemas.IdParamsSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Cancel workflow instance" }
   })
 
@@ -255,7 +255,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.ProcessStepActionSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Process workflow step (approve/reject)" }
   })
 
@@ -278,7 +278,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     }
   }, {
     body: schemas.ReassignStepSchema,
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "write")],
     detail: { tags: ["Workflows"], summary: "Reassign workflow step" }
   })
 
@@ -294,7 +294,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("workflows", "read")],
     detail: { tags: ["Workflows"], summary: "Get my pending approvals" }
   });
 

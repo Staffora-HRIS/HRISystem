@@ -23,6 +23,7 @@ import {
   auditPlugin,
   betterAuthPlugin,
 } from "./plugins";
+import { ErrorCodes } from "./plugins/errors";
 
 // Import modules
 import { hrRoutes } from "./modules/hr";
@@ -448,7 +449,7 @@ export const app = new Elysia()
     set.status = 404;
     return {
       error: {
-        code: "NOT_FOUND",
+        code: ErrorCodes.NOT_FOUND,
         message: "The requested resource was not found",
         requestId: `req_${Date.now().toString(36)}`,
       },

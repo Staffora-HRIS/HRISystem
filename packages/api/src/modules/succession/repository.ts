@@ -67,6 +67,14 @@ export interface CandidateRow {
   updatedAt: Date;
 }
 
+export interface PipelineStatsRow {
+  totalCriticalPositions: number;
+  coveredPositions: number;
+  uncoveredPositions: number;
+  readyNowCandidates: number;
+  highRiskPositions: number;
+}
+
 export interface PaginatedResult<T> {
   items: T[];
   nextCursor: string | null;
@@ -91,62 +99,64 @@ export class SuccessionRepository {
   ): Promise<PaginatedResult<SuccessionPlanRow>> {
     const limit = pagination.limit ?? 20;
 
-    const rows = await this.db.query<SuccessionPlanRow>`
-      SELECT
-        sp.id,
-        sp.tenant_id as "tenantId",
-        sp.position_id as "positionId",
-        p.title as "positionTitle",
-        p.org_unit_id as "orgUnitId",
-        ou.name as "orgUnitName",
-        pa.employee_id as "incumbentId",
-        app.get_employee_display_name(pa.employee_id) as "incumbentName",
-        sp.is_critical_role as "isCriticalRole",
-        sp.criticality_reason as "criticalityReason",
-        sp.risk_level as "riskLevel",
-        sp.incumbent_retirement_risk as "incumbentRetirementRisk",
-        sp.incumbent_flight_risk as "incumbentFlightRisk",
-        sp.market_scarcity as "marketScarcity",
-        sp.notes,
-        COALESCE(c.candidate_count, 0)::int as "candidateCount",
-        COALESCE(c.ready_now_count, 0)::int as "readyNowCount",
-        sp.last_reviewed_at as "lastReviewedAt",
-        sp.next_review_date as "nextReviewDate",
-        sp.is_active as "isActive",
-        sp.created_at as "createdAt",
-        sp.updated_at as "updatedAt"
-      FROM app.succession_plans sp
-      INNER JOIN app.positions p ON sp.position_id = p.id
-      LEFT JOIN app.org_units ou ON p.org_unit_id = ou.id
-      LEFT JOIN LATERAL (
-        SELECT pa2.employee_id
-        FROM app.position_assignments pa2
-        WHERE pa2.position_id = sp.position_id
-          AND pa2.is_primary = true
-          AND pa2.effective_to IS NULL
-        LIMIT 1
-      ) pa ON true
-      LEFT JOIN LATERAL (
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<SuccessionPlanRow[]>`
         SELECT
-          COUNT(*)::int as candidate_count,
-          COUNT(*) FILTER (WHERE sc.readiness = 'ready_now')::int as ready_now_count
-        FROM app.succession_candidates sc
-        WHERE sc.plan_id = sp.id AND sc.is_active = true
-      ) c ON true
-      WHERE sp.tenant_id = ${context.tenantId}::uuid
-        AND sp.is_active = true
-        ${filters.is_critical !== undefined ? this.db.client`AND sp.is_critical_role = ${filters.is_critical}` : this.db.client``}
-        ${filters.risk_level ? this.db.client`AND sp.risk_level = ${filters.risk_level}` : this.db.client``}
-        ${filters.org_unit_id ? this.db.client`AND p.org_unit_id = ${filters.org_unit_id}::uuid` : this.db.client``}
-        ${filters.has_ready_successor !== undefined
-          ? filters.has_ready_successor
-            ? this.db.client`AND COALESCE(c.ready_now_count, 0) > 0`
-            : this.db.client`AND COALESCE(c.ready_now_count, 0) = 0`
-          : this.db.client``}
-        ${pagination.cursor ? this.db.client`AND sp.id > ${pagination.cursor}::uuid` : this.db.client``}
-      ORDER BY sp.is_critical_role DESC, sp.risk_level DESC, sp.id
-      LIMIT ${limit + 1}
-    `;
+          sp.id,
+          sp.tenant_id as "tenantId",
+          sp.position_id as "positionId",
+          p.title as "positionTitle",
+          p.org_unit_id as "orgUnitId",
+          ou.name as "orgUnitName",
+          pa.employee_id as "incumbentId",
+          app.get_employee_display_name(pa.employee_id) as "incumbentName",
+          sp.is_critical_role as "isCriticalRole",
+          sp.criticality_reason as "criticalityReason",
+          sp.risk_level as "riskLevel",
+          sp.incumbent_retirement_risk as "incumbentRetirementRisk",
+          sp.incumbent_flight_risk as "incumbentFlightRisk",
+          sp.market_scarcity as "marketScarcity",
+          sp.notes,
+          COALESCE(c.candidate_count, 0)::int as "candidateCount",
+          COALESCE(c.ready_now_count, 0)::int as "readyNowCount",
+          sp.last_reviewed_at as "lastReviewedAt",
+          sp.next_review_date as "nextReviewDate",
+          sp.is_active as "isActive",
+          sp.created_at as "createdAt",
+          sp.updated_at as "updatedAt"
+        FROM app.succession_plans sp
+        INNER JOIN app.positions p ON sp.position_id = p.id
+        LEFT JOIN app.org_units ou ON p.org_unit_id = ou.id
+        LEFT JOIN LATERAL (
+          SELECT pa2.employee_id
+          FROM app.position_assignments pa2
+          WHERE pa2.position_id = sp.position_id
+            AND pa2.is_primary = true
+            AND pa2.effective_to IS NULL
+          LIMIT 1
+        ) pa ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*)::int as candidate_count,
+            COUNT(*) FILTER (WHERE sc.readiness = 'ready_now')::int as ready_now_count
+          FROM app.succession_candidates sc
+          WHERE sc.plan_id = sp.id AND sc.is_active = true
+        ) c ON true
+        WHERE sp.tenant_id = ${context.tenantId}::uuid
+          AND sp.is_active = true
+          ${filters.is_critical !== undefined ? tx`AND sp.is_critical_role = ${filters.is_critical}` : tx``}
+          ${filters.risk_level ? tx`AND sp.risk_level = ${filters.risk_level}` : tx``}
+          ${filters.org_unit_id ? tx`AND p.org_unit_id = ${filters.org_unit_id}::uuid` : tx``}
+          ${filters.has_ready_successor !== undefined
+            ? filters.has_ready_successor
+              ? tx`AND COALESCE(c.ready_now_count, 0) > 0`
+              : tx`AND COALESCE(c.ready_now_count, 0) = 0`
+            : tx``}
+          ${pagination.cursor ? tx`AND sp.id > ${pagination.cursor}::uuid` : tx``}
+        ORDER BY sp.is_critical_role DESC, sp.risk_level DESC, sp.id
+        LIMIT ${limit + 1}
+      `;
+    });
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
@@ -159,51 +169,53 @@ export class SuccessionRepository {
     context: TenantContext,
     id: string
   ): Promise<SuccessionPlanRow | null> {
-    const rows = await this.db.query<SuccessionPlanRow>`
-      SELECT
-        sp.id,
-        sp.tenant_id as "tenantId",
-        sp.position_id as "positionId",
-        p.title as "positionTitle",
-        p.org_unit_id as "orgUnitId",
-        ou.name as "orgUnitName",
-        pa.employee_id as "incumbentId",
-        app.get_employee_display_name(pa.employee_id) as "incumbentName",
-        sp.is_critical_role as "isCriticalRole",
-        sp.criticality_reason as "criticalityReason",
-        sp.risk_level as "riskLevel",
-        sp.incumbent_retirement_risk as "incumbentRetirementRisk",
-        sp.incumbent_flight_risk as "incumbentFlightRisk",
-        sp.market_scarcity as "marketScarcity",
-        sp.notes,
-        COALESCE(c.candidate_count, 0)::int as "candidateCount",
-        COALESCE(c.ready_now_count, 0)::int as "readyNowCount",
-        sp.last_reviewed_at as "lastReviewedAt",
-        sp.next_review_date as "nextReviewDate",
-        sp.is_active as "isActive",
-        sp.created_at as "createdAt",
-        sp.updated_at as "updatedAt"
-      FROM app.succession_plans sp
-      INNER JOIN app.positions p ON sp.position_id = p.id
-      LEFT JOIN app.org_units ou ON p.org_unit_id = ou.id
-      LEFT JOIN LATERAL (
-        SELECT pa2.employee_id
-        FROM app.position_assignments pa2
-        WHERE pa2.position_id = sp.position_id
-          AND pa2.is_primary = true
-          AND pa2.effective_to IS NULL
-        LIMIT 1
-      ) pa ON true
-      LEFT JOIN LATERAL (
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<SuccessionPlanRow[]>`
         SELECT
-          COUNT(*)::int as candidate_count,
-          COUNT(*) FILTER (WHERE sc.readiness = 'ready_now')::int as ready_now_count
-        FROM app.succession_candidates sc
-        WHERE sc.plan_id = sp.id AND sc.is_active = true
-      ) c ON true
-      WHERE sp.id = ${id}::uuid
-        AND sp.tenant_id = ${context.tenantId}::uuid
-    `;
+          sp.id,
+          sp.tenant_id as "tenantId",
+          sp.position_id as "positionId",
+          p.title as "positionTitle",
+          p.org_unit_id as "orgUnitId",
+          ou.name as "orgUnitName",
+          pa.employee_id as "incumbentId",
+          app.get_employee_display_name(pa.employee_id) as "incumbentName",
+          sp.is_critical_role as "isCriticalRole",
+          sp.criticality_reason as "criticalityReason",
+          sp.risk_level as "riskLevel",
+          sp.incumbent_retirement_risk as "incumbentRetirementRisk",
+          sp.incumbent_flight_risk as "incumbentFlightRisk",
+          sp.market_scarcity as "marketScarcity",
+          sp.notes,
+          COALESCE(c.candidate_count, 0)::int as "candidateCount",
+          COALESCE(c.ready_now_count, 0)::int as "readyNowCount",
+          sp.last_reviewed_at as "lastReviewedAt",
+          sp.next_review_date as "nextReviewDate",
+          sp.is_active as "isActive",
+          sp.created_at as "createdAt",
+          sp.updated_at as "updatedAt"
+        FROM app.succession_plans sp
+        INNER JOIN app.positions p ON sp.position_id = p.id
+        LEFT JOIN app.org_units ou ON p.org_unit_id = ou.id
+        LEFT JOIN LATERAL (
+          SELECT pa2.employee_id
+          FROM app.position_assignments pa2
+          WHERE pa2.position_id = sp.position_id
+            AND pa2.is_primary = true
+            AND pa2.effective_to IS NULL
+          LIMIT 1
+        ) pa ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*)::int as candidate_count,
+            COUNT(*) FILTER (WHERE sc.readiness = 'ready_now')::int as ready_now_count
+          FROM app.succession_candidates sc
+          WHERE sc.plan_id = sp.id AND sc.is_active = true
+        ) c ON true
+        WHERE sp.id = ${id}::uuid
+          AND sp.tenant_id = ${context.tenantId}::uuid
+      `;
+    });
 
     return rows[0] ?? null;
   }
@@ -216,90 +228,94 @@ export class SuccessionRepository {
     context: TenantContext,
     planId: string
   ): Promise<CandidateRow[]> {
-    return await this.db.query<CandidateRow>`
-      SELECT
-        sc.id,
-        sc.tenant_id as "tenantId",
-        sc.plan_id as "planId",
-        sc.employee_id as "employeeId",
-        app.get_employee_display_name(sc.employee_id) as "employeeName",
-        (
-          SELECT p.title
-          FROM app.position_assignments pa
-          INNER JOIN app.positions p ON pa.position_id = p.id
-          WHERE pa.employee_id = sc.employee_id
-            AND pa.is_primary = true
-            AND pa.effective_to IS NULL
-          LIMIT 1
-        ) as "currentPosition",
-        (
-          SELECT ou.name
-          FROM app.position_assignments pa
-          INNER JOIN app.positions p ON pa.position_id = p.id
-          INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-          WHERE pa.employee_id = sc.employee_id
-            AND pa.is_primary = true
-            AND pa.effective_to IS NULL
-          LIMIT 1
-        ) as "currentDepartment",
-        sc.readiness,
-        sc.ranking,
-        sc.assessment_notes as "assessmentNotes",
-        sc.strengths,
-        sc.development_areas as "developmentAreas",
-        sc.is_active as "isActive",
-        sc.created_at as "createdAt",
-        sc.updated_at as "updatedAt"
-      FROM app.succession_candidates sc
-      WHERE sc.plan_id = ${planId}::uuid
-        AND sc.tenant_id = ${context.tenantId}::uuid
-        AND sc.is_active = true
-      ORDER BY sc.ranking
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<CandidateRow[]>`
+        SELECT
+          sc.id,
+          sc.tenant_id as "tenantId",
+          sc.plan_id as "planId",
+          sc.employee_id as "employeeId",
+          app.get_employee_display_name(sc.employee_id) as "employeeName",
+          (
+            SELECT p.title
+            FROM app.position_assignments pa
+            INNER JOIN app.positions p ON pa.position_id = p.id
+            WHERE pa.employee_id = sc.employee_id
+              AND pa.is_primary = true
+              AND pa.effective_to IS NULL
+            LIMIT 1
+          ) as "currentPosition",
+          (
+            SELECT ou.name
+            FROM app.position_assignments pa
+            INNER JOIN app.positions p ON pa.position_id = p.id
+            INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
+            WHERE pa.employee_id = sc.employee_id
+              AND pa.is_primary = true
+              AND pa.effective_to IS NULL
+            LIMIT 1
+          ) as "currentDepartment",
+          sc.readiness,
+          sc.ranking,
+          sc.assessment_notes as "assessmentNotes",
+          sc.strengths,
+          sc.development_areas as "developmentAreas",
+          sc.is_active as "isActive",
+          sc.created_at as "createdAt",
+          sc.updated_at as "updatedAt"
+        FROM app.succession_candidates sc
+        WHERE sc.plan_id = ${planId}::uuid
+          AND sc.tenant_id = ${context.tenantId}::uuid
+          AND sc.is_active = true
+        ORDER BY sc.ranking
+      `;
+    });
   }
 
   async findCandidateById(
     context: TenantContext,
     id: string
   ): Promise<CandidateRow | null> {
-    const rows = await this.db.query<CandidateRow>`
-      SELECT
-        sc.id,
-        sc.tenant_id as "tenantId",
-        sc.plan_id as "planId",
-        sc.employee_id as "employeeId",
-        app.get_employee_display_name(sc.employee_id) as "employeeName",
-        (
-          SELECT p.title
-          FROM app.position_assignments pa
-          INNER JOIN app.positions p ON pa.position_id = p.id
-          WHERE pa.employee_id = sc.employee_id
-            AND pa.is_primary = true
-            AND pa.effective_to IS NULL
-          LIMIT 1
-        ) as "currentPosition",
-        (
-          SELECT ou.name
-          FROM app.position_assignments pa
-          INNER JOIN app.positions p ON pa.position_id = p.id
-          INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-          WHERE pa.employee_id = sc.employee_id
-            AND pa.is_primary = true
-            AND pa.effective_to IS NULL
-          LIMIT 1
-        ) as "currentDepartment",
-        sc.readiness,
-        sc.ranking,
-        sc.assessment_notes as "assessmentNotes",
-        sc.strengths,
-        sc.development_areas as "developmentAreas",
-        sc.is_active as "isActive",
-        sc.created_at as "createdAt",
-        sc.updated_at as "updatedAt"
-      FROM app.succession_candidates sc
-      WHERE sc.id = ${id}::uuid
-        AND sc.tenant_id = ${context.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<CandidateRow[]>`
+        SELECT
+          sc.id,
+          sc.tenant_id as "tenantId",
+          sc.plan_id as "planId",
+          sc.employee_id as "employeeId",
+          app.get_employee_display_name(sc.employee_id) as "employeeName",
+          (
+            SELECT p.title
+            FROM app.position_assignments pa
+            INNER JOIN app.positions p ON pa.position_id = p.id
+            WHERE pa.employee_id = sc.employee_id
+              AND pa.is_primary = true
+              AND pa.effective_to IS NULL
+            LIMIT 1
+          ) as "currentPosition",
+          (
+            SELECT ou.name
+            FROM app.position_assignments pa
+            INNER JOIN app.positions p ON pa.position_id = p.id
+            INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
+            WHERE pa.employee_id = sc.employee_id
+              AND pa.is_primary = true
+              AND pa.effective_to IS NULL
+            LIMIT 1
+          ) as "currentDepartment",
+          sc.readiness,
+          sc.ranking,
+          sc.assessment_notes as "assessmentNotes",
+          sc.strengths,
+          sc.development_areas as "developmentAreas",
+          sc.is_active as "isActive",
+          sc.created_at as "createdAt",
+          sc.updated_at as "updatedAt"
+        FROM app.succession_candidates sc
+        WHERE sc.id = ${id}::uuid
+          AND sc.tenant_id = ${context.tenantId}::uuid
+      `;
+    });
 
     return rows[0] ?? null;
   }
@@ -517,14 +533,71 @@ export class SuccessionRepository {
   // ===========================================================================
 
   async getPipeline(context: TenantContext): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT * FROM app.get_succession_pipeline(${context.tenantId}::uuid)
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT * FROM app.get_succession_pipeline(${context.tenantId}::uuid)
+      `;
+    });
   }
 
   async getGaps(context: TenantContext): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT * FROM app.get_succession_gaps(${context.tenantId}::uuid)
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT * FROM app.get_succession_gaps(${context.tenantId}::uuid)
+      `;
+    });
+  }
+
+  async getPipelineStats(context: TenantContext): Promise<PipelineStatsRow> {
+    return await this.db.withTransaction(context, async (tx) => {
+      // Get total critical positions (positions with active succession plans)
+      const [criticalRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(DISTINCT sp.position_id)::int as count
+        FROM app.succession_plans sp
+        WHERE sp.is_active = true
+      `;
+
+      // Get covered positions (have at least one ready-now candidate)
+      const [coveredRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(DISTINCT sp.position_id)::int as count
+        FROM app.succession_plans sp
+        JOIN app.succession_candidates sc ON sc.plan_id = sp.id
+        WHERE sp.is_active = true
+          AND sc.is_active = true
+          AND sc.readiness = 'ready_now'
+      `;
+
+      // Get ready now candidates
+      const [readyNowRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(*)::int as count
+        FROM app.succession_candidates sc
+        JOIN app.succession_plans sp ON sp.id = sc.plan_id
+        WHERE sp.is_active = true
+          AND sc.is_active = true
+          AND sc.readiness = 'ready_now'
+      `;
+
+      // Get high risk positions (active plans with no successors at all)
+      const [highRiskRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(*)::int as count
+        FROM app.succession_plans sp
+        WHERE sp.is_active = true
+          AND NOT EXISTS (
+            SELECT 1 FROM app.succession_candidates sc
+            WHERE sc.plan_id = sp.id AND sc.is_active = true
+          )
+      `;
+
+      const totalCritical = criticalRow?.count ?? 0;
+      const covered = coveredRow?.count ?? 0;
+
+      return {
+        totalCriticalPositions: totalCritical,
+        coveredPositions: covered,
+        uncoveredPositions: totalCritical - covered,
+        readyNowCandidates: readyNowRow?.count ?? 0,
+        highRiskPositions: highRiskRow?.count ?? 0,
+      };
+    });
   }
 }

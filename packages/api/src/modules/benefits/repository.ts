@@ -267,6 +267,20 @@ export class BenefitsRepository {
     return rows[0] || null;
   }
 
+  async deactivateCarrier(
+    tx: TransactionSql,
+    context: TenantContext,
+    id: string
+  ): Promise<boolean> {
+    const result = await tx`
+      UPDATE app.benefit_carriers
+      SET is_active = false, updated_at = now()
+      WHERE id = ${id}::uuid
+    `;
+
+    return result.count > 0;
+  }
+
   // ===========================================================================
   // Plan Methods
   // ===========================================================================
@@ -432,6 +446,20 @@ export class BenefitsRepository {
     `;
 
     return rows[0] || null;
+  }
+
+  async deactivatePlan(
+    tx: TransactionSql,
+    context: TenantContext,
+    id: string
+  ): Promise<boolean> {
+    const result = await tx`
+      UPDATE app.benefit_plans
+      SET is_active = false, updated_at = now()
+      WHERE id = ${id}::uuid
+    `;
+
+    return result.count > 0;
   }
 
   // ===========================================================================
@@ -734,6 +762,45 @@ export class BenefitsRepository {
     return result.count > 0;
   }
 
+  async waiveEnrollment(
+    tx: TransactionSql,
+    context: TenantContext,
+    data: {
+      employee_id: string;
+      plan_id: string;
+      waiver_reason: string;
+      waiver_other_coverage?: string;
+      effective_from: string;
+    }
+  ): Promise<EnrollmentRow> {
+    const rows = await tx<EnrollmentRow[]>`
+      INSERT INTO app.benefit_enrollments (
+        tenant_id, employee_id, plan_id, coverage_level, status,
+        effective_from, employee_contribution, employer_contribution,
+        covered_dependents, enrollment_type, waiver_reason
+      )
+      VALUES (
+        ${context.tenantId}::uuid,
+        ${data.employee_id}::uuid,
+        ${data.plan_id}::uuid,
+        'employee_only'::app.coverage_level,
+        'waived'::app.enrollment_status,
+        ${data.effective_from}::date,
+        0,
+        0,
+        '{}'::uuid[],
+        'new_hire',
+        ${data.waiver_reason}
+      )
+      RETURNING id, tenant_id, employee_id, plan_id, coverage_level, status,
+                effective_from, effective_to, employee_contribution::text,
+                employer_contribution::text, covered_dependents, enrollment_type,
+                life_event_id, waiver_reason, created_at, updated_at
+    `;
+
+    return rows[0]!;
+  }
+
   // ===========================================================================
   // Life Event Methods
   // ===========================================================================
@@ -957,6 +1024,52 @@ export class BenefitsRepository {
     `;
 
     return result.count > 0;
+  }
+
+  // ===========================================================================
+  // Enrollment Stats Methods
+  // ===========================================================================
+
+  async getEnrollmentStats(
+    context: TenantContext
+  ): Promise<{ totalEmployees: number; enrolledEmployees: number; pendingEnrollments: number; pendingLifeEvents: number }> {
+    return await this.db.withTransaction(context, async (tx) => {
+      // Get total eligible employees (active employees)
+      const [totalRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(*)::int as count
+        FROM app.employees
+        WHERE status = 'active'
+      `;
+
+      // Get enrolled employees (employees with at least one active enrollment)
+      const [enrolledRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(DISTINCT employee_id)::int as count
+        FROM app.benefit_enrollments
+        WHERE status = 'active'
+          AND (effective_to IS NULL OR effective_to > CURRENT_DATE)
+      `;
+
+      // Get pending enrollments
+      const [pendingEnrollmentsRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(*)::int as count
+        FROM app.benefit_enrollments
+        WHERE status = 'pending'
+      `;
+
+      // Get pending life events
+      const [pendingLifeEventsRow] = await tx<{ count: number }[]>`
+        SELECT COUNT(*)::int as count
+        FROM app.life_events
+        WHERE status = 'pending'
+      `;
+
+      return {
+        totalEmployees: totalRow?.count ?? 0,
+        enrolledEmployees: enrolledRow?.count ?? 0,
+        pendingEnrollments: pendingEnrollmentsRow?.count ?? 0,
+        pendingLifeEvents: pendingLifeEventsRow?.count ?? 0,
+      };
+    });
   }
 
   // ===========================================================================

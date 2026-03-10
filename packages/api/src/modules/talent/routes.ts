@@ -2,6 +2,7 @@
  * Talent Module Routes
  *
  * Defines the API endpoints for Talent Management operations.
+ * All routes delegate to TalentService for business logic.
  * All routes require authentication and appropriate permissions.
  *
  * Permission model:
@@ -13,9 +14,10 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { AuditActions } from "../../plugins/audit";
-import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { ErrorCodes } from "../../plugins/errors";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { TalentRepository } from "./repository";
+import { TalentService } from "./service";
 import {
   // Schemas
   CreateGoalSchema,
@@ -34,21 +36,8 @@ import {
 } from "./schemas";
 
 // =============================================================================
-// Types
-// =============================================================================
-
-/**
- * Tenant context for repository operations
- */
-interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
-
-// =============================================================================
 // Response Schemas
 // =============================================================================
-
 
 /**
  * Goal response schema
@@ -131,10 +120,8 @@ const OptionalIdempotencyHeaderSchema = t.Object({
   "idempotency-key": t.Optional(t.String()),
 });
 
-/**
- * Talent module-specific error codes beyond the shared base set
- */
-const _talentErrorStatusMap: Record<string, number> = {
+/** Module-specific error code overrides */
+const TALENT_ERROR_CODES: Record<string, number> = {
   INVALID_GOAL: 400,
   INVALID_REVIEW_CYCLE: 400,
   INVALID_REVIEW: 400,
@@ -142,6 +129,8 @@ const _talentErrorStatusMap: Record<string, number> = {
   REVIEW_NOT_IN_CORRECT_STATE: 400,
   GOAL_NOT_ACTIVE: 400,
   CYCLE_NOT_ACTIVE: 400,
+  CREATE_FAILED: 500,
+  UPDATE_FAILED: 500,
 };
 
 // =============================================================================
@@ -151,15 +140,17 @@ const _talentErrorStatusMap: Record<string, number> = {
 export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes" })
 
   // ===========================================================================
-  // Plugin Setup - Derive tenant context
+  // Plugin Setup - Derive tenant context, service, and repository
   // ===========================================================================
   .derive((ctx) => {
-    const { tenant, user } = ctx as any;
-    const tenantContext: TenantContext = {
+    const { db, tenant, user } = ctx as any;
+    const repository = new TalentRepository(db);
+    const service = new TalentService(repository, db);
+    const tenantContext = {
       tenantId: (tenant as any)?.id || "",
       userId: (user as any)?.id,
     };
-    return { tenantContext };
+    return { talentService: service, talentRepository: repository, tenantContext };
   })
 
   // ===========================================================================
@@ -170,33 +161,20 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/goals",
     async (ctx) => {
-      const { db, query, tenantContext, error } = ctx as any;
-      const { cursor, limit = 20, employeeId, status, category } = query;
+      const { talentService, tenantContext, query, error } = ctx as any;
+      const { cursor, limit = 20, ...filters } = query;
 
       try {
-        const goals = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT g.*, e.first_name || ' ' || e.last_name as employee_name
-            FROM app.goals g
-            JOIN app.employees e ON e.id = g.employee_id
-            WHERE g.tenant_id = ${tenantContext.tenantId}::uuid
-            ${employeeId ? tx`AND g.employee_id = ${employeeId}::uuid` : tx``}
-            ${status ? tx`AND g.status = ${status}` : tx``}
-            ${category ? tx`AND g.category = ${category}` : tx``}
-            ${cursor ? tx`AND g.id > ${cursor}::uuid` : tx``}
-            ORDER BY g.target_date ASC, g.id ASC
-            LIMIT ${Number(limit) + 1}
-          `;
-        });
-
-        const hasMore = goals.length > limit;
-        const items = hasMore ? goals.slice(0, limit) : goals;
-        const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : null;
+        const result = await talentService.listGoals(
+          tenantContext,
+          filters,
+          { cursor, limit: Number(limit) }
+        );
 
         return {
-          items,
-          nextCursor,
-          hasMore,
+          items: result.items,
+          nextCursor: result.nextCursor,
+          hasMore: result.hasMore,
         };
       } catch (err: any) {
         return error(500, {
@@ -231,29 +209,17 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/goals/:id",
     async (ctx) => {
-      const { db, params, tenantContext, error } = ctx as any;
-      try {
-        const [goal] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT g.*, e.first_name || ' ' || e.last_name as employee_name
-            FROM app.goals g
-            JOIN app.employees e ON e.id = g.employee_id
-            WHERE g.id = ${params.id}::uuid AND g.tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const { talentService, tenantContext, params, error } = ctx as any;
 
-        if (!goal) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
-          });
-        }
+      const result = await talentService.getGoal(tenantContext, params.id);
 
-        return goal;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("goals", "read")],
@@ -276,43 +242,29 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/goals",
     async (ctx) => {
-      const { db, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        const [goal] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            INSERT INTO app.goals (
-              id, tenant_id, employee_id, title, description, category,
-              weight, target_date, metrics, parent_goal_id, status, progress
-            ) VALUES (
-              gen_random_uuid(), ${tenantContext.tenantId}::uuid, ${(body as any).employeeId}::uuid,
-              ${(body as any).title}, ${(body as any).description || null}, ${(body as any).category || null},
-              ${(body as any).weight || 0}, ${(body as any).targetDate}::date,
-              ${(body as any).metrics ? JSON.stringify((body as any).metrics) : null}::jsonb,
-              ${(body as any).parentGoalId || null}::uuid, 'active', 0
-            )
-            RETURNING *
-          `;
-        });
+      const result = await talentService.createGoal(tenantContext, body);
 
-        // Audit log the creation
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.goal.created",
-            resourceType: "goal",
-            resourceId: goal.id,
-            newValues: goal,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return goal;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the creation
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.goal.created",
+          resourceType: "goal",
+          resourceId: result.data.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("goals", "write")],
@@ -336,59 +288,30 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .patch(
     "/goals/:id",
     async (ctx) => {
-      const { db, params, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        // Get current state for audit
-        const [oldGoal] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.goals
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const result = await talentService.updateGoal(tenantContext, params.id, body);
 
-        if (!oldGoal) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
-          });
-        }
-
-        const [goal] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            UPDATE app.goals SET
-              title = COALESCE(${(body as any).title}, title),
-              description = COALESCE(${(body as any).description}, description),
-              category = COALESCE(${(body as any).category}, category),
-              weight = COALESCE(${(body as any).weight}, weight),
-              target_date = COALESCE(${(body as any).targetDate}::date, target_date),
-              status = COALESCE(${(body as any).status}, status),
-              progress = COALESCE(${(body as any).progress}, progress),
-              metrics = COALESCE(${(body as any).metrics ? JSON.stringify((body as any).metrics) : null}::jsonb, metrics),
-              updated_at = now()
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-            RETURNING *
-          `;
-        });
-
-        // Audit log the update
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.goal.updated",
-            resourceType: "goal",
-            resourceId: params.id,
-            oldValues: oldGoal,
-            newValues: goal,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return goal;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the update
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.goal.updated",
+          resourceType: "goal",
+          resourceId: params.id,
+          oldValues: result.data.oldGoal,
+          newValues: result.data.goal,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data.goal;
     },
     {
       beforeHandle: [requirePermission("goals", "write")],
@@ -413,50 +336,29 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .delete(
     "/goals/:id",
     async (ctx) => {
-      const { db, params, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, params, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        // Get current state for audit
-        const [oldGoal] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.goals
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const result = await talentService.deleteGoal(tenantContext, params.id);
 
-        if (!oldGoal) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Goal not found" },
-          });
-        }
-
-        await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            UPDATE app.goals SET
-              status = 'cancelled',
-              updated_at = now()
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
-
-        // Audit log the deletion
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.goal.deleted",
-            resourceType: "goal",
-            resourceId: params.id,
-            oldValues: oldGoal,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return { success: true as const, message: "Goal deleted successfully" };
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the deletion
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.goal.deleted",
+          resourceType: "goal",
+          resourceId: params.id,
+          oldValues: result.data.oldGoal,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return { success: true as const, message: "Goal deleted successfully" };
     },
     {
       beforeHandle: [requirePermission("goals", "delete")],
@@ -487,28 +389,19 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/review-cycles",
     async (ctx) => {
-      const { db, query, tenantContext, error } = ctx as any;
+      const { talentService, tenantContext, query, error } = ctx as any;
       const { cursor, limit = 20 } = query;
 
       try {
-        const cycles = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.review_cycles
-            WHERE tenant_id = ${tenantContext.tenantId}::uuid
-            ${cursor ? tx`AND id > ${cursor}::uuid` : tx``}
-            ORDER BY period_end DESC, id ASC
-            LIMIT ${Number(limit) + 1}
-          `;
-        });
-
-        const hasMore = cycles.length > limit;
-        const items = hasMore ? cycles.slice(0, limit) : cycles;
-        const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : null;
+        const result = await talentService.listReviewCycles(
+          tenantContext,
+          { cursor, limit: Number(limit) }
+        );
 
         return {
-          items,
-          nextCursor,
-          hasMore,
+          items: result.items,
+          nextCursor: result.nextCursor,
+          hasMore: result.hasMore,
         };
       } catch (err: any) {
         return error(500, {
@@ -540,27 +433,17 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/review-cycles/:id",
     async (ctx) => {
-      const { db, params, tenantContext, error } = ctx as any;
-      try {
-        const [cycle] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.review_cycles
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const { talentService, tenantContext, params, error } = ctx as any;
 
-        if (!cycle) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Review cycle not found" },
-          });
-        }
+      const result = await talentService.getReviewCycle(tenantContext, params.id);
 
-        return cycle;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("review_cycles", "read")],
@@ -583,42 +466,29 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/review-cycles",
     async (ctx) => {
-      const { db, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        const [cycle] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            INSERT INTO app.review_cycles (
-              id, tenant_id, name, description, period_start, period_end,
-              self_review_deadline, manager_review_deadline, calibration_deadline, status
-            ) VALUES (
-              gen_random_uuid(), ${tenantContext.tenantId}::uuid, ${(body as any).name}, ${(body as any).description || null},
-              ${(body as any).periodStart}::date, ${(body as any).periodEnd}::date,
-              ${(body as any).selfReviewDeadline}::date, ${(body as any).managerReviewDeadline}::date,
-              ${(body as any).calibrationDeadline || null}::date, 'draft'
-            )
-            RETURNING *
-          `;
-        });
+      const result = await talentService.createReviewCycle(tenantContext, body);
 
-        // Audit log the creation
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.review_cycle.created",
-            resourceType: "review_cycle",
-            resourceId: cycle.id,
-            newValues: cycle,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return cycle;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the creation
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.review_cycle.created",
+          resourceType: "review_cycle",
+          resourceId: result.data.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("review_cycles", "write")],
@@ -646,32 +516,19 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/reviews",
     async (ctx) => {
-      const { db, query, tenantContext, error } = ctx as any;
+      const { talentService, tenantContext, query, error } = ctx as any;
       const { cursor, limit = 20 } = query;
 
       try {
-        const reviews = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT r.*, e.first_name || ' ' || e.last_name as employee_name,
-                   rc.name as cycle_name
-            FROM app.reviews r
-            JOIN app.employees e ON e.id = r.employee_id
-            JOIN app.review_cycles rc ON rc.id = r.review_cycle_id
-            WHERE r.tenant_id = ${tenantContext.tenantId}::uuid
-            ${cursor ? tx`AND r.id > ${cursor}::uuid` : tx``}
-            ORDER BY r.created_at DESC, r.id ASC
-            LIMIT ${Number(limit) + 1}
-          `;
-        });
-
-        const hasMore = reviews.length > limit;
-        const items = hasMore ? reviews.slice(0, limit) : reviews;
-        const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : null;
+        const result = await talentService.listReviews(
+          tenantContext,
+          { cursor, limit: Number(limit) }
+        );
 
         return {
-          items,
-          nextCursor,
-          hasMore,
+          items: result.items,
+          nextCursor: result.nextCursor,
+          hasMore: result.hasMore,
         };
       } catch (err: any) {
         return error(500, {
@@ -703,31 +560,17 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/reviews/:id",
     async (ctx) => {
-      const { db, params, tenantContext, error } = ctx as any;
-      try {
-        const [review] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT r.*, e.first_name || ' ' || e.last_name as employee_name,
-                   rc.name as cycle_name
-            FROM app.reviews r
-            JOIN app.employees e ON e.id = r.employee_id
-            JOIN app.review_cycles rc ON rc.id = r.review_cycle_id
-            WHERE r.id = ${params.id}::uuid AND r.tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const { talentService, tenantContext, params, error } = ctx as any;
 
-        if (!review) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
-          });
-        }
+      const result = await talentService.getReview(tenantContext, params.id);
 
-        return review;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("reviews", "read")],
@@ -750,39 +593,29 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/reviews",
     async (ctx) => {
-      const { db, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        const [review] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            INSERT INTO app.reviews (
-              id, tenant_id, review_cycle_id, employee_id, reviewer_id, status
-            ) VALUES (
-              gen_random_uuid(), ${tenantContext.tenantId}::uuid, ${(body as any).reviewCycleId}::uuid,
-              ${(body as any).employeeId}::uuid, ${(body as any).reviewerId}::uuid, 'draft'
-            )
-            RETURNING *
-          `;
-        });
+      const result = await talentService.createReview(tenantContext, body);
 
-        // Audit log the creation
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.review.created",
-            resourceType: "review",
-            resourceId: review.id,
-            newValues: review,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return review;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the creation
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.review.created",
+          resourceType: "review",
+          resourceId: result.data.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("reviews", "write")],
@@ -806,63 +639,30 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/reviews/:id/self-review",
     async (ctx) => {
-      const { db, params, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        // Get current state for audit
-        const [oldReview] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.reviews
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const result = await talentService.submitSelfReview(tenantContext, params.id, body);
 
-        if (!oldReview) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
-          });
-        }
-
-        const selfReviewData = {
-          accomplishments: (body as any).accomplishments,
-          challenges: (body as any).challenges,
-          developmentAreas: (body as any).developmentAreas,
-          selfRating: (body as any).selfRating,
-          goalRatings: (body as any).goalRatings,
-          competencyRatings: (body as any).competencyRatings,
-        };
-
-        const [review] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            UPDATE app.reviews SET
-              self_review = ${JSON.stringify(selfReviewData)}::jsonb,
-              status = 'self_review',
-              self_review_submitted_at = now(),
-              updated_at = now()
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-            RETURNING *
-          `;
-        });
-
-        // Audit log the submission
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.review.self_review_submitted",
-            resourceType: "review",
-            resourceId: params.id,
-            oldValues: { status: oldReview.status },
-            newValues: { status: review.status, selfRating: (body as any).selfRating },
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return review;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the submission
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.review.self_review_submitted",
+          resourceType: "review",
+          resourceId: params.id,
+          oldValues: { status: result.data.oldReview.status },
+          newValues: { status: result.data.review.status, selfRating: (body as any).selfRating },
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data.review;
     },
     {
       beforeHandle: [requirePermission("reviews", "write")],
@@ -887,68 +687,34 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/reviews/:id/manager-review",
     async (ctx) => {
-      const { db, params, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        // Get current state for audit
-        const [oldReview] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.reviews
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const result = await talentService.submitManagerReview(tenantContext, params.id, body);
 
-        if (!oldReview) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Review not found" },
-          });
-        }
-
-        const managerReviewData = {
-          feedback: (body as any).feedback,
-          strengths: (body as any).strengths,
-          developmentAreas: (body as any).developmentAreas,
-          managerRating: (body as any).managerRating,
-          goalRatings: (body as any).goalRatings,
-          competencyRatings: (body as any).competencyRatings,
-          promotionRecommendation: (body as any).promotionRecommendation,
-        };
-
-        const [review] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            UPDATE app.reviews SET
-              manager_review = ${JSON.stringify(managerReviewData)}::jsonb,
-              status = 'manager_review',
-              manager_review_submitted_at = now(),
-              updated_at = now()
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-            RETURNING *
-          `;
-        });
-
-        // Audit log the submission
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.review.manager_review_submitted",
-            resourceType: "review",
-            resourceId: params.id,
-            oldValues: { status: oldReview.status },
-            newValues: {
-              status: review.status,
-              managerRating: (body as any).managerRating,
-              promotionRecommendation: (body as any).promotionRecommendation,
-            },
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return review;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the submission
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.review.manager_review_submitted",
+          resourceType: "review",
+          resourceId: params.id,
+          oldValues: { status: result.data.oldReview.status },
+          newValues: {
+            status: result.data.review.status,
+            managerRating: (body as any).managerRating,
+            promotionRecommendation: (body as any).promotionRecommendation,
+          },
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data.review;
     },
     {
       beforeHandle: [requirePermission("reviews", "write")],
@@ -977,28 +743,19 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/competencies",
     async (ctx) => {
-      const { db, query, tenantContext, error } = ctx as any;
+      const { talentService, tenantContext, query, error } = ctx as any;
       const { cursor, limit = 20 } = query;
 
       try {
-        const competencies = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.competencies
-            WHERE tenant_id = ${tenantContext.tenantId}::uuid
-            ${cursor ? tx`AND id > ${cursor}::uuid` : tx``}
-            ORDER BY category, name, id ASC
-            LIMIT ${Number(limit) + 1}
-          `;
-        });
-
-        const hasMore = competencies.length > limit;
-        const items = hasMore ? competencies.slice(0, limit) : competencies;
-        const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : null;
+        const result = await talentService.listCompetencies(
+          tenantContext,
+          { cursor, limit: Number(limit) }
+        );
 
         return {
-          items,
-          nextCursor,
-          hasMore,
+          items: result.items,
+          nextCursor: result.nextCursor,
+          hasMore: result.hasMore,
         };
       } catch (err: any) {
         return error(500, {
@@ -1030,27 +787,17 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .get(
     "/competencies/:id",
     async (ctx) => {
-      const { db, params, tenantContext, error } = ctx as any;
-      try {
-        const [competency] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            SELECT * FROM app.competencies
-            WHERE id = ${params.id}::uuid AND tenant_id = ${tenantContext.tenantId}::uuid
-          `;
-        });
+      const { talentService, tenantContext, params, error } = ctx as any;
 
-        if (!competency) {
-          return error(404, {
-            error: { code: ErrorCodes.NOT_FOUND, message: "Competency not found" },
-          });
-        }
+      const result = await talentService.getCompetency(tenantContext, params.id);
 
-        return competency;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("competencies", "read")],
@@ -1073,40 +820,29 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
   .post(
     "/competencies",
     async (ctx) => {
-      const { db, body, headers, tenantContext, audit, requestId, error } = ctx as any;
+      const { talentService, tenantContext, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      try {
-        const [competency] = await (db as any).withTransaction(tenantContext, async (tx: any) => {
-          return tx`
-            INSERT INTO app.competencies (
-              id, tenant_id, name, description, category, levels
-            ) VALUES (
-              gen_random_uuid(), ${tenantContext.tenantId}::uuid, ${(body as any).name},
-              ${(body as any).description || null}, ${(body as any).category},
-              ${JSON.stringify((body as any).levels)}::jsonb
-            )
-            RETURNING *
-          `;
-        });
+      const result = await talentService.createCompetency(tenantContext, body);
 
-        // Audit log the creation
-        if (audit) {
-          await (audit as any).log({
-            action: "talent.competency.created",
-            resourceType: "competency",
-            resourceId: competency.id,
-            newValues: competency,
-            metadata: { idempotencyKey, requestId },
-          });
-        }
-
-        return competency;
-      } catch (err: any) {
-        return error(500, {
-          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+      if (!result.success) {
+        return error(mapErrorToStatus(result.error.code, TALENT_ERROR_CODES), {
+          error: result.error,
         });
       }
+
+      // Audit log the creation
+      if (audit) {
+        await (audit as any).log({
+          action: "talent.competency.created",
+          resourceType: "competency",
+          resourceId: result.data.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("competencies", "write")],
