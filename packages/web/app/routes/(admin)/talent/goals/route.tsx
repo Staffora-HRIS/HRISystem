@@ -34,15 +34,15 @@ interface Goal {
   id: string;
   title: string;
   description: string | null;
-  employee_id: string;
-  employee_name: string | null;
+  employeeId: string;
+  employeeName: string | null;
   category: string;
   status: string;
   priority: string;
-  target_date: string | null;
+  targetDate: string | null;
   progress: number;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface GoalsResponse {
@@ -76,9 +76,9 @@ function formatDate(dateStr: string): string {
 }
 
 function isOverdue(goal: Goal): boolean {
-  if (!goal.target_date) return false;
+  if (!goal.targetDate) return false;
   if (goal.status === "completed" || goal.status === "cancelled") return false;
-  return new Date(goal.target_date) < new Date();
+  return new Date(goal.targetDate) < new Date();
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -203,8 +203,8 @@ export default function GoalsPage() {
       description: formDescription || undefined,
       category: formCategory,
       priority: formPriority,
-      target_date: formTargetDate || undefined,
-      employee_id: formEmployeeId || undefined,
+      targetDate: formTargetDate || undefined,
+      employeeId: formEmployeeId || undefined,
     });
   }
 
@@ -231,7 +231,7 @@ export default function GoalsPage() {
         header: "Employee",
         cell: ({ row }) => (
           <span className="text-sm text-gray-700 dark:text-gray-300">
-            {row.employee_name || "-"}
+            {row.employeeName || "-"}
           </span>
         ),
       },
@@ -284,11 +284,11 @@ export default function GoalsPage() {
         cell: ({ row }) => <ProgressBar value={row.progress} />,
       },
       {
-        id: "target_date",
+        id: "targetDate",
         header: "Target Date",
         cell: ({ row }) => (
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {row.target_date ? formatDate(row.target_date) : "-"}
+            {row.targetDate ? formatDate(row.targetDate) : "-"}
           </span>
         ),
       },

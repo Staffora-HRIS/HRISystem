@@ -26,23 +26,23 @@ import { api } from "~/lib/api-client";
 
 interface Position {
   id: string;
-  tenant_id: string;
+  tenantId: string;
   code: string;
   title: string;
   description: string | null;
-  org_unit_id: string | null;
-  org_unit_name?: string;
-  job_grade: string | null;
-  min_salary: number | null;
-  max_salary: number | null;
+  orgUnitId: string | null;
+  orgUnitName?: string;
+  jobGrade: string | null;
+  minSalary: number | null;
+  maxSalary: number | null;
   currency: string;
-  is_manager: boolean;
+  isManager: boolean;
   headcount: number;
-  current_headcount?: number;
-  reports_to_position_id: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  currentHeadcount?: number;
+  reportsToPositionId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface PositionListResponse {
@@ -72,7 +72,7 @@ export default function AdminPositionsPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
-      if (departmentFilter) params.set("org_unit_id", departmentFilter);
+      if (departmentFilter) params.set("orgUnitId", departmentFilter);
       params.set("limit", "100");
       return api.get<PositionListResponse>(`/hr/positions?${params}`);
     },
@@ -89,10 +89,10 @@ export default function AdminPositionsPage() {
   // Calculate stats
   const totalPositions = positions.length;
   const filledPositions = positions.filter(
-    (p) => (p.current_headcount ?? 0) >= p.headcount
+    (p) => (p.currentHeadcount ?? 0) >= p.headcount
   ).length;
   const openPositions = positions.reduce(
-    (sum, p) => sum + Math.max(0, p.headcount - (p.current_headcount ?? 0)),
+    (sum, p) => sum + Math.max(0, p.headcount - (p.currentHeadcount ?? 0)),
     0
   );
 
@@ -118,14 +118,14 @@ export default function AdminPositionsPage() {
       id: "department",
       header: "Department",
       cell: ({ row }) => (
-        <span className="text-gray-600">{row.org_unit_name || "-"}</span>
+        <span className="text-gray-600">{row.orgUnitName || "-"}</span>
       ),
     },
     {
       id: "grade",
       header: "Grade",
       cell: ({ row }) => (
-        <span className="text-gray-600">{row.job_grade || "-"}</span>
+        <span className="text-gray-600">{row.jobGrade || "-"}</span>
       ),
     },
     {
@@ -133,10 +133,10 @@ export default function AdminPositionsPage() {
       header: "Salary Range",
       cell: ({ row }) => (
         <div className="text-sm">
-          {row.min_salary != null || row.max_salary != null ? (
+          {row.minSalary != null || row.maxSalary != null ? (
             <span className="text-gray-600">
-              {formatSalary(row.min_salary, row.currency)} -{" "}
-              {formatSalary(row.max_salary, row.currency)}
+              {formatSalary(row.minSalary, row.currency)} -{" "}
+              {formatSalary(row.maxSalary, row.currency)}
             </span>
           ) : (
             <span className="text-gray-400">-</span>
@@ -148,7 +148,7 @@ export default function AdminPositionsPage() {
       id: "headcount",
       header: "Headcount",
       cell: ({ row }) => {
-        const current = row.current_headcount ?? 0;
+        const current = row.currentHeadcount ?? 0;
         const target = row.headcount;
         return (
           <div className="flex items-center gap-2">
@@ -168,8 +168,8 @@ export default function AdminPositionsPage() {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.is_active ? "success" : "secondary"}>
-          {row.is_active ? "Active" : "Inactive"}
+        <Badge variant={row.isActive ? "success" : "secondary"}>
+          {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
     },

@@ -9,17 +9,17 @@ import { api } from "~/lib/api-client";
 
 interface PerformanceCycle {
   id: string;
-  tenant_id: string;
+  tenantId: string;
   name: string;
   description: string | null;
   status: string;
-  period_start: string;
-  period_end: string;
-  self_review_deadline: string;
-  manager_review_deadline: string;
-  calibration_deadline: string | null;
-  created_at: string;
-  updated_at: string;
+  periodStart: string;
+  periodEnd: string;
+  selfReviewDeadline: string;
+  managerReviewDeadline: string;
+  calibrationDeadline: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ReviewCyclesResponse {
@@ -104,7 +104,7 @@ export default function PerformanceManagementPage() {
                         <div className="text-right text-sm text-gray-500">
                           <div className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {formatDate(cycle.period_start)} - {formatDate(cycle.period_end)}
+                            {formatDate(cycle.periodStart)} - {formatDate(cycle.periodEnd)}
                           </div>
                         </div>
                       </CardHeader>
@@ -116,16 +116,16 @@ export default function PerformanceManagementPage() {
                         <div className="space-y-2 text-sm text-gray-600">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-gray-400" />
-                            <span>Self Review Deadline: {formatDate(cycle.self_review_deadline)}</span>
+                            <span>Self Review Deadline: {formatDate(cycle.selfReviewDeadline)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-gray-400" />
-                            <span>Manager Review Deadline: {formatDate(cycle.manager_review_deadline)}</span>
+                            <span>Manager Review Deadline: {formatDate(cycle.managerReviewDeadline)}</span>
                           </div>
-                          {cycle.calibration_deadline && (
+                          {cycle.calibrationDeadline && (
                             <div className="flex items-center gap-2">
                               <Clock className="h-4 w-4 text-gray-400" />
-                              <span>Calibration Deadline: {formatDate(cycle.calibration_deadline)}</span>
+                              <span>Calibration Deadline: {formatDate(cycle.calibrationDeadline)}</span>
                             </div>
                           )}
                         </div>
@@ -170,7 +170,7 @@ export default function PerformanceManagementPage() {
                             <div className="font-medium text-gray-900">{cycle.name}</div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {formatDate(cycle.period_start)} - {formatDate(cycle.period_end)}
+                            {formatDate(cycle.periodStart)} - {formatDate(cycle.periodEnd)}
                           </td>
                           <td className="px-6 py-4">{getStatusBadge(cycle.status)}</td>
                           <td className="px-6 py-4 text-right">

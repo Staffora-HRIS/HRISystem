@@ -15,27 +15,28 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { api } from "~/lib/api-client";
 
 interface Document {
   id: string;
-  tenant_id: string;
-  employee_id: string | null;
-  employee_name?: string;
+  tenantId: string;
+  employeeId: string | null;
+  employeeName?: string;
   category: string;
   name: string;
   description: string | null;
-  file_key: string;
-  file_name: string;
-  file_size: number;
-  mime_type: string;
+  fileKey: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
   version: number;
   status: string;
-  expires_at: string | null;
+  expiresAt: string | null;
   tags: string[];
-  uploaded_by: string;
-  uploaded_by_name?: string;
-  created_at: string;
-  updated_at: string;
+  uploadedBy: string;
+  uploadedByName?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface DocumentListProps {
@@ -74,32 +75,18 @@ export function DocumentList({ employeeId, className, onUpload }: DocumentListPr
 
   const { data, isLoading, error } = useQuery<{ items: Document[]; hasMore: boolean }>({
     queryKey: ["documents", { employeeId, search: searchTerm, category: categoryFilter }],
-    queryFn: async () => {
+    queryFn: () => {
       const params = new URLSearchParams();
-      if (employeeId) params.set("employee_id", employeeId);
+      if (employeeId) params.set("employeeId", employeeId);
       if (searchTerm) params.set("search", searchTerm);
       if (categoryFilter) params.set("category", categoryFilter);
-
-      const response = await fetch(`/api/v1/documents?${params}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch documents");
-      }
-      return response.json();
+      const qs = params.toString();
+      return api.get<{ items: Document[]; hasMore: boolean }>(`/documents${qs ? `?${qs}` : ""}`);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (documentId: string) => {
-      const response = await fetch(`/api/v1/documents/${documentId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to delete document");
-      }
-    },
+    mutationFn: (documentId: string) => api.delete(`/documents/${documentId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
@@ -107,12 +94,8 @@ export function DocumentList({ employeeId, className, onUpload }: DocumentListPr
 
   const downloadDocument = async (doc: Document) => {
     try {
-      const response = await fetch(`/api/v1/documents/${doc.id}/download-url`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to get download URL");
-      const { download_url } = await response.json();
-      window.open(download_url, "_blank");
+      const result = await api.get<{ downloadUrl: string }>(`/documents/${doc.id}/download-url`);
+      window.open(result.downloadUrl, "_blank");
     } catch (err) {
       console.error("Download failed:", err);
     }
@@ -198,8 +181,8 @@ export function DocumentList({ employeeId, className, onUpload }: DocumentListPr
           <div className="divide-y">
             {data?.items.map((doc) => {
               const isExpiringSoon =
-                doc.expires_at &&
-                new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                doc.expiresAt &&
+                new Date(doc.expiresAt) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
               return (
                 <div
@@ -231,10 +214,10 @@ export function DocumentList({ employeeId, className, onUpload }: DocumentListPr
                       )}
                     </div>
                     <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
-                      <span>{doc.file_name}</span>
-                      <span>{formatFileSize(doc.file_size)}</span>
-                      {doc.uploaded_by_name && <span>by {doc.uploaded_by_name}</span>}
-                      <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                      <span>{doc.fileName}</span>
+                      <span>{formatFileSize(doc.fileSize)}</span>
+                      {doc.uploadedByName && <span>by {doc.uploadedByName}</span>}
+                      <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
 

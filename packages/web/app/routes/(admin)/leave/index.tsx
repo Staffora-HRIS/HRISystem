@@ -3,7 +3,6 @@ import {
   Calendar,
   FileText,
   Shield,
-  Clock,
   ArrowRight,
 } from "lucide-react";
 import { Card, CardBody } from "~/components/ui/card";

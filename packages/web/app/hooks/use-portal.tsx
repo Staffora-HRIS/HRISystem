@@ -9,7 +9,7 @@
  * - usePortalNavigation() - get portal-specific navigation
  */
 
-import { useMemo, useCallback, createContext, useContext, ReactNode, useState, useEffect } from "react";
+import { useMemo, useCallback, createContext, useContext, type ReactNode, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router";
 import { api } from "../lib/api-client";
@@ -336,24 +336,4 @@ export function PortalGate({ portal, fallback = null, children }: PortalGateProp
   return hasAccess ? <>{children}</> : <>{fallback}</>;
 }
 
-// =============================================================================
-// Query Key Extensions
-// =============================================================================
-
-// Extend query keys for portals
-declare module "../lib/query-client" {
-  interface QueryKeys {
-    portal: {
-      available: () => readonly ["portal", "available"];
-      navigation: (portal: string) => readonly ["portal", "navigation", string];
-    };
-  }
-}
-
-// Add query keys if not already present
-if (!queryKeys.portal) {
-  (queryKeys as any).portal = {
-    available: () => ["portal", "available"] as const,
-    navigation: (portal: string) => ["portal", "navigation", portal] as const,
-  };
-}
+// Query keys are defined in ~/lib/query-client under queryKeys.portal

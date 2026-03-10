@@ -19,7 +19,7 @@ interface ReportDefinition {
   name: string;
   description: string;
   category: string;
-  last_run?: string;
+  lastRun?: string;
 }
 
 export default function AnalyticsDashboardPage() {
@@ -41,7 +41,7 @@ export default function AnalyticsDashboardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ format: "pdf", date_range: dateRange }),
+        body: JSON.stringify({ format: "pdf", dateRange }),
       });
       if (response.ok) {
         const blob = await response.blob();
@@ -156,10 +156,10 @@ export default function AnalyticsDashboardPage() {
                           <p className="text-sm text-gray-500 mt-1">
                             {report.description}
                           </p>
-                          {report.last_run && (
+                          {report.lastRun && (
                             <p className="text-xs text-gray-400 mt-2">
                               Last run:{" "}
-                              {new Date(report.last_run).toLocaleDateString()}
+                              {new Date(report.lastRun).toLocaleDateString()}
                             </p>
                           )}
                           <div className="flex gap-2 mt-4">

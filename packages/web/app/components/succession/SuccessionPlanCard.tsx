@@ -9,24 +9,24 @@ import { cn } from "~/lib/utils";
 
 interface Candidate {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  readiness_level: "ready_now" | "ready_1_year" | "ready_2_years" | "development_needed";
+  employeeId: string;
+  employeeName: string;
+  readinessLevel: "ready_now" | "ready_1_year" | "ready_2_years" | "development_needed";
   priority: number;
-  development_notes: string | null;
+  developmentNotes: string | null;
 }
 
 interface SuccessionPlan {
   id: string;
-  position_id: string;
-  position_title: string;
-  department_name?: string;
+  positionId: string;
+  positionTitle: string;
+  departmentName?: string;
   criticality: "critical" | "high" | "medium" | "low";
-  risk_level: "high" | "medium" | "low";
+  riskLevel: "high" | "medium" | "low";
   status: "active" | "draft" | "archived";
   candidates: Candidate[];
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface SuccessionPlanCardProps {
@@ -86,12 +86,12 @@ export function SuccessionPlanCard({
   className,
 }: SuccessionPlanCardProps) {
   const readyNowCount = plan.candidates.filter(
-    (c) => c.readiness_level === "ready_now"
+    (c) => c.readinessLevel === "ready_now"
   ).length;
   const readySoonCount = plan.candidates.filter(
     (c) =>
-      c.readiness_level === "ready_1_year" ||
-      c.readiness_level === "ready_2_years"
+      c.readinessLevel === "ready_1_year" ||
+      c.readinessLevel === "ready_2_years"
   ).length;
 
   return (
@@ -114,17 +114,17 @@ export function SuccessionPlanCard({
               {plan.criticality}
             </span>
             <div className="flex items-center gap-1">
-              {getRiskIcon(plan.risk_level)}
+              {getRiskIcon(plan.riskLevel)}
               <span className="text-xs text-gray-500 capitalize">
-                {plan.risk_level} Risk
+                {plan.riskLevel} Risk
               </span>
             </div>
           </div>
           <h3 className="mt-2 text-lg font-semibold text-gray-900">
-            {plan.position_title}
+            {plan.positionTitle}
           </h3>
-          {plan.department_name && (
-            <p className="mt-1 text-sm text-gray-500">{plan.department_name}</p>
+          {plan.departmentName && (
+            <p className="mt-1 text-sm text-gray-500">{plan.departmentName}</p>
           )}
         </div>
       </div>
@@ -163,16 +163,16 @@ export function SuccessionPlanCard({
                   {index + 1}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
-                  {candidate.employee_name}
+                  {candidate.employeeName}
                 </span>
               </div>
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 text-xs font-medium",
-                  getReadinessColor(candidate.readiness_level)
+                  getReadinessColor(candidate.readinessLevel)
                 )}
               >
-                {getReadinessLabel(candidate.readiness_level)}
+                {getReadinessLabel(candidate.readinessLevel)}
               </span>
             </div>
           ))}

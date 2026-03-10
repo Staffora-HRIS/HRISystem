@@ -202,6 +202,37 @@ export class HRRepository {
   constructor(private db: DatabaseClient) {}
 
   // ===========================================================================
+  // Stats
+  // ===========================================================================
+
+  async getStats(context: TenantContext): Promise<{
+    total_employees: number;
+    active_employees: number;
+    departments: number;
+    positions: number;
+    pending_hires: number;
+  }> {
+    const [result] = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          (SELECT COUNT(*) FROM app.employees WHERE tenant_id = ${context.tenantId}::uuid)::int as total_employees,
+          (SELECT COUNT(*) FROM app.employees WHERE tenant_id = ${context.tenantId}::uuid AND status = 'active')::int as active_employees,
+          (SELECT COUNT(*) FROM app.org_units WHERE tenant_id = ${context.tenantId}::uuid AND is_active = true)::int as departments,
+          (SELECT COUNT(*) FROM app.positions WHERE tenant_id = ${context.tenantId}::uuid AND is_active = true)::int as positions,
+          (SELECT COUNT(*) FROM app.employees WHERE tenant_id = ${context.tenantId}::uuid AND status = 'pending')::int as pending_hires
+      `;
+    });
+
+    return {
+      total_employees: Number(result?.totalEmployees ?? 0),
+      active_employees: Number(result?.activeEmployees ?? 0),
+      departments: Number(result?.departments ?? 0),
+      positions: Number(result?.positions ?? 0),
+      pending_hires: Number(result?.pendingHires ?? 0),
+    };
+  }
+
+  // ===========================================================================
   // Org Unit Methods
   // ===========================================================================
 

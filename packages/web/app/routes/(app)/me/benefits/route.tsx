@@ -9,39 +9,39 @@ import { api } from "~/lib/api-client";
 
 interface BenefitPlan {
   id: string;
-  plan_type: string;
+  planType: string;
   name: string;
   description: string | null;
   provider: string | null;
-  coverage_level: string;
-  employee_contribution: number;
-  employer_contribution: number;
-  effective_from: string;
-  effective_to: string | null;
-  enrollment_start: string | null;
-  enrollment_end: string | null;
-  is_active: boolean;
-  enrollment_status?: "enrolled" | "pending" | "not_enrolled" | "waived";
+  coverageLevel: string;
+  employeeContribution: number;
+  employerContribution: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  enrollmentStart: string | null;
+  enrollmentEnd: string | null;
+  isActive: boolean;
+  enrollmentStatus?: "enrolled" | "pending" | "not_enrolled" | "waived";
 }
 
 interface Enrollment {
   id: string;
-  plan_id: string;
-  plan_name: string;
-  plan_type: string;
-  coverage_level: string;
-  employee_contribution: number;
+  planId: string;
+  planName: string;
+  planType: string;
+  coverageLevel: string;
+  employeeContribution: number;
   status: "active" | "pending" | "terminated";
-  effective_from: string;
-  effective_to: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
 }
 
 interface LifeEvent {
   id: string;
-  event_type: string;
-  event_date: string;
+  eventType: string;
+  eventDate: string;
   status: "pending" | "approved" | "rejected" | "expired";
-  enrollment_window_end: string;
+  enrollmentWindowEnd: string;
 }
 
 const LIFE_EVENT_TYPES = [
@@ -65,7 +65,7 @@ export default function MyBenefitsPage() {
 
   const { data: availablePlans, isLoading: plansLoading } = useQuery({
     queryKey: ["available-plans"],
-    queryFn: () => api.get<{ items: BenefitPlan[] }>("/benefits/available-plans"),
+    queryFn: () => api.get<{ items: BenefitPlan[] }>("/benefits/plans"),
     enabled: activeTab === "available",
   });
 
@@ -79,7 +79,7 @@ export default function MyBenefitsPage() {
   const pendingLifeEvents = lifeEvents?.items.filter((e) => e.status === "pending") || [];
 
   const totalMonthlyCost = activeEnrollments.reduce(
-    (sum, e) => sum + e.employee_contribution,
+    (sum, e) => sum + e.employeeContribution,
     0
   );
 
@@ -119,7 +119,7 @@ export default function MyBenefitsPage() {
                 You have a life event that allows you to make benefit changes.
                 Window closes{" "}
                 {new Date(
-                  pendingLifeEvents[0].enrollment_window_end
+                  pendingLifeEvents[0].enrollmentWindowEnd
                 ).toLocaleDateString()}
                 .
               </p>
@@ -234,13 +234,13 @@ export default function MyBenefitsPage() {
                     <div className="flex items-start justify-between">
                       <div>
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 capitalize">
-                          {enrollment.plan_type}
+                          {enrollment.planType}
                         </span>
                         <h3 className="font-semibold mt-2">
-                          {enrollment.plan_name}
+                          {enrollment.planName}
                         </h3>
                         <p className="text-sm text-gray-500 capitalize">
-                          {enrollment.coverage_level.replace(/_/g, " ")}
+                          {enrollment.coverageLevel.replace(/_/g, " ")}
                         </p>
                       </div>
                       <Badge variant="success">
@@ -253,13 +253,13 @@ export default function MyBenefitsPage() {
                         Monthly Deduction
                       </span>
                       <span className="font-medium">
-                        {formatCurrency(enrollment.employee_contribution)}
+                        {formatCurrency(enrollment.employeeContribution)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm text-gray-500">
                       <span>Effective</span>
                       <span>
-                        {new Date(enrollment.effective_from).toLocaleDateString()}
+                        {new Date(enrollment.effectiveFrom).toLocaleDateString()}
                       </span>
                     </div>
                   </CardBody>
@@ -279,11 +279,11 @@ export default function MyBenefitsPage() {
                   <Card key={enrollment.id} className="border-yellow-200">
                     <CardBody className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-medium">{enrollment.plan_name}</h3>
+                        <h3 className="font-medium">{enrollment.planName}</h3>
                         <p className="text-sm text-gray-500">
                           Effective{" "}
                           {new Date(
-                            enrollment.effective_from
+                            enrollment.effectiveFrom
                           ).toLocaleDateString()}
                         </p>
                       </div>

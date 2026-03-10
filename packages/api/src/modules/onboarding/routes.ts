@@ -104,6 +104,29 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
     detail: { tags: ["Onboarding"], summary: "Create onboarding checklist" }
   })
 
+  .patch("/checklists/:id", async (ctx) => {
+    const { onboardingService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await onboardingService.updateTemplate(tenantContext, params.id, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: t.Object({
+      name: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+      description: t.Optional(t.String({ maxLength: 1000 })),
+      isDefault: t.Optional(t.Boolean()),
+      isActive: t.Optional(t.Boolean()),
+    }),
+    beforeHandle: [requirePermission("onboarding", "write")],
+    detail: { tags: ["Onboarding"], summary: "Update onboarding checklist" }
+  })
+
   // Employee Onboarding Instances
   .get("/instances", async (ctx) => {
     const { onboardingService, tenantContext, query, set } = ctx as any;

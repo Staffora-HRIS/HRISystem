@@ -79,7 +79,6 @@ export class TimeService {
         deviceId: input.deviceId,
         latitude: input.latitude,
         longitude: input.longitude,
-        notes: input.notes,
       });
 
       return { success: true, data: this.formatTimeEvent(event) };
@@ -307,13 +306,10 @@ export class TimeService {
     try {
       const shift = await this.repo.createShift(ctx, {
         scheduleId: input.scheduleId,
-        employeeId: input.employeeId,
-        shiftDate: new Date(input.shiftDate),
+        name: input.name || `Shift ${input.startTime}-${input.endTime}`,
         startTime: input.startTime,
         endTime: input.endTime,
         breakMinutes: input.breakMinutes,
-        positionId: input.positionId,
-        notes: input.notes,
       });
 
       return { success: true, data: this.formatShift(shift) };
@@ -360,16 +356,10 @@ export class TimeService {
 
   async getShiftsBySchedule(
     ctx: TenantContext,
-    scheduleId: string,
-    filters: { employeeId?: string; from?: string; to?: string }
+    scheduleId: string
   ): Promise<ServiceResult<unknown[]>> {
     try {
-      const shifts = await this.repo.getShiftsBySchedule(ctx, scheduleId, {
-        employeeId: filters.employeeId,
-        from: filters.from ? new Date(filters.from) : undefined,
-        to: filters.to ? new Date(filters.to) : undefined,
-      });
-
+      const shifts = await this.repo.getShiftsBySchedule(ctx, scheduleId);
       return { success: true, data: shifts.map(this.formatShift) };
     } catch (error) {
       console.error("Error fetching shifts:", error);
@@ -390,12 +380,9 @@ export class TimeService {
   ): Promise<ServiceResult<unknown>> {
     try {
       const shift = await this.repo.updateShift(ctx, id, {
-        shiftDate: input.shiftDate ? new Date(input.shiftDate) : undefined,
         startTime: input.startTime,
         endTime: input.endTime,
         breakMinutes: input.breakMinutes,
-        positionId: input.positionId,
-        notes: input.notes,
       });
 
       if (!shift) {
@@ -712,9 +699,9 @@ export class TimeService {
       deviceId: event.deviceId,
       latitude: event.latitude,
       longitude: event.longitude,
-      notes: event.notes,
+      isManual: event.isManual,
+      sessionId: event.sessionId,
       createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : event.createdAt,
-      updatedAt: event.updatedAt instanceof Date ? event.updatedAt.toISOString() : event.updatedAt,
     };
   }
 
@@ -739,16 +726,12 @@ export class TimeService {
       id: shift.id,
       tenantId: shift.tenantId,
       scheduleId: shift.scheduleId,
-      employeeId: shift.employeeId,
-      shiftDate: shift.shiftDate instanceof Date ? shift.shiftDate.toISOString().split("T")[0] : shift.shiftDate,
+      name: shift.name,
       startTime: shift.startTime,
       endTime: shift.endTime,
       breakMinutes: shift.breakMinutes,
-      actualStartTime: shift.actualStartTime,
-      actualEndTime: shift.actualEndTime,
-      status: shift.status,
-      positionId: shift.positionId,
-      notes: shift.notes,
+      isOvernight: shift.isOvernight,
+      color: shift.color,
       createdAt: shift.createdAt instanceof Date ? shift.createdAt.toISOString() : shift.createdAt,
       updatedAt: shift.updatedAt instanceof Date ? shift.updatedAt.toISOString() : shift.updatedAt,
     };

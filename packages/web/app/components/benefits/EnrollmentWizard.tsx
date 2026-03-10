@@ -15,25 +15,26 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { api } from "~/lib/api-client";
 
 interface BenefitPlan {
   id: string;
-  plan_type: string;
+  planType: string;
   name: string;
   description: string | null;
   provider: string | null;
-  coverage_level: string;
-  employee_contribution: number;
-  employer_contribution: number;
+  coverageLevel: string;
+  employeeContribution: number;
+  employerContribution: number;
 }
 
 interface Dependent {
   id?: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   relationship: string;
-  date_of_birth: string;
-  ssn_last_four?: string;
+  dateOfBirth: string;
+  ssnLastFour?: string;
 }
 
 interface EnrollmentWizardProps {
@@ -82,7 +83,7 @@ export function EnrollmentWizard({
 }: EnrollmentWizardProps) {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<Step>("coverage");
-  const [coverageLevel, setCoverageLevel] = useState(plan.coverage_level);
+  const [coverageLevel, setCoverageLevel] = useState(plan.coverageLevel);
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [beneficiaries, setBeneficiaries] = useState<
     { name: string; relationship: string; percentage: number }[]
@@ -95,21 +96,12 @@ export function EnrollmentWizard({
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/v1/benefits/enrollments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          plan_id: plan.id,
-          coverage_level: coverageLevel,
-          dependents: dependents.length > 0 ? dependents : undefined,
-          beneficiaries: beneficiaries.length > 0 ? beneficiaries : undefined,
-        }),
+      return api.post("/benefits/enrollments", {
+        planId: plan.id,
+        coverageLevel,
+        dependents: dependents.length > 0 ? dependents : undefined,
+        beneficiaries: beneficiaries.length > 0 ? beneficiaries : undefined,
       });
-      if (!response.ok) {
-        throw new Error("Failed to enroll");
-      }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["benefits"] });
@@ -137,7 +129,7 @@ export function EnrollmentWizard({
   const addDependent = () => {
     setDependents([
       ...dependents,
-      { first_name: "", last_name: "", relationship: "child", date_of_birth: "" },
+      { firstName: "", lastName: "", relationship: "child", dateOfBirth: "" },
     ]);
   };
 
@@ -178,7 +170,7 @@ export function EnrollmentWizard({
         return !!coverageLevel;
       case "dependents":
         return dependents.every(
-          (d) => d.first_name && d.last_name && d.relationship && d.date_of_birth
+          (d) => d.firstName && d.lastName && d.relationship && d.dateOfBirth
         );
       case "beneficiaries":
         if (beneficiaries.length === 0) return true;
@@ -342,18 +334,18 @@ export function EnrollmentWizard({
                       <input
                         type="text"
                         placeholder="First Name"
-                        value={dep.first_name}
+                        value={dep.firstName}
                         onChange={(e) =>
-                          updateDependent(index, "first_name", e.target.value)
+                          updateDependent(index, "firstName", e.target.value)
                         }
                         className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
                       />
                       <input
                         type="text"
                         placeholder="Last Name"
-                        value={dep.last_name}
+                        value={dep.lastName}
                         onChange={(e) =>
-                          updateDependent(index, "last_name", e.target.value)
+                          updateDependent(index, "lastName", e.target.value)
                         }
                         className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
                       />
@@ -373,9 +365,9 @@ export function EnrollmentWizard({
                       <input
                         type="date"
                         placeholder="Date of Birth"
-                        value={dep.date_of_birth}
+                        value={dep.dateOfBirth}
                         onChange={(e) =>
-                          updateDependent(index, "date_of_birth", e.target.value)
+                          updateDependent(index, "dateOfBirth", e.target.value)
                         }
                         className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
                       />
@@ -509,13 +501,13 @@ export function EnrollmentWizard({
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Your Contribution</span>
                   <span className="font-medium">
-                    {formatCurrency(plan.employee_contribution)}
+                    {formatCurrency(plan.employeeContribution)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Employer Contribution</span>
                   <span className="font-medium text-green-600">
-                    {formatCurrency(plan.employer_contribution)}
+                    {formatCurrency(plan.employerContribution)}
                   </span>
                 </div>
               </div>
@@ -529,7 +521,7 @@ export function EnrollmentWizard({
                 <ul className="mt-2 space-y-1">
                   {dependents.map((dep, index) => (
                     <li key={index} className="text-sm text-gray-600">
-                      {dep.first_name} {dep.last_name} ({dep.relationship})
+                      {dep.firstName} {dep.lastName} ({dep.relationship})
                     </li>
                   ))}
                 </ul>

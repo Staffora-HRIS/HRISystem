@@ -25,22 +25,24 @@ import { api } from "~/lib/api-client";
 
 interface OnboardingInstance {
   id: string;
-  employee_id: string;
-  employee_name: string | null;
-  checklist_id: string;
-  checklist_name: string | null;
+  employeeId: string;
+  employeeName: string | null;
+  templateId: string;
+  templateName: string | null;
   status: string;
   progress: number;
-  start_date: string;
-  target_completion_date: string | null;
-  completed_date: string | null;
-  total_tasks: number;
-  completed_tasks: number;
-  created_at: string;
+  startDate: string;
+  targetCompletionDate: string | null;
+  completedAt: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface OnboardingListResponse {
-  items: OnboardingInstance[];
+  instances: OnboardingInstance[];
+  count: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -92,7 +94,7 @@ export default function ActiveOnboardingPage() {
     },
   });
 
-  const instances = data?.items ?? [];
+  const instances = data?.instances ?? [];
 
   const stats = {
     total: instances.length,
@@ -106,7 +108,7 @@ export default function ActiveOnboardingPage() {
       id: "employee",
       header: "Employee",
       cell: ({ row }) => {
-        const initials = (row.employee_name || "")
+        const initials = (row.employeeName || "")
           .split(" ")
           .map((n) => n[0])
           .join("")
@@ -118,7 +120,7 @@ export default function ActiveOnboardingPage() {
               {initials || "?"}
             </div>
             <div className="font-medium text-gray-900">
-              {row.employee_name || "Unknown"}
+              {row.employeeName || "Unknown"}
             </div>
           </div>
         );
@@ -129,7 +131,7 @@ export default function ActiveOnboardingPage() {
       header: "Checklist",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {row.checklist_name || "-"}
+          {row.templateName || "-"}
         </div>
       ),
     },
@@ -147,14 +149,14 @@ export default function ActiveOnboardingPage() {
       header: "Progress",
       cell: ({ row }) => {
         const percentage =
-          row.total_tasks > 0
-            ? Math.round((row.completed_tasks / row.total_tasks) * 100)
+          row.taskCount > 0
+            ? Math.round((row.completedTaskCount / row.taskCount) * 100)
             : 0;
         return (
           <div className="min-w-[140px]">
             <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
               <span>
-                {row.completed_tasks}/{row.total_tasks} tasks
+                {row.completedTaskCount}/{row.taskCount} tasks
               </span>
               <span>{percentage}%</span>
             </div>
@@ -179,7 +181,7 @@ export default function ActiveOnboardingPage() {
       id: "startDate",
       header: "Start Date",
       cell: ({ row }) => (
-        <div className="text-sm text-gray-600">{formatDate(row.start_date)}</div>
+        <div className="text-sm text-gray-600">{formatDate(row.startDate)}</div>
       ),
     },
     {
@@ -187,7 +189,7 @@ export default function ActiveOnboardingPage() {
       header: "Target Date",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          {formatDate(row.target_completion_date)}
+          {formatDate(row.targetCompletionDate)}
         </div>
       ),
     },

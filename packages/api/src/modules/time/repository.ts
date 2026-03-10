@@ -26,12 +26,18 @@ export interface TimeEventRow {
   employeeId: string;
   eventType: string;
   eventTime: Date;
+  recordedTime: Date;
   deviceId: string | null;
   latitude: number | null;
   longitude: number | null;
-  notes: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  isManual: boolean;
+  manualReason: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | null;
+  sessionId: string | null;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface ScheduleRow {
@@ -52,15 +58,29 @@ export interface ShiftRow {
   id: string;
   tenantId: string;
   scheduleId: string;
-  employeeId: string;
-  shiftDate: Date;
+  name: string;
   startTime: string;
   endTime: string;
   breakMinutes: number;
-  actualStartTime: string | null;
-  actualEndTime: string | null;
-  status: string;
-  positionId: string | null;
+  isOvernight: boolean;
+  color: string | null;
+  minStaff: number | null;
+  maxStaff: number | null;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ShiftAssignmentRow {
+  id: string;
+  tenantId: string;
+  shiftId: string;
+  employeeId: string;
+  assignmentDate: Date;
+  actualStartTime: Date | null;
+  actualEndTime: Date | null;
+  isPublished: boolean;
+  attendanceStatus: string | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -129,7 +149,9 @@ export class TimeRepository {
       deviceId?: string;
       latitude?: number;
       longitude?: number;
-      notes?: string;
+      isManual?: boolean;
+      manualReason?: string;
+      sessionId?: string;
     }
   ): Promise<TimeEventRow> {
     return this.db.withTransaction(ctx, async (tx) => {
@@ -137,12 +159,12 @@ export class TimeRepository {
       const [row] = await tx<TimeEventRow[]>`
         INSERT INTO app.time_events (
           id, tenant_id, employee_id, event_type, event_time,
-          device_id, latitude, longitude, notes
+          device_id, latitude, longitude, is_manual, manual_reason, session_id
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
           ${data.eventType}, ${data.eventTime},
           ${data.deviceId || null}::uuid, ${data.latitude || null}, ${data.longitude || null},
-          ${data.notes || null}
+          ${data.isManual || false}, ${data.manualReason || null}, ${data.sessionId || null}::uuid
         )
         RETURNING *
       `;
@@ -323,34 +345,31 @@ export class TimeRepository {
     ctx: TenantContext,
     data: {
       scheduleId: string;
-      employeeId: string;
-      shiftDate: Date;
+      name: string;
       startTime: string;
       endTime: string;
       breakMinutes?: number;
-      positionId?: string;
-      notes?: string;
+      isOvernight?: boolean;
+      color?: string;
     }
   ): Promise<ShiftRow> {
     return this.db.withTransaction(ctx, async (tx) => {
       const id = crypto.randomUUID();
       const [row] = await tx<ShiftRow[]>`
         INSERT INTO app.shifts (
-          id, tenant_id, schedule_id, employee_id, shift_date,
-          start_time, end_time, break_minutes, position_id, notes, status
+          id, tenant_id, schedule_id, name,
+          start_time, end_time, break_minutes, is_overnight, color
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.scheduleId}::uuid,
-          ${data.employeeId}::uuid, ${data.shiftDate}, ${data.startTime}, ${data.endTime},
-          ${data.breakMinutes || 0}, ${data.positionId || null}::uuid, ${data.notes || null},
-          'scheduled'
+          ${data.name}, ${data.startTime}, ${data.endTime},
+          ${data.breakMinutes || 0}, ${data.isOvernight || false}, ${data.color || null}
         )
         RETURNING *
       `;
 
       await this.writeOutbox(tx, ctx.tenantId, "shift", id, "time.shift.created", {
         shiftId: id,
-        employeeId: data.employeeId,
-        shiftDate: data.shiftDate,
+        name: data.name,
       });
 
       return row as ShiftRow;
@@ -369,18 +388,14 @@ export class TimeRepository {
 
   async getShiftsBySchedule(
     ctx: TenantContext,
-    scheduleId: string,
-    filters: { employeeId?: string; from?: Date; to?: Date }
+    scheduleId: string
   ): Promise<ShiftRow[]> {
     return this.db.withTransaction(ctx, async (tx) => {
       const rows = await tx<ShiftRow[]>`
         SELECT * FROM app.shifts
         WHERE tenant_id = ${ctx.tenantId}::uuid
           AND schedule_id = ${scheduleId}::uuid
-        ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
-        ${filters.from ? tx`AND shift_date >= ${filters.from}` : tx``}
-        ${filters.to ? tx`AND shift_date <= ${filters.to}` : tx``}
-        ORDER BY shift_date, start_time
+        ORDER BY start_time
       `;
       return rows as ShiftRow[];
     });
@@ -390,29 +405,23 @@ export class TimeRepository {
     ctx: TenantContext,
     id: string,
     data: Partial<{
-      shiftDate: Date;
+      name: string;
       startTime: string;
       endTime: string;
       breakMinutes: number;
-      status: string;
-      actualStartTime: string;
-      actualEndTime: string;
-      positionId: string;
-      notes: string;
+      isOvernight: boolean;
+      color: string;
     }>
   ): Promise<ShiftRow | null> {
     return this.db.withTransaction(ctx, async (tx) => {
       const [row] = await tx<ShiftRow[]>`
         UPDATE app.shifts SET
-          shift_date = COALESCE(${data.shiftDate || null}, shift_date),
+          name = COALESCE(${data.name || null}, name),
           start_time = COALESCE(${data.startTime || null}, start_time),
           end_time = COALESCE(${data.endTime || null}, end_time),
           break_minutes = COALESCE(${data.breakMinutes ?? null}, break_minutes),
-          status = COALESCE(${data.status || null}, status),
-          actual_start_time = COALESCE(${data.actualStartTime || null}, actual_start_time),
-          actual_end_time = COALESCE(${data.actualEndTime || null}, actual_end_time),
-          position_id = COALESCE(${data.positionId || null}::uuid, position_id),
-          notes = COALESCE(${data.notes || null}, notes),
+          is_overnight = COALESCE(${data.isOvernight ?? null}, is_overnight),
+          color = COALESCE(${data.color || null}, color),
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         RETURNING *
@@ -611,10 +620,11 @@ export class TimeRepository {
       `;
 
       if (row) {
-        // Write approval record
+        // Use the security definer function to bypass RLS insert policy
         await tx`
-          INSERT INTO app.timesheet_approvals (id, timesheet_id, approver_id, action, comments)
-          VALUES (${crypto.randomUUID()}::uuid, ${id}::uuid, ${approverId}::uuid, 'approved', ${comments || null})
+          SELECT app.record_timesheet_approval(
+            ${id}::uuid, 'approve', ${approverId}::uuid, ${comments || null}
+          )
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "timesheet", id, "time.timesheet.approved", {
@@ -645,8 +655,9 @@ export class TimeRepository {
 
       if (row) {
         await tx`
-          INSERT INTO app.timesheet_approvals (id, timesheet_id, approver_id, action, comments)
-          VALUES (${crypto.randomUUID()}::uuid, ${id}::uuid, ${approverId}::uuid, 'rejected', ${comments || null})
+          SELECT app.record_timesheet_approval(
+            ${id}::uuid, 'reject', ${approverId}::uuid, ${comments || null}
+          )
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "timesheet", id, "time.timesheet.rejected", {

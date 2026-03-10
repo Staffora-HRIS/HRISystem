@@ -10,6 +10,7 @@ import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
 import { LMSRepository } from "./repository";
 import { LMSService } from "./service";
+import { CreateLearningPathSchema } from "./schemas";
 import { mapErrorToStatus } from "../../lib/route-helpers";
 
 const UuidSchema = t.String({ format: "uuid" });
@@ -220,6 +221,85 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     })),
     beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Complete course" }
+  })
+
+  // Learning Paths
+  .get("/learning-paths", async (ctx) => {
+    const { lmsService, tenantContext, query, set } = ctx as any;
+
+    try {
+      const { cursor, limit, ...filters } = query;
+      const parsedLimit = limit ? Number(limit) : undefined;
+      const result = await lmsService.listLearningPaths(
+        tenantContext,
+        filters,
+        { cursor, limit: parsedLimit }
+      );
+
+      return {
+        items: result.items,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    query: t.Object({
+      search: t.Optional(t.String()),
+      status: t.Optional(t.String()),
+      category: t.Optional(t.String()),
+      cursor: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
+    }),
+    beforeHandle: [requirePermission("lms", "read")],
+    detail: { tags: ["LMS"], summary: "List learning paths" }
+  })
+
+  .get("/learning-paths/:id", async (ctx) => {
+    const { lmsService, tenantContext, params, set } = ctx as any;
+
+    try {
+      const result = await lmsService.getLearningPath(tenantContext, params.id);
+
+      if (!result.success) {
+        set.status = 404;
+        return { error: { code: result.error?.code, message: result.error?.message } };
+      }
+
+      return result.data;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("lms", "read")],
+    detail: { tags: ["LMS"], summary: "Get learning path" }
+  })
+
+  .post("/learning-paths", async (ctx) => {
+    const { lmsService, tenantContext, body, set } = ctx as any;
+
+    try {
+      const result = await lmsService.createLearningPath(tenantContext, body);
+
+      if (!result.success) {
+        set.status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", LMS_ERROR_CODES);
+        return { error: { code: result.error?.code, message: result.error?.message } };
+      }
+
+      set.status = 201;
+      return result.data;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    body: CreateLearningPathSchema,
+    beforeHandle: [requirePermission("lms", "write")],
+    detail: { tags: ["LMS"], summary: "Create learning path" }
   })
 
   // My Learning

@@ -29,9 +29,9 @@ export class AbsenceService {
         description: input.description,
         isPaid: input.isPaid,
         requiresApproval: input.requiresApproval,
-        requiresDocumentation: input.requiresDocumentation,
-        maxDaysPerRequest: input.maxDaysPerRequest,
-        minDaysNotice: input.minDaysNotice,
+        requiresAttachment: input.requiresAttachment,
+        maxConsecutiveDays: input.maxConsecutiveDays,
+        minNoticeDays: input.minNoticeDays,
         color: input.color,
       });
       return { success: true, data: this.formatLeaveType(leaveType) };
@@ -64,6 +64,19 @@ export class AbsenceService {
     }
   }
 
+  async deleteLeaveType(ctx: TenantContext, id: string): Promise<ServiceResult<unknown>> {
+    try {
+      const result = await this.repo.deactivateLeaveType(ctx, id);
+      if (!result) {
+        return { success: false, error: { code: AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND, message: "Leave type not found or already inactive" } };
+      }
+      return { success: true, data: { message: "Leave type deactivated" } };
+    } catch (error) {
+      console.error("Error deleting leave type:", error);
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete leave type" } };
+    }
+  }
+
   // Leave Policies
   async createLeavePolicy(ctx: TenantContext, input: CreateLeavePolicy): Promise<ServiceResult<unknown>> {
     try {
@@ -93,6 +106,19 @@ export class AbsenceService {
     } catch (error) {
       console.error("Error fetching leave policies:", error);
       return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave policies" } };
+    }
+  }
+
+  async deleteLeavePolicy(ctx: TenantContext, id: string): Promise<ServiceResult<unknown>> {
+    try {
+      const result = await this.repo.deactivateLeavePolicy(ctx, id);
+      if (!result) {
+        return { success: false, error: { code: "LEAVE_POLICY_NOT_FOUND", message: "Leave policy not found or already inactive" } };
+      }
+      return { success: true, data: { message: "Leave policy deactivated" } };
+    } catch (error) {
+      console.error("Error deleting leave policy:", error);
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete leave policy" } };
     }
   }
 
@@ -223,9 +249,9 @@ export class AbsenceService {
       description: type.description,
       isPaid: type.isPaid,
       requiresApproval: type.requiresApproval,
-      requiresDocumentation: type.requiresDocumentation,
-      maxDaysPerRequest: type.maxDaysPerRequest,
-      minDaysNotice: type.minDaysNotice,
+      requiresAttachment: type.requiresAttachment,
+      maxConsecutiveDays: type.maxConsecutiveDays,
+      minNoticeDays: type.minNoticeDays,
       color: type.color,
       isActive: type.isActive,
       createdAt: type.createdAt instanceof Date ? type.createdAt.toISOString() : type.createdAt,
