@@ -150,10 +150,9 @@ export interface OpenEnrollmentRow extends Row {
   updatedAt: Date;
 }
 
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
+import type { TenantContext } from "../../types/service-result";
+
+export type { TenantContext } from "../../types/service-result";
 
 export interface PaginatedResult<T> {
   items: T[];

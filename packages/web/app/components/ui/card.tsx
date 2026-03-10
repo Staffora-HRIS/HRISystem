@@ -53,8 +53,8 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
           "rounded-xl overflow-hidden",
           variantStyles[variant],
           paddingStyles[padding],
-          hoverable && "transition-shadow duration-200 hover:shadow-md",
-          clickable && "cursor-pointer transition-all duration-200 hover:shadow-md active:scale-[0.99]",
+          hoverable && "cursor-pointer transition-shadow duration-200 hover:shadow-md",
+          clickable && "cursor-pointer transition-[shadow,transform] duration-200 hover:shadow-md active:scale-[0.99]",
           selected && "ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-900",
           className
         )}

@@ -14,6 +14,7 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import {
   // Schemas
   CreateGoalSchema,
@@ -47,16 +48,6 @@ interface TenantContext {
 // Response Schemas
 // =============================================================================
 
-/**
- * Error response schema for consistent API responses
- */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
 
 /**
  * Goal response schema
@@ -139,30 +130,18 @@ const OptionalIdempotencyHeaderSchema = t.Object({
   "idempotency-key": t.Optional(t.String()),
 });
 
-// =============================================================================
-// Error Mapping
-// =============================================================================
-
 /**
- * Map service error codes to HTTP status codes
+ * Talent module-specific error codes beyond the shared base set
  */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    FORBIDDEN: 403,
-    CONFLICT: 409,
-    VALIDATION_ERROR: 400,
-    INVALID_GOAL: 400,
-    INVALID_REVIEW_CYCLE: 400,
-    INVALID_REVIEW: 400,
-    INVALID_COMPETENCY: 400,
-    REVIEW_NOT_IN_CORRECT_STATE: 400,
-    GOAL_NOT_ACTIVE: 400,
-    CYCLE_NOT_ACTIVE: 400,
-    INTERNAL_ERROR: 500,
-  };
-  return statusMap[code] || 500;
-}
+const _talentErrorStatusMap: Record<string, number> = {
+  INVALID_GOAL: 400,
+  INVALID_REVIEW_CYCLE: 400,
+  INVALID_REVIEW: 400,
+  INVALID_COMPETENCY: 400,
+  REVIEW_NOT_IN_CORRECT_STATE: 400,
+  GOAL_NOT_ACTIVE: 400,
+  CYCLE_NOT_ACTIVE: 400,
+};
 
 // =============================================================================
 // Talent Routes

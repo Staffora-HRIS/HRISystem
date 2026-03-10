@@ -15,11 +15,9 @@ import type {
   InstanceResponse,
   InstanceTask,
 } from "./schemas";
+import type { TenantContext } from "../../types/service-result";
 
-export interface TenantContext {
-  tenantId: string;
-  userId: string;
-}
+export type { TenantContext } from "../../types/service-result";
 
 export interface PaginationOptions {
   cursor?: string;

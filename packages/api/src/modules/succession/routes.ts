@@ -7,6 +7,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { SuccessionRepository, type TenantContext } from "./repository";
 import { SuccessionService } from "./service";
 import {
@@ -21,17 +22,6 @@ import {
   SuccessionPipelineResponseSchema,
   PaginationQuerySchema,
 } from "./schemas";
-
-/**
- * Error response schema
- */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
 
 /**
  * Success response schema
@@ -54,17 +44,13 @@ const IdParamsSchema = t.Object({
 });
 
 /**
- * Map error codes to HTTP status
+ * Module-specific error code overrides (merged into shared mapErrorToStatus)
  */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    PLAN_NOT_FOUND: 404,
-    DUPLICATE_CANDIDATE: 409,
-    POSITION_NOT_FOUND: 400,
-  };
-  return statusMap[code] || 500;
-}
+const SUCCESSION_ERROR_CODES: Record<string, number> = {
+  PLAN_NOT_FOUND: 404,
+  DUPLICATE_CANDIDATE: 409,
+  POSITION_NOT_FOUND: 400,
+};
 
 /**
  * Create Succession routes plugin
@@ -127,7 +113,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.getPipeline(tenantContext);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -156,7 +142,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.getGaps(tenantContext);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -185,7 +171,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.getPlan(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -218,7 +204,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.createPlan(tenantContext, body);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -265,7 +251,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.updatePlan(tenantContext, params.id, body);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -313,7 +299,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.deletePlan(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -358,7 +344,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.listCandidates(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -391,7 +377,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.addCandidate(tenantContext, body);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -435,7 +421,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.getCandidate(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -474,7 +460,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 
@@ -522,7 +508,7 @@ export const successionRoutes = new Elysia({ prefix: "/succession", name: "succe
       const result = await successionService.removeCandidate(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", SUCCESSION_ERROR_CODES);
         return error(status, { error: result.error });
       }
 

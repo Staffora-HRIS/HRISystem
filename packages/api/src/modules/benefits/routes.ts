@@ -16,6 +16,7 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { BenefitsRepository, type TenantContext } from "./repository";
 import { BenefitsService } from "./service";
 import {
@@ -53,17 +54,6 @@ import {
 } from "./schemas";
 
 /**
- * Error response schema for consistent API responses
- */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
-
-/**
  * Success response for delete/action operations
  */
 const SuccessSchema = t.Object({
@@ -91,31 +81,26 @@ const OptionalIdempotencyHeaderSchema = t.Object({
 });
 
 /**
- * Map service error codes to HTTP status codes
+ * Benefits module-specific error codes beyond the shared base set
  */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    CARRIER_NOT_FOUND: 404,
-    PLAN_NOT_FOUND: 404,
-    DEPENDENT_NOT_FOUND: 404,
-    ENROLLMENT_NOT_FOUND: 404,
-    LIFE_EVENT_NOT_FOUND: 404,
-    OPEN_ENROLLMENT_NOT_FOUND: 404,
-    EMPLOYEE_NOT_FOUND: 404,
-    ALREADY_ENROLLED: 409,
-    ENROLLMENT_CONFLICT: 409,
-    LIFE_EVENT_ALREADY_REVIEWED: 409,
-    LIFE_EVENT_EXPIRED: 400,
-    OPEN_ENROLLMENT_NOT_ACTIVE: 400,
-    WAITING_PERIOD_NOT_MET: 400,
-    PLAN_NOT_ELIGIBLE: 400,
-    INVALID_COVERAGE_LEVEL: 400,
-    INVALID_DEPENDENTS: 400,
-    DUPLICATE_CODE: 409,
-  };
-  return statusMap[code] || 500;
-}
+const benefitsErrorStatusMap: Record<string, number> = {
+  CARRIER_NOT_FOUND: 404,
+  PLAN_NOT_FOUND: 404,
+  DEPENDENT_NOT_FOUND: 404,
+  ENROLLMENT_NOT_FOUND: 404,
+  LIFE_EVENT_NOT_FOUND: 404,
+  OPEN_ENROLLMENT_NOT_FOUND: 404,
+  EMPLOYEE_NOT_FOUND: 404,
+  ALREADY_ENROLLED: 409,
+  ENROLLMENT_CONFLICT: 409,
+  LIFE_EVENT_ALREADY_REVIEWED: 409,
+  LIFE_EVENT_EXPIRED: 400,
+  OPEN_ENROLLMENT_NOT_ACTIVE: 400,
+  WAITING_PERIOD_NOT_MET: 400,
+  PLAN_NOT_ELIGIBLE: 400,
+  INVALID_COVERAGE_LEVEL: 400,
+  INVALID_DEPENDENTS: 400,
+};
 
 /**
  * Create Benefits routes plugin
@@ -179,7 +164,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       const result = await benefitsService.getCarrier(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -217,7 +202,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -271,7 +256,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -325,7 +310,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -407,7 +392,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       const result = await benefitsService.getPlan(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -445,7 +430,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -499,7 +484,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -553,7 +538,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -599,7 +584,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       const result = await benefitsService.listDependents(tenantContext, params.employeeId);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -638,7 +623,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -693,7 +678,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -747,7 +732,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -832,7 +817,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -866,7 +851,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -910,7 +895,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -964,7 +949,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1017,7 +1002,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1070,7 +1055,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1168,7 +1153,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1222,7 +1207,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1310,7 +1295,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         if (result.error?.code === "NOT_FOUND") {
           return { active: false, period: null };
         }
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1349,7 +1334,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1402,7 +1387,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", benefitsErrorStatusMap);
         return error(status, { error: result.error });
       }
 

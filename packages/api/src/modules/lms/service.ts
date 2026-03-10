@@ -5,6 +5,7 @@
  * Handles validation, domain rules, and outbox events.
  */
 
+import type { TransactionSql } from "postgres";
 import { LMSRepository, type TenantContext, type PaginationOptions } from "./repository";
 import type {
   CreateCourse,
@@ -14,16 +15,8 @@ import type {
   UpdateEnrollment,
   EnrollmentResponse,
 } from "./schemas";
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 export class LMSService {
   constructor(
@@ -59,7 +52,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Course not found",
         },
       };
@@ -74,15 +67,22 @@ export class LMSService {
     idempotencyKey?: string
   ): Promise<ServiceResult<CourseResponse>> {
     try {
-      const course = await this.repository.createCourse(ctx, data);
+      const course = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createCourse(ctx, data);
 
-      // Emit domain event for course creation
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "course",
-        aggregateId: course.id,
-        eventType: "lms.course.created",
-        payload: { course, actor: ctx.userId },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "course",
+            aggregateId: result.id,
+            eventType: "lms.course.created",
+            payload: { course: result, actor: ctx.userId },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: course };
     } catch (error: any) {
@@ -107,14 +107,33 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Course not found",
         },
       };
     }
 
     try {
-      const course = await this.repository.updateCourse(ctx, id, data);
+      const course = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.updateCourse(ctx, id, data);
+
+          if (!result) {
+            return null;
+          }
+
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "course",
+            aggregateId: result.id,
+            eventType: "lms.course.updated",
+            payload: { course: result, previousValues: existing, actor: ctx.userId },
+          });
+
+          return result;
+        }
+      );
 
       if (!course) {
         return {
@@ -125,14 +144,6 @@ export class LMSService {
           },
         };
       }
-
-      // Emit domain event for course update
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "course",
-        aggregateId: course.id,
-        eventType: "lms.course.updated",
-        payload: { course, previousValues: existing, actor: ctx.userId },
-      });
 
       return { success: true, data: course };
     } catch (error: any) {
@@ -155,7 +166,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Course not found",
         },
       };
@@ -194,22 +205,30 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Course not found",
         },
       };
     }
 
-    const deleted = await this.repository.deleteCourse(ctx, id);
+    const deleted = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        const result = await this.repository.deleteCourse(ctx, id);
 
-    if (deleted) {
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "course",
-        aggregateId: id,
-        eventType: "lms.course.archived",
-        payload: { courseId: id, actor: ctx.userId },
-      });
-    }
+        if (result) {
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "course",
+            aggregateId: id,
+            eventType: "lms.course.archived",
+            payload: { courseId: id, actor: ctx.userId },
+          });
+        }
+
+        return result;
+      }
+    );
 
     return { success: deleted, data: deleted };
   }
@@ -241,7 +260,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
         },
       };
@@ -285,20 +304,27 @@ export class LMSService {
     }
 
     try {
-      const enrollment = await this.repository.createEnrollment(ctx, data);
+      const enrollment = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          const result = await this.repository.createEnrollment(ctx, data);
 
-      // Emit domain event
-      await this.emitDomainEvent(ctx, {
-        aggregateType: "enrollment",
-        aggregateId: enrollment.id,
-        eventType: "lms.employee.enrolled",
-        payload: {
-          enrollment,
-          courseId: data.courseId,
-          employeeId: data.employeeId,
-          actor: ctx.userId,
-        },
-      });
+          // Emit domain event atomically within the same transaction
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "enrollment",
+            aggregateId: result.id,
+            eventType: "lms.employee.enrolled",
+            payload: {
+              enrollment: result,
+              courseId: data.courseId,
+              employeeId: data.employeeId,
+              actor: ctx.userId,
+            },
+          });
+
+          return result;
+        }
+      );
 
       return { success: true, data: enrollment };
     } catch (error: any) {
@@ -333,7 +359,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
         },
       };
@@ -349,7 +375,31 @@ export class LMSService {
       };
     }
 
-    const updated = await this.repository.startEnrollment(ctx, enrollmentId);
+    const updated = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        const result = await this.repository.startEnrollment(ctx, enrollmentId);
+
+        if (!result) {
+          return null;
+        }
+
+        // Emit domain event atomically within the same transaction
+        await this.emitDomainEvent(tx, ctx, {
+          aggregateType: "enrollment",
+          aggregateId: enrollmentId,
+          eventType: "lms.course.started",
+          payload: {
+            enrollmentId,
+            courseId: enrollment.courseId,
+            employeeId: enrollment.employeeId,
+            actor: ctx.userId,
+          },
+        });
+
+        return result;
+      }
+    );
 
     if (!updated) {
       return {
@@ -360,18 +410,6 @@ export class LMSService {
         },
       };
     }
-
-    await this.emitDomainEvent(ctx, {
-      aggregateType: "enrollment",
-      aggregateId: enrollmentId,
-      eventType: "lms.course.started",
-      payload: {
-        enrollmentId,
-        courseId: enrollment.courseId,
-        employeeId: enrollment.employeeId,
-        actor: ctx.userId,
-      },
-    });
 
     return { success: true, data: updated };
   }
@@ -387,7 +425,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
         },
       };
@@ -428,7 +466,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Enrollment not found",
         },
       };
@@ -444,7 +482,32 @@ export class LMSService {
       };
     }
 
-    const updated = await this.repository.completeEnrollment(ctx, enrollmentId, score);
+    const updated = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        const result = await this.repository.completeEnrollment(ctx, enrollmentId, score);
+
+        if (!result) {
+          return null;
+        }
+
+        // Emit completion event atomically within the same transaction
+        await this.emitDomainEvent(tx, ctx, {
+          aggregateType: "enrollment",
+          aggregateId: enrollmentId,
+          eventType: "lms.course.completed",
+          payload: {
+            enrollmentId,
+            courseId: enrollment.courseId,
+            employeeId: enrollment.employeeId,
+            score,
+            actor: ctx.userId,
+          },
+        });
+
+        return result;
+      }
+    );
 
     if (!updated) {
       return {
@@ -455,20 +518,6 @@ export class LMSService {
         },
       };
     }
-
-    // Emit completion event
-    await this.emitDomainEvent(ctx, {
-      aggregateType: "enrollment",
-      aggregateId: enrollmentId,
-      eventType: "lms.course.completed",
-      payload: {
-        enrollmentId,
-        courseId: enrollment.courseId,
-        employeeId: enrollment.employeeId,
-        score,
-        actor: ctx.userId,
-      },
-    });
 
     return { success: true, data: updated };
   }
@@ -483,7 +532,7 @@ export class LMSService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Course not found",
         },
       };
@@ -503,6 +552,7 @@ export class LMSService {
   // ===========================================================================
 
   private async emitDomainEvent(
+    tx: TransactionSql,
     ctx: TenantContext,
     event: {
       aggregateType: string;
@@ -510,25 +560,15 @@ export class LMSService {
       eventType: string;
       payload: Record<string, unknown>;
     }
-  ) {
-    try {
-      await this.db.withTransaction(
-        { tenantId: ctx.tenantId, userId: ctx.userId },
-        async (tx: any) => {
-          return tx`
-            INSERT INTO app.domain_outbox (
-              id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
-            ) VALUES (
-              gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
-              ${event.aggregateId}::uuid, ${event.eventType},
-              ${JSON.stringify(event.payload)}::jsonb, now()
-            )
-          `;
-        }
-      );
-    } catch (error) {
-      // Log but don't fail the main operation
-      console.error("Failed to emit domain event:", error);
-    }
+  ): Promise<void> {
+    await tx`
+      INSERT INTO app.domain_outbox (
+        id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
+      ) VALUES (
+        gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
+        ${event.aggregateId}::uuid, ${event.eventType},
+        ${JSON.stringify(event.payload)}::jsonb, now()
+      )
+    `;
   }
 }

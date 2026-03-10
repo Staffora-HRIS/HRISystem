@@ -6,5 +6,6 @@
 
 export { onboardingRoutes, type OnboardingRoutes } from "./routes";
 export { OnboardingRepository, type TenantContext, type PaginationOptions } from "./repository";
-export { OnboardingService, type ServiceResult } from "./service";
+export { OnboardingService } from "./service";
+export type { ServiceResult } from "../../types/service-result";
 export * from "./schemas";

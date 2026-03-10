@@ -16,6 +16,7 @@ import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { AppError, NotFoundError, ConflictError } from "../../plugins/errors";
 import { AuditActions } from "../../plugins/audit";
+import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { HRRepository, type TenantContext } from "./repository";
 import { HRService } from "./service";
 import {
@@ -53,55 +54,29 @@ import {
 } from "./schemas";
 
 /**
- * Error response schema for consistent API responses
+ * HR module-specific error codes beyond the shared base set
  */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
-
-/**
- * Success response for delete operations
- */
-const DeleteSuccessSchema = t.Object({
-  success: t.Literal(true),
-  message: t.String(),
-});
-
-/**
- * Map service error codes to HTTP status codes
- */
-function mapErrorToStatus(code: string): number {
-  const statusMap: Record<string, number> = {
-    NOT_FOUND: 404,
-    DUPLICATE_CODE: 409,
-    INVALID_PARENT: 400,
-    INACTIVE_PARENT: 400,
-    CIRCULAR_HIERARCHY: 400,
-    HAS_CHILDREN: 400,
-    HAS_EMPLOYEES: 400,
-    HAS_ASSIGNMENTS: 400,
-    INVALID_ORG_UNIT: 400,
-    INVALID_SALARY_RANGE: 400,
-    POSITION_NOT_FOUND: 400,
-    POSITION_OVERFILLED: 400,
-    ORG_UNIT_NOT_FOUND: 400,
-    MANAGER_NOT_FOUND: 400,
-    INVALID_MANAGER: 400,
-    TERMINATED: 400,
-    INVALID_TRANSITION: 409,
-    CIRCULAR_REPORTING: 400,
-    ALREADY_TERMINATED: 409,
-    CANNOT_TERMINATE_PENDING: 400,
-    INVALID_TERMINATION_DATE: 400,
-    INVALID_DIMENSION: 400,
-    EFFECTIVE_DATE_OVERLAP: 409,
-  };
-  return statusMap[code] || 500;
-}
+const hrErrorStatusMap: Record<string, number> = {
+  INVALID_PARENT: 400,
+  INACTIVE_PARENT: 400,
+  CIRCULAR_HIERARCHY: 400,
+  HAS_CHILDREN: 400,
+  HAS_EMPLOYEES: 400,
+  HAS_ASSIGNMENTS: 400,
+  INVALID_ORG_UNIT: 400,
+  INVALID_SALARY_RANGE: 400,
+  POSITION_NOT_FOUND: 400,
+  POSITION_OVERFILLED: 400,
+  ORG_UNIT_NOT_FOUND: 400,
+  MANAGER_NOT_FOUND: 400,
+  INVALID_MANAGER: 400,
+  TERMINATED: 400,
+  CIRCULAR_REPORTING: 400,
+  ALREADY_TERMINATED: 409,
+  CANNOT_TERMINATE_PENDING: 400,
+  INVALID_TERMINATION_DATE: 400,
+  INVALID_DIMENSION: 400,
+};
 
 /**
  * Create HR routes plugin
@@ -171,7 +146,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getOrgUnitHierarchy(tenantContext, query.root_id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -204,7 +179,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getOrgUnit(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -241,7 +216,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -297,7 +272,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -349,7 +324,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.deleteOrgUnit(tenantContext, params.id, idempotencyKey);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -436,7 +411,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getPosition(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -473,7 +448,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -528,7 +503,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -580,7 +555,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.deletePosition(tenantContext, params.id, idempotencyKey);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -663,7 +638,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getEmployee(tenantContext, params.id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -694,7 +669,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getEmployeeByNumber(tenantContext, params.employeeNumber);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -731,7 +706,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -787,7 +762,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -845,7 +820,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -923,7 +898,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
           );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -985,7 +960,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1047,7 +1022,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1108,7 +1083,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1179,7 +1154,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1232,7 +1207,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getOrgChart(tenantContext, query.root_employee_id);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1281,7 +1256,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getDirectReports(tenantContext, params.employeeId);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1321,7 +1296,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       const result = await hrService.getReportingChain(tenantContext, params.employeeId);
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 
@@ -1369,7 +1344,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR");
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
         return error(status, { error: result.error });
       }
 

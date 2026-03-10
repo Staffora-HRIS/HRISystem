@@ -4,18 +4,8 @@
 
 import { AbsenceRepository, type TenantContext } from "./repository";
 import type { CreateLeaveType, CreateLeavePolicy, CreateLeaveRequest, LeaveRequestFilters } from "./schemas";
-
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: { code: string; message: string; details?: unknown };
-}
-
-export interface PaginatedServiceResult<T> {
-  success: boolean;
-  data?: { items: T[]; cursor: string | null; hasMore: boolean };
-  error?: { code: string; message: string; details?: unknown };
-}
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 export const AbsenceErrorCodes = {
   LEAVE_TYPE_NOT_FOUND: "LEAVE_TYPE_NOT_FOUND",
@@ -47,7 +37,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveType(leaveType) };
     } catch (error) {
       console.error("Error creating leave type:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create leave type" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create leave type" } };
     }
   }
 
@@ -57,7 +47,7 @@ export class AbsenceService {
       return { success: true, data: types.map(this.formatLeaveType) };
     } catch (error) {
       console.error("Error fetching leave types:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave types" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave types" } };
     }
   }
 
@@ -70,7 +60,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveType(type) };
     } catch (error) {
       console.error("Error fetching leave type:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave type" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave type" } };
     }
   }
 
@@ -92,7 +82,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeavePolicy(policy) };
     } catch (error) {
       console.error("Error creating leave policy:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create leave policy" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create leave policy" } };
     }
   }
 
@@ -102,7 +92,7 @@ export class AbsenceService {
       return { success: true, data: policies.map(this.formatLeavePolicy) };
     } catch (error) {
       console.error("Error fetching leave policies:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave policies" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave policies" } };
     }
   }
 
@@ -122,11 +112,11 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error creating leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create leave request" } };
     }
   }
 
-  async getLeaveRequests(ctx: TenantContext, filters: LeaveRequestFilters): Promise<PaginatedServiceResult<unknown>> {
+  async getLeaveRequests(ctx: TenantContext, filters: LeaveRequestFilters): Promise<ServiceResult<{ items: unknown[]; cursor: string | null; hasMore: boolean }>> {
     try {
       const result = await this.repo.getLeaveRequests(ctx, {
         employeeId: filters.employeeId,
@@ -143,7 +133,7 @@ export class AbsenceService {
       };
     } catch (error) {
       console.error("Error fetching leave requests:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave requests" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave requests" } };
     }
   }
 
@@ -156,7 +146,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error fetching leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave request" } };
     }
   }
 
@@ -169,7 +159,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error submitting leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to submit leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to submit leave request" } };
     }
   }
 
@@ -182,7 +172,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error approving leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to approve leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to approve leave request" } };
     }
   }
 
@@ -195,7 +185,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error rejecting leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to reject leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to reject leave request" } };
     }
   }
 
@@ -208,7 +198,7 @@ export class AbsenceService {
       return { success: true, data: this.formatLeaveRequest(request) };
     } catch (error) {
       console.error("Error cancelling leave request:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to cancel leave request" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to cancel leave request" } };
     }
   }
 
@@ -219,7 +209,7 @@ export class AbsenceService {
       return { success: true, data: balances.map(this.formatLeaveBalance) };
     } catch (error) {
       console.error("Error fetching leave balances:", error);
-      return { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch leave balances" } };
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave balances" } };
     }
   }
 

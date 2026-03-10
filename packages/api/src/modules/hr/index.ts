@@ -20,7 +20,8 @@
 export { hrRoutes, type HRRoutes } from "./routes";
 
 // Export service
-export { HRService, type ServiceResult, type PaginatedServiceResult } from "./service";
+export { HRService } from "./service";
+export type { ServiceResult, PaginatedServiceResult, TenantContext as ServiceTenantContext } from "../../types/service-result";
 
 // Export repository
 export {

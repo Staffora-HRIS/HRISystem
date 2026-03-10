@@ -6,5 +6,6 @@
 
 export { casesRoutes, type CasesRoutes } from "./routes";
 export { CasesRepository, type TenantContext, type PaginationOptions } from "./repository";
-export { CasesService, type ServiceResult } from "./service";
+export { CasesService } from "./service";
+export type { ServiceResult } from "../../types/service-result";
 export * from "./schemas";

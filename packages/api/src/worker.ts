@@ -31,6 +31,21 @@ import { getDbClient } from "./plugins/db";
 import { getCacheClient } from "./plugins/cache";
 
 // =============================================================================
+// Utilities
+// =============================================================================
+
+/**
+ * Sanitize error objects for safe logging.
+ * Prevents full stack traces and potentially sensitive details from being logged.
+ */
+function sanitizeError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  return String(error);
+}
+
+// =============================================================================
 // Configuration
 // =============================================================================
 
@@ -222,12 +237,12 @@ async function main(): Promise<void> {
 
   // Handle uncaught errors
   process.on("uncaughtException", (error) => {
-    console.error("[Worker] Uncaught exception:", error);
+    console.error("[Worker] Uncaught exception:", sanitizeError(error));
     shutdown("uncaughtException");
   });
 
   process.on("unhandledRejection", (reason) => {
-    console.error("[Worker] Unhandled rejection:", reason);
+    console.error("[Worker] Unhandled rejection:", sanitizeError(reason));
   });
 
   // Start health check server
@@ -256,7 +271,7 @@ async function main(): Promise<void> {
   try {
     await worker.start(streams);
   } catch (error) {
-    console.error("[Worker] Fatal error:", error);
+    console.error("[Worker] Fatal error:", sanitizeError(error));
     await shutdown("error");
   }
 }
@@ -266,6 +281,6 @@ async function main(): Promise<void> {
 // =============================================================================
 
 main().catch((error) => {
-  console.error("[Worker] Failed to start:", error);
+  console.error("[Worker] Failed to start:", sanitizeError(error));
   process.exit(1);
 });

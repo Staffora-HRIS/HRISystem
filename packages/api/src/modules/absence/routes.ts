@@ -4,6 +4,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { ErrorResponseSchema } from "../../lib/route-helpers";
 import { AbsenceRepository } from "./repository";
 import { AbsenceService } from "./service";
 import {
@@ -15,17 +16,6 @@ import {
   IdParamsSchema,
   EmployeeIdParamsSchema,
 } from "./schemas";
-
-/**
- * Error response schema
- */
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-  }),
-});
 
 export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-routes" })
   .derive((ctx) => {

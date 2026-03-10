@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Users, MapPin, Calendar, Building, Search, BarChart3 }
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Requisition {
@@ -36,6 +37,7 @@ interface RequisitionStats {
 
 export default function RecruitmentPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
@@ -105,7 +107,7 @@ export default function RecruitmentPage() {
           <Users className="h-4 w-4 mr-2" />
           View Candidates
         </Button>
-        <Button onClick={() => alert("Create requisition modal")}>
+        <Button onClick={() => toast.info("Coming Soon", { message: "The requisition creation form will be available in a future update." })}>
           <Plus className="h-4 w-4 mr-2" />
           New Requisition
         </Button>
@@ -160,7 +162,7 @@ export default function RecruitmentPage() {
             <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">No requisitions found</h3>
             <p className="text-gray-500 mb-4">Create your first job requisition to start recruiting.</p>
-            <Button>
+            <Button onClick={() => toast.info("Coming Soon", { message: "The requisition creation form will be available in a future update." })}>
               <Plus className="h-4 w-4 mr-2" />
               New Requisition
             </Button>
@@ -234,7 +236,7 @@ export default function RecruitmentPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => alert(`View requisition: ${req.id}`)}
+                    onClick={() => toast.info("Coming Soon", { message: "Requisition detail view will be available in a future update." })}
                   >
                     View
                   </Button>

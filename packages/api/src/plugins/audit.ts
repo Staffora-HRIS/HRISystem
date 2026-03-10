@@ -11,7 +11,7 @@
 
 import { Elysia } from "elysia";
 import { type DatabaseClient, type TransactionSql } from "./db";
-import { type User, type Session } from "./auth";
+import { type User, type Session } from "./auth-better";
 import { type Tenant } from "./tenant";
 
 // =============================================================================
@@ -466,12 +466,18 @@ export function sanitizeAuditData(
  * ```
  */
 export function auditPlugin() {
+  // Singleton: created once when plugin is initialized, reused across all requests
+  let auditServiceSingleton: AuditService | null = null;
+
   return new Elysia({ name: "audit" })
-    // Audit service for direct access
+    // Audit service for direct access (singleton)
     .derive({ as: "global" }, (ctx) => {
       const { db } = ctx as any;
+      if (!auditServiceSingleton) {
+        auditServiceSingleton = new AuditService(db);
+      }
       return {
-        auditService: new AuditService(db),
+        auditService: auditServiceSingleton,
       } as Record<string, unknown>;
     })
 

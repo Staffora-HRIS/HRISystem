@@ -196,7 +196,7 @@ export function betterAuthPlugin() {
         const response = await auth.handler(safeRequest);
         return await normalizeBetterAuthResponse(response);
       } catch (error) {
-        console.error("Better Auth handler error:", error);
+        console.error("Better Auth handler error:", error instanceof Error ? error.message : "Unknown error");
         return buildAuthErrorResponse(error);
       }
     })
@@ -209,7 +209,7 @@ export function betterAuthPlugin() {
         const response = await auth.handler(safeRequest);
         return await normalizeBetterAuthResponse(response);
       } catch (error) {
-        console.error("Better Auth handler error:", error);
+        console.error("Better Auth handler error:", error instanceof Error ? error.message : "Unknown error");
         return buildAuthErrorResponse(error);
       }
     });
@@ -245,7 +245,7 @@ export function betterAuthSession() {
           isAuthenticated: true as const,
         };
       } catch (error) {
-        console.error("Session validation error:", error);
+        console.error("Session validation error:", error instanceof Error ? error.message : "Unknown error");
         return {
           session: null,
           user: null,

@@ -5,6 +5,7 @@ import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { api } from "~/lib/api-client";
+import { useToast } from "~/components/ui/toast";
 
 interface Goal {
   id: string;
@@ -31,6 +32,7 @@ interface Review {
 
 export default function ManagerPerformancePage() {
   const [activeTab, setActiveTab] = useState<"goals" | "reviews">("goals");
+  const toast = useToast();
 
   const { data: goalsData } = useQuery({
     queryKey: ["team-goals"],
@@ -160,7 +162,13 @@ export default function ManagerPerformancePage() {
                           />
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">View</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toast.info("Coming Soon", { message: "Goal detail view will be available in a future update." })}
+                      >
+                        View
+                      </Button>
                     </div>
                   </CardBody>
                 </Card>
@@ -210,9 +218,19 @@ export default function ManagerPerformancePage() {
                         </div>
                       </div>
                       {review.status === "manager_review" ? (
-                        <Button>Complete Review</Button>
+                        <Button
+                          onClick={() => toast.info("Coming Soon", { message: "The review completion form will be available in a future update." })}
+                        >
+                          Complete Review
+                        </Button>
                       ) : (
-                        <Button variant="outline" size="sm">View</Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toast.info("Coming Soon", { message: "Review detail view will be available in a future update." })}
+                        >
+                          View
+                        </Button>
                       )}
                     </div>
                   </CardBody>

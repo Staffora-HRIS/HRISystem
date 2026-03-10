@@ -31,15 +31,7 @@ import type {
 // Types
 // =============================================================================
 
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
+import type { ServiceResult } from "../../types/service-result";
 
 // =============================================================================
 // Service

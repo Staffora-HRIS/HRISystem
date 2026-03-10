@@ -77,47 +77,6 @@ export function generatePrefixedId(prefix: string, length = 12): string {
   return `${prefix}_${result}`;
 }
 
-/**
- * Check if a string is a valid UUID v4
- * @deprecated Use isValidUUID from validation utilities instead
- */
-export function isValidUuid(id: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(id);
-}
-
-// =============================================================================
-// Legacy Date Utilities (for backward compatibility)
-// =============================================================================
-
-/**
- * Format a date to ISO 8601 string
- * @deprecated Use formatTimestamp from dates utilities instead
- */
-export function toISOString(date: Date): string {
-  return date.toISOString();
-}
-
-/**
- * Parse an ISO 8601 string to a Date object
- * @deprecated Use parseDate from dates utilities instead
- */
-export function parseISOString(dateString: string): Date {
-  return new Date(dateString);
-}
-
-/**
- * Calculate the difference in days between two dates
- * @deprecated Use diffInDays from dates utilities instead
- */
-export function daysBetween(startDate: Date, endDate: Date): number {
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.round(
-    (endDate.getTime() - startDate.getTime()) / millisecondsPerDay
-  );
-}
-
 // =============================================================================
 // Object Utilities
 // =============================================================================

@@ -28,15 +28,8 @@ import type {
 // Types
 // =============================================================================
 
-interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, any>;
-  };
-}
+import type { ServiceResult } from "../../types/service-result";
+import { ErrorCodes } from "../../plugins/errors";
 
 // =============================================================================
 // Service
@@ -72,7 +65,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Competency not found",
           details: { id },
         },
@@ -122,7 +115,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Competency not found",
           details: { id },
         },
@@ -177,7 +170,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Competency not found",
           details: { id },
         },
@@ -243,7 +236,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Job competency not found",
           details: { id },
         },
@@ -265,7 +258,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Job competency not found",
           details: { id },
         },
@@ -297,7 +290,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee competency not found",
           details: { id },
         },
@@ -346,7 +339,7 @@ export class CompetenciesService {
       return {
         success: false,
         error: {
-          code: "NOT_FOUND",
+          code: ErrorCodes.NOT_FOUND,
           message: "Employee competency not found",
           details: { id },
         },
