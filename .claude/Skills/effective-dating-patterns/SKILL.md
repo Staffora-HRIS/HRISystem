@@ -60,7 +60,7 @@ async getPositionAsOf(ctx: TenantContext, employeeId: string, asOfDate: string) 
 ## Service Layer Validation
 ```typescript
 async updatePosition(ctx: TenantContext, employeeId: string, data: Input) {
-  return await this.db.begin(async (tx) => {
+  return await this.db.withTransaction(ctx, async (tx) => {
     // Validate no overlapping records
     const overlaps = await tx`
       SELECT id FROM app.position_assignments

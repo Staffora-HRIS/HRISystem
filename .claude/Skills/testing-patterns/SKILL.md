@@ -20,17 +20,20 @@ bun test path/to/file.test.ts         # Single file
 ```typescript
 describe('RLS', () => {
   test('tenant B cannot read tenant A data', async () => {
-    await setTenantContext(tenantB.id);
-    const result = await db.query.employees.findMany();
+    const db = getTestDb();
+    await setTenantContext(db, tenantB.id);
+    const result = await db`SELECT * FROM employees`;
     expect(result.find(e => e.tenantId === tenantA.id)).toBeUndefined();
   });
 
   test('tenant B cannot update tenant A data', async () => {
-    await setTenantContext(tenantB.id);
-    const result = await db.update(employees)
-      .set({ firstName: 'Hacked' })
-      .where(eq(employees.id, tenantAEmployee.id))
-      .returning();
+    const db = getTestDb();
+    await setTenantContext(db, tenantB.id);
+    const result = await db`
+      UPDATE employees SET first_name = 'Hacked'
+      WHERE id = ${tenantAEmployee.id}
+      RETURNING *
+    `;
     expect(result).toHaveLength(0);
   });
 });
@@ -59,9 +62,13 @@ test('prevents overlapping records', async () => {
 ### 4. Outbox Tests
 ```typescript
 test('event written atomically', async () => {
+  const db = getTestDb();
   const emp = await service.create(validData, ctx);
-  const event = await db.query.domainOutbox.findFirst({
-    where: eq(domainOutbox.aggregateId, emp.id),
+  const [event] = await withSystemContext(db, async (tx) => {
+    return await tx`
+      SELECT * FROM domain_outbox
+      WHERE aggregate_id = ${emp.id}
+    `;
   });
   expect(event.eventType).toBe('hr.employee.created');
 });
@@ -77,8 +84,14 @@ test('valid transitions', () => {
 
 ## Test Setup
 ```typescript
-// Use set_config with parameterized queries (NOT string interpolation)
-export async function setTenantContext(tenantId: string, userId?: string) {
+import { getTestDb, setTenantContext, withSystemContext, createTestTenant, createTestUser, closeTestConnections } from '../setup';
+
+// setTenantContext requires db as first param
+export async function setTenantContext(
+  db: ReturnType<typeof postgres>,
+  tenantId: string,
+  userId?: string
+) {
   await db`SELECT set_config('app.current_tenant', ${tenantId}, false)`;
   await db`SELECT set_config('app.current_user', ${userId ?? ''}, false)`;
 }
