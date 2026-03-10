@@ -62,9 +62,9 @@ export default function ManagerApprovalsPage() {
   const approveMutation = useMutation({
     mutationFn: (params: { type: string; id: string }) => {
       if (params.type === "leave_request") {
-        return api.post(`/absence/requests/${params.id}/approve`, {});
+        return api.post(`/absence/requests/${params.id}/approve`, { action: "approve" });
       }
-      return api.post(`/time/timesheets/${params.id}/approve`, {});
+      return api.post(`/time/timesheets/${params.id}/approve`, { action: "approve" });
     },
     onSuccess: () => {
       toast.success("Approved successfully");
@@ -78,9 +78,9 @@ export default function ManagerApprovalsPage() {
   const rejectMutation = useMutation({
     mutationFn: (params: { type: string; id: string }) => {
       if (params.type === "leave_request") {
-        return api.post(`/absence/requests/${params.id}/reject`, { reason: "Rejected by manager" });
+        return api.post(`/absence/requests/${params.id}/approve`, { action: "reject", comments: "Rejected by manager" });
       }
-      return api.post(`/time/timesheets/${params.id}/reject`, { reason: "Rejected by manager" });
+      return api.post(`/time/timesheets/${params.id}/approve`, { action: "reject", comments: "Rejected by manager" });
     },
     onSuccess: () => {
       toast.success("Rejected successfully");

@@ -208,6 +208,38 @@ export class BenefitsService {
     };
   }
 
+  async deleteCarrier(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<void>> {
+    const existing = await this.repository.findCarrierById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Carrier not found",
+          details: { id },
+        },
+      };
+    }
+
+    await this.db.withTransaction(context, async (tx) => {
+      await this.repository.deactivateCarrier(tx, context, id);
+
+      await this.emitEvent(
+        tx,
+        context,
+        "benefit_carrier",
+        id,
+        "benefits.carrier.updated",
+        { carrierId: id, action: "deactivated" }
+      );
+    });
+
+    return { success: true };
+  }
+
   // ===========================================================================
   // Plan Methods
   // ===========================================================================
@@ -345,9 +377,64 @@ export class BenefitsService {
     };
   }
 
+  async deletePlan(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<void>> {
+    const existing = await this.repository.findPlanById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Plan not found",
+          details: { id },
+        },
+      };
+    }
+
+    await this.db.withTransaction(context, async (tx) => {
+      await this.repository.deactivatePlan(tx, context, id);
+
+      await this.emitEvent(
+        tx,
+        context,
+        "benefit_plan",
+        id,
+        "benefits.plan.updated",
+        { planId: id, action: "deactivated" }
+      );
+    });
+
+    return { success: true };
+  }
+
   // ===========================================================================
   // Dependent Methods
   // ===========================================================================
+
+  async getDependent(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<DependentResponse>> {
+    const dependent = await this.repository.findDependentById(context, id);
+
+    if (!dependent) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Dependent not found",
+          details: { id },
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.mapDependentToResponse(dependent),
+    };
+  }
 
   async listDependents(
     context: TenantContext,
@@ -644,6 +731,17 @@ export class BenefitsService {
     });
 
     return { success: true };
+  }
+
+  async getEnrollmentStats(
+    context: TenantContext
+  ): Promise<ServiceResult<{ totalEmployees: number; enrolledEmployees: number; pendingEnrollments: number; pendingLifeEvents: number }>> {
+    const stats = await this.repository.getEnrollmentStats(context);
+
+    return {
+      success: true,
+      data: stats,
+    };
   }
 
   async getEmployeeBenefitCosts(

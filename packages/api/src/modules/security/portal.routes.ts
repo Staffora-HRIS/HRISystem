@@ -5,8 +5,10 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
+import { ErrorCodes } from "../../plugins/errors";
 import { PortalService } from "./portal.service";
 import {
   PortalTypeSchema,
@@ -20,12 +22,16 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .get(
     "/",
     async (ctx) => {
-      const { db } = ctx as any;
+      const { tenant, user, db } = ctx as any;
       const service = new PortalService(db);
-      const portals = await service.getActivePortals();
+      const portals = await service.getActivePortals({
+        tenantId: tenant.id,
+        userId: user.id,
+      });
       return { portals };
     },
     {
+      beforeHandle: [requireTenantContext],
       detail: {
         tags: ["Portal"],
         summary: "List all active portals",
@@ -39,16 +45,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
       const portals = await service.getUserPortals({
@@ -59,6 +55,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { portals };
     },
     {
+      beforeHandle: [requireTenantContext],
       detail: {
         tags: ["Portal"],
         summary: "Get user's available portals",
@@ -70,16 +67,19 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .get(
     "/:code",
     async (ctx) => {
-      const { db, params, set, requestId } = ctx as any;
+      const { tenant, user, db, params, set, requestId } = ctx as any;
 
       const service = new PortalService(db);
-      const portal = await service.getPortalByCode(params.code);
+      const portal = await service.getPortalByCode(
+        { tenantId: tenant.id, userId: user.id },
+        params.code
+      );
 
       if (!portal) {
         set.status = 404;
         return {
           error: {
-            code: "NOT_FOUND",
+            code: ErrorCodes.NOT_FOUND,
             message: "Portal not found",
             requestId,
           },
@@ -89,6 +89,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return portal;
     },
     {
+      beforeHandle: [requireTenantContext],
       params: t.Object({ code: PortalTypeSchema }),
       detail: {
         tags: ["Portal"],
@@ -103,16 +104,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
 
@@ -126,7 +117,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
         set.status = 403;
         return {
           error: {
-            code: "FORBIDDEN",
+            code: ErrorCodes.FORBIDDEN,
             message: "No access to this portal",
             requestId,
           },
@@ -141,6 +132,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { navigation };
     },
     {
+      beforeHandle: [requireTenantContext],
       params: t.Object({ code: PortalTypeSchema }),
       detail: {
         tags: ["Portal"],
@@ -155,16 +147,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, body, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       try {
         const service = new PortalService(db);
@@ -173,7 +155,10 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
           body.portalCode
         );
 
-        const portal = await service.getPortalByCode(body.portalCode);
+        const portal = await service.getPortalByCode(
+          { tenantId: tenant.id, userId: user.id },
+          body.portalCode
+        );
 
         return {
           success: true,
@@ -190,7 +175,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
           set.status = 403;
           return {
             error: {
-              code: "FORBIDDEN",
+              code: ErrorCodes.FORBIDDEN,
               message: error.message,
               requestId,
             },
@@ -200,6 +185,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       }
     },
     {
+      beforeHandle: [requireTenantContext],
       body: SwitchPortalSchema,
       detail: {
         tags: ["Portal"],
@@ -214,16 +200,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, body, audit, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
       const accessId = await service.grantPortalAccess(
@@ -250,7 +226,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { success: true, accessId };
     },
     {
-      beforeHandle: [requirePermission("users", "write")],
+      beforeHandle: [requireTenantContext, requirePermission("users", "write")],
       body: GrantPortalAccessSchema,
       detail: {
         tags: ["Portal"],
@@ -265,16 +241,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, body, audit, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
       const revoked = await service.revokePortalAccess(
@@ -287,7 +253,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
         set.status = 404;
         return {
           error: {
-            code: "NOT_FOUND",
+            code: ErrorCodes.NOT_FOUND,
             message: "Portal access not found",
             requestId,
           },
@@ -310,7 +276,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { success: true };
     },
     {
-      beforeHandle: [requirePermission("users", "write")],
+      beforeHandle: [requireTenantContext, requirePermission("users", "write")],
       body: RevokePortalAccessSchema,
       detail: {
         tags: ["Portal"],
@@ -325,16 +291,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
       const portals = await service.getUserPortals({
@@ -345,7 +301,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { userId: params.userId, portals };
     },
     {
-      beforeHandle: [requirePermission("users", "read")],
+      beforeHandle: [requireTenantContext, requirePermission("users", "read")],
       params: t.Object({ userId: t.String() }),
       detail: {
         tags: ["Portal"],
@@ -360,16 +316,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     async (ctx) => {
       const { tenant, user, db, params, audit, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new PortalService(db);
       await service.syncPortalAccessFromRoles(
@@ -395,7 +341,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       return { success: true, portals };
     },
     {
-      beforeHandle: [requirePermission("users", "write")],
+      beforeHandle: [requireTenantContext, requirePermission("users", "write")],
       params: t.Object({ userId: t.String() }),
       detail: {
         tags: ["Portal"],

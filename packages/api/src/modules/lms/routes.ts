@@ -6,6 +6,8 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requirePermission } from "../../plugins/rbac";
+import { ErrorCodes } from "../../plugins/errors";
 import { LMSRepository } from "./repository";
 import { LMSService } from "./service";
 import { mapErrorToStatus } from "../../lib/route-helpers";
@@ -27,30 +29,6 @@ const LMS_ERROR_CODES: Record<string, number> = {
   COMPLETE_FAILED: 500,
 };
 
-/**
- * Helper to check auth and tenant context, returning appropriate errors.
- * Returns error response object if check fails, null if checks pass.
- */
-function checkContext(ctx: any): { status: number; body: any } | null {
-  const { tenant, user } = ctx;
-
-  if (!user) {
-    return {
-      status: 401,
-      body: { error: { code: "UNAUTHORIZED", message: "Authentication required" } }
-    };
-  }
-
-  if (!tenant) {
-    return {
-      status: 400,
-      body: { error: { code: "MISSING_TENANT", message: "Tenant context required. Please select a tenant or provide X-Tenant-ID header." } }
-    };
-  }
-
-  return null;
-}
-
 export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   // Wire up service and repository via derive
@@ -71,11 +49,7 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
   // Courses
   .get("/courses", async (ctx) => {
     const { lmsService, tenantContext, query, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     try {
       const { cursor, limit, ...filters } = query;
@@ -93,7 +67,7 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: t.Object({
@@ -102,16 +76,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requirePermission("lms", "read")],
     detail: { tags: ["LMS"], summary: "List courses" }
   })
 
   .post("/courses", async (ctx) => {
     const { lmsService, tenantContext, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     const result = await lmsService.createCourse(tenantContext, body);
 
@@ -132,16 +103,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       contentUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
       thumbnailUrl: t.Optional(t.String({ maxLength: 500, pattern: "^https?://" })),
     }),
+    beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Create course" }
   })
 
   .get("/courses/:id", async (ctx) => {
     const { lmsService, tenantContext, params, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     const result = await lmsService.getCourse(tenantContext, params.id);
 
@@ -153,17 +121,14 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("lms", "read")],
     detail: { tags: ["LMS"], summary: "Get course by ID" }
   })
 
   // Enrollments
   .get("/enrollments", async (ctx) => {
     const { lmsService, tenantContext, query, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     try {
       const { cursor, limit, ...filters } = query;
@@ -181,7 +146,7 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: t.Object({
@@ -191,16 +156,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requirePermission("lms", "read")],
     detail: { tags: ["LMS"], summary: "List enrollments" }
   })
 
   .post("/enrollments", async (ctx) => {
     const { lmsService, tenantContext, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     const result = await lmsService.enrollEmployee(tenantContext, body);
 
@@ -217,16 +179,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       employeeId: UuidSchema,
       dueDate: t.Optional(t.String({ format: "date" })),
     }),
+    beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Create enrollment" }
   })
 
   .post("/enrollments/:id/start", async (ctx) => {
     const { lmsService, tenantContext, params, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     const result = await lmsService.startCourse(tenantContext, params.id);
 
@@ -238,16 +197,13 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Start course" }
   })
 
   .post("/enrollments/:id/complete", async (ctx) => {
     const { lmsService, tenantContext, params, body, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     const result = await lmsService.completeCourse(tenantContext, params.id, (body as any)?.score);
 
@@ -262,17 +218,14 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     body: t.Optional(t.Object({
       score: t.Optional(t.Number({ minimum: 0, maximum: 100 })),
     })),
+    beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Complete course" }
   })
 
   // My Learning
   .get("/my-learning", async (ctx) => {
     const { lmsService, lmsRepository, tenantContext, set } = ctx as any;
-    const authError = checkContext(ctx);
-    if (authError) {
-      set.status = authError.status;
-      return authError.body;
-    }
+
 
     try {
       const employeeId = await lmsRepository.getEmployeeIdByUserId(tenantContext);
@@ -285,9 +238,10 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
       return { enrollments, count: enrollments.length };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
+    beforeHandle: [requirePermission("lms", "read")],
     detail: { tags: ["LMS"], summary: "Get my learning" }
   });
 

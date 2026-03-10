@@ -14,9 +14,11 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { ErrorCodes } from "../../plugins/errors";
 import { BenefitsRepository, type TenantContext } from "./repository";
 import { BenefitsService } from "./service";
 import {
@@ -615,11 +617,10 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      const result = await benefitsService.addDependent(
+      const result = await benefitsService.createDependent(
         tenantContext,
         params.employeeId,
-        body as any,
-        idempotencyKey
+        body as any
       );
 
       if (!result.success) {
@@ -673,8 +674,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       const result = await benefitsService.updateDependent(
         tenantContext,
         params.id,
-        body as any,
-        idempotencyKey
+        body as any
       );
 
       if (!result.success) {
@@ -725,10 +725,9 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
 
       const oldResult = await benefitsService.getDependent(tenantContext, params.id);
 
-      const result = await benefitsService.removeDependent(
+      const result = await benefitsService.deleteDependent(
         tenantContext,
-        params.id,
-        idempotencyKey
+        params.id
       );
 
       if (!result.success) {
@@ -845,7 +844,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
     "/employees/:employeeId/costs",
     async (ctx) => {
       const { benefitsService, params, tenantContext, error } = ctx as any;
-      const result = await benefitsService.getEmployeeCostSummary(
+      const result = await benefitsService.getEmployeeBenefitCosts(
         tenantContext,
         params.employeeId
       );
@@ -855,7 +854,17 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
         return error(status, { error: result.error });
       }
 
-      return result.data;
+      const byCategory = result.data as any[];
+      const totalEmployee = byCategory.reduce((sum: number, c: any) => sum + c.employee_total, 0);
+      const totalEmployer = byCategory.reduce((sum: number, c: any) => sum + c.employer_total, 0);
+
+      return {
+        employee_id: params.employeeId,
+        by_category: byCategory,
+        total_employee: totalEmployee,
+        total_employer: totalEmployer,
+        grand_total: totalEmployee + totalEmployer,
+      };
     },
     {
       beforeHandle: [requirePermission("benefits:enrollments", "read")],
@@ -1441,12 +1450,6 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
     async (ctx) => {
       const { benefitsService, user, tenant, db, set } = ctx as any;
 
-      // Require authentication and tenant context
-      if (!user || !tenant) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-      }
-
       try {
         // Get employee ID for current user
         const [employee] = await db.withTransaction(
@@ -1476,10 +1479,11 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       } catch (error) {
         console.error("Benefits /my-enrollments error:", error);
         set.status = 500;
-        return { error: { code: "INTERNAL_ERROR", message: "Failed to get enrollments" } };
+        return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get enrollments" } };
       }
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       response: {
         200: t.Object({
           items: t.Array(EnrollmentResponse),
@@ -1501,12 +1505,6 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
     "/my-life-events",
     async (ctx) => {
       const { benefitsService, user, tenant, db, set } = ctx as any;
-
-      // Require authentication and tenant context
-      if (!user || !tenant) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-      }
 
       try {
         // Get employee ID for current user
@@ -1534,7 +1532,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
                 id, employee_id, event_type, event_date, 
                 enrollment_deadline, status, notes,
                 created_at, updated_at
-              FROM app.benefit_life_events
+              FROM app.life_events
               WHERE employee_id = ${employee.id}::uuid 
                 AND tenant_id = ${tenant.id}::uuid
               ORDER BY event_date DESC
@@ -1559,10 +1557,11 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
       } catch (error) {
         console.error("Benefits /my-life-events error:", error);
         set.status = 500;
-        return { error: { code: "INTERNAL_ERROR", message: "Failed to get life events" } };
+        return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get life events" } };
       }
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       response: {
         200: t.Object({
           items: t.Array(t.Object({
@@ -1597,52 +1596,28 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
   .get(
     "/stats",
     async (ctx) => {
-      const { db, tenantContext, error, set } = ctx as any;
-      
+      const { benefitsService, tenantContext, set } = ctx as any;
+
       try {
-        const stats = await db.withTransaction(tenantContext, async (tx: any) => {
-          // Get total eligible employees (active employees)
-          const [totalRow] = await tx`
-            SELECT COUNT(*)::int as count
-            FROM app.employees
-            WHERE status = 'active'
-          `;
-          
-          // Get enrolled employees (employees with at least one active enrollment)
-          const [enrolledRow] = await tx`
-            SELECT COUNT(DISTINCT employee_id)::int as count
-            FROM app.benefit_enrollments
-            WHERE status = 'active'
-              AND (effective_to IS NULL OR effective_to > CURRENT_DATE)
-          `;
-          
-          // Get pending enrollments
-          const [pendingEnrollmentsRow] = await tx`
-            SELECT COUNT(*)::int as count
-            FROM app.benefit_enrollments
-            WHERE status = 'pending'
-          `;
-          
-          // Get pending life events
-          const [pendingLifeEventsRow] = await tx`
-            SELECT COUNT(*)::int as count
-            FROM app.benefit_life_events
-            WHERE status = 'pending'
-          `;
-          
-          return {
-            total_employees: totalRow?.count ?? 0,
-            enrolled_employees: enrolledRow?.count ?? 0,
-            pending_enrollments: pendingEnrollmentsRow?.count ?? 0,
-            pending_life_events: pendingLifeEventsRow?.count ?? 0,
-          };
-        });
-        
-        return stats;
+        const result = await benefitsService.getEnrollmentStats(tenantContext);
+
+        if (!result.success) {
+          set.status = 500;
+          return { error: { code: result.error.code, message: result.error.message } };
+        }
+
+        const { totalEmployees, enrolledEmployees, pendingEnrollments, pendingLifeEvents } = result.data;
+
+        return {
+          total_employees: totalEmployees,
+          enrolled_employees: enrolledEmployees,
+          pending_enrollments: pendingEnrollments,
+          pending_life_events: pendingLifeEvents,
+        };
       } catch (err) {
         console.error("Benefits /stats error:", err);
         set.status = 500;
-        return { error: { code: "INTERNAL_ERROR", message: "Failed to get benefits stats" } };
+        return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get benefits stats" } };
       }
     },
     {

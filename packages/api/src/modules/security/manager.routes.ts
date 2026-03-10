@@ -6,6 +6,8 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { ErrorCodes } from "../../plugins/errors";
 import { ManagerService } from "./manager.service";
 import { ApprovalTypeSchema, ApprovalActionSchema } from "./schemas";
 
@@ -16,16 +18,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const overview = await service.getTeamOverview({
@@ -36,6 +28,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return overview;
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: {
         tags: ["Manager"],
         summary: "Get team overview for dashboard",
@@ -49,16 +42,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const isManager = await service.isManager({
@@ -69,6 +52,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { isManager };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: {
         tags: ["Manager"],
         summary: "Check if user is a manager",
@@ -82,16 +66,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const team = await service.getDirectReports({
@@ -102,6 +76,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { team };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: {
         tags: ["Manager"],
         summary: "Get direct reports",
@@ -115,16 +90,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, query, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const maxDepth = parseInt(query?.maxDepth ?? "10", 10);
 
@@ -137,6 +102,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { team };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       query: t.Object({
         maxDepth: t.Optional(t.String()),
       }),
@@ -153,16 +119,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const member = await service.getTeamMember(
@@ -174,7 +130,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
         set.status = 404;
         return {
           error: {
-            code: "NOT_FOUND",
+            code: ErrorCodes.NOT_FOUND,
             message: "Team member not found or not authorized",
             requestId,
           },
@@ -184,6 +140,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return member;
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       params: t.Object({ employeeId: t.String() }),
       detail: {
         tags: ["Manager"],
@@ -198,16 +155,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, query, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const approvals = await service.getPendingApprovals(
@@ -218,6 +165,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { approvals };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       query: t.Object({
         type: t.Optional(ApprovalTypeSchema),
       }),
@@ -234,16 +182,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, params, body, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       try {
         const service = new ManagerService(db);
@@ -260,7 +198,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
           set.status = 403;
           return {
             error: {
-              code: "FORBIDDEN",
+              code: ErrorCodes.FORBIDDEN,
               message: error.message,
               requestId,
             },
@@ -270,6 +208,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       }
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       params: t.Object({ id: t.String() }),
       body: t.Object({
         type: ApprovalTypeSchema,
@@ -288,16 +227,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, params, body, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       try {
         const service = new ManagerService(db);
@@ -314,7 +243,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
           set.status = 403;
           return {
             error: {
-              code: "FORBIDDEN",
+              code: ErrorCodes.FORBIDDEN,
               message: error.message,
               requestId,
             },
@@ -324,6 +253,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       }
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       params: t.Object({ id: t.String() }),
       body: t.Object({
         type: ApprovalTypeSchema,
@@ -342,16 +272,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, query, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       // Default to current month if not specified
       const now = new Date();
@@ -372,6 +292,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { entries };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       query: t.Object({
         startDate: t.Optional(t.String()),
         endDate: t.Optional(t.String()),
@@ -389,16 +310,6 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new ManagerService(db);
       const isSubordinate = await service.isSubordinateOf(
@@ -409,6 +320,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       return { isSubordinate };
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       params: t.Object({ employeeId: t.String() }),
       detail: {
         tags: ["Manager"],

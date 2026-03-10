@@ -1,95 +1,33 @@
+/**
+ * Tenant Routes
+ *
+ * Provides /current and /settings endpoints for resolving the active tenant.
+ * All routes delegate to TenantService/TenantRepository for data access.
+ */
+
 import { Elysia } from "elysia";
-
-type TenantRow = {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  settings: Record<string, unknown>;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
-
-function toIso(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
-  return String(value);
-}
+import { requireAuthContext } from "../../plugins";
+import { TenantRepository } from "./repository";
+import { TenantService } from "./service";
 
 export const tenantRoutes = new Elysia({ prefix: "/tenant" })
-  .get("/current", async (ctx) => {
-    const { user, session, authService, tenant, db, set, requestId } = ctx as any;
 
-    if (!user || !session) {
-      set.status = 401;
-      return {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-          requestId: requestId || "",
-        },
-      };
+  // Wire up service and repository via derive
+  .derive((ctx) => {
+    const { db, authService } = ctx as any;
+    const repository = new TenantRepository(db);
+    const tenantService = new TenantService(repository);
+    if (authService) {
+      tenantService.setAuthService(authService);
     }
 
-    const tenantId = tenant?.id ?? (await authService.getSessionTenant(session.id, user.id));
-
-    if (!tenantId) {
-      set.status = 404;
-      return {
-        error: {
-          code: "TENANT_NOT_FOUND",
-          message: "No tenant selected for current session",
-          requestId: requestId || "",
-        },
-      };
-    }
-
-    const rows = await db.withSystemContext(async (tx: any) => {
-      return await tx<TenantRow[]>`
-        SELECT id, name, slug, status, settings, created_at, updated_at
-        FROM app.tenants
-        WHERE id = ${tenantId}::uuid
-        LIMIT 1
-      `;
-    });
-
-    const row = (rows as TenantRow[])[0];
-    if (!row) {
-      set.status = 404;
-      return {
-        error: {
-          code: "TENANT_NOT_FOUND",
-          message: "Tenant not found",
-          requestId: requestId || "",
-        },
-      };
-    }
-
-    return {
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      status: row.status,
-      settings: row.settings ?? {},
-      createdAt: toIso(row.createdAt),
-      updatedAt: toIso(row.updatedAt),
-    };
+    return { tenantService };
   })
-  .get("/settings", async (ctx) => {
-    const { user, session, authService, tenant, db, set, requestId } = ctx as any;
 
-    if (!user || !session) {
-      set.status = 401;
-      return {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Authentication required",
-          requestId: requestId || "",
-        },
-      };
-    }
+  .get("/current", async (ctx) => {
+    const { user, session, tenant, set, requestId, tenantService } = ctx as any;
 
-    const tenantId = tenant?.id ?? (await authService.getSessionTenant(session.id, user.id));
+    const tenantId = tenant?.id ?? (await tenantService.getSessionTenant(session.id, user.id));
 
     if (!tenantId) {
       set.status = 404;
@@ -102,17 +40,9 @@ export const tenantRoutes = new Elysia({ prefix: "/tenant" })
       };
     }
 
-    const rows = await db.withSystemContext(async (tx: any) => {
-      return await tx<Array<{ settings: Record<string, unknown> }>>`
-        SELECT settings
-        FROM app.tenants
-        WHERE id = ${tenantId}::uuid
-        LIMIT 1
-      `;
-    });
+    const result = await tenantService.getCurrentTenant(tenantId);
 
-    const row = (rows as Array<{ settings: Record<string, unknown> }>)[0];
-    if (!row) {
+    if (!result) {
       set.status = 404;
       return {
         error: {
@@ -123,7 +53,51 @@ export const tenantRoutes = new Elysia({ prefix: "/tenant" })
       };
     }
 
-    return row.settings ?? {};
+    return result;
+  }, {
+    beforeHandle: [requireAuthContext],
+    detail: {
+      tags: ["Tenant"],
+      summary: "Get current tenant",
+    },
+  })
+
+  .get("/settings", async (ctx) => {
+    const { user, session, tenant, set, requestId, tenantService } = ctx as any;
+
+    const tenantId = tenant?.id ?? (await tenantService.getSessionTenant(session.id, user.id));
+
+    if (!tenantId) {
+      set.status = 404;
+      return {
+        error: {
+          code: "TENANT_NOT_FOUND",
+          message: "No tenant selected for current session",
+          requestId: requestId || "",
+        },
+      };
+    }
+
+    const settings = await tenantService.getTenantSettings(tenantId);
+
+    if (settings === null) {
+      set.status = 404;
+      return {
+        error: {
+          code: "TENANT_NOT_FOUND",
+          message: "Tenant not found",
+          requestId: requestId || "",
+        },
+      };
+    }
+
+    return settings;
+  }, {
+    beforeHandle: [requireAuthContext],
+    detail: {
+      tags: ["Tenant"],
+      summary: "Get tenant settings",
+    },
   });
 
 export type TenantRoutes = typeof tenantRoutes;

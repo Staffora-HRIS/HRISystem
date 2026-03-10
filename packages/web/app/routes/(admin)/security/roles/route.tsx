@@ -132,6 +132,18 @@ export default function AdminRolesPage() {
     onError: () => toast.error("Failed to revoke permission"),
   });
 
+  // Deduplicate roles by id to prevent duplicate key warnings
+  // (system roles with tenant_id IS NULL may appear more than once)
+  const roles = useMemo(() => {
+    const data = rolesQuery.data ?? [];
+    const seen = new Set<string>();
+    return data.filter((role) => {
+      if (seen.has(role.id)) return false;
+      seen.add(role.id);
+      return true;
+    });
+  }, [rolesQuery.data]);
+
   const columns = useMemo<ColumnDef<RoleSummary>[]>(
     () => [
       {
@@ -213,7 +225,7 @@ export default function AdminRolesPage() {
         <CardBody padding="none">
           <DataTable
             columns={columns}
-            data={rolesQuery.data ?? []}
+            data={roles}
             loading={rolesQuery.isFetching}
             emptyMessage="No roles found"
           />

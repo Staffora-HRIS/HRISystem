@@ -7,7 +7,8 @@
  */
 
 import { Elysia, t } from "elysia";
-import { AuthService } from "../../plugins";
+import { AuthService, requireAuthContext } from "../../plugins";
+import { ErrorCodes } from "../../plugins/errors";
 import { ErrorResponseSchema } from "../../lib/route-helpers";
 
 // =============================================================================
@@ -89,17 +90,6 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
     async (ctx) => {
       const { authService, user, session, set, requestId } = ctx as any;
 
-      if (!user || !session) {
-        set.status = 401;
-        return {
-          error: {
-            code: "UNAUTHORIZED",
-            message: "Not authenticated",
-            requestId: requestId || "",
-          },
-        };
-      }
-
       try {
         const userWithTenants = await authService.getUserWithTenants(user.id);
         const currentTenantId = await authService.getSessionTenant(session.id, user.id);
@@ -133,7 +123,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
         set.status = 500;
         return {
           error: {
-            code: "INTERNAL_ERROR",
+            code: ErrorCodes.INTERNAL_ERROR,
             message: "Failed to get user info",
             requestId: requestId || "",
           },
@@ -141,6 +131,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
       }
     },
     {
+      beforeHandle: [requireAuthContext],
       response: {
         200: MeResponseSchema,
         401: ErrorResponseSchema,
@@ -160,17 +151,6 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
     async (ctx) => {
       const { authService, user, session, set, requestId } = ctx as any;
 
-      if (!user || !session) {
-        set.status = 401;
-        return {
-          error: {
-            code: "UNAUTHORIZED",
-            message: "Not authenticated",
-            requestId: requestId || "",
-          },
-        };
-      }
-
       try {
         const userWithTenants = await authService.getUserWithTenants(user.id);
         const tenants = userWithTenants?.tenants ?? [];
@@ -187,7 +167,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
         set.status = 500;
         return {
           error: {
-            code: "INTERNAL_ERROR",
+            code: ErrorCodes.INTERNAL_ERROR,
             message: "Failed to get tenants",
             requestId: requestId || "",
           },
@@ -195,6 +175,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
       }
     },
     {
+      beforeHandle: [requireAuthContext],
       response: {
         200: t.Array(TenantListItemSchema),
         401: ErrorResponseSchema,
@@ -214,17 +195,6 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
     async (ctx) => {
       const { authService, user, session, body, set, requestId } = ctx as any;
 
-      if (!user || !session) {
-        set.status = 401;
-        return {
-          error: {
-            code: "UNAUTHORIZED",
-            message: "Not authenticated",
-            requestId: requestId || "",
-          },
-        };
-      }
-
       try {
         const tenantId = (body as any).tenantId;
         const canSwitch = await authService.switchTenant(user.id, session.id, tenantId);
@@ -233,7 +203,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           set.status = 403;
           return {
             error: {
-              code: "FORBIDDEN",
+              code: ErrorCodes.FORBIDDEN,
               message: "You do not have access to this tenant",
               requestId: requestId || "",
             },
@@ -246,7 +216,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
         set.status = 500;
         return {
           error: {
-            code: "INTERNAL_ERROR",
+            code: ErrorCodes.INTERNAL_ERROR,
             message: "Failed to switch tenant",
             requestId: requestId || "",
           },
@@ -254,6 +224,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
       }
     },
     {
+      beforeHandle: [requireAuthContext],
       body: SwitchTenantBodySchema,
       response: {
         200: SwitchTenantResponseSchema,
