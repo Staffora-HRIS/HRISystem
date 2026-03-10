@@ -21,13 +21,13 @@ interface Timesheet {
   periodStart: string;
   periodEnd: string;
   status: "draft" | "submitted" | "approved" | "rejected";
-  totalHours: number;
-  regularHours: number;
-  overtimeHours: number;
+  totalRegularHours: number;
+  totalOvertimeHours: number;
   submittedAt?: string;
   approvedAt?: string;
-  approvedBy?: string;
-  rejectedReason?: string;
+  approvedById?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const statusLabels: Record<string, string> = {
@@ -52,7 +52,7 @@ export default function TimesheetsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-timesheets", statusFilter, search],
-    queryFn: () => api.get<{ timesheets: Timesheet[]; count: number }>(
+    queryFn: () => api.get<{ items: Timesheet[]; cursor: string | null; hasMore: boolean }>(
       "/time/timesheets",
       {
         params: {
@@ -65,7 +65,7 @@ export default function TimesheetsPage() {
 
   const approveMutation = useMutation({
     mutationFn: (timesheetId: string) =>
-      api.post(`/time/timesheets/${timesheetId}/approve`, {}),
+      api.post(`/time/timesheets/${timesheetId}/approve`, { action: "approve" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
     },
@@ -73,13 +73,13 @@ export default function TimesheetsPage() {
 
   const rejectMutation = useMutation({
     mutationFn: ({ timesheetId, reason }: { timesheetId: string; reason: string }) =>
-      api.post(`/time/timesheets/${timesheetId}/reject`, { reason }),
+      api.post(`/time/timesheets/${timesheetId}/approve`, { action: "reject", comments: reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
     },
   });
 
-  const timesheets = data?.timesheets || [];
+  const timesheets = data?.items || [];
 
   const handleReject = (timesheetId: string) => {
     const reason = prompt("Enter rejection reason:");
@@ -242,19 +242,19 @@ export default function TimesheetsPage() {
                         {new Date(timesheet.periodEnd).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {timesheet.regularHours.toFixed(1)}h
+                        {(timesheet.totalRegularHours ?? 0).toFixed(1)}h
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        {timesheet.overtimeHours > 0 ? (
+                        {(timesheet.totalOvertimeHours ?? 0) > 0 ? (
                           <span className="text-orange-600 font-medium">
-                            {timesheet.overtimeHours.toFixed(1)}h
+                            {(timesheet.totalOvertimeHours ?? 0).toFixed(1)}h
                           </span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {timesheet.totalHours.toFixed(1)}h
+                        {((timesheet.totalRegularHours ?? 0) + (timesheet.totalOvertimeHours ?? 0)).toFixed(1)}h
                       </td>
                       <td className="px-6 py-4">{getStatusBadge(timesheet.status)}</td>
                       <td className="px-6 py-4 text-right">

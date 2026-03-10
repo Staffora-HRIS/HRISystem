@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
   Card,
-  CardHeader,
   CardBody,
   Button,
   Badge,
@@ -29,14 +28,14 @@ import { api } from "~/lib/api-client";
 
 interface Employee {
   id: string;
-  employee_number: string;
+  employeeNumber: string;
   status: string;
-  hire_date: string;
-  full_name: string;
-  display_name: string;
-  position_title: string | null;
-  org_unit_name: string | null;
-  manager_name: string | null;
+  hireDate: string;
+  fullName: string;
+  displayName: string;
+  positionTitle: string | null;
+  orgUnitName: string | null;
+  managerName: string | null;
 }
 
 interface EmployeeListResponse {
@@ -91,7 +90,7 @@ export default function AdminEmployeesPage() {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (statusFilter) params.set("status", statusFilter);
-      if (departmentFilter) params.set("org_unit_id", departmentFilter);
+      if (departmentFilter) params.set("orgUnitId", departmentFilter);
       params.set("limit", "50");
       return api.get<EmployeeListResponse>(`/hr/employees?${params}`);
     },
@@ -119,7 +118,7 @@ export default function AdminEmployeesPage() {
       id: "employee",
       header: "Employee",
       cell: ({ row }) => {
-        const initials = (row.display_name || row.full_name || "")
+        const initials = (row.displayName || row.fullName || "")
           .split(" ")
           .map((n) => n[0])
           .join("")
@@ -132,9 +131,9 @@ export default function AdminEmployeesPage() {
             </div>
             <div>
               <div className="font-medium text-gray-900">
-                {row.display_name || row.full_name}
+                {row.displayName || row.fullName}
               </div>
-              <div className="text-sm text-gray-500">{row.employee_number}</div>
+              <div className="text-sm text-gray-500">{row.employeeNumber}</div>
             </div>
           </div>
         );
@@ -145,8 +144,8 @@ export default function AdminEmployeesPage() {
       header: "Position",
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.position_title || "-"}</div>
-          <div className="text-sm text-gray-500">{row.org_unit_name || "-"}</div>
+          <div className="font-medium">{row.positionTitle || "-"}</div>
+          <div className="text-sm text-gray-500">{row.orgUnitName || "-"}</div>
         </div>
       ),
     },
@@ -154,14 +153,14 @@ export default function AdminEmployeesPage() {
       id: "manager",
       header: "Manager",
       cell: ({ row }) => (
-        <div className="text-sm text-gray-600">{row.manager_name || "-"}</div>
+        <div className="text-sm text-gray-600">{row.managerName || "-"}</div>
       ),
     },
     {
       id: "hireDate",
       header: "Hire Date",
       cell: ({ row }) => (
-        <div className="text-sm text-gray-600">{formatDate(row.hire_date)}</div>
+        <div className="text-sm text-gray-600">{formatDate(row.hireDate)}</div>
       ),
     },
     {

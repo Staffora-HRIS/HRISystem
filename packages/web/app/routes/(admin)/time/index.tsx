@@ -13,16 +13,15 @@ interface TimesheetSummary {
   periodStart: string;
   periodEnd: string;
   status: "draft" | "submitted" | "approved" | "rejected";
-  totalHours: number;
-  regularHours: number;
-  overtimeHours: number;
+  totalRegularHours: number;
+  totalOvertimeHours: number;
   submittedAt?: string;
 }
 
 export default function TimeAdminPage() {
   const { data: timesheetsData, isLoading } = useQuery({
     queryKey: ["admin-timesheets"],
-    queryFn: () => api.get<{ timesheets: TimesheetSummary[]; count: number }>("/time/timesheets"),
+    queryFn: () => api.get<{ items: TimesheetSummary[]; cursor: string | null; hasMore: boolean }>("/time/timesheets"),
   });
 
   const { data: statsData } = useQuery({
@@ -35,7 +34,7 @@ export default function TimeAdminPage() {
     }>("/time/stats"),
   });
 
-  const timesheets = timesheetsData?.timesheets || [];
+  const timesheets = timesheetsData?.items || [];
   const pendingTimesheets = timesheets.filter(t => t.status === "submitted");
 
   const stats = statsData || {
@@ -144,10 +143,10 @@ export default function TimeAdminPage() {
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {new Date(timesheet.periodStart).toLocaleDateString()} - {new Date(timesheet.periodEnd).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{timesheet.totalHours.toFixed(1)}h</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{((timesheet.totalRegularHours ?? 0) + (timesheet.totalOvertimeHours ?? 0)).toFixed(1)}h</td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {timesheet.overtimeHours > 0 ? (
-                          <span className="text-orange-600">{timesheet.overtimeHours.toFixed(1)}h</span>
+                        {(timesheet.totalOvertimeHours ?? 0) > 0 ? (
+                          <span className="text-orange-600">{(timesheet.totalOvertimeHours ?? 0).toFixed(1)}h</span>
                         ) : (
                           "-"
                         )}

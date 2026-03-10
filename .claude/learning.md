@@ -272,6 +272,28 @@ Notes: Workflow module has the deepest mismatch — the entire definitions/insta
 
 ---
 
+### Learning Entry
+
+Date: 2026-03-10
+Agent: Claude Code (fourth review pass)
+Category: Architecture
+
+Context: Fourth comprehensive review after 3 previous fix sessions. Focused on finding remaining unimplemented features, frontend-backend API path mismatches, and missing service methods.
+
+Problem: (1) Benefits service `listLifeEvents` signature mismatch — routes call `listLifeEvents(ctx, status, {cursor, limit})` but service expects `(ctx, employeeId?, status?)` and returns non-paginated `ServiceResult<T[]>`. (2) Frontend calls 7 API endpoints that don't exist on backend: `/benefits/available-plans`, `/lms/learning-paths`, `/onboarding/templates` (backend has `/checklists`), `/onboarding/my-progress` (backend has `/my-onboarding`), `/hr/stats`, `/competencies/employees/me`, `/competencies/employees/me/gaps`. (3) Security manager routes (10 endpoints) had `requireTenantContext` but no `requireAuthContext`. (4) Time module routes chain broken by premature semicolon at line 461 causing syntax error. (5) Workflows repository queries return untyped `object` causing TS errors. (6) Workflows service passes `data.category` to `updateDefinition` but schema doesn't include `category`.
+
+Root Cause: (1) Service method was written for a different call pattern than the routes use. (2) Frontend pages were scaffolded before backend endpoints existed, or used different path names than backend. (3) Auth guard omission — `requireTenantContext` only validates tenant, not user authentication. (4) Errant semicolon broke Elysia method chain. (5) postgres.js tagged templates without type parameters return `object`. (6) Service tried to pass fields not in the TypeBox schema.
+
+Solution: (1) Fixed `listLifeEvents` to accept `(ctx, status?, pagination?)` and return `PaginatedServiceResult`. (2) Fixed 4 frontend paths (`/benefits/available-plans`→`/plans`, `/onboarding/templates`→`/checklists`, `/onboarding/my-progress`→`/my-onboarding`). Added 3 backend endpoints: `GET /hr/stats`, `GET /lms/learning-paths` + `GET /lms/learning-paths/:id`, `GET /competencies/employees/me` + `GET /competencies/employees/me/gaps`. (3) Added `requireAuthContext` to all 10 manager routes. (4) Changed `);\n\n  .get(` to `)\n\n  .get(`. (5) Added `<any[]>` type parameter to untyped tagged template queries. (6) Removed `category` from `updateDefinition` call.
+
+Prevention: When adding frontend pages, always verify the exact API path matches. Use `tx<TypedRow[]>` for all postgres.js tagged template queries. Test route chain syntax by running typecheck after every change.
+
+Affected Files: `benefits/service.ts`, `benefits/route.tsx`, `onboarding/route.tsx`, `onboarding/templates/route.tsx`, `onboarding/index.tsx`, `hr/{routes,service,repository}.ts`, `lms/{routes,service}.ts`, `competencies/routes.ts`, `security/manager.routes.ts`, `time/routes.ts`, `workflows/{repository,service}.ts`
+
+Notes: Two background agents from previous session completed successfully: benefits service methods (waiveCoverage, submitElections, etc.) and security getEffectivePermissions. The `analytics_events` table absence (from entry above) was already resolved by replacing the INSERT with a log statement. API typecheck now passes clean.
+
+---
+
 ## Entry Format Reference
 
 Each entry must follow this format:

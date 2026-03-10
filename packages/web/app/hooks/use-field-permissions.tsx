@@ -9,7 +9,7 @@
  * - FieldPermissionGate - component for conditional field rendering
  */
 
-import { useMemo, useCallback, createContext, useContext, ReactNode } from "react";
+import { useMemo, useCallback, createContext, useContext, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { queryKeys } from "../lib/query-client";
@@ -336,25 +336,4 @@ export function FieldVisibility({ entity, field, children }: FieldVisibilityProp
   return <>{children}</>;
 }
 
-// =============================================================================
-// Query Key Extensions
-// =============================================================================
-
-// Extend query keys for field permissions
-declare module "../lib/query-client" {
-  interface QueryKeys {
-    security: {
-      fieldPermissions: () => readonly ["security", "field-permissions"];
-      entityFieldPermissions: (entity: string) => readonly ["security", "field-permissions", string];
-    };
-  }
-}
-
-// Add query keys if not already present
-if (!queryKeys.security) {
-  (queryKeys as any).security = {
-    fieldPermissions: () => ["security", "field-permissions"] as const,
-    entityFieldPermissions: (entity: string) =>
-      ["security", "field-permissions", entity] as const,
-  };
-}
+// Query keys are defined in ~/lib/query-client under queryKeys.security

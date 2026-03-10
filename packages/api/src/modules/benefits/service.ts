@@ -761,20 +761,159 @@ export class BenefitsService {
     };
   }
 
+  async waiveCoverage(
+    context: TenantContext,
+    data: WaiveEnrollment & { employee_id: string }
+  ): Promise<ServiceResult<EnrollmentResponse>> {
+    // Validate plan exists
+    const plan = await this.repository.findPlanById(context, data.plan_id);
+    if (!plan) {
+      return {
+        success: false,
+        error: {
+          code: "PLAN_NOT_FOUND",
+          message: "Benefit plan not found",
+          details: { plan_id: data.plan_id },
+        },
+      };
+    }
+
+    const result = await this.db.withTransaction(context, async (tx) => {
+      const enrollment = await this.repository.waiveEnrollment(tx, context, {
+        employee_id: data.employee_id,
+        plan_id: data.plan_id,
+        waiver_reason: data.waiver_reason,
+        waiver_other_coverage: data.waiver_other_coverage,
+        effective_from: new Date().toISOString().split("T")[0]!,
+      });
+
+      await this.emitEvent(
+        tx,
+        context,
+        "benefit_enrollment",
+        enrollment.id,
+        "benefits.enrollment.waived",
+        {
+          enrollmentId: enrollment.id,
+          employeeId: data.employee_id,
+          planId: data.plan_id,
+          waiverReason: data.waiver_reason,
+        }
+      );
+
+      return enrollment;
+    });
+
+    const enriched = { ...result, dependentDetails: [] };
+
+    return {
+      success: true,
+      data: this.mapEnrollmentToResponse(enriched),
+    };
+  }
+
+  async submitElections(
+    context: TenantContext,
+    periodId: string,
+    employeeId: string,
+    data: SubmitElections
+  ): Promise<ServiceResult<EnrollmentResponse[]>> {
+    // Validate open enrollment period exists and is active
+    const period = await this.repository.findOpenEnrollmentById(context, periodId);
+    if (!period) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Open enrollment period not found",
+          details: { periodId },
+        },
+      };
+    }
+
+    if (!period.isActive) {
+      return {
+        success: false,
+        error: {
+          code: "OPEN_ENROLLMENT_NOT_ACTIVE",
+          message: "Open enrollment period is not active",
+          details: { periodId },
+        },
+      };
+    }
+
+    const enrollments: EnrollmentResponse[] = [];
+
+    const results = await this.db.withTransaction(context, async (tx) => {
+      const created: (EnrollmentRow & { dependentDetails: { id: string; name: string; relationship: string }[] })[] = [];
+
+      for (const election of data.elections) {
+        if (election.action === "enroll") {
+          const enrollment = await this.repository.createEnrollment(tx, context, {
+            employee_id: employeeId,
+            plan_id: election.plan_id,
+            coverage_level: election.coverage_level || "employee_only",
+            effective_from: period.coverageEffectiveDate.toISOString().split("T")[0]!,
+            covered_dependents: election.dependents,
+            enrollment_type: "open_enrollment",
+          });
+          created.push({ ...enrollment, dependentDetails: [] });
+        } else if (election.action === "waive") {
+          const enrollment = await this.repository.waiveEnrollment(tx, context, {
+            employee_id: employeeId,
+            plan_id: election.plan_id,
+            waiver_reason: "Open enrollment waiver",
+            effective_from: period.coverageEffectiveDate.toISOString().split("T")[0]!,
+          });
+          created.push({ ...enrollment, dependentDetails: [] });
+        }
+        // "continue" action requires no new record
+      }
+
+      await this.emitEvent(
+        tx,
+        context,
+        "open_enrollment",
+        periodId,
+        "benefits.elections.submitted",
+        {
+          periodId,
+          employeeId,
+          electionCount: data.elections.length,
+        }
+      );
+
+      return created;
+    });
+
+    return {
+      success: true,
+      data: results.map(this.mapEnrollmentToResponse),
+    };
+  }
+
   // ===========================================================================
   // Life Event Methods
   // ===========================================================================
 
   async listLifeEvents(
     context: TenantContext,
-    employeeId?: string,
-    status?: "pending" | "approved" | "rejected" | "expired"
-  ): Promise<ServiceResult<LifeEventResponse[]>> {
-    const events = await this.repository.findLifeEvents(context, employeeId, status);
+    status?: string,
+    pagination: PaginationQuery = {}
+  ): Promise<PaginatedServiceResult<LifeEventResponse>> {
+    const events = await this.repository.findLifeEvents(context, undefined, status as any);
+    const limit = pagination.limit || 50;
+    const startIndex = pagination.cursor
+      ? events.findIndex((e) => e.id === pagination.cursor) + 1
+      : 0;
+    const sliced = events.slice(startIndex, startIndex + limit + 1);
+    const hasMore = sliced.length > limit;
+    const items = hasMore ? sliced.slice(0, limit) : sliced;
 
     return {
-      success: true,
-      data: events.map(this.mapLifeEventToResponse),
+      items: items.map(this.mapLifeEventToResponse),
+      nextCursor: hasMore && items.length > 0 ? items[items.length - 1]!.id : null,
+      hasMore,
     };
   }
 

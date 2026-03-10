@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 import {
-  Settings,
   Building2,
   Plug,
   Shield,

@@ -11,7 +11,7 @@
  * - useApprovalActions() - approve/reject requests
  */
 
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { queryKeys } from "../lib/query-client";
@@ -410,36 +410,4 @@ export function useCurrentMonthTeamAbsence() {
   return useTeamAbsence(startDate, endDate);
 }
 
-// =============================================================================
-// Query Key Extensions
-// =============================================================================
-
-declare module "../lib/query-client" {
-  interface QueryKeys {
-    manager: {
-      isManager: () => readonly ["manager", "is-manager"];
-      overview: () => readonly ["manager", "overview"];
-      directReports: () => readonly ["manager", "direct-reports"];
-      allSubordinates: (maxDepth?: number) => readonly ["manager", "all-subordinates", number | undefined];
-      teamMember: (id: string) => readonly ["manager", "team-member", string];
-      isSubordinate: (id: string) => readonly ["manager", "is-subordinate", string];
-      pendingApprovals: (type?: ApprovalType) => readonly ["manager", "pending-approvals", ApprovalType | undefined];
-      teamAbsence: (startDate: string, endDate: string) => readonly ["manager", "team-absence", string, string];
-    };
-  }
-}
-
-// Add query keys if not already present
-if (!queryKeys.manager) {
-  (queryKeys as any).manager = {
-    isManager: () => ["manager", "is-manager"] as const,
-    overview: () => ["manager", "overview"] as const,
-    directReports: () => ["manager", "direct-reports"] as const,
-    allSubordinates: (maxDepth?: number) => ["manager", "all-subordinates", maxDepth] as const,
-    teamMember: (id: string) => ["manager", "team-member", id] as const,
-    isSubordinate: (id: string) => ["manager", "is-subordinate", id] as const,
-    pendingApprovals: (type?: ApprovalType) => ["manager", "pending-approvals", type] as const,
-    teamAbsence: (startDate: string, endDate: string) =>
-      ["manager", "team-absence", startDate, endDate] as const,
-  };
-}
+// Query keys are defined in ~/lib/query-client under queryKeys.manager

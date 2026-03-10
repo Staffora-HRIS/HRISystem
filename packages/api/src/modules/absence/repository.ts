@@ -22,9 +22,9 @@ export interface LeaveTypeRow {
   description: string | null;
   isPaid: boolean;
   requiresApproval: boolean;
-  requiresDocumentation: boolean;
-  maxDaysPerRequest: number | null;
-  minDaysNotice: number;
+  requiresAttachment: boolean;
+  maxConsecutiveDays: number | null;
+  minNoticeDays: number;
   color: string | null;
   isActive: boolean;
   createdAt: Date;
@@ -95,13 +95,13 @@ export class AbsenceRepository {
       const [row] = await tx<LeaveTypeRow[]>`
         INSERT INTO app.leave_types (
           id, tenant_id, code, name, description, is_paid,
-          requires_approval, requires_documentation, max_days_per_request,
-          min_days_notice, color, is_active
+          requires_approval, requires_attachment, max_consecutive_days,
+          min_notice_days, color, is_active
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.code}, ${data.name},
           ${data.description || null}, ${data.isPaid ?? true},
-          ${data.requiresApproval ?? true}, ${data.requiresDocumentation ?? false},
-          ${data.maxDaysPerRequest || null}, ${data.minDaysNotice ?? 0},
+          ${data.requiresApproval ?? true}, ${data.requiresAttachment ?? false},
+          ${data.maxConsecutiveDays || null}, ${data.minNoticeDays ?? 0},
           ${data.color || null}, true
         )
         RETURNING *
@@ -131,6 +131,23 @@ export class AbsenceRepository {
       `;
     });
     return rows.length > 0 ? (rows[0] as LeaveTypeRow) : null;
+  }
+
+  async deactivateLeaveType(ctx: TenantContext, id: string): Promise<LeaveTypeRow | null> {
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const [row] = await tx<LeaveTypeRow[]>`
+        UPDATE app.leave_types SET
+          is_active = false,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND is_active = true
+        RETURNING *
+      `;
+
+      if (row) {
+        await this.writeOutbox(tx, ctx.tenantId, "leave_type", id, "absence.leave_type.deactivated", { leaveTypeId: id });
+      }
+      return row as LeaveTypeRow | null;
+    });
   }
 
   // Leave Policies
@@ -164,6 +181,23 @@ export class AbsenceRepository {
         ORDER BY name
       `;
       return rows as LeavePolicyRow[];
+    });
+  }
+
+  async deactivateLeavePolicy(ctx: TenantContext, id: string): Promise<LeavePolicyRow | null> {
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const [row] = await tx<LeavePolicyRow[]>`
+        UPDATE app.leave_policies SET
+          is_active = false,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND is_active = true
+        RETURNING *
+      `;
+
+      if (row) {
+        await this.writeOutbox(tx, ctx.tenantId, "leave_policy", id, "absence.leave_policy.deactivated", { policyId: id });
+      }
+      return row as LeavePolicyRow | null;
     });
   }
 
@@ -283,8 +317,8 @@ export class AbsenceRepository {
 
       if (row) {
         await tx`
-          INSERT INTO app.leave_approvals (id, leave_request_id, approver_id, action, comments)
-          VALUES (${crypto.randomUUID()}::uuid, ${id}::uuid, ${approverId}::uuid, 'approved', ${comments || null})
+          INSERT INTO app.leave_request_approvals (id, tenant_id, request_id, actor_id, action, comment)
+          VALUES (${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid, ${id}::uuid, ${approverId}::uuid, 'approve', ${comments || null})
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "leave_request", id, "absence.request.approved", {
@@ -310,8 +344,8 @@ export class AbsenceRepository {
 
       if (row) {
         await tx`
-          INSERT INTO app.leave_approvals (id, leave_request_id, approver_id, action, comments)
-          VALUES (${crypto.randomUUID()}::uuid, ${id}::uuid, ${approverId}::uuid, 'rejected', ${reason || null})
+          INSERT INTO app.leave_request_approvals (id, tenant_id, request_id, actor_id, action, comment)
+          VALUES (${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid, ${id}::uuid, ${approverId}::uuid, 'reject', ${reason || null})
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "leave_request", id, "absence.request.denied", {
@@ -351,10 +385,12 @@ export class AbsenceRepository {
     const currentYear = year || new Date().getFullYear();
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<LeaveBalanceRow[]>`
-        SELECT 
+        SELECT
           lb.id, lb.tenant_id, lb.employee_id, lb.leave_type_id,
-          lt.name as leave_type_name, lb.year, lb.entitled, lb.used,
-          lb.pending, lb.available, lb.carryover, lb.updated_at
+          lt.name as leave_type_name, lb.year,
+          (lb.opening_balance + lb.accrued + lb.carryover + lb.adjustments) as entitled,
+          lb.used, lb.pending, lb.available_balance as available,
+          lb.carryover, lb.updated_at
         FROM app.leave_balances lb
         JOIN app.leave_types lt ON lt.id = lb.leave_type_id
         WHERE lb.tenant_id = ${ctx.tenantId}::uuid

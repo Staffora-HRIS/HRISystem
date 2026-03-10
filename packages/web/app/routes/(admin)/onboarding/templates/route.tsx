@@ -30,11 +30,11 @@ export default function OnboardingTemplatesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-onboarding-templates"],
-    queryFn: () => api.get<{ templates: OnboardingTemplate[]; count: number }>("/onboarding/templates"),
+    queryFn: () => api.get<{ checklists: OnboardingTemplate[]; count: number }>("/onboarding/checklists"),
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof newTemplate) => api.post("/onboarding/templates", data),
+    mutationFn: (data: typeof newTemplate) => api.post("/onboarding/checklists", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-onboarding-templates"] });
       setShowCreateModal(false);
@@ -43,13 +43,13 @@ export default function OnboardingTemplatesPage() {
   });
 
   const setDefaultMutation = useMutation({
-    mutationFn: (templateId: string) => api.patch(`/onboarding/templates/${templateId}`, { isDefault: true }),
+    mutationFn: (templateId: string) => api.patch(`/onboarding/checklists/${templateId}`, { isDefault: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-onboarding-templates"] });
     },
   });
 
-  const templates = data?.templates || [];
+  const templates = data?.checklists || [];
 
   const getTypeBadge = (type: string) => {
     switch (type) {

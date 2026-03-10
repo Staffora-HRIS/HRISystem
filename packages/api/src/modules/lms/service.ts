@@ -523,6 +523,52 @@ export class LMSService {
   }
 
   // ===========================================================================
+  // Learning Path Operations
+  // ===========================================================================
+
+  async createLearningPath(
+    ctx: TenantContext,
+    data: any
+  ): Promise<ServiceResult<any>> {
+    try {
+      const path = await this.repository.createLearningPath(ctx, data);
+      return { success: true, data: path };
+    } catch (error: any) {
+      console.error("Error creating learning path:", error);
+      return {
+        success: false,
+        error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message },
+      };
+    }
+  }
+
+  async listLearningPaths(
+    ctx: TenantContext,
+    filters: { search?: string; status?: string; category?: string } = {},
+    pagination: PaginationOptions = {}
+  ) {
+    return this.repository.listLearningPaths(ctx, pagination);
+  }
+
+  async getLearningPath(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<any>> {
+    const path = await this.repository.getLearningPathById(ctx, id);
+    if (!path) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Learning path not found",
+        },
+      };
+    }
+
+    return { success: true, data: path };
+  }
+
+  // ===========================================================================
   // Analytics Operations
   // ===========================================================================
 

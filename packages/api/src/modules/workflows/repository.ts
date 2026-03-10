@@ -106,7 +106,7 @@ export class WorkflowRepository {
       `;
 
       // 2. Create the initial version (draft) with steps
-      const [ver] = await tx`
+      const [ver] = await tx<any[]>`
         INSERT INTO app.workflow_versions (
           tenant_id, definition_id, status, steps
         ) VALUES (
@@ -225,7 +225,7 @@ export class WorkflowRepository {
       const defId = data.definitionId || data.workflowDefinitionId;
 
       // Get active version for this definition
-      const [ver] = await tx`
+      const [ver] = await tx<any[]>`
         SELECT wv.id as version_id, wv.steps, wd.name
         FROM app.workflow_definitions wd
         JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
@@ -389,7 +389,7 @@ export class WorkflowRepository {
 
       if (step) {
         // Get instance and version steps to determine next step
-        const [instance] = await tx`
+        const [instance] = await tx<any[]>`
           SELECT wi.*, wv.steps
           FROM app.workflow_instances wi
           JOIN app.workflow_versions wv ON wv.id = wi.version_id

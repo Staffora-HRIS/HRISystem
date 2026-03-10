@@ -68,7 +68,8 @@ export const CreateTimeEventSchema = t.Object({
   deviceId: t.Optional(UuidSchema),
   latitude: t.Optional(t.Number({ minimum: -90, maximum: 90 })),
   longitude: t.Optional(t.Number({ minimum: -180, maximum: 180 })),
-  notes: t.Optional(t.String({ maxLength: 500 })),
+  isManual: t.Optional(t.Boolean({ default: false })),
+  manualReason: t.Optional(t.String({ maxLength: 500 })),
 });
 export type CreateTimeEvent = Static<typeof CreateTimeEventSchema>;
 
@@ -81,9 +82,9 @@ export const TimeEventResponseSchema = t.Object({
   deviceId: t.Nullable(UuidSchema),
   latitude: t.Nullable(t.Number()),
   longitude: t.Nullable(t.Number()),
-  notes: t.Nullable(t.String()),
+  isManual: t.Boolean(),
+  sessionId: t.Nullable(UuidSchema),
   createdAt: t.String(),
-  updatedAt: t.String(),
 });
 export type TimeEventResponse = Static<typeof TimeEventResponseSchema>;
 
@@ -135,18 +136,17 @@ export type ScheduleResponse = Static<typeof ScheduleResponseSchema>;
 
 export const CreateShiftSchema = t.Object({
   scheduleId: UuidSchema,
-  employeeId: UuidSchema,
-  shiftDate: DateSchema,
+  name: t.String({ minLength: 1, maxLength: 100 }),
   startTime: t.String({ pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$" }),
   endTime: t.String({ pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$" }),
   breakMinutes: t.Optional(t.Number({ minimum: 0, maximum: 480, default: 0 })),
-  positionId: t.Optional(UuidSchema),
-  notes: t.Optional(t.String({ maxLength: 500 })),
+  isOvernight: t.Optional(t.Boolean({ default: false })),
+  color: t.Optional(t.String({ pattern: "^#[0-9A-Fa-f]{6}$" })),
 });
 export type CreateShift = Static<typeof CreateShiftSchema>;
 
 export const UpdateShiftSchema = t.Partial(
-  t.Omit(CreateShiftSchema, ["scheduleId", "employeeId"])
+  t.Omit(CreateShiftSchema, ["scheduleId"])
 );
 export type UpdateShift = Static<typeof UpdateShiftSchema>;
 
@@ -154,16 +154,12 @@ export const ShiftResponseSchema = t.Object({
   id: UuidSchema,
   tenantId: UuidSchema,
   scheduleId: UuidSchema,
-  employeeId: UuidSchema,
-  shiftDate: t.String(),
+  name: t.String(),
   startTime: t.String(),
   endTime: t.String(),
   breakMinutes: t.Number(),
-  actualStartTime: t.Nullable(t.String()),
-  actualEndTime: t.Nullable(t.String()),
-  status: ShiftStatusSchema,
-  positionId: t.Nullable(UuidSchema),
-  notes: t.Nullable(t.String()),
+  isOvernight: t.Boolean(),
+  color: t.Nullable(t.String()),
   createdAt: t.String(),
   updatedAt: t.String(),
 });

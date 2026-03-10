@@ -95,6 +95,33 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
   })
 
   // ===========================================================================
+  // Stats
+  // ===========================================================================
+
+  // GET /stats - Dashboard statistics
+  .get(
+    "/stats",
+    async (ctx) => {
+      const { hrService, tenantContext, set } = ctx as any;
+
+      try {
+        const stats = await hrService.getStats(tenantContext);
+        return stats;
+      } catch (error: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      detail: {
+        tags: ["HR"],
+        summary: "Get HR dashboard statistics",
+      },
+    }
+  )
+
+  // ===========================================================================
   // Org Unit Routes
   // ===========================================================================
 
@@ -630,6 +657,38 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
     }
   )
 
+  // GET /employees/by-number/:employeeNumber - Get employee by employee number
+  // IMPORTANT: Must be before /employees/:id to avoid being caught by the parameterized route
+  .get(
+    "/employees/by-number/:employeeNumber",
+    async (ctx) => {
+      const { hrService, params, tenantContext, error } = ctx as any;
+      const result = await hrService.getEmployeeByNumber(tenantContext, params.employeeNumber);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: EmployeeNumberParamsSchema,
+      response: {
+        200: EmployeeResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employees"],
+        summary: "Get employee by employee number",
+        description: "Get a single employee by their employee number",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
   // GET /employees/:id - Get employee by ID
   .get(
     "/employees/:id",
@@ -656,37 +715,6 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
         tags: ["Employees"],
         summary: "Get employee by ID",
         description: "Get a single employee with full details",
-        security: [{ bearerAuth: [] }],
-      },
-    }
-  )
-
-  // GET /employees/by-number/:employeeNumber - Get employee by employee number
-  .get(
-    "/employees/by-number/:employeeNumber",
-    async (ctx) => {
-      const { hrService, params, tenantContext, error } = ctx as any;
-      const result = await hrService.getEmployeeByNumber(tenantContext, params.employeeNumber);
-
-      if (!result.success) {
-        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
-        return error(status, { error: result.error });
-      }
-
-      return result.data;
-    },
-    {
-      beforeHandle: [requirePermission("employees", "read")],
-      params: EmployeeNumberParamsSchema,
-      response: {
-        200: EmployeeResponseSchema,
-        404: ErrorResponseSchema,
-        500: ErrorResponseSchema,
-      },
-      detail: {
-        tags: ["Employees"],
-        summary: "Get employee by employee number",
-        description: "Get a single employee by their employee number",
         security: [{ bearerAuth: [] }],
       },
     }

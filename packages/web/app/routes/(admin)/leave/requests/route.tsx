@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Search,
   Calendar,
   Clock,
   CheckCircle,
@@ -17,7 +16,6 @@ import {
   Badge,
   DataTable,
   type ColumnDef,
-  Input,
   Select,
   Modal,
   ModalHeader,
@@ -29,17 +27,22 @@ import { api } from "~/lib/api-client";
 
 interface LeaveRequest {
   id: string;
-  employee_id: string;
-  employee_name: string | null;
-  leave_type_id: string;
-  leave_type_name: string | null;
-  start_date: string;
-  end_date: string;
-  days_requested: number;
+  employeeId: string;
+  leaveTypeId: string;
+  startDate: string;
+  endDate: string;
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+  totalDays: number;
   status: string;
   reason: string | null;
-  reviewer_name: string | null;
-  created_at: string;
+  contactInfo: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  approvedById: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LeaveRequestListResponse {
@@ -84,29 +87,29 @@ export default function AdminLeaveRequestsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [confirmAction, setConfirmAction] = useState<{
     type: "approve" | "reject";
     requestId: string;
-    employeeName: string | null;
   } | null>(null);
 
   // Fetch leave requests
   const { data: requestsData, isLoading } = useQuery({
-    queryKey: ["admin-leave-requests", search, statusFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (statusFilter) params.set("status", statusFilter);
-      params.set("limit", "50");
-      return api.get<LeaveRequestListResponse>(`/absence/requests?${params}`);
+    queryKey: ["admin-leave-requests", statusFilter],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (statusFilter) params.status = statusFilter;
+      const qs = new URLSearchParams(params).toString();
+      return api.get<LeaveRequestListResponse>(
+        `/absence/requests${qs ? `?${qs}` : ""}`
+      );
     },
   });
 
   // Approve mutation
   const approveMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/absence/requests/${id}/approve`, { action: "approve" }),
+    mutationFn: (id: string) =>
+      api.post(`/absence/requests/${id}/approve`, { action: "approve" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-leave-requests"] });
       toast.success("Leave request approved");
@@ -122,7 +125,8 @@ export default function AdminLeaveRequestsPage() {
 
   // Reject mutation
   const rejectMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/absence/requests/${id}/approve`, { action: "reject" }),
+    mutationFn: (id: string) =>
+      api.post(`/absence/requests/${id}/approve`, { action: "reject" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-leave-requests"] });
       toast.success("Leave request rejected");
@@ -152,32 +156,10 @@ export default function AdminLeaveRequestsPage() {
     {
       id: "employee",
       header: "Employee",
-      cell: ({ row }) => {
-        const initials = (row.employee_name || "")
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase();
-        return (
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
-              {initials || "?"}
-            </div>
-            <div className="font-medium text-gray-900">
-              {row.employee_name || "Unknown"}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      id: "leave_type",
-      header: "Leave Type",
       cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {row.leave_type_name || "-"}
-        </span>
+        <div className="text-sm font-medium text-gray-900">
+          {row.employeeId.slice(0, 8)}...
+        </div>
       ),
     },
     {
@@ -185,9 +167,9 @@ export default function AdminLeaveRequestsPage() {
       header: "Dates",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600">
-          <span>{formatDateShort(row.start_date)}</span>
+          <span>{formatDateShort(row.startDate)}</span>
           <span className="mx-1 text-gray-400">-</span>
-          <span>{formatDateShort(row.end_date)}</span>
+          <span>{formatDateShort(row.endDate)}</span>
         </div>
       ),
     },
@@ -196,7 +178,16 @@ export default function AdminLeaveRequestsPage() {
       header: "Days",
       cell: ({ row }) => (
         <span className="text-sm font-medium text-gray-900">
-          {row.days_requested}
+          {row.totalDays}
+        </span>
+      ),
+    },
+    {
+      id: "reason",
+      header: "Reason",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-600 line-clamp-1">
+          {row.reason || "-"}
         </span>
       ),
     },
@@ -225,7 +216,7 @@ export default function AdminLeaveRequestsPage() {
       header: "Submitted",
       cell: ({ row }) => (
         <span className="text-sm text-gray-500">
-          {formatDate(row.created_at)}
+          {formatDate(row.submittedAt || row.createdAt)}
         </span>
       ),
     },
@@ -244,10 +235,9 @@ export default function AdminLeaveRequestsPage() {
                 setConfirmAction({
                   type: "approve",
                   requestId: row.id,
-                  employeeName: row.employee_name,
                 });
               }}
-              aria-label={`Approve leave request for ${row.employee_name || "employee"}`}
+              aria-label="Approve leave request"
             >
               <Check className="h-4 w-4 text-green-600" />
             </Button>
@@ -259,10 +249,9 @@ export default function AdminLeaveRequestsPage() {
                 setConfirmAction({
                   type: "reject",
                   requestId: row.id,
-                  employeeName: row.employee_name,
                 });
               }}
-              aria-label={`Reject leave request for ${row.employee_name || "employee"}`}
+              aria-label="Reject leave request"
             >
               <X className="h-4 w-4 text-red-500" />
             </Button>
@@ -336,15 +325,6 @@ export default function AdminLeaveRequestsPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search by employee name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
         <Select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -373,7 +353,7 @@ export default function AdminLeaveRequestsPage() {
                 No leave requests found
               </h3>
               <p className="text-gray-500 mb-4">
-                {search || statusFilter
+                {statusFilter
                   ? "Try adjusting your filters"
                   : "No leave requests have been submitted yet"}
               </p>
@@ -400,23 +380,9 @@ export default function AdminLeaveRequestsPage() {
           </ModalHeader>
           <ModalBody>
             <p className="text-gray-600">
-              {confirmAction.type === "approve" ? (
-                <>
-                  Are you sure you want to approve the leave request from{" "}
-                  <span className="font-medium text-gray-900">
-                    {confirmAction.employeeName || "this employee"}
-                  </span>
-                  ?
-                </>
-              ) : (
-                <>
-                  Are you sure you want to reject the leave request from{" "}
-                  <span className="font-medium text-gray-900">
-                    {confirmAction.employeeName || "this employee"}
-                  </span>
-                  ? The employee will be notified.
-                </>
-              )}
+              {confirmAction.type === "approve"
+                ? "Are you sure you want to approve this leave request?"
+                : "Are you sure you want to reject this leave request? The employee will be notified."}
             </p>
           </ModalBody>
           <ModalFooter>

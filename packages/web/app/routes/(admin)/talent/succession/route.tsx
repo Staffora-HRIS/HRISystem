@@ -17,32 +17,32 @@ import { api } from "~/lib/api-client";
 
 interface Candidate {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  readiness_level: "ready_now" | "ready_1_year" | "ready_2_years" | "development_needed";
+  employeeId: string;
+  employeeName: string;
+  readinessLevel: "ready_now" | "ready_1_year" | "ready_2_years" | "development_needed";
   priority: number;
-  development_notes: string | null;
+  developmentNotes: string | null;
 }
 
 interface SuccessionPlan {
   id: string;
-  position_id: string;
-  position_title: string;
-  department_name?: string;
+  positionId: string;
+  positionTitle: string;
+  departmentName?: string;
   criticality: "critical" | "high" | "medium" | "low";
-  risk_level: "high" | "medium" | "low";
+  riskLevel: "high" | "medium" | "low";
   status: "active" | "draft" | "archived";
   candidates: Candidate[];
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface PipelineStats {
-  total_critical_positions: number;
-  covered_positions: number;
-  uncovered_positions: number;
-  ready_now_candidates: number;
-  high_risk_positions: number;
+  totalCriticalPositions: number;
+  coveredPositions: number;
+  uncoveredPositions: number;
+  readyNowCandidates: number;
+  highRiskPositions: number;
 }
 
 export default function SuccessionPlanningPage() {
@@ -68,7 +68,7 @@ export default function SuccessionPlanningPage() {
 
   const plans = data?.items || [];
   const criticalPlans = plans.filter((p) => p.criticality === "critical");
-  const highRiskPlans = plans.filter((p) => p.risk_level === "high");
+  const highRiskPlans = plans.filter((p) => p.riskLevel === "high");
 
   return (
     <div className="space-y-6">
@@ -106,7 +106,7 @@ export default function SuccessionPlanningPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-gray-900">
-              {stats?.total_critical_positions || 0}
+              {stats?.totalCriticalPositions || 0}
             </p>
             <p className="text-sm text-gray-500">Critical Positions</p>
           </CardBody>
@@ -114,7 +114,7 @@ export default function SuccessionPlanningPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-green-600">
-              {stats?.covered_positions || 0}
+              {stats?.coveredPositions || 0}
             </p>
             <p className="text-sm text-gray-500">Covered</p>
           </CardBody>
@@ -122,7 +122,7 @@ export default function SuccessionPlanningPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-red-600">
-              {stats?.uncovered_positions || 0}
+              {stats?.uncoveredPositions || 0}
             </p>
             <p className="text-sm text-gray-500">Uncovered</p>
           </CardBody>
@@ -130,7 +130,7 @@ export default function SuccessionPlanningPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-blue-600">
-              {stats?.ready_now_candidates || 0}
+              {stats?.readyNowCandidates || 0}
             </p>
             <p className="text-sm text-gray-500">Ready Now</p>
           </CardBody>
@@ -138,7 +138,7 @@ export default function SuccessionPlanningPage() {
         <Card>
           <CardBody className="text-center">
             <p className="text-2xl font-bold text-orange-600">
-              {stats?.high_risk_positions || 0}
+              {stats?.highRiskPositions || 0}
             </p>
             <p className="text-sm text-gray-500">High Risk</p>
           </CardBody>

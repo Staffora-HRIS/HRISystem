@@ -16,7 +16,6 @@ import {
   type ColumnDef,
   Input,
   Select,
-  Checkbox,
   Modal,
   ModalHeader,
   ModalBody,
@@ -29,15 +28,17 @@ interface LeavePolicy {
   id: string;
   name: string;
   description: string | null;
-  leave_type_id: string;
-  leave_type_name: string | null;
-  max_days_per_year: number | null;
-  max_consecutive_days: number | null;
-  min_notice_days: number;
-  allow_negative_balance: boolean;
-  carry_over_days: number | null;
-  is_active: boolean;
-  created_at: string;
+  leaveTypeId: string;
+  annualAllowance: number;
+  maxCarryover: number;
+  accrualFrequency: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  eligibleAfterMonths: number;
+  appliesTo: unknown;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LeavePolicyListResponse {
@@ -49,28 +50,46 @@ interface LeavePolicyListResponse {
 interface LeaveTypeOption {
   id: string;
   name: string;
+  code: string;
 }
 
 interface CreatePolicyForm {
   name: string;
   description: string;
-  leave_type_id: string;
-  max_days_per_year: string;
-  max_consecutive_days: string;
-  min_notice_days: string;
-  allow_negative_balance: boolean;
-  carry_over_days: string;
+  leaveTypeId: string;
+  annualAllowance: string;
+  maxCarryover: string;
+  accrualFrequency: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  eligibleAfterMonths: string;
 }
+
+const ACCRUAL_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "annually", label: "Annually" },
+  { value: "hire_anniversary", label: "Hire Anniversary" },
+];
+
+const ACCRUAL_LABELS: Record<string, string> = {
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  annually: "Annually",
+  hire_anniversary: "Hire Anniversary",
+};
 
 const initialFormState: CreatePolicyForm = {
   name: "",
   description: "",
-  leave_type_id: "",
-  max_days_per_year: "",
-  max_consecutive_days: "",
-  min_notice_days: "0",
-  allow_negative_balance: false,
-  carry_over_days: "",
+  leaveTypeId: "",
+  annualAllowance: "",
+  maxCarryover: "0",
+  accrualFrequency: "",
+  effectiveFrom: new Date().toISOString().split("T")[0],
+  effectiveTo: "",
+  eligibleAfterMonths: "0",
 };
 
 export default function AdminLeavePoliciesPage() {
@@ -85,19 +104,14 @@ export default function AdminLeavePoliciesPage() {
   // Fetch leave policies
   const { data: policiesData, isLoading } = useQuery({
     queryKey: ["admin-leave-policies", search],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      params.set("limit", "50");
-      return api.get<LeavePolicyListResponse>(`/absence/policies?${params}`);
-    },
+    queryFn: () => api.get<LeavePolicyListResponse>("/absence/policies"),
   });
 
   // Fetch leave types for the dropdown
   const { data: leaveTypesData } = useQuery({
     queryKey: ["admin-leave-types-options"],
     queryFn: () =>
-      api.get<{ items: LeaveTypeOption[] }>("/absence/leave-types?limit=100"),
+      api.get<{ items: LeaveTypeOption[] }>("/absence/leave-types"),
   });
 
   // Create mutation
@@ -136,26 +150,35 @@ export default function AdminLeavePoliciesPage() {
   const policies = policiesData?.items ?? [];
   const leaveTypeOptions = leaveTypesData?.items ?? [];
 
+  // Client-side search
+  const filteredPolicies = search
+    ? policies.filter(
+        (p) =>
+          p.name.toLowerCase().includes(search.toLowerCase()) ||
+          (p.description?.toLowerCase().includes(search.toLowerCase()) ?? false)
+      )
+    : policies;
+
+  // Build leave type name lookup
+  const leaveTypeMap = new Map(leaveTypeOptions.map((t) => [t.id, t.name]));
+
   const handleCreateSubmit = () => {
-    if (!formData.name.trim() || !formData.leave_type_id) {
+    if (!formData.name.trim() || !formData.leaveTypeId || !formData.annualAllowance) {
       toast.warning("Please fill in required fields");
       return;
     }
     createMutation.mutate({
       name: formData.name.trim(),
-      description: formData.description.trim() || null,
-      leave_type_id: formData.leave_type_id,
-      max_days_per_year: formData.max_days_per_year
-        ? Number(formData.max_days_per_year)
-        : null,
-      max_consecutive_days: formData.max_consecutive_days
-        ? Number(formData.max_consecutive_days)
-        : null,
-      min_notice_days: Number(formData.min_notice_days) || 0,
-      allow_negative_balance: formData.allow_negative_balance,
-      carry_over_days: formData.carry_over_days
-        ? Number(formData.carry_over_days)
-        : null,
+      description: formData.description.trim() || undefined,
+      leaveTypeId: formData.leaveTypeId,
+      annualAllowance: Number(formData.annualAllowance),
+      maxCarryover: formData.maxCarryover ? Number(formData.maxCarryover) : 0,
+      accrualFrequency: formData.accrualFrequency || undefined,
+      effectiveFrom: formData.effectiveFrom,
+      effectiveTo: formData.effectiveTo || undefined,
+      eligibleAfterMonths: formData.eligibleAfterMonths
+        ? Number(formData.eligibleAfterMonths)
+        : 0,
     });
   };
 
@@ -180,67 +203,59 @@ export default function AdminLeavePoliciesPage() {
       ),
     },
     {
-      id: "leave_type",
+      id: "leaveType",
       header: "Leave Type",
       cell: ({ row }) => (
         <span className="text-sm text-gray-600">
-          {row.leave_type_name || "-"}
+          {leaveTypeMap.get(row.leaveTypeId) || row.leaveTypeId}
         </span>
       ),
     },
     {
-      id: "max_days_per_year",
-      header: "Max Days/Year",
+      id: "annualAllowance",
+      header: "Annual Allowance",
       cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {row.max_days_per_year != null ? row.max_days_per_year : "-"}
+        <span className="text-sm font-medium text-gray-900">
+          {row.annualAllowance} days
         </span>
       ),
     },
     {
-      id: "max_consecutive",
-      header: "Max Consecutive",
+      id: "maxCarryover",
+      header: "Max Carryover",
       cell: ({ row }) => (
         <span className="text-sm text-gray-600">
-          {row.max_consecutive_days != null ? row.max_consecutive_days : "-"}
+          {row.maxCarryover > 0 ? `${row.maxCarryover} days` : "-"}
         </span>
       ),
     },
     {
-      id: "min_notice",
-      header: "Min Notice",
+      id: "accrual",
+      header: "Accrual",
       cell: ({ row }) => (
         <span className="text-sm text-gray-600">
-          {row.min_notice_days} {row.min_notice_days === 1 ? "day" : "days"}
-        </span>
-      ),
-    },
-    {
-      id: "carry_over",
-      header: "Carry Over",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {row.carry_over_days != null
-            ? `${row.carry_over_days} days`
+          {row.accrualFrequency
+            ? ACCRUAL_LABELS[row.accrualFrequency] || row.accrualFrequency
             : "-"}
         </span>
       ),
     },
     {
-      id: "negative_balance",
-      header: "Negative Balance",
+      id: "effective",
+      header: "Effective",
       cell: ({ row }) => (
-        <Badge variant={row.allow_negative_balance ? "warning" : "default"}>
-          {row.allow_negative_balance ? "Allowed" : "No"}
-        </Badge>
+        <span className="text-sm text-gray-600">
+          {row.effectiveFrom}
+          {row.effectiveTo ? ` to ${row.effectiveTo}` : " (ongoing)"}
+        </span>
       ),
     },
     {
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.is_active ? "success" : "secondary"} dot rounded>
-          {row.is_active ? "Active" : "Inactive"}
+        <Badge variant={row.isActive ? "success" : "secondary"} dot rounded>
+          {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
     },
@@ -255,8 +270,7 @@ export default function AdminLeavePoliciesPage() {
             onClick={(e) => {
               e.stopPropagation();
               toast.info("Coming Soon", {
-                message:
-                  "Policy editing will be available in a future update.",
+                message: "Policy editing will be available in a future update.",
               });
             }}
             aria-label={`Edit ${row.name}`}
@@ -286,7 +300,7 @@ export default function AdminLeavePoliciesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Leave Policies</h1>
           <p className="text-gray-600">
-            Define rules and limits for each leave type
+            Define accrual rules, allowances, and carry-over limits
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
@@ -315,7 +329,7 @@ export default function AdminLeavePoliciesPage() {
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
-          ) : policies.length === 0 ? (
+          ) : filteredPolicies.length === 0 ? (
             <div className="text-center py-12">
               <Shield className="h-12 w-12 mx-auto text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900">
@@ -335,7 +349,7 @@ export default function AdminLeavePoliciesPage() {
             </div>
           ) : (
             <DataTable
-              data={policies}
+              data={filteredPolicies}
               columns={columns}
               getRowId={(row) => row.id}
             />
@@ -378,9 +392,9 @@ export default function AdminLeavePoliciesPage() {
               <Select
                 label="Leave Type"
                 required
-                value={formData.leave_type_id}
+                value={formData.leaveTypeId}
                 onChange={(e) =>
-                  setFormData({ ...formData, leave_type_id: e.target.value })
+                  setFormData({ ...formData, leaveTypeId: e.target.value })
                 }
                 options={[
                   { value: "", label: "Select a leave type" },
@@ -392,72 +406,87 @@ export default function AdminLeavePoliciesPage() {
               />
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Max Days Per Year"
+                  label="Annual Allowance (days)"
                   type="number"
                   placeholder="e.g. 20"
-                  value={formData.max_days_per_year}
+                  required
+                  value={formData.annualAllowance}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      max_days_per_year: e.target.value,
+                      annualAllowance: e.target.value,
                     })
                   }
                   min={0}
+                  max={365}
                 />
                 <Input
-                  label="Max Consecutive Days"
+                  label="Max Carryover (days)"
                   type="number"
-                  placeholder="e.g. 10"
-                  value={formData.max_consecutive_days}
+                  placeholder="e.g. 5"
+                  value={formData.maxCarryover}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      max_consecutive_days: e.target.value,
+                      maxCarryover: e.target.value,
                     })
                   }
                   min={0}
+                  max={365}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Select
+                  label="Accrual Frequency"
+                  value={formData.accrualFrequency}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      accrualFrequency: e.target.value,
+                    })
+                  }
+                  options={ACCRUAL_OPTIONS}
+                />
+                <Input
+                  label="Eligible After (months)"
+                  type="number"
+                  placeholder="e.g. 3"
+                  value={formData.eligibleAfterMonths}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      eligibleAfterMonths: e.target.value,
+                    })
+                  }
+                  min={0}
+                  max={24}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Min Notice Days"
-                  type="number"
-                  placeholder="e.g. 3"
-                  value={formData.min_notice_days}
+                  label="Effective From"
+                  type="date"
+                  required
+                  value={formData.effectiveFrom}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      min_notice_days: e.target.value,
+                      effectiveFrom: e.target.value,
                     })
                   }
-                  min={0}
                 />
                 <Input
-                  label="Carry Over Days"
-                  type="number"
-                  placeholder="e.g. 5"
-                  value={formData.carry_over_days}
+                  label="Effective To (optional)"
+                  type="date"
+                  value={formData.effectiveTo}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      carry_over_days: e.target.value,
+                      effectiveTo: e.target.value,
                     })
                   }
-                  min={0}
                 />
               </div>
-              <Checkbox
-                label="Allow Negative Balance"
-                description="Allow employees to take leave even if they have no remaining balance"
-                checked={formData.allow_negative_balance}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    allow_negative_balance: (e.target as HTMLInputElement)
-                      .checked,
-                  })
-                }
-              />
             </div>
           </ModalBody>
           <ModalFooter>
@@ -474,7 +503,8 @@ export default function AdminLeavePoliciesPage() {
               onClick={handleCreateSubmit}
               disabled={
                 !formData.name.trim() ||
-                !formData.leave_type_id ||
+                !formData.leaveTypeId ||
+                !formData.annualAllowance ||
                 createMutation.isPending
               }
             >

@@ -186,6 +186,117 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
     }
   )
 
+  // ===========================================================================
+  // Template Routes
+  // ===========================================================================
+
+  // GET /documents/templates - List document templates
+  .get(
+    "/templates",
+    async (ctx) => {
+      const { db, query, tenantContext, set } = ctx as any;
+      try {
+        const rows = await db.withTransaction(tenantContext, async (tx: any) => {
+          return tx<any[]>`
+            SELECT id, name, document_type, description, is_active, is_default,
+                   created_at, updated_at
+            FROM app.document_templates
+            WHERE tenant_id = ${tenantContext.tenantId}::uuid
+            ${query.category ? tx`AND document_type = ${query.category}` : tx``}
+            ${query.search ? tx`AND name ILIKE ${"%" + query.search + "%"}` : tx``}
+            ORDER BY name ASC
+            LIMIT ${Number(query.limit) || 50}
+          `;
+        });
+
+        return {
+          items: rows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            category: r.documentType,
+            format: "pdf",
+            is_active: r.isActive,
+            version: 1,
+            created_at: r.createdAt?.toISOString?.() || r.createdAt,
+            updated_at: r.updatedAt?.toISOString?.() || r.updatedAt,
+          })),
+          nextCursor: null,
+          hasMore: false,
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("documents", "read")],
+      query: t.Object({
+        search: t.Optional(t.String()),
+        category: t.Optional(t.String()),
+        limit: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ["Documents"],
+        summary: "List document templates",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /documents/templates - Create document template
+  .post(
+    "/templates",
+    async (ctx) => {
+      const { db, body, tenantContext, set } = ctx as any;
+      try {
+        const id = crypto.randomUUID();
+        const [row] = await db.withTransaction(tenantContext, async (tx: any) => {
+          return tx<any[]>`
+            INSERT INTO app.document_templates (
+              id, tenant_id, name, document_type, description, template_content, is_active
+            ) VALUES (
+              ${id}::uuid, ${tenantContext.tenantId}::uuid, ${body.name},
+              ${body.category || 'custom'}, ${body.description || null},
+              '', true
+            )
+            RETURNING *
+          `;
+        });
+
+        set.status = 201;
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          category: row.documentType,
+          format: body.format || "pdf",
+          is_active: row.isActive,
+          version: 1,
+          created_at: row.createdAt?.toISOString?.() || row.createdAt,
+          updated_at: row.updatedAt?.toISOString?.() || row.updatedAt,
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("documents", "write")],
+      body: t.Object({
+        name: t.String({ minLength: 1, maxLength: 255 }),
+        description: t.Optional(t.String({ maxLength: 2000 })),
+        category: t.Optional(t.String()),
+        format: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ["Documents"],
+        summary: "Create document template",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
   // GET /documents/:id - Get document by ID
   .get(
     "/:id",

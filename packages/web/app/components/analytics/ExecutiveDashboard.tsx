@@ -7,33 +7,34 @@
 import { useQuery } from "@tanstack/react-query";
 import { Users, TrendingDown, Clock, Briefcase } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { api } from "~/lib/api-client";
 import { KPICard } from "./KPICard";
 
 interface ExecutiveDashboardData {
   headcount: {
-    total_employees: number;
-    active_employees: number;
-    on_leave_employees: number;
-    pending_employees: number;
-    terminated_employees: number;
-    as_of_date: string;
+    totalEmployees: number;
+    activeEmployees: number;
+    onLeaveEmployees: number;
+    pendingEmployees: number;
+    terminatedEmployees: number;
+    asOfDate: string;
   };
   turnover: {
     rate: number;
     trend: "up" | "down" | "stable";
-    change_percentage: number;
+    changePercentage: number;
   };
   attendance: {
     rate: number;
     trend: "up" | "down" | "stable";
   };
   leave: {
-    pending_requests: number;
-    avg_utilization: number;
+    pendingRequests: number;
+    avgUtilization: number;
   };
   recruitment: {
-    open_positions: number;
-    avg_time_to_fill: number;
+    openPositions: number;
+    avgTimeToFill: number;
   };
 }
 
@@ -44,15 +45,7 @@ interface ExecutiveDashboardProps {
 export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
   const { data, isLoading, error } = useQuery<ExecutiveDashboardData>({
     queryKey: ["analytics", "executive-dashboard"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/analytics/dashboard/executive", {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch dashboard data");
-      }
-      return response.json();
-    },
+    queryFn: () => api.get<ExecutiveDashboardData>("/analytics/dashboard/executive"),
     refetchInterval: 60000, // Refresh every minute
   });
 
@@ -82,8 +75,8 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Total Headcount"
-          value={data.headcount.total_employees}
-          subtitle={`${data.headcount.active_employees} active`}
+          value={data.headcount.totalEmployees}
+          subtitle={`${data.headcount.activeEmployees} active`}
           icon={<Users className="h-6 w-6" />}
         />
         <KPICard
@@ -91,8 +84,8 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
           value={`${data.turnover.rate.toFixed(1)}%`}
           trend={data.turnover.trend}
           trendValue={
-            data.turnover.change_percentage !== 0
-              ? `${data.turnover.change_percentage > 0 ? "+" : ""}${data.turnover.change_percentage.toFixed(1)}%`
+            data.turnover.changePercentage !== 0
+              ? `${data.turnover.changePercentage > 0 ? "+" : ""}${data.turnover.changePercentage.toFixed(1)}%`
               : undefined
           }
           icon={<TrendingDown className="h-6 w-6" />}
@@ -105,10 +98,10 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
         />
         <KPICard
           title="Open Positions"
-          value={data.recruitment.open_positions}
+          value={data.recruitment.openPositions}
           subtitle={
-            data.recruitment.avg_time_to_fill > 0
-              ? `Avg ${data.recruitment.avg_time_to_fill} days to fill`
+            data.recruitment.avgTimeToFill > 0
+              ? `Avg ${data.recruitment.avgTimeToFill} days to fill`
               : undefined
           }
           icon={<Briefcase className="h-6 w-6" />}
@@ -122,15 +115,15 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Active</span>
-              <span className="font-medium">{data.headcount.active_employees}</span>
+              <span className="font-medium">{data.headcount.activeEmployees}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">On Leave</span>
-              <span className="font-medium">{data.headcount.on_leave_employees}</span>
+              <span className="font-medium">{data.headcount.onLeaveEmployees}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Pending</span>
-              <span className="font-medium">{data.headcount.pending_employees}</span>
+              <span className="font-medium">{data.headcount.pendingEmployees}</span>
             </div>
           </div>
         </div>
@@ -140,11 +133,11 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Pending Approvals</span>
-              <span className="font-medium">{data.leave.pending_requests}</span>
+              <span className="font-medium">{data.leave.pendingRequests}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Avg Utilization</span>
-              <span className="font-medium">{data.leave.avg_utilization.toFixed(1)}%</span>
+              <span className="font-medium">{data.leave.avgUtilization.toFixed(1)}%</span>
             </div>
           </div>
         </div>

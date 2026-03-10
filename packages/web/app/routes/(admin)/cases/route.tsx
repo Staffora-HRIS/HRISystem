@@ -25,20 +25,21 @@ import { api } from "~/lib/api-client";
 
 interface CaseListItem {
   id: string;
-  case_number: string;
+  caseNumber: string;
   subject: string;
   category: string;
   priority: string;
   status: string;
-  employee_id: string;
-  employee_name: string | null;
-  assignee_name: string | null;
-  created_at: string;
-  updated_at: string;
+  requesterId: string;
+  requesterName: string | null;
+  assigneeName: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CaseListResponse {
-  items: CaseListItem[];
+  cases: CaseListItem[];
+  count: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -120,7 +121,7 @@ export default function CasesListPage() {
     },
   });
 
-  const cases = casesData?.items ?? [];
+  const cases = casesData?.cases ?? [];
 
   const stats = {
     total: cases.length,
@@ -142,7 +143,7 @@ export default function CasesListPage() {
             navigate(`/admin/cases/${row.id}`);
           }}
         >
-          {row.case_number}
+          {row.caseNumber}
         </button>
       ),
     },
@@ -160,7 +161,7 @@ export default function CasesListPage() {
       header: "Employee",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {row.employee_name || "Unknown"}
+          {row.requesterName || "Unknown"}
         </div>
       ),
     },
@@ -196,7 +197,7 @@ export default function CasesListPage() {
       header: "Assignee",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {row.assignee_name || "Unassigned"}
+          {row.assigneeName || "Unassigned"}
         </div>
       ),
     },
@@ -205,7 +206,7 @@ export default function CasesListPage() {
       header: "Created",
       cell: ({ row }) => (
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {formatDate(row.created_at)}
+          {formatDate(row.createdAt)}
         </div>
       ),
     },
@@ -220,7 +221,7 @@ export default function CasesListPage() {
             e.stopPropagation();
             navigate(`/admin/cases/${row.id}`);
           }}
-          aria-label={`View case ${row.case_number}`}
+          aria-label={`View case ${row.caseNumber}`}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>

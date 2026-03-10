@@ -34,7 +34,8 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
       if (!result.success) {
         throw new Error(result.error?.message || "Failed to fetch leave types");
       }
-      return result.data;
+      const items = result.data || [];
+      return { items, nextCursor: null, hasMore: false };
     },
     {
       beforeHandle: [requirePermission("absence", "read")],
@@ -82,6 +83,29 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
     }
   )
 
+  .delete(
+    "/leave-types/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.deleteLeaveType(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_TYPE_NOT_FOUND" ? 404 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      response: {
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Delete (deactivate) leave type" },
+    }
+  )
+
   // Leave Policies
   .get(
     "/policies",
@@ -91,7 +115,8 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
       if (!result.success) {
         throw new Error(result.error?.message || "Failed to fetch policies");
       }
-      return result.data;
+      const items = result.data || [];
+      return { items, nextCursor: null, hasMore: false };
     },
     {
       beforeHandle: [requirePermission("absence", "read")],
@@ -116,6 +141,29 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
     }
   )
 
+  .delete(
+    "/policies/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, error } = ctx as any;
+      const result = await absenceService.deleteLeavePolicy(tenantContext, params.id);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_POLICY_NOT_FOUND" ? 404 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      response: {
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Delete (deactivate) leave policy" },
+    }
+  )
+
   // Leave Requests
   .get(
     "/requests",
@@ -125,7 +173,8 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
       if (!result.success) {
         throw new Error(result.error?.message || "Failed to fetch requests");
       }
-      return result.data;
+      const { items, cursor, hasMore } = result.data!;
+      return { items, nextCursor: cursor, hasMore };
     },
     {
       beforeHandle: [requirePermission("absence", "read")],

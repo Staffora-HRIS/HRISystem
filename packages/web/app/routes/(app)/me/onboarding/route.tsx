@@ -55,11 +55,12 @@ export default function MyOnboardingPage() {
 
   const { data: onboarding, isLoading } = useQuery({
     queryKey: ["my-onboarding"],
-    queryFn: () => api.get<OnboardingInstance>("/onboarding/my-progress"),
+    queryFn: () => api.get<OnboardingInstance>("/onboarding/my-onboarding"),
   });
 
   const completeMutation = useMutation({
-    mutationFn: (taskId: string) => api.post(`/onboarding/tasks/${taskId}/complete`),
+    mutationFn: (taskId: string) =>
+      api.post(`/onboarding/instances/${onboarding!.id}/tasks/${taskId}/complete`),
     onSuccess: () => {
       toast.success("Task completed!");
       queryClient.invalidateQueries({ queryKey: ["my-onboarding"] });
