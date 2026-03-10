@@ -580,7 +580,7 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
       } catch (err: any) {
         if (err.message.includes("not found") || err.message.includes("not open")) {
           return error(400, {
-            error: { code: "VALIDATION_ERROR", message: err.message },
+            error: { code: ErrorCodes.VALIDATION_ERROR, message: err.message },
           });
         }
         return error(500, {

@@ -36,7 +36,6 @@ export class WorkflowService {
       triggerType: data.triggerType,
       triggerConfig: data.triggerConfig as Record<string, unknown>,
       steps: data.steps as unknown as Record<string, unknown>[],
-      version: data.version || 1,
     });
 
     return this.formatDefinition(definition);
@@ -71,8 +70,7 @@ export class WorkflowService {
     const definition = await this.repository.updateDefinition(ctx, id, {
       name: data.name,
       description: data.description,
-      status: data.status,
-      steps: data.steps as unknown as Record<string, unknown>[],
+      category: data.category,
     });
 
     if (!definition) {
@@ -97,12 +95,12 @@ export class WorkflowService {
     if (!definition) {
       throw new Error("NOT_FOUND: Workflow definition not found");
     }
-    if (definition.status !== "active") {
+    if (!definition.isActive) {
       throw new Error("VALIDATION_ERROR: Workflow definition is not active");
     }
 
     const instance = await this.repository.createInstance(ctx, {
-      workflowDefinitionId: data.workflowDefinitionId,
+      definitionId: data.workflowDefinitionId,
       entityType: data.entityType,
       entityId: data.entityId,
       initiatorId: data.initiatorId,
@@ -195,49 +193,52 @@ export class WorkflowService {
       category: row.category,
       triggerType: row.triggerType,
       triggerConfig: row.triggerConfig,
-      steps: row.steps,
-      status: row.status,
-      version: row.version,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
+      steps: row.steps || [],
+      status: row.isActive ? 'active' : 'inactive',
+      version: row.version || null,
+      versionId: row.versionId || null,
+      createdAt: row.createdAt?.toISOString?.() || row.createdAt,
+      updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt,
     };
   }
 
   private formatInstance(row: WorkflowInstanceRow) {
+    const ctx = row.context || {};
+    const entity = (ctx as any)?.entity;
     return {
       id: row.id,
       tenantId: row.tenantId,
-      workflowDefinitionId: row.workflowDefinitionId,
-      workflowName: row.workflowName,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      initiatorId: row.initiatorId,
+      workflowDefinitionId: row.definitionId,
+      workflowName: row.workflowName || null,
+      entityType: entity?.type || null,
+      entityId: entity?.id || null,
+      initiatorId: row.createdBy,
       status: row.status,
-      currentStepKey: row.currentStepKey,
-      contextData: row.contextData,
-      startedAt: row.startedAt.toISOString(),
-      completedAt: row.completedAt?.toISOString() || null,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
+      currentStepIndex: row.currentStepIndex,
+      context: row.context,
+      startedAt: row.startedAt?.toISOString?.() || null,
+      completedAt: row.completedAt?.toISOString?.() || null,
+      cancelledAt: row.cancelledAt?.toISOString?.() || null,
+      createdAt: row.createdAt?.toISOString?.() || row.createdAt,
     };
   }
 
   private formatStep(row: StepInstanceRow) {
+    const stepCtx = row.context || {};
     return {
       id: row.id,
-      workflowInstanceId: row.workflowInstanceId,
-      stepKey: row.stepKey,
-      stepType: row.stepType,
+      workflowInstanceId: row.instanceId,
+      stepIndex: row.stepIndex,
+      stepKey: (stepCtx as any)?.step_key || null,
+      stepType: (stepCtx as any)?.step_type || null,
       stepName: row.stepName,
       status: row.status,
-      assigneeId: row.assigneeId,
-      assigneeName: row.assigneeName,
-      dueAt: row.dueAt?.toISOString() || null,
-      startedAt: row.startedAt?.toISOString() || null,
-      completedAt: row.completedAt?.toISOString() || null,
-      decision: row.decision,
-      comments: row.comments,
-      createdAt: row.createdAt.toISOString(),
+      assigneeId: row.assignedTo,
+      assigneeName: row.assigneeName || null,
+      completedAt: row.completedAt?.toISOString?.() || null,
+      completionAction: row.completionAction,
+      completionComment: row.completionComment,
+      createdAt: row.createdAt?.toISOString?.() || row.createdAt,
     };
   }
 }

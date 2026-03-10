@@ -110,27 +110,32 @@ export class RecruitmentRepository {
   ): Promise<{ items: Requisition[]; nextCursor: string | null; hasMore: boolean }> {
     const { cursor, limit = 20, status, hiringManagerId, orgUnitId, search } = options;
 
-    const rows = await this.db.query<Requisition>`
-      SELECT
-        r.*,
-        e.first_name || ' ' || e.last_name as hiring_manager_name,
-        p.title as position_title,
-        ou.name as org_unit_name,
-        ou.name as department,
-        (SELECT COUNT(*)::int FROM app.candidates c WHERE c.requisition_id = r.id) as candidate_count
-      FROM app.requisitions r
-      LEFT JOIN app.employees e ON e.id = r.hiring_manager_id
-      LEFT JOIN app.positions p ON p.id = r.position_id
-      LEFT JOIN app.org_units ou ON ou.id = r.org_unit_id
-      WHERE r.tenant_id = ${ctx.tenantId}::uuid
-      ${status ? this.db.client`AND r.status = ${status}` : this.db.client``}
-      ${hiringManagerId ? this.db.client`AND r.hiring_manager_id = ${hiringManagerId}::uuid` : this.db.client``}
-      ${orgUnitId ? this.db.client`AND r.org_unit_id = ${orgUnitId}::uuid` : this.db.client``}
-      ${search ? this.db.client`AND (r.title ILIKE ${"%" + search + "%"} OR r.code ILIKE ${"%" + search + "%"})` : this.db.client``}
-      ${cursor ? this.db.client`AND r.id > ${cursor}::uuid` : this.db.client``}
-      ORDER BY r.priority ASC, r.created_at DESC, r.id ASC
-      LIMIT ${limit + 1}
-    `;
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx<Requisition[]>`
+          SELECT
+            r.*,
+            e.first_name || ' ' || e.last_name as hiring_manager_name,
+            p.title as position_title,
+            ou.name as org_unit_name,
+            ou.name as department,
+            (SELECT COUNT(*)::int FROM app.candidates c WHERE c.requisition_id = r.id) as candidate_count
+          FROM app.requisitions r
+          LEFT JOIN app.employees e ON e.id = r.hiring_manager_id
+          LEFT JOIN app.positions p ON p.id = r.position_id
+          LEFT JOIN app.org_units ou ON ou.id = r.org_unit_id
+          WHERE r.tenant_id = ${ctx.tenantId}::uuid
+          ${status ? tx`AND r.status = ${status}` : tx``}
+          ${hiringManagerId ? tx`AND r.hiring_manager_id = ${hiringManagerId}::uuid` : tx``}
+          ${orgUnitId ? tx`AND r.org_unit_id = ${orgUnitId}::uuid` : tx``}
+          ${search ? tx`AND (r.title ILIKE ${"%" + search + "%"} OR r.code ILIKE ${"%" + search + "%"})` : tx``}
+          ${cursor ? tx`AND r.id > ${cursor}::uuid` : tx``}
+          ORDER BY r.priority ASC, r.created_at DESC, r.id ASC
+          LIMIT ${limit + 1}
+        `;
+      }
+    );
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
@@ -140,20 +145,22 @@ export class RecruitmentRepository {
   }
 
   async getRequisitionById(ctx: TenantContext, id: string): Promise<Requisition | null> {
-    const rows = await this.db.query<Requisition>`
-      SELECT
-        r.*,
-        e.first_name || ' ' || e.last_name as hiring_manager_name,
-        p.title as position_title,
-        ou.name as org_unit_name,
-        ou.name as department,
-        (SELECT COUNT(*)::int FROM app.candidates c WHERE c.requisition_id = r.id) as candidate_count
-      FROM app.requisitions r
-      LEFT JOIN app.employees e ON e.id = r.hiring_manager_id
-      LEFT JOIN app.positions p ON p.id = r.position_id
-      LEFT JOIN app.org_units ou ON ou.id = r.org_unit_id
-      WHERE r.id = ${id}::uuid AND r.tenant_id = ${ctx.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Requisition[]>`
+        SELECT
+          r.*,
+          e.first_name || ' ' || e.last_name as hiring_manager_name,
+          p.title as position_title,
+          ou.name as org_unit_name,
+          ou.name as department,
+          (SELECT COUNT(*)::int FROM app.candidates c WHERE c.requisition_id = r.id) as candidate_count
+        FROM app.requisitions r
+        LEFT JOIN app.employees e ON e.id = r.hiring_manager_id
+        LEFT JOIN app.positions p ON p.id = r.position_id
+        LEFT JOIN app.org_units ou ON ou.id = r.org_unit_id
+        WHERE r.id = ${id}::uuid AND r.tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
     return rows[0] || null;
   }
 
@@ -226,23 +233,25 @@ export class RecruitmentRepository {
       status: string;
     }>
   ): Promise<Requisition | null> {
-    const rows = await this.db.query<Requisition>`
-      UPDATE app.requisitions SET
-        title = COALESCE(${data.title}, title),
-        position_id = COALESCE(${data.positionId}::uuid, position_id),
-        org_unit_id = COALESCE(${data.orgUnitId}::uuid, org_unit_id),
-        hiring_manager_id = COALESCE(${data.hiringManagerId}::uuid, hiring_manager_id),
-        openings = COALESCE(${data.openings}, openings),
-        priority = COALESCE(${data.priority}, priority),
-        job_description = COALESCE(${data.jobDescription}, job_description),
-        requirements = COALESCE(${data.requirements ? JSON.stringify(data.requirements) : null}::jsonb, requirements),
-        target_start_date = COALESCE(${data.targetStartDate}::date, target_start_date),
-        deadline = COALESCE(${data.deadline}::date, deadline),
-        status = COALESCE(${data.status}::app.requisition_status, status),
-        updated_at = now()
-      WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-      RETURNING *
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Requisition[]>`
+        UPDATE app.requisitions SET
+          title = COALESCE(${data.title}, title),
+          position_id = COALESCE(${data.positionId}::uuid, position_id),
+          org_unit_id = COALESCE(${data.orgUnitId}::uuid, org_unit_id),
+          hiring_manager_id = COALESCE(${data.hiringManagerId}::uuid, hiring_manager_id),
+          openings = COALESCE(${data.openings}, openings),
+          priority = COALESCE(${data.priority}, priority),
+          job_description = COALESCE(${data.jobDescription}, job_description),
+          requirements = COALESCE(${data.requirements ? JSON.stringify(data.requirements) : null}::jsonb, requirements),
+          target_start_date = COALESCE(${data.targetStartDate}::date, target_start_date),
+          deadline = COALESCE(${data.deadline}::date, deadline),
+          status = COALESCE(${data.status}::app.requisition_status, status),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    });
     return rows[0] || null;
   }
 
@@ -254,17 +263,19 @@ export class RecruitmentRepository {
     totalOpenings: number;
     totalFilled: number;
   }> {
-    const rows = await this.db.query<RequisitionStatsRow>`
-      SELECT
-        COUNT(*)::int AS total_requisitions,
-        COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
-        COUNT(*) FILTER (WHERE status = 'on_hold')::int AS on_hold_count,
-        COUNT(*) FILTER (WHERE status = 'filled')::int AS filled_count,
-        COALESCE(SUM(openings), 0)::int AS total_openings,
-        COALESCE(SUM(filled), 0)::int AS total_filled
-      FROM app.requisitions
-      WHERE tenant_id = ${ctx.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<RequisitionStatsRow[]>`
+        SELECT
+          COUNT(*)::int AS total_requisitions,
+          COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
+          COUNT(*) FILTER (WHERE status = 'on_hold')::int AS on_hold_count,
+          COUNT(*) FILTER (WHERE status = 'filled')::int AS filled_count,
+          COALESCE(SUM(openings), 0)::int AS total_openings,
+          COALESCE(SUM(filled), 0)::int AS total_filled
+        FROM app.requisitions
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
 
     const stats = rows[0];
     return {
@@ -294,21 +305,23 @@ export class RecruitmentRepository {
   ): Promise<{ items: Candidate[]; nextCursor: string | null; hasMore: boolean }> {
     const { cursor, limit = 20, requisitionId, stage, source, search } = options;
 
-    const rows = await this.db.query<Candidate>`
-      SELECT
-        c.*,
-        r.title as requisition_title
-      FROM app.candidates c
-      JOIN app.requisitions r ON r.id = c.requisition_id
-      WHERE c.tenant_id = ${ctx.tenantId}::uuid
-      ${requisitionId ? this.db.client`AND c.requisition_id = ${requisitionId}::uuid` : this.db.client``}
-      ${stage ? this.db.client`AND c.current_stage = ${stage}::app.candidate_stage` : this.db.client``}
-      ${source ? this.db.client`AND c.source = ${source}` : this.db.client``}
-      ${search ? this.db.client`AND (c.first_name ILIKE ${"%" + search + "%"} OR c.last_name ILIKE ${"%" + search + "%"} OR c.email ILIKE ${"%" + search + "%"})` : this.db.client``}
-      ${cursor ? this.db.client`AND c.id > ${cursor}::uuid` : this.db.client``}
-      ORDER BY c.created_at DESC, c.id ASC
-      LIMIT ${limit + 1}
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Candidate[]>`
+        SELECT
+          c.*,
+          r.title as requisition_title
+        FROM app.candidates c
+        JOIN app.requisitions r ON r.id = c.requisition_id
+        WHERE c.tenant_id = ${ctx.tenantId}::uuid
+        ${requisitionId ? tx`AND c.requisition_id = ${requisitionId}::uuid` : tx``}
+        ${stage ? tx`AND c.current_stage = ${stage}::app.candidate_stage` : tx``}
+        ${source ? tx`AND c.source = ${source}` : tx``}
+        ${search ? tx`AND (c.first_name ILIKE ${"%" + search + "%"} OR c.last_name ILIKE ${"%" + search + "%"} OR c.email ILIKE ${"%" + search + "%"})` : tx``}
+        ${cursor ? tx`AND c.id > ${cursor}::uuid` : tx``}
+        ORDER BY c.created_at DESC, c.id ASC
+        LIMIT ${limit + 1}
+      `;
+    });
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
@@ -318,14 +331,16 @@ export class RecruitmentRepository {
   }
 
   async getCandidateById(ctx: TenantContext, id: string): Promise<Candidate | null> {
-    const rows = await this.db.query<Candidate>`
-      SELECT
-        c.*,
-        r.title as requisition_title
-      FROM app.candidates c
-      JOIN app.requisitions r ON r.id = c.requisition_id
-      WHERE c.id = ${id}::uuid AND c.tenant_id = ${ctx.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Candidate[]>`
+        SELECT
+          c.*,
+          r.title as requisition_title
+        FROM app.candidates c
+        JOIN app.requisitions r ON r.id = c.requisition_id
+        WHERE c.id = ${id}::uuid AND c.tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
     return rows[0] || null;
   }
 
@@ -344,25 +359,27 @@ export class RecruitmentRepository {
       notes?: Record<string, unknown>;
     }
   ): Promise<Candidate> {
-    const rows = await this.db.query<Candidate>`
-      INSERT INTO app.candidates (
-        tenant_id, requisition_id, email, first_name, last_name,
-        phone, source, resume_url, linkedin_url, rating, notes
-      ) VALUES (
-        ${ctx.tenantId}::uuid,
-        ${data.requisitionId}::uuid,
-        ${data.email},
-        ${data.firstName},
-        ${data.lastName},
-        ${data.phone || null},
-        ${data.source || "direct"},
-        ${data.resumeUrl || null},
-        ${data.linkedinUrl || null},
-        ${data.rating || null},
-        ${data.notes ? JSON.stringify(data.notes) : "{}"}::jsonb
-      )
-      RETURNING *
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Candidate[]>`
+        INSERT INTO app.candidates (
+          tenant_id, requisition_id, email, first_name, last_name,
+          phone, source, resume_url, linkedin_url, rating, notes
+        ) VALUES (
+          ${ctx.tenantId}::uuid,
+          ${data.requisitionId}::uuid,
+          ${data.email},
+          ${data.firstName},
+          ${data.lastName},
+          ${data.phone || null},
+          ${data.source || "direct"},
+          ${data.resumeUrl || null},
+          ${data.linkedinUrl || null},
+          ${data.rating || null},
+          ${data.notes ? JSON.stringify(data.notes) : "{}"}::jsonb
+        )
+        RETURNING *
+      `;
+    });
     return rows[0];
   }
 
@@ -382,22 +399,24 @@ export class RecruitmentRepository {
       notes: Record<string, unknown> | null;
     }>
   ): Promise<Candidate | null> {
-    const rows = await this.db.query<Candidate>`
-      UPDATE app.candidates SET
-        email = COALESCE(${data.email}, email),
-        first_name = COALESCE(${data.firstName}, first_name),
-        last_name = COALESCE(${data.lastName}, last_name),
-        phone = COALESCE(${data.phone}, phone),
-        source = COALESCE(${data.source}, source),
-        resume_url = COALESCE(${data.resumeUrl}, resume_url),
-        linkedin_url = COALESCE(${data.linkedinUrl}, linkedin_url),
-        rating = COALESCE(${data.rating}, rating),
-        current_stage = COALESCE(${data.currentStage}::app.candidate_stage, current_stage),
-        notes = COALESCE(${data.notes ? JSON.stringify(data.notes) : null}::jsonb, notes),
-        updated_at = now()
-      WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-      RETURNING *
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<Candidate[]>`
+        UPDATE app.candidates SET
+          email = COALESCE(${data.email}, email),
+          first_name = COALESCE(${data.firstName}, first_name),
+          last_name = COALESCE(${data.lastName}, last_name),
+          phone = COALESCE(${data.phone}, phone),
+          source = COALESCE(${data.source}, source),
+          resume_url = COALESCE(${data.resumeUrl}, resume_url),
+          linkedin_url = COALESCE(${data.linkedinUrl}, linkedin_url),
+          rating = COALESCE(${data.rating}, rating),
+          current_stage = COALESCE(${data.currentStage}::app.candidate_stage, current_stage),
+          notes = COALESCE(${data.notes ? JSON.stringify(data.notes) : null}::jsonb, notes),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    });
     return rows[0] || null;
   }
 
@@ -407,34 +426,38 @@ export class RecruitmentRepository {
     newStage: string,
     reason?: string
   ): Promise<boolean> {
-    const rows = await this.db.query<{ result: boolean }>`
-      SELECT app.advance_candidate_stage(
-        ${candidateId}::uuid,
-        ${newStage}::app.candidate_stage,
-        ${ctx.userId || null}::uuid,
-        ${reason || null}
-      ) as result
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<{ result: boolean }[]>`
+        SELECT app.advance_candidate_stage(
+          ${candidateId}::uuid,
+          ${newStage}::app.candidate_stage,
+          ${ctx.userId || null}::uuid,
+          ${reason || null}
+        ) as result
+      `;
+    });
     return rows[0]?.result || false;
   }
 
   async getRequisitionPipeline(ctx: TenantContext, requisitionId: string): Promise<PipelineStage[]> {
-    const rows = await this.db.query<{ stage: string; count: number }>`
-      SELECT current_stage as stage, COUNT(*)::int as count
-      FROM app.candidates
-      WHERE requisition_id = ${requisitionId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-      GROUP BY current_stage
-      ORDER BY
-        CASE current_stage
-          WHEN 'applied' THEN 1
-          WHEN 'screening' THEN 2
-          WHEN 'interview' THEN 3
-          WHEN 'offer' THEN 4
-          WHEN 'hired' THEN 5
-          WHEN 'rejected' THEN 6
-          WHEN 'withdrawn' THEN 7
-        END
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<{ stage: string; count: number }[]>`
+        SELECT current_stage as stage, COUNT(*)::int as count
+        FROM app.candidates
+        WHERE requisition_id = ${requisitionId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        GROUP BY current_stage
+        ORDER BY
+          CASE current_stage
+            WHEN 'applied' THEN 1
+            WHEN 'screening' THEN 2
+            WHEN 'interview' THEN 3
+            WHEN 'offer' THEN 4
+            WHEN 'hired' THEN 5
+            WHEN 'rejected' THEN 6
+            WHEN 'withdrawn' THEN 7
+          END
+      `;
+    });
     return rows;
   }
 
@@ -447,18 +470,20 @@ export class RecruitmentRepository {
     hiredCount: number;
     rejectedCount: number;
   }> {
-    const rows = await this.db.query<CandidateStatsRow>`
-      SELECT
-        COUNT(*)::int AS total_candidates,
-        COUNT(*) FILTER (WHERE current_stage = 'applied')::int AS applied_count,
-        COUNT(*) FILTER (WHERE current_stage = 'screening')::int AS screening_count,
-        COUNT(*) FILTER (WHERE current_stage = 'interview')::int AS interview_count,
-        COUNT(*) FILTER (WHERE current_stage = 'offer')::int AS offer_count,
-        COUNT(*) FILTER (WHERE current_stage = 'hired')::int AS hired_count,
-        COUNT(*) FILTER (WHERE current_stage = 'rejected')::int AS rejected_count
-      FROM app.candidates
-      WHERE tenant_id = ${ctx.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<CandidateStatsRow[]>`
+        SELECT
+          COUNT(*)::int AS total_candidates,
+          COUNT(*) FILTER (WHERE current_stage = 'applied')::int AS applied_count,
+          COUNT(*) FILTER (WHERE current_stage = 'screening')::int AS screening_count,
+          COUNT(*) FILTER (WHERE current_stage = 'interview')::int AS interview_count,
+          COUNT(*) FILTER (WHERE current_stage = 'offer')::int AS offer_count,
+          COUNT(*) FILTER (WHERE current_stage = 'hired')::int AS hired_count,
+          COUNT(*) FILTER (WHERE current_stage = 'rejected')::int AS rejected_count
+        FROM app.candidates
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
 
     const stats = rows[0];
     return {

@@ -39,25 +39,27 @@ export class AnalyticsRepository {
   ): Promise<any> {
     const asOfDate = filters.as_of_date || new Date().toISOString().split("T")[0];
 
-    const rows = await this.db.query<any>`
-      SELECT
-        COUNT(*) FILTER (WHERE status != 'terminated') as total_employees,
-        COUNT(*) FILTER (WHERE status = 'active') as active_employees,
-        COUNT(*) FILTER (WHERE status = 'on_leave') as on_leave_employees,
-        COUNT(*) FILTER (WHERE status = 'pending') as pending_employees,
-        COUNT(*) FILTER (WHERE status = 'terminated') as terminated_employees
-      FROM app.employees e
-      WHERE e.tenant_id = ${context.tenantId}::uuid
-        ${filters.org_unit_id
-          ? this.db.client`AND EXISTS (
-              SELECT 1 FROM app.position_assignments pa
-              INNER JOIN app.positions p ON pa.position_id = p.id
-              WHERE pa.employee_id = e.id
-                AND p.org_unit_id = ${filters.org_unit_id}::uuid
-                AND pa.effective_to IS NULL
-            )`
-          : this.db.client``}
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COUNT(*) FILTER (WHERE status != 'terminated') as total_employees,
+          COUNT(*) FILTER (WHERE status = 'active') as active_employees,
+          COUNT(*) FILTER (WHERE status = 'on_leave') as on_leave_employees,
+          COUNT(*) FILTER (WHERE status = 'pending') as pending_employees,
+          COUNT(*) FILTER (WHERE status = 'terminated') as terminated_employees
+        FROM app.employees e
+        WHERE e.tenant_id = ${context.tenantId}::uuid
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                INNER JOIN app.positions p ON pa.position_id = p.id
+                WHERE pa.employee_id = e.id
+                  AND p.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+              )`
+            : tx``}
+      `;
+    });
 
     return {
       ...rows[0],
@@ -69,23 +71,25 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: HeadcountFilters = {}
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT
-        ou.id as org_unit_id,
-        ou.name as org_unit_name,
-        COUNT(DISTINCT e.id) as headcount
-      FROM app.org_units ou
-      LEFT JOIN app.positions p ON p.org_unit_id = ou.id AND p.is_active = true
-      LEFT JOIN app.position_assignments pa ON pa.position_id = p.id
-        AND pa.effective_to IS NULL
-        AND pa.is_primary = true
-      LEFT JOIN app.employees e ON e.id = pa.employee_id
-        AND e.status IN ('active', 'on_leave')
-      WHERE ou.tenant_id = ${context.tenantId}::uuid
-        AND ou.is_active = true
-      GROUP BY ou.id, ou.name
-      ORDER BY headcount DESC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          ou.id as org_unit_id,
+          ou.name as org_unit_name,
+          COUNT(DISTINCT e.id) as headcount
+        FROM app.org_units ou
+        LEFT JOIN app.positions p ON p.org_unit_id = ou.id AND p.is_active = true
+        LEFT JOIN app.position_assignments pa ON pa.position_id = p.id
+          AND pa.effective_to IS NULL
+          AND pa.is_primary = true
+        LEFT JOIN app.employees e ON e.id = pa.employee_id
+          AND e.status IN ('active', 'on_leave')
+        WHERE ou.tenant_id = ${context.tenantId}::uuid
+          AND ou.is_active = true
+        GROUP BY ou.id, ou.name
+        ORDER BY headcount DESC
+      `;
+    });
   }
 
   async getHeadcountTrend(
@@ -94,49 +98,51 @@ export class AnalyticsRepository {
     endDate: string,
     period: string = "month"
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      WITH date_series AS (
-        SELECT generate_series(
-          ${startDate}::date,
-          ${endDate}::date,
-          CASE ${period}
-            WHEN 'day' THEN '1 day'::interval
-            WHEN 'week' THEN '1 week'::interval
-            WHEN 'month' THEN '1 month'::interval
-            WHEN 'quarter' THEN '3 months'::interval
-            ELSE '1 month'::interval
-          END
-        )::date as period_date
-      ),
-      hires AS (
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH date_series AS (
+          SELECT generate_series(
+            ${startDate}::date,
+            ${endDate}::date,
+            CASE ${period}
+              WHEN 'day' THEN '1 day'::interval
+              WHEN 'week' THEN '1 week'::interval
+              WHEN 'month' THEN '1 month'::interval
+              WHEN 'quarter' THEN '3 months'::interval
+              ELSE '1 month'::interval
+            END
+          )::date as period_date
+        ),
+        hires AS (
+          SELECT
+            date_trunc(${period}, hire_date)::date as period_date,
+            COUNT(*) as count
+          FROM app.employees
+          WHERE tenant_id = ${context.tenantId}::uuid
+            AND hire_date BETWEEN ${startDate}::date AND ${endDate}::date
+          GROUP BY 1
+        ),
+        terms AS (
+          SELECT
+            date_trunc(${period}, termination_date)::date as period_date,
+            COUNT(*) as count
+          FROM app.employees
+          WHERE tenant_id = ${context.tenantId}::uuid
+            AND termination_date BETWEEN ${startDate}::date AND ${endDate}::date
+          GROUP BY 1
+        )
         SELECT
-          date_trunc(${period}, hire_date)::date as period_date,
-          COUNT(*) as count
-        FROM app.employees
-        WHERE tenant_id = ${context.tenantId}::uuid
-          AND hire_date BETWEEN ${startDate}::date AND ${endDate}::date
-        GROUP BY 1
-      ),
-      terms AS (
-        SELECT
-          date_trunc(${period}, termination_date)::date as period_date,
-          COUNT(*) as count
-        FROM app.employees
-        WHERE tenant_id = ${context.tenantId}::uuid
-          AND termination_date BETWEEN ${startDate}::date AND ${endDate}::date
-        GROUP BY 1
-      )
-      SELECT
-        ds.period_date::text as period,
-        COALESCE(h.count, 0)::int as new_hires,
-        COALESCE(t.count, 0)::int as terminations,
-        (COALESCE(h.count, 0) - COALESCE(t.count, 0))::int as net_change,
-        0 as headcount -- Would need a running total calculation
-      FROM date_series ds
-      LEFT JOIN hires h ON h.period_date = ds.period_date
-      LEFT JOIN terms t ON t.period_date = ds.period_date
-      ORDER BY ds.period_date
-    `;
+          ds.period_date::text as period,
+          COALESCE(h.count, 0)::int as new_hires,
+          COALESCE(t.count, 0)::int as terminations,
+          (COALESCE(h.count, 0) - COALESCE(t.count, 0))::int as net_change,
+          0 as headcount -- Would need a running total calculation
+        FROM date_series ds
+        LEFT JOIN hires h ON h.period_date = ds.period_date
+        LEFT JOIN terms t ON t.period_date = ds.period_date
+        ORDER BY ds.period_date
+      `;
+    });
   }
 
   // ===========================================================================
@@ -147,40 +153,42 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: TurnoverFilters
   ): Promise<any> {
-    const rows = await this.db.query<any>`
-      WITH terminated AS (
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH terminated AS (
+          SELECT
+            e.id,
+            e.termination_date,
+            e.hire_date,
+            e.termination_reason
+          FROM app.employees e
+          WHERE e.tenant_id = ${context.tenantId}::uuid
+            AND e.status = 'terminated'
+            AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+            ${filters.org_unit_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM app.position_assignments pa
+                  INNER JOIN app.positions p ON pa.position_id = p.id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.org_unit_id}::uuid
+                )`
+              : tx``}
+        ),
+        avg_headcount AS (
+          SELECT COUNT(*)::numeric as count
+          FROM app.employees
+          WHERE tenant_id = ${context.tenantId}::uuid
+            AND status != 'terminated'
+        )
         SELECT
-          e.id,
-          e.termination_date,
-          e.hire_date,
-          e.termination_reason
-        FROM app.employees e
-        WHERE e.tenant_id = ${context.tenantId}::uuid
-          AND e.status = 'terminated'
-          AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
-          ${filters.org_unit_id
-            ? this.db.client`AND EXISTS (
-                SELECT 1 FROM app.position_assignments pa
-                INNER JOIN app.positions p ON pa.position_id = p.id
-                WHERE pa.employee_id = e.id
-                  AND p.org_unit_id = ${filters.org_unit_id}::uuid
-              )`
-            : this.db.client``}
-      ),
-      avg_headcount AS (
-        SELECT COUNT(*)::numeric as count
-        FROM app.employees
-        WHERE tenant_id = ${context.tenantId}::uuid
-          AND status != 'terminated'
-      )
-      SELECT
-        COUNT(*) as total_terminations,
-        COUNT(*) FILTER (WHERE termination_reason IN ('resignation', 'retirement', 'personal')) as voluntary_terminations,
-        COUNT(*) FILTER (WHERE termination_reason NOT IN ('resignation', 'retirement', 'personal')) as involuntary_terminations,
-        ROUND(COUNT(*)::numeric / NULLIF((SELECT count FROM avg_headcount), 0) * 100, 2) as turnover_rate,
-        ROUND(AVG(EXTRACT(EPOCH FROM (termination_date - hire_date)) / 86400 / 30), 1) as avg_tenure_months
-      FROM terminated
-    `;
+          COUNT(*) as total_terminations,
+          COUNT(*) FILTER (WHERE termination_reason IN ('resignation', 'retirement', 'personal')) as voluntary_terminations,
+          COUNT(*) FILTER (WHERE termination_reason NOT IN ('resignation', 'retirement', 'personal')) as involuntary_terminations,
+          ROUND(COUNT(*)::numeric / NULLIF((SELECT count FROM avg_headcount), 0) * 100, 2) as turnover_rate,
+          ROUND(AVG(EXTRACT(EPOCH FROM (termination_date - hire_date)) / 86400 / 30), 1) as avg_tenure_months
+        FROM terminated
+      `;
+    });
 
     return {
       ...rows[0],
@@ -195,59 +203,63 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: TurnoverFilters
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      WITH dept_terms AS (
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH dept_terms AS (
+          SELECT
+            ou.id as org_unit_id,
+            ou.name as org_unit_name,
+            COUNT(DISTINCT e.id) as terminations
+          FROM app.employees e
+          INNER JOIN app.position_assignments pa ON pa.employee_id = e.id
+          INNER JOIN app.positions p ON pa.position_id = p.id
+          INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
+          WHERE e.tenant_id = ${context.tenantId}::uuid
+            AND e.status = 'terminated'
+            AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+          GROUP BY ou.id, ou.name
+        ),
+        dept_headcount AS (
+          SELECT
+            ou.id as org_unit_id,
+            COUNT(DISTINCT e.id) as headcount
+          FROM app.employees e
+          INNER JOIN app.position_assignments pa ON pa.employee_id = e.id
+            AND pa.effective_to IS NULL
+          INNER JOIN app.positions p ON pa.position_id = p.id
+          INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
+          WHERE e.tenant_id = ${context.tenantId}::uuid
+          GROUP BY ou.id
+        )
         SELECT
-          ou.id as org_unit_id,
-          ou.name as org_unit_name,
-          COUNT(DISTINCT e.id) as terminations
-        FROM app.employees e
-        INNER JOIN app.position_assignments pa ON pa.employee_id = e.id
-        INNER JOIN app.positions p ON pa.position_id = p.id
-        INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-        WHERE e.tenant_id = ${context.tenantId}::uuid
-          AND e.status = 'terminated'
-          AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
-        GROUP BY ou.id, ou.name
-      ),
-      dept_headcount AS (
-        SELECT
-          ou.id as org_unit_id,
-          COUNT(DISTINCT e.id) as headcount
-        FROM app.employees e
-        INNER JOIN app.position_assignments pa ON pa.employee_id = e.id
-          AND pa.effective_to IS NULL
-        INNER JOIN app.positions p ON pa.position_id = p.id
-        INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-        WHERE e.tenant_id = ${context.tenantId}::uuid
-        GROUP BY ou.id
-      )
-      SELECT
-        dt.org_unit_id,
-        dt.org_unit_name,
-        dt.terminations::int,
-        ROUND(dt.terminations::numeric / NULLIF(dh.headcount, 0) * 100, 2) as turnover_rate
-      FROM dept_terms dt
-      LEFT JOIN dept_headcount dh ON dt.org_unit_id = dh.org_unit_id
-      ORDER BY dt.terminations DESC
-    `;
+          dt.org_unit_id,
+          dt.org_unit_name,
+          dt.terminations::int,
+          ROUND(dt.terminations::numeric / NULLIF(dh.headcount, 0) * 100, 2) as turnover_rate
+        FROM dept_terms dt
+        LEFT JOIN dept_headcount dh ON dt.org_unit_id = dh.org_unit_id
+        ORDER BY dt.terminations DESC
+      `;
+    });
   }
 
   async getTurnoverByReason(
     context: TenantContext,
     filters: TurnoverFilters
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT
-        COALESCE(termination_reason, 'unspecified') as reason,
-        COUNT(*) as count
-      FROM app.employees
-      WHERE tenant_id = ${context.tenantId}::uuid
-        AND status = 'terminated'
-        AND termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
-      GROUP BY termination_reason
-      ORDER BY count DESC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COALESCE(termination_reason, 'unspecified') as reason,
+          COUNT(*) as count
+        FROM app.employees
+        WHERE tenant_id = ${context.tenantId}::uuid
+          AND status = 'terminated'
+          AND termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+        GROUP BY termination_reason
+        ORDER BY count DESC
+      `;
+    });
   }
 
   // ===========================================================================
@@ -258,28 +270,30 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: AttendanceFilters
   ): Promise<any> {
-    const rows = await this.db.query<any>`
-      SELECT
-        COUNT(DISTINCT ts.date) as total_work_days,
-        SUM(CASE WHEN ts.status = 'approved' THEN 1 ELSE 0 END) as total_present_days,
-        SUM(CASE WHEN ts.status = 'pending' AND tsd.regular_hours = 0 THEN 1 ELSE 0 END) as total_absent_days,
-        ROUND(AVG(COALESCE(tsd.regular_hours, 0)), 2) as avg_hours_worked,
-        COALESCE(SUM(tsd.overtime_hours), 0) as overtime_hours
-      FROM app.timesheets ts
-      LEFT JOIN app.timesheet_days tsd ON tsd.timesheet_id = ts.id
-      WHERE ts.tenant_id = ${context.tenantId}::uuid
-        AND ts.date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
-        ${filters.employee_id ? this.db.client`AND ts.employee_id = ${filters.employee_id}::uuid` : this.db.client``}
-        ${filters.org_unit_id
-          ? this.db.client`AND EXISTS (
-              SELECT 1 FROM app.position_assignments pa
-              INNER JOIN app.positions p ON pa.position_id = p.id
-              WHERE pa.employee_id = ts.employee_id
-                AND p.org_unit_id = ${filters.org_unit_id}::uuid
-                AND pa.effective_to IS NULL
-            )`
-          : this.db.client``}
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COUNT(DISTINCT ts.date) as total_work_days,
+          SUM(CASE WHEN ts.status = 'approved' THEN 1 ELSE 0 END) as total_present_days,
+          SUM(CASE WHEN ts.status = 'pending' AND tsd.regular_hours = 0 THEN 1 ELSE 0 END) as total_absent_days,
+          ROUND(AVG(COALESCE(tsd.regular_hours, 0)), 2) as avg_hours_worked,
+          COALESCE(SUM(tsd.overtime_hours), 0) as overtime_hours
+        FROM app.timesheets ts
+        LEFT JOIN app.timesheet_days tsd ON tsd.timesheet_id = ts.id
+        WHERE ts.tenant_id = ${context.tenantId}::uuid
+          AND ts.date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+          ${filters.employee_id ? tx`AND ts.employee_id = ${filters.employee_id}::uuid` : tx``}
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                INNER JOIN app.positions p ON pa.position_id = p.id
+                WHERE pa.employee_id = ts.employee_id
+                  AND p.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+              )`
+            : tx``}
+      `;
+    });
 
     const summary = rows[0] || {};
     const attendanceRate = summary.total_work_days > 0
@@ -308,37 +322,39 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: LeaveFilters
   ): Promise<any> {
-    const rows = await this.db.query<any>`
-      SELECT
-        COUNT(*) as total_requests,
-        COUNT(*) FILTER (WHERE lr.status = 'approved') as approved_requests,
-        COUNT(*) FILTER (WHERE lr.status = 'pending') as pending_requests,
-        COUNT(*) FILTER (WHERE lr.status = 'rejected') as rejected_requests,
-        COALESCE(SUM(
-          CASE WHEN lr.status = 'approved'
-          THEN (lr.end_date - lr.start_date + 1)
-          ELSE 0 END
-        ), 0) as total_days_taken,
-        ROUND(AVG(
-          CASE WHEN lr.status = 'approved'
-          THEN (lr.end_date - lr.start_date + 1)
-          ELSE NULL END
-        ), 1) as avg_days_per_request
-      FROM app.leave_requests lr
-      WHERE lr.tenant_id = ${context.tenantId}::uuid
-        AND lr.start_date <= ${filters.end_date}::date
-        AND lr.end_date >= ${filters.start_date}::date
-        ${filters.leave_type_id ? this.db.client`AND lr.leave_type_id = ${filters.leave_type_id}::uuid` : this.db.client``}
-        ${filters.org_unit_id
-          ? this.db.client`AND EXISTS (
-              SELECT 1 FROM app.position_assignments pa
-              INNER JOIN app.positions p ON pa.position_id = p.id
-              WHERE pa.employee_id = lr.employee_id
-                AND p.org_unit_id = ${filters.org_unit_id}::uuid
-                AND pa.effective_to IS NULL
-            )`
-          : this.db.client``}
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COUNT(*) as total_requests,
+          COUNT(*) FILTER (WHERE lr.status = 'approved') as approved_requests,
+          COUNT(*) FILTER (WHERE lr.status = 'pending') as pending_requests,
+          COUNT(*) FILTER (WHERE lr.status = 'rejected') as rejected_requests,
+          COALESCE(SUM(
+            CASE WHEN lr.status = 'approved'
+            THEN (lr.end_date - lr.start_date + 1)
+            ELSE 0 END
+          ), 0) as total_days_taken,
+          ROUND(AVG(
+            CASE WHEN lr.status = 'approved'
+            THEN (lr.end_date - lr.start_date + 1)
+            ELSE NULL END
+          ), 1) as avg_days_per_request
+        FROM app.leave_requests lr
+        WHERE lr.tenant_id = ${context.tenantId}::uuid
+          AND lr.start_date <= ${filters.end_date}::date
+          AND lr.end_date >= ${filters.start_date}::date
+          ${filters.leave_type_id ? tx`AND lr.leave_type_id = ${filters.leave_type_id}::uuid` : tx``}
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                INNER JOIN app.positions p ON pa.position_id = p.id
+                WHERE pa.employee_id = lr.employee_id
+                  AND p.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+              )`
+            : tx``}
+      `;
+    });
 
     return {
       ...rows[0],
@@ -353,26 +369,28 @@ export class AnalyticsRepository {
     context: TenantContext,
     filters: LeaveFilters
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT
-        lt.id as leave_type_id,
-        lt.name as leave_type_name,
-        COUNT(lr.id) as requests_count,
-        COALESCE(SUM(
-          CASE WHEN lr.status = 'approved'
-          THEN (lr.end_date - lr.start_date + 1)
-          ELSE 0 END
-        ), 0) as days_taken
-      FROM app.leave_types lt
-      LEFT JOIN app.leave_requests lr ON lr.leave_type_id = lt.id
-        AND lr.tenant_id = ${context.tenantId}::uuid
-        AND lr.start_date <= ${filters.end_date}::date
-        AND lr.end_date >= ${filters.start_date}::date
-      WHERE lt.tenant_id = ${context.tenantId}::uuid
-        AND lt.is_active = true
-      GROUP BY lt.id, lt.name
-      ORDER BY days_taken DESC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          lt.id as leave_type_id,
+          lt.name as leave_type_name,
+          COUNT(lr.id) as requests_count,
+          COALESCE(SUM(
+            CASE WHEN lr.status = 'approved'
+            THEN (lr.end_date - lr.start_date + 1)
+            ELSE 0 END
+          ), 0) as days_taken
+        FROM app.leave_types lt
+        LEFT JOIN app.leave_requests lr ON lr.leave_type_id = lt.id
+          AND lr.tenant_id = ${context.tenantId}::uuid
+          AND lr.start_date <= ${filters.end_date}::date
+          AND lr.end_date >= ${filters.start_date}::date
+        WHERE lt.tenant_id = ${context.tenantId}::uuid
+          AND lt.is_active = true
+        GROUP BY lt.id, lt.name
+        ORDER BY days_taken DESC
+      `;
+    });
   }
 
   // ===========================================================================
@@ -418,24 +436,26 @@ export class AnalyticsRepository {
 
   async getManagerDashboard(context: TenantContext): Promise<any> {
     // Get team-specific metrics for manager
-    const rows = await this.db.query<any>`
-      WITH team AS (
-        SELECT e.id
-        FROM app.employees e
-        INNER JOIN app.reporting_lines rl ON rl.employee_id = e.id
-        WHERE rl.manager_id = (
-          SELECT employee_id FROM app.users WHERE id = ${context.userId}::uuid
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH team AS (
+          SELECT e.id
+          FROM app.employees e
+          INNER JOIN app.reporting_lines rl ON rl.employee_id = e.id
+          WHERE rl.manager_id = (
+            SELECT employee_id FROM app.users WHERE id = ${context.userId}::uuid
+          )
+          AND rl.effective_to IS NULL
+          AND e.status IN ('active', 'on_leave')
         )
-        AND rl.effective_to IS NULL
-        AND e.status IN ('active', 'on_leave')
-      )
-      SELECT
-        (SELECT COUNT(*) FROM team) as team_headcount,
-        0 as pending_approvals,
-        0 as team_on_leave_today,
-        0 as upcoming_reviews,
-        0 as overdue_timesheets
-    `;
+        SELECT
+          (SELECT COUNT(*) FROM team) as team_headcount,
+          0 as pending_approvals,
+          0 as team_on_leave_today,
+          0 as upcoming_reviews,
+          0 as overdue_timesheets
+      `;
+    });
 
     return {
       team_headcount: Number(rows[0]?.team_headcount) || 0,

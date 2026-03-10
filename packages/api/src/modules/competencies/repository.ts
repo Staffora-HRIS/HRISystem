@@ -124,29 +124,31 @@ export class CompetenciesRepository {
   ): Promise<PaginatedResult<CompetencyRow>> {
     const limit = pagination.limit ?? 20;
 
-    const rows = await this.db.query<CompetencyRow>`
-      SELECT
-        id,
-        tenant_id as "tenantId",
-        code,
-        name,
-        category,
-        description,
-        levels,
-        assessment_criteria as "assessmentCriteria",
-        behavioral_indicators as "behavioralIndicators",
-        is_active as "isActive",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM app.competencies
-      WHERE tenant_id = ${context.tenantId}::uuid
-        ${filters.category ? this.db.client`AND category = ${filters.category}` : this.db.client``}
-        ${filters.is_active !== undefined ? this.db.client`AND is_active = ${filters.is_active}` : this.db.client``}
-        ${filters.search ? this.db.client`AND (name ILIKE ${"%" + filters.search + "%"} OR code ILIKE ${"%" + filters.search + "%"})` : this.db.client``}
-        ${pagination.cursor ? this.db.client`AND id > ${pagination.cursor}::uuid` : this.db.client``}
-      ORDER BY category, name, id
-      LIMIT ${limit + 1}
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<CompetencyRow[]>`
+        SELECT
+          id,
+          tenant_id as "tenantId",
+          code,
+          name,
+          category,
+          description,
+          levels,
+          assessment_criteria as "assessmentCriteria",
+          behavioral_indicators as "behavioralIndicators",
+          is_active as "isActive",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        FROM app.competencies
+        WHERE tenant_id = ${context.tenantId}::uuid
+          ${filters.category ? tx`AND category = ${filters.category}` : tx``}
+          ${filters.is_active !== undefined ? tx`AND is_active = ${filters.is_active}` : tx``}
+          ${filters.search ? tx`AND (name ILIKE ${"%" + filters.search + "%"} OR code ILIKE ${"%" + filters.search + "%"})` : tx``}
+          ${pagination.cursor ? tx`AND id > ${pagination.cursor}::uuid` : tx``}
+        ORDER BY category, name, id
+        LIMIT ${limit + 1}
+      `;
+    });
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
@@ -159,24 +161,26 @@ export class CompetenciesRepository {
     context: TenantContext,
     id: string
   ): Promise<CompetencyRow | null> {
-    const rows = await this.db.query<CompetencyRow>`
-      SELECT
-        id,
-        tenant_id as "tenantId",
-        code,
-        name,
-        category,
-        description,
-        levels,
-        assessment_criteria as "assessmentCriteria",
-        behavioral_indicators as "behavioralIndicators",
-        is_active as "isActive",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM app.competencies
-      WHERE id = ${id}::uuid
-        AND tenant_id = ${context.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<CompetencyRow[]>`
+        SELECT
+          id,
+          tenant_id as "tenantId",
+          code,
+          name,
+          category,
+          description,
+          levels,
+          assessment_criteria as "assessmentCriteria",
+          behavioral_indicators as "behavioralIndicators",
+          is_active as "isActive",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        FROM app.competencies
+        WHERE id = ${id}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+      `;
+    });
 
     return rows[0] ?? null;
   }
@@ -279,24 +283,26 @@ export class CompetenciesRepository {
     context: TenantContext,
     jobId: string
   ): Promise<JobCompetencyRow[]> {
-    return await this.db.query<JobCompetencyRow>`
-      SELECT
-        jc.id,
-        jc.tenant_id as "tenantId",
-        jc.job_id as "jobId",
-        jc.competency_id as "competencyId",
-        c.name as "competencyName",
-        c.category as "competencyCategory",
-        jc.required_level as "requiredLevel",
-        jc.is_required as "isRequired",
-        jc.weight,
-        jc.created_at as "createdAt"
-      FROM app.job_competencies jc
-      INNER JOIN app.competencies c ON jc.competency_id = c.id
-      WHERE jc.job_id = ${jobId}::uuid
-        AND jc.tenant_id = ${context.tenantId}::uuid
-      ORDER BY jc.is_required DESC, jc.weight DESC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<JobCompetencyRow[]>`
+        SELECT
+          jc.id,
+          jc.tenant_id as "tenantId",
+          jc.job_id as "jobId",
+          jc.competency_id as "competencyId",
+          c.name as "competencyName",
+          c.category as "competencyCategory",
+          jc.required_level as "requiredLevel",
+          jc.is_required as "isRequired",
+          jc.weight,
+          jc.created_at as "createdAt"
+        FROM app.job_competencies jc
+        INNER JOIN app.competencies c ON jc.competency_id = c.id
+        WHERE jc.job_id = ${jobId}::uuid
+          AND jc.tenant_id = ${context.tenantId}::uuid
+        ORDER BY jc.is_required DESC, jc.weight DESC
+      `;
+    });
   }
 
   async createJobCompetency(
@@ -372,65 +378,69 @@ export class CompetenciesRepository {
     context: TenantContext,
     employeeId: string
   ): Promise<EmployeeCompetencyRow[]> {
-    return await this.db.query<EmployeeCompetencyRow>`
-      SELECT
-        ec.id,
-        ec.tenant_id as "tenantId",
-        ec.employee_id as "employeeId",
-        app.get_employee_display_name(ec.employee_id) as "employeeName",
-        ec.competency_id as "competencyId",
-        c.name as "competencyName",
-        c.category as "competencyCategory",
-        ec.current_level as "currentLevel",
-        ec.target_level as "targetLevel",
-        ec.self_assessment_level as "selfAssessmentLevel",
-        ec.manager_assessment_level as "managerAssessmentLevel",
-        ec.assessment_notes as "assessmentNotes",
-        ec.assessed_at as "assessedAt",
-        ec.assessed_by as "assessedBy",
-        ec.assessment_source as "assessmentSource",
-        ec.next_assessment_due as "nextAssessmentDue",
-        ec.evidence,
-        ec.created_at as "createdAt",
-        ec.updated_at as "updatedAt"
-      FROM app.employee_competencies ec
-      INNER JOIN app.competencies c ON ec.competency_id = c.id
-      WHERE ec.employee_id = ${employeeId}::uuid
-        AND ec.tenant_id = ${context.tenantId}::uuid
-      ORDER BY c.category, c.name
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<EmployeeCompetencyRow[]>`
+        SELECT
+          ec.id,
+          ec.tenant_id as "tenantId",
+          ec.employee_id as "employeeId",
+          app.get_employee_display_name(ec.employee_id) as "employeeName",
+          ec.competency_id as "competencyId",
+          c.name as "competencyName",
+          c.category as "competencyCategory",
+          ec.current_level as "currentLevel",
+          ec.target_level as "targetLevel",
+          ec.self_assessment_level as "selfAssessmentLevel",
+          ec.manager_assessment_level as "managerAssessmentLevel",
+          ec.assessment_notes as "assessmentNotes",
+          ec.assessed_at as "assessedAt",
+          ec.assessed_by as "assessedBy",
+          ec.assessment_source as "assessmentSource",
+          ec.next_assessment_due as "nextAssessmentDue",
+          ec.evidence,
+          ec.created_at as "createdAt",
+          ec.updated_at as "updatedAt"
+        FROM app.employee_competencies ec
+        INNER JOIN app.competencies c ON ec.competency_id = c.id
+        WHERE ec.employee_id = ${employeeId}::uuid
+          AND ec.tenant_id = ${context.tenantId}::uuid
+        ORDER BY c.category, c.name
+      `;
+    });
   }
 
   async findEmployeeCompetencyById(
     context: TenantContext,
     id: string
   ): Promise<EmployeeCompetencyRow | null> {
-    const rows = await this.db.query<EmployeeCompetencyRow>`
-      SELECT
-        ec.id,
-        ec.tenant_id as "tenantId",
-        ec.employee_id as "employeeId",
-        app.get_employee_display_name(ec.employee_id) as "employeeName",
-        ec.competency_id as "competencyId",
-        c.name as "competencyName",
-        c.category as "competencyCategory",
-        ec.current_level as "currentLevel",
-        ec.target_level as "targetLevel",
-        ec.self_assessment_level as "selfAssessmentLevel",
-        ec.manager_assessment_level as "managerAssessmentLevel",
-        ec.assessment_notes as "assessmentNotes",
-        ec.assessed_at as "assessedAt",
-        ec.assessed_by as "assessedBy",
-        ec.assessment_source as "assessmentSource",
-        ec.next_assessment_due as "nextAssessmentDue",
-        ec.evidence,
-        ec.created_at as "createdAt",
-        ec.updated_at as "updatedAt"
-      FROM app.employee_competencies ec
-      INNER JOIN app.competencies c ON ec.competency_id = c.id
-      WHERE ec.id = ${id}::uuid
-        AND ec.tenant_id = ${context.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<EmployeeCompetencyRow[]>`
+        SELECT
+          ec.id,
+          ec.tenant_id as "tenantId",
+          ec.employee_id as "employeeId",
+          app.get_employee_display_name(ec.employee_id) as "employeeName",
+          ec.competency_id as "competencyId",
+          c.name as "competencyName",
+          c.category as "competencyCategory",
+          ec.current_level as "currentLevel",
+          ec.target_level as "targetLevel",
+          ec.self_assessment_level as "selfAssessmentLevel",
+          ec.manager_assessment_level as "managerAssessmentLevel",
+          ec.assessment_notes as "assessmentNotes",
+          ec.assessed_at as "assessedAt",
+          ec.assessed_by as "assessedBy",
+          ec.assessment_source as "assessmentSource",
+          ec.next_assessment_due as "nextAssessmentDue",
+          ec.evidence,
+          ec.created_at as "createdAt",
+          ec.updated_at as "updatedAt"
+        FROM app.employee_competencies ec
+        INNER JOIN app.competencies c ON ec.competency_id = c.id
+        WHERE ec.id = ${id}::uuid
+          AND ec.tenant_id = ${context.tenantId}::uuid
+      `;
+    });
 
     return rows[0] ?? null;
   }
@@ -534,29 +544,35 @@ export class CompetenciesRepository {
     context: TenantContext,
     employeeId: string
   ): Promise<CompetencyGapRow[]> {
-    return await this.db.query<CompetencyGapRow>`
-      SELECT * FROM app.get_competency_gaps(${employeeId}::uuid)
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<CompetencyGapRow[]>`
+        SELECT * FROM app.get_competency_gaps(${employeeId}::uuid)
+      `;
+    });
   }
 
   async getCompetenciesDueAssessment(
     context: TenantContext,
     daysAhead: number = 30
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT * FROM app.get_competencies_due_assessment(
-        ${context.tenantId}::uuid,
-        ${daysAhead}
-      )
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT * FROM app.get_competencies_due_assessment(
+          ${context.tenantId}::uuid,
+          ${daysAhead}
+        )
+      `;
+    });
   }
 
   async getTeamCompetencyOverview(
     context: TenantContext,
     managerId: string
   ): Promise<any[]> {
-    return await this.db.query<any>`
-      SELECT * FROM app.get_team_competency_overview(${managerId}::uuid)
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT * FROM app.get_team_competency_overview(${managerId}::uuid)
+      `;
+    });
   }
 }

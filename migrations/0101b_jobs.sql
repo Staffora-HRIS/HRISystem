@@ -89,6 +89,6 @@ CREATE POLICY jobs_tenant_write ON app.jobs
 CREATE TRIGGER jobs_updated_at
     BEFORE UPDATE ON app.jobs
     FOR EACH ROW
-    EXECUTE FUNCTION app.update_updated_at();
+    EXECUTE FUNCTION app.update_updated_at_column();
 
 COMMENT ON TABLE app.jobs IS 'Job catalog/classification for the organization';

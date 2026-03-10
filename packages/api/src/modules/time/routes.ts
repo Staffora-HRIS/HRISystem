@@ -5,7 +5,7 @@
  */
 
 import { Elysia } from "elysia";
-import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { requirePermission } from "../../plugins/rbac";
 import { TimeRepository } from "./repository";
 import { TimeService } from "./service";
 import {
@@ -56,7 +56,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateTimeEventSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time", "write")],
       detail: { tags: ["Time"], summary: "Record time event" },
     }
   )
@@ -80,7 +80,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       query: TimeEventFiltersSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time", "read")],
       detail: { tags: ["Time"], summary: "List time events" },
     }
   )
@@ -104,7 +104,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time", "read")],
       detail: { tags: ["Time"], summary: "Get time event by ID" },
     }
   )
@@ -134,7 +134,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateScheduleSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:schedules", "write")],
       detail: { tags: ["Time"], summary: "Create schedule" },
     }
   )
@@ -157,7 +157,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       return result.data;
     },
     {
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:schedules", "read")],
       detail: { tags: ["Time"], summary: "List schedules" },
     }
   )
@@ -181,7 +181,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:schedules", "read")],
       detail: { tags: ["Time"], summary: "Get schedule by ID" },
     }
   )
@@ -207,7 +207,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateScheduleSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:schedules", "write")],
       detail: { tags: ["Time"], summary: "Update schedule" },
     }
   )
@@ -237,7 +237,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateShiftSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:shifts", "write")],
       detail: { tags: ["Time"], summary: "Create shift" },
     }
   )
@@ -261,7 +261,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:shifts", "read")],
       detail: { tags: ["Time"], summary: "Get shift by ID" },
     }
   )
@@ -287,7 +287,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateShiftSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:shifts", "write")],
       detail: { tags: ["Time"], summary: "Update shift" },
     }
   )
@@ -317,7 +317,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateTimesheetSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Create timesheet" },
     }
   )
@@ -341,7 +341,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       query: TimesheetFiltersSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "read")],
       detail: { tags: ["Time"], summary: "List timesheets" },
     }
   )
@@ -365,7 +365,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "read")],
       detail: { tags: ["Time"], summary: "Get timesheet by ID" },
     }
   )
@@ -392,7 +392,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateTimesheetSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Update timesheet lines" },
     }
   )
@@ -417,7 +417,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Submit timesheet" },
     }
   )
@@ -455,8 +455,53 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       params: IdParamsSchema,
       body: TimesheetApprovalSchema,
       headers: IdempotencyHeaderSchema,
-      beforeHandle: [requireAuthContext, requireTenantContext],
+      beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Approve or reject timesheet" },
+    }
+  );
+
+  // ===========================================================================
+  // Schedule Assignments
+  // ===========================================================================
+
+  .get(
+    "/schedule-assignments",
+    async (ctx) => {
+      const { timeService, tenant, user, set } = ctx as any;
+
+      try {
+        return await timeService.getScheduleAssignments({ tenantId: tenant.id, userId: user.id });
+      } catch (err: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: err.message || "Failed to get schedule assignments" } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("time:schedules", "read")],
+      detail: { tags: ["Time"], summary: "List schedule assignments" },
+    }
+  )
+
+  // ===========================================================================
+  // Stats
+  // ===========================================================================
+
+  .get(
+    "/stats",
+    async (ctx) => {
+      const { timeService, tenant, user, set } = ctx as any;
+
+      try {
+        const stats = await timeService.getStats({ tenantId: tenant.id, userId: user.id });
+        return stats;
+      } catch (err: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: err.message || "Failed to get time stats" } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("time", "read")],
+      detail: { tags: ["Time"], summary: "Get time statistics" },
     }
   );
 

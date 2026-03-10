@@ -61,6 +61,34 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+export interface RecentDocumentRow {
+  id: string;
+  name: string;
+  category: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  createdAt: Date;
+}
+
+export interface ExpiringDocumentRow {
+  id: string;
+  name: string;
+  category: string;
+  expiresAt: Date;
+}
+
+export interface MyDocumentsSummaryRow {
+  employeeId: string | null;
+  categoryCounts: CategoryCount[];
+  recentDocuments: RecentDocumentRow[];
+  expiringDocuments: ExpiringDocumentRow[];
+}
+
 // =============================================================================
 // Repository
 // =============================================================================
@@ -79,42 +107,44 @@ export class DocumentsRepository {
   ): Promise<PaginatedResult<DocumentRow>> {
     const limit = pagination.limit ?? 20;
 
-    const rows = await this.db.query<DocumentRow>`
-      SELECT
-        d.id,
-        d.tenant_id as "tenantId",
-        d.employee_id as "employeeId",
-        app.get_employee_display_name(d.employee_id) as "employeeName",
-        d.category,
-        d.name,
-        d.description,
-        d.file_key as "fileKey",
-        d.file_name as "fileName",
-        d.file_size as "fileSize",
-        d.mime_type as "mimeType",
-        d.version,
-        d.status,
-        d.expires_at as "expiresAt",
-        d.tags,
-        d.uploaded_by as "uploadedBy",
-        app.get_user_display_name(d.uploaded_by) as "uploadedByName",
-        d.created_at as "createdAt",
-        d.updated_at as "updatedAt"
-      FROM app.documents d
-      WHERE d.tenant_id = ${context.tenantId}::uuid
-        ${filters.employee_id ? this.db.client`AND d.employee_id = ${filters.employee_id}::uuid` : this.db.client``}
-        ${filters.category ? this.db.client`AND d.category = ${filters.category}` : this.db.client``}
-        ${filters.status ? this.db.client`AND d.status = ${filters.status}` : this.db.client``}
-        ${
-          filters.expiring_within_days
-            ? this.db.client`AND d.expires_at IS NOT NULL AND d.expires_at <= now() + ${filters.expiring_within_days}::integer * interval '1 day'`
-            : this.db.client``
-        }
-        ${filters.search ? this.db.client`AND d.name ILIKE ${"%" + filters.search + "%"}` : this.db.client``}
-        ${pagination.cursor ? this.db.client`AND d.id > ${pagination.cursor}::uuid` : this.db.client``}
-      ORDER BY d.created_at DESC, d.id
-      LIMIT ${limit + 1}
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<DocumentRow[]>`
+        SELECT
+          d.id,
+          d.tenant_id as "tenantId",
+          d.employee_id as "employeeId",
+          app.get_employee_display_name(d.employee_id) as "employeeName",
+          d.category,
+          d.name,
+          d.description,
+          d.file_key as "fileKey",
+          d.file_name as "fileName",
+          d.file_size as "fileSize",
+          d.mime_type as "mimeType",
+          d.version,
+          d.status,
+          d.expires_at as "expiresAt",
+          d.tags,
+          d.uploaded_by as "uploadedBy",
+          app.get_user_display_name(d.uploaded_by) as "uploadedByName",
+          d.created_at as "createdAt",
+          d.updated_at as "updatedAt"
+        FROM app.documents d
+        WHERE d.tenant_id = ${context.tenantId}::uuid
+          ${filters.employee_id ? tx`AND d.employee_id = ${filters.employee_id}::uuid` : tx``}
+          ${filters.category ? tx`AND d.category = ${filters.category}` : tx``}
+          ${filters.status ? tx`AND d.status = ${filters.status}` : tx``}
+          ${
+            filters.expiring_within_days
+              ? tx`AND d.expires_at IS NOT NULL AND d.expires_at <= now() + ${filters.expiring_within_days}::integer * interval '1 day'`
+              : tx``
+          }
+          ${filters.search ? tx`AND d.name ILIKE ${"%" + filters.search + "%"}` : tx``}
+          ${pagination.cursor ? tx`AND d.id > ${pagination.cursor}::uuid` : tx``}
+        ORDER BY d.created_at DESC, d.id
+        LIMIT ${limit + 1}
+      `;
+    });
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
@@ -127,31 +157,33 @@ export class DocumentsRepository {
     context: TenantContext,
     id: string
   ): Promise<DocumentRow | null> {
-    const rows = await this.db.query<DocumentRow>`
-      SELECT
-        d.id,
-        d.tenant_id as "tenantId",
-        d.employee_id as "employeeId",
-        app.get_employee_display_name(d.employee_id) as "employeeName",
-        d.category,
-        d.name,
-        d.description,
-        d.file_key as "fileKey",
-        d.file_name as "fileName",
-        d.file_size as "fileSize",
-        d.mime_type as "mimeType",
-        d.version,
-        d.status,
-        d.expires_at as "expiresAt",
-        d.tags,
-        d.uploaded_by as "uploadedBy",
-        app.get_user_display_name(d.uploaded_by) as "uploadedByName",
-        d.created_at as "createdAt",
-        d.updated_at as "updatedAt"
-      FROM app.documents d
-      WHERE d.id = ${id}::uuid
-        AND d.tenant_id = ${context.tenantId}::uuid
-    `;
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<DocumentRow[]>`
+        SELECT
+          d.id,
+          d.tenant_id as "tenantId",
+          d.employee_id as "employeeId",
+          app.get_employee_display_name(d.employee_id) as "employeeName",
+          d.category,
+          d.name,
+          d.description,
+          d.file_key as "fileKey",
+          d.file_name as "fileName",
+          d.file_size as "fileSize",
+          d.mime_type as "mimeType",
+          d.version,
+          d.status,
+          d.expires_at as "expiresAt",
+          d.tags,
+          d.uploaded_by as "uploadedBy",
+          app.get_user_display_name(d.uploaded_by) as "uploadedByName",
+          d.created_at as "createdAt",
+          d.updated_at as "updatedAt"
+        FROM app.documents d
+        WHERE d.id = ${id}::uuid
+          AND d.tenant_id = ${context.tenantId}::uuid
+      `;
+    });
 
     return rows[0] ?? null;
   }
@@ -160,22 +192,24 @@ export class DocumentsRepository {
     context: TenantContext,
     documentId: string
   ): Promise<DocumentVersionRow[]> {
-    return await this.db.query<DocumentVersionRow>`
-      SELECT
-        dv.id,
-        dv.document_id as "documentId",
-        dv.version,
-        dv.file_key as "fileKey",
-        dv.file_size as "fileSize",
-        dv.uploaded_by as "uploadedBy",
-        app.get_user_display_name(dv.uploaded_by) as "uploadedByName",
-        dv.created_at as "createdAt"
-      FROM app.document_versions dv
-      INNER JOIN app.documents d ON dv.document_id = d.id
-      WHERE dv.document_id = ${documentId}::uuid
-        AND d.tenant_id = ${context.tenantId}::uuid
-      ORDER BY dv.version DESC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<DocumentVersionRow[]>`
+        SELECT
+          dv.id,
+          dv.document_id as "documentId",
+          dv.version,
+          dv.file_key as "fileKey",
+          dv.file_size as "fileSize",
+          dv.uploaded_by as "uploadedBy",
+          app.get_user_display_name(dv.uploaded_by) as "uploadedByName",
+          dv.created_at as "createdAt"
+        FROM app.document_versions dv
+        INNER JOIN app.documents d ON dv.document_id = d.id
+        WHERE dv.document_id = ${documentId}::uuid
+          AND d.tenant_id = ${context.tenantId}::uuid
+        ORDER BY dv.version DESC
+      `;
+    });
   }
 
   // ===========================================================================
@@ -330,6 +364,75 @@ export class DocumentsRepository {
   }
 
   // ===========================================================================
+  // My Documents Summary (Self-Service Portal)
+  // ===========================================================================
+
+  async getMyDocumentsSummary(
+    context: TenantContext
+  ): Promise<MyDocumentsSummaryRow> {
+    return await this.db.withTransaction(context, async (tx) => {
+      // Get employee ID for current user
+      const employees = await tx<{ id: string }[]>`
+        SELECT id FROM app.employees
+        WHERE user_id = ${context.userId!}::uuid AND tenant_id = ${context.tenantId}::uuid
+        LIMIT 1
+      `;
+
+      const employee = employees[0];
+      if (!employee) {
+        return {
+          employeeId: null,
+          categoryCounts: [],
+          recentDocuments: [],
+          expiringDocuments: [],
+        };
+      }
+
+      // Get document counts by category
+      const categoryCounts = await tx<CategoryCount[]>`
+        SELECT category, COUNT(*)::int as count
+        FROM app.documents
+        WHERE employee_id = ${employee.id}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+          AND status = 'active'
+        GROUP BY category
+        ORDER BY count DESC
+      `;
+
+      // Get recent documents
+      const recentDocuments = await tx<RecentDocumentRow[]>`
+        SELECT id, name, category, mime_type as "mimeType", file_size as "fileSize", created_at as "createdAt"
+        FROM app.documents
+        WHERE employee_id = ${employee.id}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+          AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 5
+      `;
+
+      // Get expiring documents (within 30 days)
+      const expiringDocuments = await tx<ExpiringDocumentRow[]>`
+        SELECT id, name, category, expires_at as "expiresAt"
+        FROM app.documents
+        WHERE employee_id = ${employee.id}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+          AND status = 'active'
+          AND expires_at IS NOT NULL
+          AND expires_at <= NOW() + INTERVAL '30 days'
+        ORDER BY expires_at ASC
+        LIMIT 10
+      `;
+
+      return {
+        employeeId: employee.id,
+        categoryCounts: [...categoryCounts],
+        recentDocuments: [...recentDocuments],
+        expiringDocuments: [...expiringDocuments],
+      };
+    });
+  }
+
+  // ===========================================================================
   // Expiry Check
   // ===========================================================================
 
@@ -337,33 +440,35 @@ export class DocumentsRepository {
     context: TenantContext,
     daysAhead: number = 30
   ): Promise<DocumentRow[]> {
-    return await this.db.query<DocumentRow>`
-      SELECT
-        d.id,
-        d.tenant_id as "tenantId",
-        d.employee_id as "employeeId",
-        app.get_employee_display_name(d.employee_id) as "employeeName",
-        d.category,
-        d.name,
-        d.description,
-        d.file_key as "fileKey",
-        d.file_name as "fileName",
-        d.file_size as "fileSize",
-        d.mime_type as "mimeType",
-        d.version,
-        d.status,
-        d.expires_at as "expiresAt",
-        d.tags,
-        d.uploaded_by as "uploadedBy",
-        d.created_at as "createdAt",
-        d.updated_at as "updatedAt"
-      FROM app.documents d
-      WHERE d.tenant_id = ${context.tenantId}::uuid
-        AND d.status = 'active'
-        AND d.expires_at IS NOT NULL
-        AND d.expires_at <= now() + ${daysAhead}::integer * interval '1 day'
-        AND d.expires_at > now()
-      ORDER BY d.expires_at ASC
-    `;
+    return await this.db.withTransaction(context, async (tx) => {
+      return tx<DocumentRow[]>`
+        SELECT
+          d.id,
+          d.tenant_id as "tenantId",
+          d.employee_id as "employeeId",
+          app.get_employee_display_name(d.employee_id) as "employeeName",
+          d.category,
+          d.name,
+          d.description,
+          d.file_key as "fileKey",
+          d.file_name as "fileName",
+          d.file_size as "fileSize",
+          d.mime_type as "mimeType",
+          d.version,
+          d.status,
+          d.expires_at as "expiresAt",
+          d.tags,
+          d.uploaded_by as "uploadedBy",
+          d.created_at as "createdAt",
+          d.updated_at as "updatedAt"
+        FROM app.documents d
+        WHERE d.tenant_id = ${context.tenantId}::uuid
+          AND d.status = 'active'
+          AND d.expires_at IS NOT NULL
+          AND d.expires_at <= now() + ${daysAhead}::integer * interval '1 day'
+          AND d.expires_at > now()
+        ORDER BY d.expires_at ASC
+      `;
+    });
   }
 }

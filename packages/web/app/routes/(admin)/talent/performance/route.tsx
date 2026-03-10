@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Plus, Target, Calendar, Users, BarChart } from "lucide-react";
+import { ArrowLeft, Plus, Target, Calendar, Users, BarChart, Clock } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -9,18 +9,23 @@ import { api } from "~/lib/api-client";
 
 interface PerformanceCycle {
   id: string;
+  tenant_id: string;
   name: string;
-  description?: string;
-  status: "draft" | "goal_setting" | "in_progress" | "review" | "calibration" | "completed" | "archived";
-  startDate: string;
-  endDate: string;
-  goalSettingDeadline?: string;
-  selfReviewDeadline?: string;
-  managerReviewDeadline?: string;
-  calibrationDeadline?: string;
-  totalParticipants: number;
-  completedReviews: number;
-  averageRating?: number;
+  description: string | null;
+  status: string;
+  period_start: string;
+  period_end: string;
+  self_review_deadline: string;
+  manager_review_deadline: string;
+  calibration_deadline: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReviewCyclesResponse {
+  items: PerformanceCycle[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export default function PerformanceManagementPage() {
@@ -29,10 +34,10 @@ export default function PerformanceManagementPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-performance-cycles"],
-    queryFn: () => api.get<{ cycles: PerformanceCycle[] }>("/talent/performance/cycles"),
+    queryFn: () => api.get<ReviewCyclesResponse>("/talent/review-cycles"),
   });
 
-  const cycles = data?.cycles || [];
+  const cycles = data?.items || [];
   const activeCycles = cycles.filter(c => !["completed", "archived", "draft"].includes(c.status));
 
   const getStatusBadge = (status: string) => {
@@ -48,9 +53,8 @@ export default function PerformanceManagementPage() {
     }
   };
 
-  const getCompletionRate = (cycle: PerformanceCycle) => {
-    if (cycle.totalParticipants === 0) return 0;
-    return Math.round((cycle.completedReviews / cycle.totalParticipants) * 100);
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString();
   };
 
   return (
@@ -90,9 +94,7 @@ export default function PerformanceManagementPage() {
             <div>
               <h2 className="text-lg font-semibold mb-4">Active Cycles</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {activeCycles.map((cycle) => {
-                  const completionRate = getCompletionRate(cycle);
-                  return (
+                {activeCycles.map((cycle) => (
                     <Card key={cycle.id} className="border-l-4 border-l-blue-500">
                       <CardHeader className="flex flex-row items-start justify-between">
                         <div>
@@ -102,7 +104,7 @@ export default function PerformanceManagementPage() {
                         <div className="text-right text-sm text-gray-500">
                           <div className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {new Date(cycle.endDate).toLocaleDateString()}
+                            {formatDate(cycle.period_start)} - {formatDate(cycle.period_end)}
                           </div>
                         </div>
                       </CardHeader>
@@ -111,28 +113,21 @@ export default function PerformanceManagementPage() {
                           <p className="text-sm text-gray-600">{cycle.description}</p>
                         )}
 
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                          <div>
-                            <div className="text-2xl font-bold text-blue-600">{cycle.totalParticipants}</div>
-                            <div className="text-xs text-gray-500">Participants</div>
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span>Self Review Deadline: {formatDate(cycle.self_review_deadline)}</span>
                           </div>
-                          <div>
-                            <div className="text-2xl font-bold text-green-600">{completionRate}%</div>
-                            <div className="text-xs text-gray-500">Complete</div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span>Manager Review Deadline: {formatDate(cycle.manager_review_deadline)}</span>
                           </div>
-                          <div>
-                            <div className="text-2xl font-bold text-gray-600">
-                              {cycle.averageRating ? cycle.averageRating.toFixed(1) : "-"}
+                          {cycle.calibration_deadline && (
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-gray-400" />
+                              <span>Calibration Deadline: {formatDate(cycle.calibration_deadline)}</span>
                             </div>
-                            <div className="text-xs text-gray-500">Avg Rating</div>
-                          </div>
-                        </div>
-
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ width: `${completionRate}%` }}
-                          />
+                          )}
                         </div>
 
                         <div className="flex gap-2">
@@ -147,8 +142,7 @@ export default function PerformanceManagementPage() {
                         </div>
                       </CardBody>
                     </Card>
-                  );
-                })}
+                  ))}
               </div>
             </div>
           )}
@@ -163,7 +157,6 @@ export default function PerformanceManagementPage() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cycle</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -177,9 +170,8 @@ export default function PerformanceManagementPage() {
                             <div className="font-medium text-gray-900">{cycle.name}</div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {new Date(cycle.startDate).toLocaleDateString()} - {new Date(cycle.endDate).toLocaleDateString()}
+                            {formatDate(cycle.period_start)} - {formatDate(cycle.period_end)}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{cycle.totalParticipants}</td>
                           <td className="px-6 py-4">{getStatusBadge(cycle.status)}</td>
                           <td className="px-6 py-4 text-right">
                             <Button variant="outline" size="sm">View</Button>

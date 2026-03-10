@@ -177,8 +177,8 @@ export default function AdminUsersPage() {
         header: "Roles",
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
-            {(row.roles ?? []).slice(0, 3).map((r) => (
-              <Badge key={r} variant="outline" size="sm">
+            {(row.roles ?? []).slice(0, 3).map((r, i) => (
+              <Badge key={`${r}-${i}`} variant="outline" size="sm">
                 {r}
               </Badge>
             ))}

@@ -51,7 +51,7 @@ const settingsSections: SettingsSection[] = [
     description: "Email templates and notification preferences",
     icon: Bell,
     href: "/admin/settings/notifications",
-    available: false,
+    available: true,
   },
   {
     id: "appearance",

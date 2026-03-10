@@ -183,12 +183,12 @@ export class AbsenceRepository {
       const [row] = await tx<LeaveRequestRow[]>`
         INSERT INTO app.leave_requests (
           id, tenant_id, employee_id, leave_type_id, start_date, end_date,
-          start_half_day, end_half_day, total_days, reason, contact_info, status
+          start_half_day, end_half_day, duration, reason, status
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
           ${data.leaveTypeId}::uuid, ${data.startDate}, ${data.endDate},
           ${data.startHalfDay ?? false}, ${data.endHalfDay ?? false},
-          ${totalDays}, ${data.reason || null}, ${data.contactInfo || null}, 'draft'
+          ${totalDays}, ${data.reason || null}, 'draft'
         )
         RETURNING *
       `;
@@ -275,7 +275,7 @@ export class AbsenceRepository {
         UPDATE app.leave_requests SET
           status = 'approved',
           approved_at = now(),
-          approved_by_id = ${approverId}::uuid,
+          approved_by = ${approverId}::uuid,
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'pending'
         RETURNING *

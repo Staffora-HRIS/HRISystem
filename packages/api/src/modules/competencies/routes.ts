@@ -5,6 +5,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requirePermission } from "../../plugins/rbac";
 import { CompetenciesService } from "./service";
 import { CompetenciesRepository } from "./repository";
 import {
@@ -64,6 +65,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.String()),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .get(
@@ -82,6 +84,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         id: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .post(
@@ -98,6 +101,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
     },
     {
       body: CreateCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
   .patch(
@@ -117,6 +121,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
         id: t.String(),
       }),
       body: UpdateCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
   .delete(
@@ -135,6 +140,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         id: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
 
@@ -157,6 +163,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         jobId: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .post(
@@ -173,6 +180,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
     },
     {
       body: CreateJobCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
   .patch(
@@ -192,6 +200,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
         id: t.String(),
       }),
       body: UpdateJobCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
   .delete(
@@ -210,6 +219,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         id: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
 
@@ -235,6 +245,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         employeeId: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .get(
@@ -256,6 +267,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         employeeId: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .post(
@@ -272,6 +284,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
     },
     {
       body: CreateEmployeeCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
   .patch(
@@ -295,6 +308,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
         id: t.String(),
       }),
       body: UpdateEmployeeCompetencySchema,
+      beforeHandle: [requirePermission("competencies", "write")],
     }
   )
 
@@ -321,6 +335,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       query: t.Object({
         days_ahead: t.Optional(t.String()),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   )
   .get(
@@ -339,5 +354,6 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
       params: t.Object({
         managerId: t.String(),
       }),
+      beforeHandle: [requirePermission("competencies", "read")],
     }
   );

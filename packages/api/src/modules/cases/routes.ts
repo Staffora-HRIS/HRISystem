@@ -7,7 +7,8 @@
  */
 
 import { Elysia, t } from "elysia";
-import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { requirePermission } from "../../plugins/rbac";
+import { ErrorCodes } from "../../plugins/errors";
 import { CasesRepository } from "./repository";
 import { CasesService } from "./service";
 import { mapErrorToStatus } from "../../lib/route-helpers";
@@ -63,7 +64,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: t.Object({
@@ -74,7 +75,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "read")],
     detail: { tags: ["Cases"], summary: "List cases" }
   })
 
@@ -103,7 +104,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
         t.Literal("urgent"),
       ])),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "write")],
     detail: { tags: ["Cases"], summary: "Create case" }
   })
 
@@ -120,7 +121,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     return result.data;
   }, {
     params: t.Object({ id: UuidSchema }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "read")],
     detail: { tags: ["Cases"], summary: "Get case by ID" }
   })
 
@@ -143,7 +144,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       assigneeId: t.Optional(UuidSchema),
       resolution: t.Optional(t.String({ maxLength: 5000 })),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "write")],
     detail: { tags: ["Cases"], summary: "Update case" }
   })
 
@@ -156,11 +157,11 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       return { comments, count: comments.length };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: t.Object({ id: UuidSchema }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "read")],
     detail: { tags: ["Cases"], summary: "Get case comments" }
   })
 
@@ -182,7 +183,7 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       content: t.String({ minLength: 1, maxLength: 5000 }),
       isInternal: t.Optional(t.Boolean()),
     }),
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "write")],
     detail: { tags: ["Cases"], summary: "Add case comment" }
   })
 
@@ -201,10 +202,10 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
       return { cases, count: cases.length };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
-    beforeHandle: [requireAuthContext, requireTenantContext],
+    beforeHandle: [requirePermission("cases", "read")],
     detail: { tags: ["Cases"], summary: "Get my cases" }
   });
 

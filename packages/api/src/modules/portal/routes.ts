@@ -5,7 +5,8 @@
  * All routes delegate to PortalService/PortalRepository for data access.
  */
 
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
 import { PortalRepository } from "./repository";
 import { PortalService } from "./service";
@@ -30,10 +31,6 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   // My profile and dashboard
   .get("/me", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;
-    if (!user || !tenant) {
-      set.status = 401;
-      return { error: { code: ErrorCodes.UNAUTHORIZED, message: "Authentication required", requestId: "" } };
-    }
 
     try {
       return await portalService.getMyProfile(tenantContext, user, tenant);
@@ -42,15 +39,11 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get profile", requestId: "" } };
     }
-  }, { detail: { tags: ["Portal"], summary: "Get my profile" } })
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get my profile" } })
 
   // My team (direct reports)
   .get("/my-team", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;
-    if (!user || !tenant) {
-      set.status = 401;
-      return { error: { code: ErrorCodes.UNAUTHORIZED, message: "Authentication required", requestId: "" } };
-    }
 
     try {
       return await portalService.getMyTeam(tenantContext);
@@ -59,15 +52,11 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get team", requestId: "" } };
     }
-  }, { detail: { tags: ["Portal"], summary: "Get my direct reports" } })
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get my direct reports" } })
 
   // My pending tasks
   .get("/tasks", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;
-    if (!user || !tenant) {
-      set.status = 401;
-      return { error: { code: ErrorCodes.UNAUTHORIZED, message: "Authentication required", requestId: "" } };
-    }
 
     try {
       return await portalService.getMyTasks(tenantContext);
@@ -76,15 +65,11 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get tasks", requestId: "" } };
     }
-  }, { detail: { tags: ["Portal"], summary: "Get my pending tasks" } })
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get my pending tasks" } })
 
   // My pending approvals
   .get("/approvals", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;
-    if (!user || !tenant) {
-      set.status = 401;
-      return { error: { code: ErrorCodes.UNAUTHORIZED, message: "Authentication required", requestId: "" } };
-    }
 
     try {
       return await portalService.getMyApprovals(tenantContext);
@@ -93,15 +78,11 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get approvals", requestId: "" } };
     }
-  }, { detail: { tags: ["Portal"], summary: "Get my pending approvals" } })
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get my pending approvals" } })
 
   // Dashboard summary
   .get("/dashboard", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;
-    if (!user || !tenant) {
-      set.status = 401;
-      return { error: { code: ErrorCodes.UNAUTHORIZED, message: "Authentication required", requestId: "" } };
-    }
 
     try {
       return await portalService.getDashboardSummary(tenantContext);
@@ -110,6 +91,56 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get dashboard", requestId: "" } };
     }
-  }, { detail: { tags: ["Portal"], summary: "Get dashboard summary" } });
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get dashboard summary" } })
+
+  // Available portals for current user
+  .get("/available", async (ctx) => {
+    const { user, tenant, portalService, tenantContext, set } = ctx as any;
+
+    try {
+      const portals = await portalService.getAvailablePortals(tenantContext);
+      return { portals };
+    } catch (error) {
+      console.error("Portal /available error:", error);
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get available portals", requestId: "" } };
+    }
+  }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get available portals for current user" } })
+
+  // Portal navigation
+  .get("/:portalCode/navigation", async (ctx) => {
+    const { user, tenant, portalService, tenantContext, params, set } = ctx as any;
+
+    try {
+      const navigation = await portalService.getPortalNavigation(tenantContext, params.portalCode);
+      return { navigation };
+    } catch (error) {
+      console.error("Portal navigation error:", error);
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get portal navigation", requestId: "" } };
+    }
+  }, {
+    params: t.Object({ portalCode: t.String() }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
+    detail: { tags: ["Portal"], summary: "Get navigation for a portal" },
+  })
+
+  // Switch portal
+  .post("/switch", async (ctx) => {
+    const { user, tenant, portalService, tenantContext, body, set } = ctx as any;
+
+    try {
+      const result = await portalService.switchPortal(tenantContext, body.portalCode);
+      return result;
+    } catch (error) {
+      console.error("Portal /switch error:", error);
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to switch portal", requestId: "" } };
+    }
+  }, {
+    body: t.Object({ portalCode: t.String() }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
+    detail: { tags: ["Portal"], summary: "Switch active portal" },
+  });
 
 export type PortalRoutes = typeof portalRoutes;

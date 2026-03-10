@@ -5,6 +5,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { FieldPermissionService } from "./field-permission.service";
@@ -21,16 +22,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
     async (ctx) => {
       const { tenant, user, db, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
       const fields = await service.getAllFields({
@@ -41,7 +32,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       return { fields };
     },
     {
-      beforeHandle: [requirePermission("settings", "read")],
+      beforeHandle: [requireTenantContext, requirePermission("settings", "read")],
       detail: {
         tags: ["Field Security"],
         summary: "List all field definitions",
@@ -55,16 +46,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
       const fields = await service.getEntityFields(
@@ -75,7 +56,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       return { fields };
     },
     {
-      beforeHandle: [requirePermission("settings", "read")],
+      beforeHandle: [requireTenantContext, requirePermission("settings", "read")],
       params: t.Object({ entity: t.String() }),
       detail: {
         tags: ["Field Security"],
@@ -90,16 +71,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
     async (ctx) => {
       const { tenant, user, db, query, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
 
@@ -122,6 +93,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       return { permissions: permissionList };
     },
     {
+      beforeHandle: [requireTenantContext],
       query: t.Object({
         entity: t.Optional(t.String()),
       }),
@@ -138,16 +110,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
     async (ctx) => {
       const { tenant, user, db, params, set, requestId } = ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
       const permissions = await service.getRoleFieldPermissions(
@@ -173,7 +135,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       };
     },
     {
-      beforeHandle: [requirePermission("roles", "read")],
+      beforeHandle: [requireTenantContext, requirePermission("roles", "read")],
       params: t.Object({ roleId: t.String() }),
       detail: {
         tags: ["Field Security"],
@@ -189,16 +151,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       const { tenant, user, db, params, body, audit, set, requestId } =
         ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
       const count = await service.bulkSetRoleFieldPermissions(
@@ -220,7 +172,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       return { success: true, updatedCount: count };
     },
     {
-      beforeHandle: [requirePermission("roles", "write")],
+      beforeHandle: [requireTenantContext, requirePermission("roles", "write")],
       params: t.Object({ roleId: t.String() }),
       body: BulkFieldPermissionUpdateSchema,
       detail: {
@@ -237,16 +189,6 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       const { tenant, user, db, params, body, audit, set, requestId } =
         ctx as any;
 
-      if (!tenant?.id) {
-        set.status = 400;
-        return {
-          error: {
-            code: "MISSING_TENANT",
-            message: "Tenant context required",
-            requestId,
-          },
-        };
-      }
 
       const service = new FieldPermissionService(db);
       await service.setRoleFieldPermission(
@@ -269,7 +211,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
       return { success: true };
     },
     {
-      beforeHandle: [requirePermission("roles", "write")],
+      beforeHandle: [requireTenantContext, requirePermission("roles", "write")],
       params: t.Object({
         roleId: t.String(),
         fieldId: t.String(),
