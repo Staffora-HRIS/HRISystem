@@ -4,6 +4,7 @@
 
 import { Elysia } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
+import { ErrorCodes } from "../../plugins/errors";
 import { WorkflowService } from "./service";
 import { WorkflowRepository } from "./repository";
 import * as schemas from "./schemas";
@@ -33,7 +34,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       return result;
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: schemas.PaginationQuerySchema,
@@ -57,7 +58,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
         return { error: { code: "VALIDATION_ERROR", message: error.message.replace("VALIDATION_ERROR: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.CreateWorkflowDefinitionSchema,
@@ -73,10 +74,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -96,10 +97,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -116,10 +117,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -135,7 +136,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       return await workflowService.getInstances({ tenantId: tenant.id, userId: user.id }, query);
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     query: schemas.WorkflowInstanceFiltersSchema,
@@ -156,14 +157,14 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       if (error.message.startsWith("VALIDATION_ERROR:")) {
         set.status = 400;
         return { error: { code: "VALIDATION_ERROR", message: error.message.replace("VALIDATION_ERROR: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.CreateWorkflowInstanceSchema,
@@ -179,10 +180,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -199,10 +200,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -222,10 +223,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     params: schemas.IdParamsSchema,
@@ -247,10 +248,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.ProcessStepActionSchema,
@@ -270,10 +271,10 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     } catch (error: any) {
       if (error.message.startsWith("NOT_FOUND:")) {
         set.status = 404;
-        return { error: { code: "NOT_FOUND", message: error.message.replace("NOT_FOUND: ", "") } };
+        return { error: { code: ErrorCodes.NOT_FOUND, message: error.message.replace("NOT_FOUND: ", "") } };
       }
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     body: schemas.ReassignStepSchema,
@@ -290,7 +291,7 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
       return { approvals, count: approvals.length };
     } catch (error: any) {
       set.status = 500;
-      return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }, {
     beforeHandle: [requireAuthContext, requireTenantContext],
