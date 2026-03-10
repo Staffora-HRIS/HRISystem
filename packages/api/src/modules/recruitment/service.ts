@@ -4,6 +4,7 @@
  * Business logic for recruitment operations
  */
 
+import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import { RecruitmentRepository, type TenantContext, type Requisition, type Candidate } from "./repository";
 
@@ -57,14 +58,16 @@ export class RecruitmentService {
       location?: string;
     }
   ): Promise<Requisition> {
-    const requisition = await this.repository.createRequisition(ctx, data);
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const requisition = await this.repository.createRequisition(ctx, data);
 
-    // Emit domain event
-    await this.emitDomainEvent(ctx, "recruitment.requisition.created", "requisition", requisition.id, {
-      requisition,
+      // Emit domain event atomically within the same transaction
+      await this.emitDomainEvent(tx, ctx, "recruitment.requisition.created", "requisition", requisition.id, {
+        requisition,
+      });
+
+      return requisition;
     });
-
-    return requisition;
   }
 
   async updateRequisition(
@@ -92,21 +95,23 @@ export class RecruitmentService {
     const requisition = await this.repository.updateRequisition(ctx, id, data);
     if (!requisition) return null;
 
-    // Emit domain event
-    await this.emitDomainEvent(ctx, "recruitment.requisition.updated", "requisition", requisition.id, {
-      oldRequisition,
-      requisition,
-      changes: data,
-    });
-
-    // Emit status change event if status changed
-    if (data.status && oldRequisition.status !== data.status) {
-      await this.emitDomainEvent(ctx, "recruitment.requisition.status_changed", "requisition", requisition.id, {
+    // Emit domain events atomically within the same transaction
+    await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      await this.emitDomainEvent(tx, ctx, "recruitment.requisition.updated", "requisition", requisition.id, {
+        oldRequisition,
         requisition,
-        fromStatus: oldRequisition.status,
-        toStatus: data.status,
+        changes: data,
       });
-    }
+
+      // Emit status change event if status changed
+      if (data.status && oldRequisition.status !== data.status) {
+        await this.emitDomainEvent(tx, ctx, "recruitment.requisition.status_changed", "requisition", requisition.id, {
+          requisition,
+          fromStatus: oldRequisition.status,
+          toStatus: data.status,
+        });
+      }
+    });
 
     return requisition;
   }
@@ -173,15 +178,17 @@ export class RecruitmentService {
       throw new Error("Requisition is not open for applications");
     }
 
-    const candidate = await this.repository.createCandidate(ctx, data);
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const candidate = await this.repository.createCandidate(ctx, data);
 
-    // Emit domain event
-    await this.emitDomainEvent(ctx, "recruitment.candidate.created", "candidate", candidate.id, {
-      candidate,
-      requisitionId: data.requisitionId,
+      // Emit domain event atomically within the same transaction
+      await this.emitDomainEvent(tx, ctx, "recruitment.candidate.created", "candidate", candidate.id, {
+        candidate,
+        requisitionId: data.requisitionId,
+      });
+
+      return candidate;
     });
-
-    return candidate;
   }
 
   async updateCandidate(
@@ -206,11 +213,13 @@ export class RecruitmentService {
     const candidate = await this.repository.updateCandidate(ctx, id, data);
     if (!candidate) return null;
 
-    // Emit domain event
-    await this.emitDomainEvent(ctx, "recruitment.candidate.updated", "candidate", candidate.id, {
-      oldCandidate,
-      candidate,
-      changes: data,
+    // Emit domain event atomically within the same transaction
+    await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      await this.emitDomainEvent(tx, ctx, "recruitment.candidate.updated", "candidate", candidate.id, {
+        oldCandidate,
+        candidate,
+        changes: data,
+      });
     });
 
     return candidate;
@@ -230,25 +239,27 @@ export class RecruitmentService {
     const candidate = await this.repository.getCandidateById(ctx, candidateId);
     if (!candidate) return null;
 
-    // Emit domain event
-    await this.emitDomainEvent(ctx, "recruitment.candidate.stage_changed", "candidate", candidate.id, {
-      candidate,
-      fromStage: oldCandidate.current_stage,
-      toStage: newStage,
-      reason,
-    });
-
-    // Handle special stage transitions
-    if (newStage === "hired") {
-      await this.emitDomainEvent(ctx, "recruitment.candidate.hired", "candidate", candidate.id, {
+    // Emit domain events atomically within the same transaction
+    await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      await this.emitDomainEvent(tx, ctx, "recruitment.candidate.stage_changed", "candidate", candidate.id, {
         candidate,
-      });
-    } else if (newStage === "rejected") {
-      await this.emitDomainEvent(ctx, "recruitment.candidate.rejected", "candidate", candidate.id, {
-        candidate,
+        fromStage: oldCandidate.current_stage,
+        toStage: newStage,
         reason,
       });
-    }
+
+      // Handle special stage transitions
+      if (newStage === "hired") {
+        await this.emitDomainEvent(tx, ctx, "recruitment.candidate.hired", "candidate", candidate.id, {
+          candidate,
+        });
+      } else if (newStage === "rejected") {
+        await this.emitDomainEvent(tx, ctx, "recruitment.candidate.rejected", "candidate", candidate.id, {
+          candidate,
+          reason,
+        });
+      }
+    });
 
     return candidate;
   }
@@ -266,31 +277,25 @@ export class RecruitmentService {
   // ===========================================================================
 
   private async emitDomainEvent(
+    tx: TransactionSql,
     ctx: TenantContext,
     eventType: string,
     aggregateType: string,
     aggregateId: string,
     payload: Record<string, unknown>
   ): Promise<void> {
-    try {
-      await this.db.withTransaction(ctx, async (tx) => {
-        await tx`
-          INSERT INTO app.domain_outbox (
-            id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
-          ) VALUES (
-            gen_random_uuid(),
-            ${ctx.tenantId}::uuid,
-            ${aggregateType},
-            ${aggregateId}::uuid,
-            ${eventType},
-            ${JSON.stringify({ ...payload, actor: ctx.userId })}::jsonb,
-            now()
-          )
-        `;
-      });
-    } catch (error) {
-      // Log but don't fail the operation
-      console.error("Failed to emit domain event:", error);
-    }
+    await tx`
+      INSERT INTO app.domain_outbox (
+        id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
+      ) VALUES (
+        gen_random_uuid(),
+        ${ctx.tenantId}::uuid,
+        ${aggregateType},
+        ${aggregateId}::uuid,
+        ${eventType},
+        ${JSON.stringify({ ...payload, actor: ctx.userId })}::jsonb,
+        now()
+      )
+    `;
   }
 }

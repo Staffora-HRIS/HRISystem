@@ -5,6 +5,7 @@
  */
 
 import { Elysia } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { TimeRepository } from "./repository";
 import { TimeService } from "./service";
 import {
@@ -38,10 +39,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/events",
     async (ctx) => {
       const { timeService, tenant, user, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.createTimeEvent(
         { tenantId: tenant.id, userId: user.id },
@@ -59,6 +56,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateTimeEventSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Record time event" },
     }
   )
@@ -67,10 +65,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/events",
     async (ctx) => {
       const { timeService, tenant, user, query, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getTimeEvents(
         { tenantId: tenant.id, userId: user.id },
@@ -86,6 +80,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       query: TimeEventFiltersSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "List time events" },
     }
   )
@@ -94,10 +89,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/events/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getTimeEventById(
         { tenantId: tenant.id, userId: user.id },
@@ -113,6 +104,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Get time event by ID" },
     }
   )
@@ -125,10 +117,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/schedules",
     async (ctx) => {
       const { timeService, tenant, user, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.createSchedule(
         { tenantId: tenant.id, userId: user.id },
@@ -146,6 +134,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateScheduleSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Create schedule" },
     }
   )
@@ -154,10 +143,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/schedules",
     async (ctx) => {
       const { timeService, tenant, user, query, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getSchedules(
         { tenantId: tenant.id, userId: user.id },
@@ -172,6 +157,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       return result.data;
     },
     {
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "List schedules" },
     }
   )
@@ -180,10 +166,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/schedules/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getScheduleById(
         { tenantId: tenant.id, userId: user.id },
@@ -199,6 +181,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Get schedule by ID" },
     }
   )
@@ -207,10 +190,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/schedules/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.updateSchedule(
         { tenantId: tenant.id, userId: user.id },
@@ -228,6 +207,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateScheduleSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Update schedule" },
     }
   )
@@ -240,10 +220,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/shifts",
     async (ctx) => {
       const { timeService, tenant, user, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.createShift(
         { tenantId: tenant.id, userId: user.id },
@@ -261,6 +237,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateShiftSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Create shift" },
     }
   )
@@ -269,10 +246,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/shifts/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getShiftById(
         { tenantId: tenant.id, userId: user.id },
@@ -288,6 +261,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Get shift by ID" },
     }
   )
@@ -296,10 +270,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/shifts/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.updateShift(
         { tenantId: tenant.id, userId: user.id },
@@ -317,6 +287,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateShiftSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Update shift" },
     }
   )
@@ -329,10 +300,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets",
     async (ctx) => {
       const { timeService, tenant, user, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.createTimesheet(
         { tenantId: tenant.id, userId: user.id },
@@ -350,6 +317,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       body: CreateTimesheetSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Create timesheet" },
     }
   )
@@ -358,10 +326,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets",
     async (ctx) => {
       const { timeService, tenant, user, query, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getTimesheets(
         { tenantId: tenant.id, userId: user.id },
@@ -377,6 +341,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       query: TimesheetFiltersSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "List timesheets" },
     }
   )
@@ -385,10 +350,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.getTimesheetById(
         { tenantId: tenant.id, userId: user.id },
@@ -404,6 +365,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Get timesheet by ID" },
     }
   )
@@ -412,10 +374,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets/:id",
     async (ctx) => {
       const { timeService, tenant, user, params, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.updateTimesheetLines(
         { tenantId: tenant.id, userId: user.id },
@@ -434,6 +392,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       body: UpdateTimesheetSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Update timesheet lines" },
     }
   )
@@ -442,10 +401,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets/:id/submit",
     async (ctx) => {
       const { timeService, tenant, user, params, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       const result = await timeService.submitTimesheet(
         { tenantId: tenant.id, userId: user.id },
@@ -462,6 +417,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     {
       params: IdParamsSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Submit timesheet" },
     }
   )
@@ -470,10 +426,6 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     "/timesheets/:id/approve",
     async (ctx) => {
       const { timeService, tenant, user, params, body, set } = ctx as any;
-      if (!tenant || !user) {
-        set.status = 401;
-        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: "" } };
-      }
 
       let result;
       if ((body as any).action === "approve") {
@@ -503,6 +455,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       params: IdParamsSchema,
       body: TimesheetApprovalSchema,
       headers: IdempotencyHeaderSchema,
+      beforeHandle: [requireAuthContext, requireTenantContext],
       detail: { tags: ["Time"], summary: "Approve or reject timesheet" },
     }
   );

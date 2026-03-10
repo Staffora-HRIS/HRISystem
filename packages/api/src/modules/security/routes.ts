@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
+import { ErrorCodes } from "../../plugins/errors";
 
 export const securityRoutes = new Elysia({ prefix: "/security" })
   .get("/my-permissions", async (ctx) => {
@@ -12,7 +13,7 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
       set.status = 401;
       return {
         error: {
-          code: "UNAUTHORIZED",
+          code: ErrorCodes.UNAUTHORIZED,
           message: "Authentication required",
           requestId: requestId || "",
         },
@@ -52,7 +53,7 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
       set.status = 500;
       return {
         error: {
-          code: "INTERNAL_ERROR",
+          code: ErrorCodes.INTERNAL_ERROR,
           message: "Failed to load permissions",
           requestId: requestId || "",
         },
@@ -434,7 +435,7 @@ securityRoutes
       const description = body?.description ? String(body.description) : null;
       if (!roleName) {
         return error(400, {
-          error: { code: "VALIDATION_ERROR", message: "Role name is required", requestId },
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Role name is required", requestId },
         });
       }
 
@@ -451,7 +452,7 @@ securityRoutes
 
       if (!created?.id) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: "Failed to create role", requestId },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create role", requestId },
         });
       }
 
@@ -506,13 +507,13 @@ securityRoutes
 
       if (!oldRole?.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
       if (oldRole.isSystem) {
         return error(403, {
-          error: { code: "FORBIDDEN", message: "System roles cannot be modified", requestId },
+          error: { code: ErrorCodes.FORBIDDEN, message: "System roles cannot be modified", requestId },
         });
       }
 
@@ -534,7 +535,7 @@ securityRoutes
 
       if (!updated?.id) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: "Failed to update role", requestId },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update role", requestId },
         });
       }
 
@@ -588,13 +589,13 @@ securityRoutes
 
       if (!oldRole?.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
       if (oldRole.isSystem) {
         return error(403, {
-          error: { code: "FORBIDDEN", message: "System roles cannot be deleted", requestId },
+          error: { code: ErrorCodes.FORBIDDEN, message: "System roles cannot be deleted", requestId },
         });
       }
 
@@ -614,7 +615,7 @@ securityRoutes
 
       if (!result) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: "Failed to delete role", requestId },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete role", requestId },
         });
       }
 
@@ -666,20 +667,20 @@ securityRoutes
 
       if (!oldRole?.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
       // Only allow modification of tenant-owned roles, not system roles
       if (!oldRole.tenantId) {
         return error(403, {
-          error: { code: "FORBIDDEN", message: "Cannot modify system roles", requestId },
+          error: { code: ErrorCodes.FORBIDDEN, message: "Cannot modify system roles", requestId },
         });
       }
 
       if (oldRole.tenantId !== tenant.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
@@ -698,7 +699,7 @@ securityRoutes
 
       if (!granted) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: "Failed to grant permission", requestId },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to grant permission", requestId },
         });
       }
 
@@ -738,7 +739,7 @@ securityRoutes
 
       if (!resource || !action) {
         return error(400, {
-          error: { code: "VALIDATION_ERROR", message: "resource and action are required", requestId },
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "resource and action are required", requestId },
         });
       }
 
@@ -760,20 +761,20 @@ securityRoutes
 
       if (!targetRole?.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
       // Only allow modification of tenant-owned roles, not system roles
       if (!targetRole.tenantId) {
         return error(403, {
-          error: { code: "FORBIDDEN", message: "Cannot modify system roles", requestId },
+          error: { code: ErrorCodes.FORBIDDEN, message: "Cannot modify system roles", requestId },
         });
       }
 
       if (targetRole.tenantId !== tenant.id) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role not found", requestId },
         });
       }
 
@@ -790,7 +791,7 @@ securityRoutes
 
       if (!revoked) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Permission not found on role", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Permission not found on role", requestId },
         });
       }
 
@@ -844,7 +845,7 @@ securityRoutes
 
       if (!assignmentId) {
         return error(500, {
-          error: { code: "INTERNAL_ERROR", message: "Failed to assign role", requestId },
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to assign role", requestId },
         });
       }
 
@@ -889,7 +890,7 @@ securityRoutes
 
       if (!revoked) {
         return error(404, {
-          error: { code: "NOT_FOUND", message: "Role assignment not found", requestId },
+          error: { code: ErrorCodes.NOT_FOUND, message: "Role assignment not found", requestId },
         });
       }
 
