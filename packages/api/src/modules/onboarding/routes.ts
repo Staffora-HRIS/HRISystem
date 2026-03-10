@@ -5,6 +5,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { requireAuthContext, requireTenantContext } from "../../plugins";
 
 const UuidSchema = t.String({ format: "uuid" });
 
@@ -13,10 +14,6 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   // Checklists (Templates)
   .get("/checklists", async (ctx) => {
     const { tenant, user, db, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const checklists = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -32,15 +29,12 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "List onboarding checklists" }
   })
 
   .post("/checklists", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const [checklist] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -75,16 +69,13 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
         required: t.Optional(t.Boolean()),
       }))),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Create onboarding checklist" }
   })
 
   // Employee Onboarding Instances
   .get("/instances", async (ctx) => {
     const { tenant, user, db, query, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const instances = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -113,15 +104,12 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       cursor: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "List onboarding instances" }
   })
 
   .post("/instances", async (ctx) => {
     const { tenant, user, db, body, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       // Get checklist tasks
@@ -162,15 +150,12 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       startDate: t.String({ format: "date" }),
       buddyId: t.Optional(UuidSchema),
     }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Start onboarding for employee" }
   })
 
   .get("/instances/:id", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const [instance] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -196,15 +181,12 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
     }
   }, {
     params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Get onboarding instance" }
   })
 
   .post("/instances/:id/tasks/:taskId/complete", async (ctx) => {
     const { tenant, user, db, params, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       // Get current instance
@@ -245,16 +227,13 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
     }
   }, {
     params: t.Object({ id: UuidSchema, taskId: t.String() }),
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Complete onboarding task" }
   })
 
   // My Onboarding
   .get("/my-onboarding", async (ctx) => {
     const { tenant, user, db, set } = ctx as any;
-    if (!tenant || !user) {
-      set.status = 401;
-      return { error: { code: "UNAUTHORIZED", message: "Authentication required" } };
-    }
 
     try {
       const [employee] = await db.withTransaction({ tenantId: tenant.id, userId: user.id }, async (tx: any) => {
@@ -283,6 +262,7 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
       return { error: { code: "INTERNAL_ERROR", message: error.message } };
     }
   }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
     detail: { tags: ["Onboarding"], summary: "Get my onboarding" }
   });
 
