@@ -4,7 +4,7 @@
 # =============================================================================
 # Stage 1: Install dependencies
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS deps
+FROM oven/bun:1.3.10-alpine AS deps
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN bun install --frozen-lockfile --ignore-scripts
 # =============================================================================
 # Stage 2: Build
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS builder
+FROM oven/bun:1.3.10-alpine AS builder
 
 WORKDIR /app
 
@@ -40,7 +40,7 @@ RUN bun build src/app.ts --outdir dist --target bun
 # =============================================================================
 # Stage 3: Production
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS runner
+FROM oven/bun:1.3.10-alpine AS runner
 
 WORKDIR /app
 
