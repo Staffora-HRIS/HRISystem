@@ -1,7 +1,7 @@
 /**
  * Error Codes
  *
- * Centralized error codes organized by module for the HRIS platform.
+ * Centralized error codes organized by module for the Staffora platform.
  * These codes are used to identify specific error conditions across the system.
  */
 

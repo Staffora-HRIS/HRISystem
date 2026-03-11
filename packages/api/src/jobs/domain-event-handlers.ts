@@ -110,8 +110,8 @@ async function handleEmployeeCreated(
           template: "welcome",
           templateData: {
             firstName: employee.firstName || "Team Member",
-            companyName: "HRIS Platform",
-            loginUrl: process.env["APP_URL"] || "https://app.hris.local",
+            companyName: "Staffora",
+            loginUrl: process.env["APP_URL"] || "https://app.staffora.co.uk",
           },
         },
       }),

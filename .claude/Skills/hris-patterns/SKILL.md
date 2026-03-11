@@ -1,12 +1,12 @@
 ---
-name: hris-patterns
-description: Coding patterns extracted from HRISystem repository
+name: staffora-patterns
+description: Coding patterns extracted from Staffora repository
 version: 1.0.0
 source: local-git-analysis
 analyzed_commits: 9
 ---
 
-# HRISystem Coding Patterns
+# Staffora Coding Patterns
 
 ## Commit Conventions
 
@@ -26,9 +26,9 @@ Some commits use triple-backtick prefix `` ``` `` — avoid this pattern.
 
 ```
 packages/
-├── api/          # @hris/api — Elysia.js backend
-├── web/          # @hris/web — React Router v7 frontend
-└── shared/       # @hris/shared — Shared types, schemas, state machines
+├── api/          # @staffora/api — Elysia.js backend
+├── web/          # @staffora/web — React Router v7 frontend
+└── shared/       # @staffora/shared — Shared types, schemas, state machines
 migrations/       # Numbered SQL migration files (0001–0115+)
 docker/           # Docker Compose config
 ```
@@ -281,7 +281,7 @@ describe("Feature - Description", () => {
 2. **Effective dating**: `effective_from`/`effective_to` with overlap validation
 3. **Outbox pattern**: Domain events in same transaction as writes
 4. **Idempotency**: All mutations require `Idempotency-Key` header
-5. **State machines**: Defined in `@hris/shared`, transitions stored immutably
+5. **State machines**: Defined in `@staffora/shared`, transitions stored immutably
 6. **Cursor pagination**: Not offset-based
 7. **Error shape**: `{ error: { code, message, details?, requestId } }`
 8. **URL versioning**: `/api/v1/...`

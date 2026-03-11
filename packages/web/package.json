@@ -1,5 +1,5 @@
 {
-  "name": "@hris/web",
+  "name": "@staffora/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,6 +15,7 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@better-auth/infra": "^0.1.8",
     "@react-router/node": "^7.1.1",
     "@react-router/serve": "^7.1.1",
     "@tanstack/react-query": "^5.62.7",
@@ -46,6 +47,6 @@
     "vitest": "^2.1.8"
   },
   "peerDependencies": {
-    "@hris/shared": "workspace:*"
+    "@staffora/shared": "workspace:*"
   }
 }

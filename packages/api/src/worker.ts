@@ -1,5 +1,5 @@
 /**
- * HRIS Platform Background Worker
+ * Staffora Platform Background Worker
  *
  * Main entry point for the background job processing system.
  * Processes jobs from Redis Streams including:
@@ -120,29 +120,29 @@ function createHealthServer(
       const health = await getHealth();
       // Prometheus-style metrics
       return [
-        `# HELP hris_worker_active_jobs Number of currently processing jobs`,
-        `# TYPE hris_worker_active_jobs gauge`,
-        `hris_worker_active_jobs ${health.activeJobs}`,
+        `# HELP staffora_worker_active_jobs Number of currently processing jobs`,
+        `# TYPE staffora_worker_active_jobs gauge`,
+        `staffora_worker_active_jobs ${health.activeJobs}`,
         "",
-        `# HELP hris_worker_processed_jobs_total Total number of processed jobs`,
-        `# TYPE hris_worker_processed_jobs_total counter`,
-        `hris_worker_processed_jobs_total ${health.processedJobs}`,
+        `# HELP staffora_worker_processed_jobs_total Total number of processed jobs`,
+        `# TYPE staffora_worker_processed_jobs_total counter`,
+        `staffora_worker_processed_jobs_total ${health.processedJobs}`,
         "",
-        `# HELP hris_worker_failed_jobs_total Total number of failed jobs`,
-        `# TYPE hris_worker_failed_jobs_total counter`,
-        `hris_worker_failed_jobs_total ${health.failedJobs}`,
+        `# HELP staffora_worker_failed_jobs_total Total number of failed jobs`,
+        `# TYPE staffora_worker_failed_jobs_total counter`,
+        `staffora_worker_failed_jobs_total ${health.failedJobs}`,
         "",
-        `# HELP hris_worker_uptime_seconds Worker uptime in seconds`,
-        `# TYPE hris_worker_uptime_seconds gauge`,
-        `hris_worker_uptime_seconds ${Math.floor(health.uptime / 1000)}`,
+        `# HELP staffora_worker_uptime_seconds Worker uptime in seconds`,
+        `# TYPE staffora_worker_uptime_seconds gauge`,
+        `staffora_worker_uptime_seconds ${Math.floor(health.uptime / 1000)}`,
         "",
-        `# HELP hris_worker_redis_up Redis connection status`,
-        `# TYPE hris_worker_redis_up gauge`,
-        `hris_worker_redis_up ${health.redis === "up" ? 1 : 0}`,
+        `# HELP staffora_worker_redis_up Redis connection status`,
+        `# TYPE staffora_worker_redis_up gauge`,
+        `staffora_worker_redis_up ${health.redis === "up" ? 1 : 0}`,
         "",
-        `# HELP hris_worker_database_up Database connection status`,
-        `# TYPE hris_worker_database_up gauge`,
-        `hris_worker_database_up ${health.database === "up" ? 1 : 0}`,
+        `# HELP staffora_worker_database_up Database connection status`,
+        `# TYPE staffora_worker_database_up gauge`,
+        `staffora_worker_database_up ${health.database === "up" ? 1 : 0}`,
       ].join("\n");
     })
     .listen(port);
@@ -207,7 +207,7 @@ function stopOutboxPoller(): void {
 
 async function main(): Promise<void> {
   console.log("===========================================");
-  console.log("HRIS Background Worker");
+  console.log("Staffora Background Worker");
   console.log("===========================================");
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`Consumer Group: ${config.consumerGroup}`);

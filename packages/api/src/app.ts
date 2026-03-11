@@ -1,7 +1,7 @@
 /**
- * HRIS Platform API Entry Point
+ * Staffora Platform API Entry Point
  *
- * This is the main entry point for the HRIS API server.
+ * This is the main entry point for the Staffora API server.
  * It initializes Elysia with all required plugins and starts the server.
  */
 
@@ -95,6 +95,7 @@ export const app = new Elysia()
         "X-Request-ID",
         "X-CSRF-Token",
         "X-Tenant-ID",
+        "X-Visitor-ID",
         "Idempotency-Key",
         "Cache-Control",
         "Accept",
@@ -144,9 +145,9 @@ export const app = new Elysia()
     swagger({
       documentation: {
         info: {
-          title: "HRIS Platform API",
+          title: "Staffora Platform API",
           version: "0.1.0",
-          description: "Enterprise Human Resource Information System API",
+          description: "Enterprise Human Resource Information System API — staffora.co.uk",
         },
         tags: [
           { name: "Health", description: "Health check endpoints" },
@@ -256,7 +257,7 @@ export const app = new Elysia()
 
   // Root endpoint
   .get("/", () => ({
-    name: "HRIS Platform API",
+    name: "Staffora Platform API",
     version: "0.1.0",
     documentation: "/docs",
     login: "/login",
@@ -271,7 +272,7 @@ export const app = new Elysia()
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HRIS Login</title>
+    <title>Staffora Login</title>
     <style>
       :root { color-scheme: light; }
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 32px; background: #0b1220; color: #e6edf3; }
@@ -294,11 +295,11 @@ export const app = new Elysia()
   <body>
     <div class="container">
       <div class="card">
-        <h1>HRIS API Login</h1>
-        <div class="muted small">This page calls <code>POST /api/v1/auth/login</code> and stores the <code>hris_session</code> cookie automatically.</div>
+        <h1>Staffora API Login</h1>
+        <div class="muted small">This page calls <code>POST /api/v1/auth/login</code> and stores the session cookie automatically.</div>
 
         <label for="email">Email</label>
-        <input id="email" type="email" autocomplete="username" placeholder="root@hris.local" />
+        <input id="email" type="email" autocomplete="username" placeholder="root@staffora.co.uk" />
 
         <label for="password">Password</label>
         <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
@@ -388,7 +389,7 @@ export const app = new Elysia()
         print(result);
       });
 
-      emailEl.value = 'root@hris.local';
+      emailEl.value = 'root@staffora.co.uk';
       print('Enter email + password, then click Login.');
     </script>
   </body>
@@ -463,7 +464,7 @@ if (import.meta.main) {
   });
 
   console.log(
-    `HRIS API is running at http://${app.server?.hostname}:${app.server?.port}`
+    `Staffora API is running at http://${app.server?.hostname}:${app.server?.port}`
   );
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(

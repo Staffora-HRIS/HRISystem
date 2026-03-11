@@ -31,7 +31,7 @@ type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Reset Password | HRIS Platform" },
+    { title: "Reset Password | Staffora" },
     { name: "description", content: "Set a new password" },
   ];
 }

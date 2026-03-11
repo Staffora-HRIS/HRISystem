@@ -4,6 +4,7 @@ import { GitBranch, Plus, Play, Pause, Settings } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface WorkflowDefinition {
@@ -19,6 +20,8 @@ interface WorkflowDefinition {
 }
 
 export default function WorkflowsAdminPage() {
+  const toast = useToast();
+
   const { data, isLoading } = useQuery({
     queryKey: ["workflow-definitions"],
     queryFn: () => api.get<{ items: WorkflowDefinition[]; nextCursor: string | null; hasMore: boolean }>("/workflows/definitions"),
@@ -107,7 +110,7 @@ export default function WorkflowsAdminPage() {
                   <span className="text-xs text-gray-500">
                     Created {new Date(workflow.createdAt).toLocaleDateString()}
                   </span>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Workflow configuration will be available in a future update." })}>
                     <Settings className="h-4 w-4 mr-1" />
                     Configure
                   </Button>

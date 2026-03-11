@@ -177,7 +177,7 @@ export default function AdminPositionsPage() {
       id: "actions",
       header: "",
       cell: () => (
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" onClick={() => toast.info("Coming Soon", { message: "Position editing will be available in a future update." })}>
           <Edit className="h-4 w-4" />
         </Button>
       ),

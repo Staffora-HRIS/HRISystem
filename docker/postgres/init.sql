@@ -1,4 +1,4 @@
--- HRIS Platform PostgreSQL Initialization Script
+-- Staffora Platform PostgreSQL Initialization Script
 -- This script runs once when the database container is first created
 
 -- =============================================================================
@@ -15,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- SCHEMAS
 -- =============================================================================
 
--- Application schema for all HRIS tables
+-- Application schema for all Staffora tables
 CREATE SCHEMA IF NOT EXISTS app;
 
 -- Set search path to include app schema
@@ -255,7 +255,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT EXECUTE ON FUNCTIONS TO hris;
 -- COMMENTS
 -- =============================================================================
 
-COMMENT ON SCHEMA app IS 'HRIS Platform application schema';
+COMMENT ON SCHEMA app IS 'Staffora Platform application schema';
 COMMENT ON FUNCTION app.set_tenant_context IS 'Sets the current tenant and user context for RLS policies. Must be called at the start of every request.';
 COMMENT ON FUNCTION app.current_tenant_id IS 'Returns the current tenant ID from the session context. Raises exception if not set.';
 COMMENT ON FUNCTION app.current_user_id IS 'Returns the current user ID from the session context. Returns NULL if not set.';

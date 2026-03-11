@@ -12,8 +12,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@hris/shared": ["../shared/src"],
-      "@hris/shared/*": ["../shared/src/*"]
+      "@staffora/shared": ["../shared/src"],
+      "@staffora/shared/*": ["../shared/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],

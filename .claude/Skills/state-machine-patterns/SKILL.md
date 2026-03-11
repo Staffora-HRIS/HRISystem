@@ -7,7 +7,7 @@ description: Implement and extend state machines for employee lifecycle, leave r
 
 ## Definitions
 
-All state machines live in `packages/shared/src/state-machines/` and are importable via `@hris/shared/state-machines`. Each exports: states enum, `canTransition*()`, `validateTransition*()`, `getValidTransitions*()`, transition metadata, and human-readable labels.
+All state machines live in `packages/shared/src/state-machines/` and are importable via `@staffora/shared/state-machines`. Each exports: states enum, `canTransition*()`, `validateTransition*()`, `getValidTransitions*()`, transition metadata, and human-readable labels.
 
 ## Existing State Machines
 
@@ -24,7 +24,7 @@ All state machines live in `packages/shared/src/state-machines/` and are importa
 Always validate transitions in the service layer before persisting:
 
 ```typescript
-import { canTransition } from '@hris/shared/state-machines';
+import { canTransition } from '@staffora/shared/state-machines';
 
 async updateEmployeeStatus(id: string, newStatus: EmployeeStatus, reason: string, ctx: Context) {
   return db.withTransaction(ctx, async (tx) => {
@@ -70,7 +70,7 @@ await tx`
 Test both valid and invalid transitions. Use `validateTransition*()` for error messages:
 
 ```typescript
-import { canTransition, validateTransition } from '@hris/shared/state-machines';
+import { canTransition, validateTransition } from '@staffora/shared/state-machines';
 
 test('allows active -> on_leave', () => {
   expect(canTransition('active', 'on_leave')).toBe(true);

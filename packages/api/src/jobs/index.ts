@@ -2,7 +2,7 @@
  * Jobs Module Index
  *
  * Exports all job processors and worker infrastructure
- * for the HRIS background worker system.
+ * for the Staffora background worker system.
  */
 
 // =============================================================================

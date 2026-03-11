@@ -20,13 +20,13 @@ Category: Architecture
 
 Context: Full codebase audit with 8 parallel agents covering security, performance, architecture, bugs, database, tests, frontend, infrastructure.
 
-Problem: `@hris/shared` package is unused in production — zero imports from any module service or route. State machines, error codes, types, and utilities are all dead code. Each module re-implements `ServiceResult<T>`, `TenantContext`, error codes, and state machine transitions locally, with subtle divergences.
+Problem: `@staffora/shared` package is unused in production — zero imports from any module service or route. State machines, error codes, types, and utilities are all dead code. Each module re-implements `ServiceResult<T>`, `TenantContext`, error codes, and state machine transitions locally, with subtle divergences.
 
 Root Cause: Modules were built incrementally. HR module was the gold standard; later modules (talent, LMS, cases, onboarding, portal) increasingly deviated — some skip the service/repository layers entirely and inline raw SQL in routes.
 
 Solution: Refactor modules to import shared types/state-machines. Talent (1150-line routes.ts with all SQL inline) and portal need service/repository extraction.
 
-Prevention: New modules must import from `@hris/shared`. Code review should reject duplicate type definitions.
+Prevention: New modules must import from `@staffora/shared`. Code review should reject duplicate type definitions.
 
 Affected Files: All `packages/api/src/modules/*/service.ts`, `packages/shared/src/`
 

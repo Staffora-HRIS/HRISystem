@@ -1,6 +1,6 @@
 ---
 name: testing-patterns
-description: Write integration tests for HRIS. Use when creating tests for RLS, idempotency, effective dating, outbox, or state machines in packages/api/src/test/.
+description: Write integration tests for Staffora. Use when creating tests for RLS, idempotency, effective dating, outbox, or state machines in packages/api/src/test/.
 ---
 
 # Testing Patterns

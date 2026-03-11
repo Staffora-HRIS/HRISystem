@@ -1,5 +1,5 @@
 /**
- * API Client for HRIS Platform
+ * API Client for Staffora
  *
  * Features:
  * - Automatic tenant header injection
@@ -98,7 +98,7 @@ type ErrorInterceptor = (error: ApiError) => ApiError | Promise<ApiError>;
  * resulting in 405 Method Not Allowed errors.
  *
  * For server-side rendering (SSR) in Docker, we need to use the Docker
- * internal hostname (hris-api) instead of localhost.
+ * internal hostname (staffora-api) instead of localhost.
  */
 function getApiBaseUrl(): string {
   // Check if we're running server-side (SSR)

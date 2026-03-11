@@ -1,13 +1,14 @@
 /**
- * Better Auth Integration for HRIS Platform
+ * Better Auth Integration for Staffora
  *
  * This module provides Better Auth client integration with React.
- * It wraps the Better Auth client with HRIS-specific functionality
+ * It wraps the Better Auth client with Staffora-specific functionality
  * including multi-tenant support.
  */
 
 import { createAuthClient } from "better-auth/react";
-import { twoFactorClient } from "better-auth/client/plugins";
+import { twoFactorClient, organizationClient } from "better-auth/client/plugins";
+import { sentinelClient } from "@better-auth/infra/client";
 
 /**
  * Get the API base URL
@@ -25,14 +26,14 @@ function getBaseURL(): string {
 }
 
 /**
- * Better Auth client configured for HRIS
+ * Better Auth client configured for Staffora
  * 
  * IMPORTANT: fetchOptions.credentials must be 'include' for cross-origin
  * cookie handling (API on port 3000, web on port 5173)
  */
 export const authClient = createAuthClient({
   baseURL: getBaseURL(),
-  plugins: [twoFactorClient()],
+  plugins: [twoFactorClient(), sentinelClient(), organizationClient()],
   fetchOptions: {
     credentials: "include",
   },

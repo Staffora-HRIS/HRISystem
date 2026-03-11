@@ -19,7 +19,7 @@ import type { Route } from "./+types/route";
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Two-Factor Authentication | HRIS Platform" },
+    { title: "Two-Factor Authentication | Staffora" },
     { name: "description", content: "Enter your verification code" },
   ];
 }

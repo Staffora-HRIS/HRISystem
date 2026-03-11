@@ -273,15 +273,15 @@ export class AnalyticsRepository {
     const rows = await this.db.withTransaction(context, async (tx) => {
       return tx<any[]>`
         SELECT
-          COUNT(DISTINCT ts.date) as total_work_days,
+          COUNT(DISTINCT tl.work_date) as total_work_days,
           SUM(CASE WHEN ts.status = 'approved' THEN 1 ELSE 0 END) as total_present_days,
-          SUM(CASE WHEN ts.status = 'pending' AND tsd.regular_hours = 0 THEN 1 ELSE 0 END) as total_absent_days,
-          ROUND(AVG(COALESCE(tsd.regular_hours, 0)), 2) as avg_hours_worked,
-          COALESCE(SUM(tsd.overtime_hours), 0) as overtime_hours
+          SUM(CASE WHEN ts.status = 'submitted' AND tl.regular_hours = 0 THEN 1 ELSE 0 END) as total_absent_days,
+          ROUND(AVG(COALESCE(tl.regular_hours, 0)), 2) as avg_hours_worked,
+          COALESCE(SUM(tl.overtime_hours), 0) as overtime_hours
         FROM app.timesheets ts
-        LEFT JOIN app.timesheet_days tsd ON tsd.timesheet_id = ts.id
+        LEFT JOIN app.timesheet_lines tl ON tl.timesheet_id = ts.id
         WHERE ts.tenant_id = ${context.tenantId}::uuid
-          AND ts.date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+          AND tl.work_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
           ${filters.employee_id ? tx`AND ts.employee_id = ${filters.employee_id}::uuid` : tx``}
           ${filters.org_unit_id
             ? tx`AND EXISTS (

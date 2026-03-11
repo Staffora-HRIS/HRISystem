@@ -1,6 +1,6 @@
 ---
 name: frontend-react-components
-description: Build React components for HRIS frontend. Use when creating routes, components, React Query hooks, or pages in packages/web/app/.
+description: Build React components for the Staffora frontend. Use when creating routes, components, React Query hooks, or pages in packages/web/app/.
 ---
 
 # Frontend React Components

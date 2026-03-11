@@ -22,7 +22,7 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-const STORAGE_KEY = "hris-theme";
+const STORAGE_KEY = "staffora-theme";
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -40,7 +40,7 @@ function getCookieTheme(): Theme | null {
   if (typeof document === "undefined") return null;
 
   const cookie = document.cookie || "";
-  const match = cookie.match(/(?:^|;\s*)hris-theme=([^;]+)/);
+  const match = cookie.match(/(?:^|;\s*)staffora-theme=([^;]+)/);
   const raw = match?.[1] ? decodeURIComponent(match[1]) : null;
   return parseTheme(raw);
 }

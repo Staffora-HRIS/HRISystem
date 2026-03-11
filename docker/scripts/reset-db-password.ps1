@@ -20,7 +20,7 @@
 param(
     [string]$DbUser = "hris",
     [string]$DbPassword = "hris_dev_password",
-    [string]$ContainerName = "hris-postgres"
+    [string]$ContainerName = "staffora-postgres"
 )
 
 Write-Host "============================================="

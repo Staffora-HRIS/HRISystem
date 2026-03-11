@@ -31,8 +31,8 @@ export const links: Route.LinksFunction = () => [
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "HRIS Platform" },
-    { name: "description", content: "Human Resource Information System" },
+    { title: "Staffora" },
+    { name: "description", content: "Staffora - Human Resource Information System" },
     { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
   ];
 }
@@ -51,11 +51,11 @@ function Document({ children }: { children: React.ReactNode }) {
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const stored = localStorage.getItem('hris-theme') || 'light';
+                const stored = localStorage.getItem('staffora-theme') || 'light';
                 const resolved = stored === 'system'
                   ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
                   : (stored === 'dark' ? 'dark' : 'light');
-                document.cookie = 'hris-theme=' + encodeURIComponent(stored) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+                document.cookie = 'staffora-theme=' + encodeURIComponent(stored) + '; Path=/; Max-Age=31536000; SameSite=Lax';
                 document.documentElement.classList.remove('light', 'dark');
                 document.documentElement.classList.add(resolved);
               })();

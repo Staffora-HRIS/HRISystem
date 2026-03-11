@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Calendar, Users, Edit, Copy } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Schedule {
@@ -38,6 +39,7 @@ const statusLabels: Record<string, string> = {
 
 export default function SchedulesPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [view, setView] = useState<"schedules" | "assignments">("schedules");
 
   const { data: schedulesData, isLoading: schedulesLoading } = useQuery({
@@ -64,7 +66,7 @@ export default function SchedulesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Work Schedules</h1>
           <p className="text-gray-600">Manage work schedules and assignments</p>
         </div>
-        <Button onClick={() => alert("Create schedule modal")}>
+        <Button onClick={() => toast.info("Coming Soon", { message: "Schedule creation will be available in a future update." })}>
           <Plus className="h-4 w-4 mr-2" />
           New Schedule
         </Button>
@@ -107,7 +109,7 @@ export default function SchedulesPage() {
                 <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900">No schedules yet</h3>
                 <p className="text-gray-500 mb-4">Create work schedules for your employees.</p>
-                <Button onClick={() => alert("Create schedule modal")}>Create Schedule</Button>
+                <Button onClick={() => toast.info("Coming Soon", { message: "Schedule creation will be available in a future update." })}>Create Schedule</Button>
               </CardBody>
             </Card>
           ) : (
@@ -134,11 +136,11 @@ export default function SchedulesPage() {
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Schedule editing will be available in a future update." })}>
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Schedule duplication will be available in a future update." })}>
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
@@ -161,7 +163,7 @@ export default function SchedulesPage() {
                 <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900">No schedule assignments</h3>
                 <p className="text-gray-500 mb-4">Assign schedules to employees.</p>
-                <Button onClick={() => alert("Assign schedule modal")}>Assign Schedule</Button>
+                <Button onClick={() => toast.info("Coming Soon", { message: "Schedule assignment will be available in a future update." })}>Assign Schedule</Button>
               </CardBody>
             </Card>
           ) : (
@@ -206,7 +208,7 @@ export default function SchedulesPage() {
                           }
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <Button variant="outline" size="sm">Edit</Button>
+                          <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Assignment editing will be available in a future update." })}>Edit</Button>
                         </td>
                       </tr>
                     ))}

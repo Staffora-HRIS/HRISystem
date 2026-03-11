@@ -14,16 +14,16 @@ Unlike `.claude/learning.md`, which records debugging discoveries and issues, th
 
 ## Project Purpose
 
-Enterprise multi-tenant HRIS (Human Resource Information System) platform. Manages Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, Onboarding, Benefits, Documents, Succession, Analytics, Competencies, and Recruitment across isolated tenant organizations.
+Staffora (staffora.co.uk) -- an enterprise multi-tenant HRIS platform. Manages Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, Onboarding, Benefits, Documents, Succession, Analytics, Competencies, and Recruitment across isolated tenant organizations.
 
 ---
 
 ## System Architecture
 
 Monorepo with three packages:
-- **`packages/api`** (@hris/api) — Elysia.js REST API with plugin-based architecture
-- **`packages/web`** (@hris/web) — React Router v7 (framework mode) frontend
-- **`packages/shared`** (@hris/shared) — Shared types, schemas, error codes, state machines, utilities
+- **`packages/api`** (@staffora/api) — Elysia.js REST API with plugin-based architecture
+- **`packages/web`** (@staffora/web) — React Router v7 (framework mode) frontend
+- **`packages/shared`** (@staffora/shared) — Shared types, schemas, error codes, state machines, utilities
 
 Backend follows a layered pattern per module: `routes.ts` → `service.ts` → `repository.ts` with `schemas.ts` for validation.
 
@@ -65,7 +65,7 @@ All tenant data is isolated at the database level via PostgreSQL Row-Level Secur
 ### Local Development
 - `bun run docker:up` starts PostgreSQL + Redis
 - `bun run dev` starts all services (API, web, worker)
-- First-time: `bun run --filter @hris/api bootstrap:root` creates root tenant + admin
+- First-time: `bun run --filter @staffora/api bootstrap:root` creates root tenant + admin
 
 ### Background Processing
 - Outbox processor polls `domain_outbox` table → publishes to Redis Streams
@@ -160,7 +160,7 @@ Core Knowledge:
 - **Missing RBAC:** `lms`, `cases`, `onboarding` — no requirePermission() guards
 - **No service/repository layer:** `talent` (1150-line routes.ts with all SQL inline), `portal`, `dashboard`
 - **No domain events at all:** `talent`
-- **@hris/shared is unused in production** — zero imports from any module
+- **@staffora/shared is unused in production** — zero imports from any module
 
 Reason: Agents must know which modules to use as reference and which need fixing. The HR module is the canonical implementation.
 
