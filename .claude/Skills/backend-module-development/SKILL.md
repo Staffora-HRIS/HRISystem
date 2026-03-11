@@ -1,6 +1,6 @@
 ---
 name: backend-module-development
-description: Create Elysia.js backend modules for HRIS. Use when building new API modules, routes, services, repositories, or TypeBox schemas in packages/api/src/modules/.
+description: Create Elysia.js backend modules for Staffora. Use when building new API modules, routes, services, repositories, or TypeBox schemas in packages/api/src/modules/.
 ---
 
 # Backend Module Development

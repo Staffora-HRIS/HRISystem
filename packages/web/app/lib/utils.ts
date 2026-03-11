@@ -1,5 +1,5 @@
 /**
- * Utility functions for the HRIS frontend
+ * Utility functions for the Staffora frontend
  */
 
 import { type ClassValue, clsx } from "clsx";

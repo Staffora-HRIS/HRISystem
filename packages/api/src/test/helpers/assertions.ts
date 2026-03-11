@@ -1,7 +1,7 @@
 /**
  * Custom Assertion Helpers
  *
- * Extended assertion utilities for testing HRIS-specific functionality.
+ * Extended assertion utilities for testing Staffora-specific functionality.
  */
 
 import { expect } from "bun:test";

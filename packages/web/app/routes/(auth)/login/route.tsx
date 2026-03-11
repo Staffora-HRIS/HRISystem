@@ -84,7 +84,7 @@ export default function LoginPage() {
             <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
               <span className="text-2xl">🔐</span>
             </div>
-            <h2 className="mt-4 text-2xl font-bold text-gray-900">Sign in to HRIS</h2>
+            <h2 className="mt-4 text-2xl font-bold text-gray-900">Sign in to Staffora</h2>
             <p className="mt-2 text-sm text-gray-600">
               Enter your credentials to access the platform
             </p>

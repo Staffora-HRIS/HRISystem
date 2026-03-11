@@ -168,7 +168,7 @@ describe("Idempotency (end-to-end)", () => {
 
     expect(signIn.status).toBe(200);
     sessionCookie = buildCookieHeader(signIn);
-    expect(sessionCookie).toContain("hris.session_token=");
+    expect(sessionCookie).toContain("staffora.session_token=");
 
     const sessionRes = await app.handle(
       new Request("http://localhost/api/auth/get-session", {

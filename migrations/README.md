@@ -1,6 +1,6 @@
-# HRIS Platform Database Migrations
+# Staffora Platform Database Migrations
 
-This directory contains all database migrations for the HRIS platform. Migrations are used to evolve the database schema over time in a controlled and repeatable manner.
+This directory contains all database migrations for the Staffora platform. Migrations are used to evolve the database schema over time in a controlled and repeatable manner.
 
 ## Migration Conventions
 

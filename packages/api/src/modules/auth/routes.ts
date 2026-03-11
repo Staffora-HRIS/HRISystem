@@ -1,7 +1,7 @@
 /**
  * Authentication Routes
  *
- * HRIS-specific auth endpoints that complement Better Auth.
+ * Staffora-specific auth endpoints that complement Better Auth.
  * Better Auth handles: sign-in, sign-up, sign-out, session management
  * These routes handle: tenant switching, user info with tenants
  */

@@ -1,7 +1,7 @@
 /**
  * Worker Entry Point
  *
- * Runs background workers for the HRIS platform.
+ * Runs background workers for the Staffora platform.
  * Can be started separately from the main API server.
  */
 

@@ -59,6 +59,6 @@ bun run db:seed
 
 ### View Logs
 ```bash
-docker logs hris-postgres -f
-docker logs hris-redis -f
+docker logs staffora-postgres -f
+docker logs staffora-redis -f
 ```

@@ -4,6 +4,7 @@ import { Calendar, Settings, FileText, Clock, CheckCircle, XCircle } from "lucid
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface LeaveRequest {
@@ -21,6 +22,8 @@ interface LeaveRequest {
 }
 
 export default function AbsenceAdminPage() {
+  const toast = useToast();
+
   const { data: requestsData, isLoading } = useQuery({
     queryKey: ["admin-leave-requests"],
     queryFn: () => api.get<{ items: LeaveRequest[]; nextCursor: string | null; hasMore: boolean }>("/absence/requests"),
@@ -144,10 +147,10 @@ export default function AbsenceAdminPage() {
                       <td className="px-6 py-4 text-sm text-gray-500">{request.totalDays}</td>
                       <td className="px-6 py-4">{getStatusBadge(request.status)}</td>
                       <td className="px-6 py-4 text-right space-x-2">
-                        <Button variant="outline" size="sm" className="text-green-600">
+                        <Button variant="outline" size="sm" className="text-green-600" onClick={() => toast.info("Coming Soon", { message: "Leave request approval will be available in a future update." })}>
                           <CheckCircle className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-600">
+                        <Button variant="outline" size="sm" className="text-red-600" onClick={() => toast.info("Coming Soon", { message: "Leave request rejection will be available in a future update." })}>
                           <XCircle className="h-4 w-4" />
                         </Button>
                       </td>

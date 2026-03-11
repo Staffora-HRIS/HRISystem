@@ -15,7 +15,7 @@ const DB_URL = getDatabaseUrl();
 const REDIS_URL = getRedisUrl();
 
 // Stream keys for notifications
-const NOTIFICATIONS_STREAM = "hris:notifications";
+const NOTIFICATIONS_STREAM = "staffora:notifications";
 
 interface ScheduledJob {
   name: string;
@@ -270,7 +270,7 @@ class Scheduler {
               templateData: {
                 title: "Timesheet Reminder",
                 message: `Hi ${firstName}, this is a reminder to submit your timesheet for this week before the deadline.`,
-                actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/employee/time`,
+                actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/time`,
                 actionText: "Submit Timesheet",
               },
             },
@@ -391,7 +391,7 @@ class Scheduler {
               templateData: {
                 title: "Performance Review Deadline Approaching",
                 message: `Hi ${firstName}, your performance review for "${cycleName}" is due by ${deadline}. Please complete it before the deadline.`,
-                actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/employee/performance/reviews/${review["reviewId"]}`,
+                actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/performance/reviews/${review["reviewId"]}`,
                 actionText: "Complete Review",
               },
             },
@@ -516,7 +516,7 @@ class Scheduler {
                 templateData: {
                   title: `${monthName} Employee Birthdays`,
                   message: `Here are the employee birthdays this month:\n\n${birthdayList}\n\nTotal: ${tenantBirthdays.length} birthdays`,
-                  actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/admin/reports/birthdays`,
+                  actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/admin/reports/birthdays`,
                   actionText: "View Full Report",
                 },
               },

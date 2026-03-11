@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enterprise multi-tenant HRIS (Human Resource Information System) platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, Onboarding, Benefits, Documents, Succession, Analytics, Competencies, and Recruitment.
+Staffora (staffora.co.uk) -- an enterprise multi-tenant HRIS platform with modules for Core HR, Time & Attendance, Absence Management, Talent, LMS, Cases, Onboarding, Benefits, Documents, Succession, Analytics, Competencies, and Recruitment.
 
 **Tech Stack (Mandatory):**
 - Frontend: React 18 + React Router v7 (framework mode) + React Query + Tailwind CSS
@@ -62,7 +62,7 @@ bun run build:web     # Frontend only
 bun run db:seed
 
 # Bootstrap root tenant and admin user (first-time setup)
-bun run --filter @hris/api bootstrap:root
+bun run --filter @staffora/api bootstrap:root
 ```
 
 ## Environment Setup
@@ -78,9 +78,9 @@ Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 ## Architecture
 
 ### Monorepo Structure (Bun workspaces)
-- `packages/api` (@hris/api): Elysia.js backend with plugins pattern
-- `packages/web` (@hris/web): React Router v7 framework mode frontend (uses **vitest**, not bun test)
-- `packages/shared` (@hris/shared): Shared types, schemas, error codes, state machines, utilities
+- `packages/api` (@staffora/api): Elysia.js backend with plugins pattern
+- `packages/web` (@staffora/web): React Router v7 framework mode frontend (uses **vitest**, not bun test)
+- `packages/shared` (@staffora/shared): Shared types, schemas, error codes, state machines, utilities
 
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point — registers plugins then mounts all module routes
@@ -241,16 +241,16 @@ Tests connect as the `hris_app` role (non-superuser, `NOBYPASSRLS`) so RLS polic
 - Outbox written atomically with business writes
 - State machine transitions enforced
 
-## Shared Package Exports (@hris/shared)
+## Shared Package Exports (@staffora/shared)
 
 Import paths available from the shared package:
-- `@hris/shared` — Main entry point
-- `@hris/shared/types` — TypeScript types for all modules
-- `@hris/shared/constants` — Shared constants
-- `@hris/shared/utils` — Utility functions (dates, crypto, validation, effective-dating)
-- `@hris/shared/errors` — Error codes and messages organized by module
-- `@hris/shared/schemas` — Shared TypeBox/Zod schemas
-- `@hris/shared/state-machines` — Employee lifecycle and performance cycle state machines
+- `@staffora/shared` — Main entry point
+- `@staffora/shared/types` — TypeScript types for all modules
+- `@staffora/shared/constants` — Shared constants
+- `@staffora/shared/utils` — Utility functions (dates, crypto, validation, effective-dating)
+- `@staffora/shared/errors` — Error codes and messages organized by module
+- `@staffora/shared/schemas` — Shared TypeBox/Zod schemas
+- `@staffora/shared/state-machines` — Employee lifecycle and performance cycle state machines
 
 ## Common Workflows
 
@@ -273,11 +273,11 @@ Import paths available from the shared package:
 ## Specialized Agents
 
 Use these agents (defined in `.claude/agents/`, all swarm-enabled) for domain-specific work:
-- `hris-platform-architect`: Docker, migrations, RLS, plugins, RBAC, audit
-- `hris-core-hr-developer`: Employee data, org structure, contracts, effective-dating
+- `staffora-platform-architect`: Docker, migrations, RLS, plugins, RBAC, audit
+- `staffora-core-hr-developer`: Employee data, org structure, contracts, effective-dating
 - `time-attendance-module-developer`: Time events, schedules, timesheets, geo-fence
-- `hris-absence-module-builder`: Leave types, balances, accruals, ledger patterns
-- `hris-frontend-architect`: React components, React Query hooks, permission routing
+- `staffora-absence-module-builder`: Leave types, balances, accruals, ledger patterns
+- `staffora-frontend-architect`: React components, React Query hooks, permission routing
 - `cases-module-developer`: Case management, SLA tracking, escalation workflows
 - `lms-module-developer`: Courses, enrollments, learning paths, certificates
 - `talent-module-developer`: Performance reviews, goals, competencies, calibration

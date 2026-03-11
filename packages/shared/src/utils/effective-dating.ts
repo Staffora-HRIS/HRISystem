@@ -1,7 +1,7 @@
 /**
  * Effective Dating Utilities
  *
- * Utilities for managing effective-dated records in the HRIS system.
+ * Utilities for managing effective-dated records in the Staffora system.
  * Effective dating allows tracking changes over time with non-overlapping
  * date ranges per employee per dimension.
  */

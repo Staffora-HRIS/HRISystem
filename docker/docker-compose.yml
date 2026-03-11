@@ -1,5 +1,5 @@
 # =============================================================================
-# HRIS Platform Docker Compose Configuration
+# Staffora Platform Docker Compose Configuration
 # =============================================================================
 #
 # Usage:
@@ -17,7 +17,7 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16
-    container_name: hris-postgres
+    container_name: staffora-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hris}
@@ -36,7 +36,7 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - hris-network
+      - staffora-network
     deploy:
       resources:
         limits:
@@ -56,7 +56,7 @@ services:
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7
-    container_name: hris-redis
+    container_name: staffora-redis
     restart: unless-stopped
     command: redis-server /usr/local/etc/redis/redis.conf
     ports:
@@ -71,7 +71,7 @@ services:
       retries: 5
       start_period: 5s
     networks:
-      - hris-network
+      - staffora-network
     deploy:
       resources:
         limits:
@@ -95,7 +95,7 @@ services:
       dockerfile: packages/api/Dockerfile
       args:
         NODE_ENV: ${NODE_ENV:-development}
-    container_name: hris-api
+    container_name: staffora-api
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-development}
@@ -106,6 +106,7 @@ services:
       CSRF_SECRET: ${CSRF_SECRET:-dev_csrf_secret_32chars_min}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev_better_auth_secret_32chars}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      BETTER_AUTH_API_KEY: ${BETTER_AUTH_API_KEY:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
@@ -124,7 +125,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - hris-network
+      - staffora-network
     deploy:
       resources:
         limits:
@@ -148,7 +149,7 @@ services:
       dockerfile: packages/api/Dockerfile
       args:
         NODE_ENV: ${NODE_ENV:-development}
-    container_name: hris-worker
+    container_name: staffora-worker
     restart: unless-stopped
     command: ["bun", "run", "src/worker.ts"]
     environment:
@@ -163,7 +164,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-noreply@hris.local}
+      SMTP_FROM: ${SMTP_FROM:-noreply@staffora.co.uk}
       # Storage configuration for export worker
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
       STORAGE_PATH: ${STORAGE_PATH:-/app/uploads}
@@ -183,7 +184,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - hris-network
+      - staffora-network
     volumes:
       - worker_uploads:/app/uploads
     deploy:
@@ -210,18 +211,18 @@ services:
       args:
         NODE_ENV: ${NODE_ENV:-development}
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
-    container_name: hris-web
+    container_name: staffora-web
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
-      INTERNAL_API_URL: http://hris-api:3000
+      INTERNAL_API_URL: http://staffora-api:3000
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
       - api
     networks:
-      - hris-network
+      - staffora-network
     deploy:
       resources:
         limits:
@@ -243,7 +244,7 @@ services:
   # Nginx reverse proxy for production
   nginx:
     image: nginx:alpine
-    container_name: hris-nginx
+    container_name: staffora-nginx
     restart: unless-stopped
     profiles:
       - production
@@ -257,7 +258,7 @@ services:
       - api
       - web
     networks:
-      - hris-network
+      - staffora-network
     deploy:
       resources:
         limits:
@@ -284,7 +285,7 @@ volumes:
 # Networks
 # =============================================================================
 networks:
-  hris-network:
+  staffora-network:
     driver: bridge
     ipam:
       driver: default

@@ -50,7 +50,7 @@ export function loadWorkerConfig(): WorkerConfig {
   const workerId = process.env["WORKER_ID"] || `worker-${process.pid}`;
   return {
     redisUrl: process.env["REDIS_URL"] || "redis://localhost:6379",
-    consumerGroup: process.env["WORKER_GROUP"] || "hris-workers",
+    consumerGroup: process.env["WORKER_GROUP"] || "staffora-workers",
     consumerId: workerId,
     concurrency: Number(process.env["WORKER_CONCURRENCY"]) || 5,
     pollIntervalMs: Number(process.env["WORKER_POLL_INTERVAL"]) || 1000,
@@ -690,21 +690,21 @@ export class BaseWorker {
 // =============================================================================
 
 /**
- * Standard stream keys for the HRIS platform
+ * Standard stream keys for the Staffora platform
  */
 export const StreamKeys = {
   /** Domain events from the outbox */
-  DOMAIN_EVENTS: "hris:events:domain",
+  DOMAIN_EVENTS: "staffora:events:domain",
   /** Notification jobs */
-  NOTIFICATIONS: "hris:jobs:notifications",
+  NOTIFICATIONS: "staffora:jobs:notifications",
   /** Export jobs */
-  EXPORTS: "hris:jobs:exports",
+  EXPORTS: "staffora:jobs:exports",
   /** PDF generation jobs */
-  PDF_GENERATION: "hris:jobs:pdf",
+  PDF_GENERATION: "staffora:jobs:pdf",
   /** Analytics processing jobs */
-  ANALYTICS: "hris:jobs:analytics",
+  ANALYTICS: "staffora:jobs:analytics",
   /** General background jobs */
-  BACKGROUND: "hris:jobs:background",
+  BACKGROUND: "staffora:jobs:background",
 } as const;
 
 // =============================================================================

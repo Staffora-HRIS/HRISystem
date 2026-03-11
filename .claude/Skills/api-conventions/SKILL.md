@@ -1,6 +1,6 @@
 ---
 name: api-conventions
-description: Follow HRIS API conventions. Use when designing API endpoints, error handling, pagination, or TypeBox schemas.
+description: Follow Staffora API conventions. Use when designing API endpoints, error handling, pagination, or TypeBox schemas.
 ---
 
 # API Conventions
@@ -42,7 +42,7 @@ GET /api/v1/hr/employees?cursor=eyJpZCI6...&limit=20
 
 ## Error Codes
 ```typescript
-import { ErrorCodes } from '@hris/shared/errors';
+import { ErrorCodes } from '@staffora/shared/errors';
 ErrorCodes.HR.EMPLOYEE_NOT_FOUND
 ErrorCodes.TIME.TIMESHEET_ALREADY_SUBMITTED
 ```

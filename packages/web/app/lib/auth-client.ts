@@ -10,7 +10,8 @@
  */
 
 import { createAuthClient } from "better-auth/react";
-import { twoFactorClient } from "better-auth/client/plugins";
+import { twoFactorClient, organizationClient } from "better-auth/client/plugins";
+import { sentinelClient } from "@better-auth/infra/client";
 
 /**
  * Get the API base URL from environment or default
@@ -44,7 +45,7 @@ export function getBaseURL(): string {
  */
 export const authClient = createAuthClient({
   baseURL: getBaseURL(),
-  plugins: [twoFactorClient()],
+  plugins: [twoFactorClient(), sentinelClient(), organizationClient()],
   // Ensure credentials are sent with cross-origin requests
   fetchOptions: {
     credentials: "include" as RequestCredentials,

@@ -10,6 +10,7 @@ import {
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Competency {
@@ -48,6 +49,7 @@ const categoryLabels: Record<string, string> = {
 
 export default function CompetenciesPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
 
@@ -77,7 +79,7 @@ export default function CompetenciesPage() {
             Manage your organization's competency framework
           </p>
         </div>
-        <Button onClick={() => alert("Create competency modal")}>
+        <Button onClick={() => toast.info("Coming Soon", { message: "Competency creation will be available in a future update." })}>
           <Plus className="h-4 w-4 mr-2" />
           Add Competency
         </Button>
@@ -162,7 +164,7 @@ export default function CompetenciesPage() {
                 <div
                   key={competency.id}
                   className="p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => alert(`View competency: ${competency.name}`)}
+                  onClick={() => toast.info("Coming Soon", { message: "Competency detail view will be available in a future update." })}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

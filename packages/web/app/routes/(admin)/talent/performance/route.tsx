@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Plus, Target, Calendar, Users, BarChart, Clock } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface PerformanceCycle {
@@ -30,7 +31,30 @@ interface ReviewCyclesResponse {
 
 export default function PerformanceManagementPage() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCycle, setNewCycle] = useState({
+    name: "",
+    description: "",
+    periodStart: "",
+    periodEnd: "",
+    selfReviewDeadline: "",
+    managerReviewDeadline: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof newCycle) => api.post("/talent/review-cycles", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-performance-cycles"] });
+      setShowCreateModal(false);
+      setNewCycle({ name: "", description: "", periodStart: "", periodEnd: "", selfReviewDeadline: "", managerReviewDeadline: "" });
+      toast.success("Performance cycle created");
+    },
+    onError: () => {
+      toast.error("Failed to create performance cycle");
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-performance-cycles"],
@@ -131,11 +155,11 @@ export default function PerformanceManagementPage() {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="flex-1">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Performance dashboard will be available in a future update." })}>
                             <BarChart className="h-4 w-4 mr-1" />
                             Dashboard
                           </Button>
-                          <Button variant="outline" size="sm" className="flex-1">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Performance reviews will be available in a future update." })}>
                             <Users className="h-4 w-4 mr-1" />
                             Reviews
                           </Button>
@@ -174,7 +198,7 @@ export default function PerformanceManagementPage() {
                           </td>
                           <td className="px-6 py-4">{getStatusBadge(cycle.status)}</td>
                           <td className="px-6 py-4 text-right">
-                            <Button variant="outline" size="sm">View</Button>
+                            <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Cycle details view will be available in a future update." })}>View</Button>
                           </td>
                         </tr>
                       ))}
@@ -186,21 +210,83 @@ export default function PerformanceManagementPage() {
         </div>
       )}
 
-      {/* Create Modal Placeholder */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md">
+          <Card className="w-full max-w-lg">
             <CardHeader>
               <h3 className="font-semibold">Create Performance Cycle</h3>
             </CardHeader>
             <CardBody className="space-y-4">
-              <p className="text-gray-600">Performance cycle creation form would go here.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cycle Name</label>
+                <input
+                  type="text"
+                  value={newCycle.name}
+                  onChange={(e) => setNewCycle({ ...newCycle, name: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Q1 2026 Performance Review"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={newCycle.description}
+                  onChange={(e) => setNewCycle({ ...newCycle, description: e.target.value })}
+                  rows={2}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Quarterly performance review cycle..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Period Start</label>
+                  <input
+                    type="date"
+                    value={newCycle.periodStart}
+                    onChange={(e) => setNewCycle({ ...newCycle, periodStart: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Period End</label>
+                  <input
+                    type="date"
+                    value={newCycle.periodEnd}
+                    onChange={(e) => setNewCycle({ ...newCycle, periodEnd: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Self Review Deadline</label>
+                  <input
+                    type="date"
+                    value={newCycle.selfReviewDeadline}
+                    onChange={(e) => setNewCycle({ ...newCycle, selfReviewDeadline: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Manager Review Deadline</label>
+                  <input
+                    type="date"
+                    value={newCycle.managerReviewDeadline}
+                    onChange={(e) => setNewCycle({ ...newCycle, managerReviewDeadline: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" className="flex-1" onClick={() => setShowCreateModal(false)}>
                   Cancel
                 </Button>
-                <Button className="flex-1" onClick={() => setShowCreateModal(false)}>
-                  Create
+                <Button
+                  className="flex-1"
+                  onClick={() => createMutation.mutate(newCycle)}
+                  disabled={!newCycle.name.trim() || !newCycle.periodStart || !newCycle.periodEnd || !newCycle.selfReviewDeadline || !newCycle.managerReviewDeadline || createMutation.isPending}
+                >
+                  {createMutation.isPending ? "Creating..." : "Create"}
                 </Button>
               </div>
             </CardBody>

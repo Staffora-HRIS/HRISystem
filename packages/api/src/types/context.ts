@@ -13,7 +13,7 @@ import type { User, Session } from "../plugins/auth-better";
 /**
  * Extended context with all plugin-injected properties
  */
-export interface HRISContext {
+export interface StafforaContext {
   db: DatabaseClient;
   cache: CacheClient;
   tenant: Tenant | null;
@@ -25,7 +25,7 @@ export interface HRISContext {
 /**
  * Context for authenticated routes
  */
-export interface AuthenticatedContext extends HRISContext {
+export interface AuthenticatedContext extends StafforaContext {
   tenant: Tenant;
   user: User;
   session: Session;
@@ -34,7 +34,7 @@ export interface AuthenticatedContext extends HRISContext {
 /**
  * Context for tenant-aware routes (may not require auth)
  */
-export interface TenantContext extends HRISContext {
+export interface TenantContext extends StafforaContext {
   tenant: Tenant;
 }
 
@@ -46,4 +46,4 @@ export type RouteHandler<T = unknown> = (ctx: AuthenticatedContext & T) => Promi
 /**
  * Type helper for public route handlers
  */
-export type PublicRouteHandler<T = unknown> = (ctx: HRISContext & T) => Promise<unknown> | unknown;
+export type PublicRouteHandler<T = unknown> = (ctx: StafforaContext & T) => Promise<unknown> | unknown;

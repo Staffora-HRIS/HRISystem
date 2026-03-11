@@ -12,6 +12,7 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/package.json
 COPY packages/web/package.json ./packages/web/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
+COPY Website/package.json ./Website/
 
 # Install dependencies
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -22,7 +23,7 @@ COPY packages/web ./packages/web
 COPY tsconfig.base.json ./
 
 # Build the application
-RUN bun run --filter @hris/web build
+RUN bun run --filter @staffora/web build
 
 # Production stage
 FROM oven/bun:1.1.38-slim AS production

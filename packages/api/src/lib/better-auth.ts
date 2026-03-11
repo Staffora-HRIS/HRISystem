@@ -1,7 +1,7 @@
 /**
  * Better Auth Server Configuration
  *
- * Configures Better Auth with Postgres adapter for the HRIS platform.
+ * Configures Better Auth with Postgres adapter for the Staffora platform.
  * Features:
  * - Session-based authentication with cookies
  * - MFA support (TOTP)
@@ -10,7 +10,8 @@
  */
 
 import { betterAuth } from "better-auth";
-import { twoFactor } from "better-auth/plugins";
+import { twoFactor, organization } from "better-auth/plugins";
+import { dash } from "@better-auth/infra";
 import { APIError } from "better-auth/api";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
@@ -266,7 +267,7 @@ export function createBetterAuth() {
       database: {
         generateId: () => crypto.randomUUID(),
       },
-      cookiePrefix: "hris",
+      cookiePrefix: "staffora",
       useSecureCookies: process.env["NODE_ENV"] === "production",
       defaultCookieAttributes: {
         httpOnly: true,
@@ -306,12 +307,14 @@ export function createBetterAuth() {
     // Plugins
     plugins: [
       twoFactor({
-        issuer: "HRIS Platform",
+        issuer: "Staffora",
         totpOptions: {
           digits: 6,
           period: 30,
         },
       }),
+      dash(),
+      organization(),
     ],
   });
 

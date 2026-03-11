@@ -108,7 +108,7 @@ describe("Tenant + Security endpoints", () => {
       );
     });
 
-    // Authenticate via Better Auth endpoint to obtain hris.* cookies
+    // Authenticate via Better Auth endpoint to obtain staffora.* cookies
     const signIn = await app.handle(
       new Request("http://localhost/api/auth/sign-in/email", {
         method: "POST",
@@ -121,7 +121,7 @@ describe("Tenant + Security endpoints", () => {
 
     sessionCookie = buildCookieHeader(signIn);
     expect(sessionCookie).toBeTruthy();
-    expect(sessionCookie!).toContain("hris.session_token=");
+    expect(sessionCookie!).toContain("staffora.session_token=");
 
     const sessionRes = await app.handle(
       new Request("http://localhost/api/auth/get-session", {

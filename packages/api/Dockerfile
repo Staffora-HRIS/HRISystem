@@ -1,4 +1,4 @@
-# HRIS Platform API Dockerfile
+# Staffora Platform API Dockerfile
 # Multi-stage build for optimal image size
 
 # =============================================================================
@@ -13,6 +13,7 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
+COPY Website/package.json ./Website/
 
 # Install dependencies
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -44,20 +45,20 @@ FROM oven/bun:1.1.38-alpine AS runner
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup --system --gid 1001 hris && \
-    adduser --system --uid 1001 --ingroup hris hris
+RUN addgroup --system --gid 1001 staffora && \
+    adduser --system --uid 1001 --ingroup staffora staffora
 
 # Copy built application
-COPY --from=builder --chown=hris:hris /app/packages/api/dist ./dist
-COPY --from=builder --chown=hris:hris /app/packages/api/src ./src
-COPY --from=builder --chown=hris:hris /app/node_modules ./node_modules
-COPY --from=builder --chown=hris:hris /app/packages/api/package.json ./package.json
+COPY --from=builder --chown=staffora:staffora /app/packages/api/dist ./dist
+COPY --from=builder --chown=staffora:staffora /app/packages/api/src ./src
+COPY --from=builder --chown=staffora:staffora /app/node_modules ./node_modules
+COPY --from=builder --chown=staffora:staffora /app/packages/api/package.json ./package.json
 
 # Install curl for health checks
 RUN apk add --no-cache curl
 
 # Switch to non-root user
-USER hris
+USER staffora
 
 # Expose port
 EXPOSE 3000

@@ -178,7 +178,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600">
             <Users className="h-6 w-6 text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-900 dark:text-white">HRIS</span>
+          <span className="text-lg font-bold text-gray-900 dark:text-white">Staffora</span>
           {/* Mobile close button */}
           <button
             type="button"

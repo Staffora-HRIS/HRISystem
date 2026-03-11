@@ -26,7 +26,7 @@ import {
   validateTransition,
   isTerminalState,
   EmployeeStates,
-} from "@hris/shared";
+} from "@staffora/shared";
 
 describe("State Machine", () => {
   let db: ReturnType<typeof getTestDb> | null = null;

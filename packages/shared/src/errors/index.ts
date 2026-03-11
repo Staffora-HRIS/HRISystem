@@ -1,7 +1,7 @@
 /**
  * Error Module
  *
- * Centralized error handling utilities for the HRIS platform.
+ * Centralized error handling utilities for the Staffora platform.
  * Provides error codes, messages, and helper functions for creating
  * standardized error responses.
  */

@@ -1,7 +1,7 @@
 /**
- * HRIS Platform Plugins
+ * Staffora Platform Plugins
  *
- * This module exports all Elysia plugins for the HRIS platform.
+ * This module exports all Elysia plugins for the Staffora platform.
  * Plugins should be registered in a specific order due to dependencies:
  *
  * 1. errorsPlugin - Error handling and request ID generation
