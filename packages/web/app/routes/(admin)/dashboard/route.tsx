@@ -66,8 +66,8 @@ async function fetchRecentAuditLog(): Promise<AuditLogEntry[]> {
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Admin Dashboard | HRIS Platform" },
-    { name: "description", content: "HRIS Admin Dashboard" },
+    { title: "Admin Dashboard | Staffora" },
+    { name: "description", content: "Staffora Admin Dashboard" },
   ];
 }
 

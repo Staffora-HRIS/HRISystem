@@ -1,7 +1,7 @@
 /**
  * PDF Generation Worker
  *
- * Generates PDF documents for various HRIS use cases:
+ * Generates PDF documents for various Staffora use cases:
  * - LMS Course Completion Certificates
  * - Employment Letters
  * - Case Documentation Bundles
@@ -904,7 +904,7 @@ export class LocalDocumentStorage implements DocumentStorage {
   private baseUrl: string;
 
   constructor() {
-    this.basePath = process.env["PDF_STORAGE_PATH"] || "/tmp/hris-documents";
+    this.basePath = process.env["PDF_STORAGE_PATH"] || "/tmp/staffora-documents";
     this.baseUrl = process.env["PDF_BASE_URL"] || "http://localhost:3000/api/documents";
   }
 

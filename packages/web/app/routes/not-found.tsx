@@ -7,7 +7,7 @@ import { Button } from "../components/ui/button";
 
 export function meta() {
   return [
-    { title: "Page Not Found | HRIS Platform" },
+    { title: "Page Not Found | Staffora" },
     { name: "description", content: "The page you're looking for doesn't exist" },
   ];
 }

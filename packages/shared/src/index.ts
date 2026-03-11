@@ -1,5 +1,5 @@
 /**
- * HRIS Platform Shared Package
+ * Staffora Platform Shared Package
  *
  * This package contains shared types, constants, utilities,
  * schemas, error handling, and state machines used across

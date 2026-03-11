@@ -1,7 +1,7 @@
 /**
  * Shared Type Definitions
  *
- * This file exports all shared types used across the HRIS platform.
+ * This file exports all shared types used across the Staffora platform.
  * Types are organized by module for easy discovery and maintainability.
  */
 

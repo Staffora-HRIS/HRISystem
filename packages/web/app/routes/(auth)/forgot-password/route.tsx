@@ -19,7 +19,7 @@ type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Forgot Password | HRIS Platform" },
+    { title: "Forgot Password | Staffora" },
     { name: "description", content: "Reset your password" },
   ];
 }

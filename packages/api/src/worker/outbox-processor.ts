@@ -18,8 +18,8 @@ const POLL_INTERVAL_MS = 5000;
 const MAX_RETRIES = 5;
 
 // Stream keys for notifications
-const NOTIFICATIONS_STREAM = "hris:notifications";
-const ANALYTICS_STREAM = "hris:analytics";
+const NOTIFICATIONS_STREAM = "staffora:notifications";
+const ANALYTICS_STREAM = "staffora:analytics";
 
 interface OutboxEvent {
   id: string;
@@ -252,8 +252,8 @@ class OutboxProcessor {
         "welcome",
         {
           firstName: empFirstName,
-          companyName: "HRIS Platform",
-          loginUrl: process.env["APP_URL"] || "https://app.hris.local",
+          companyName: "Staffora",
+          loginUrl: process.env["APP_URL"] || "https://app.staffora.co.uk",
         }
       );
     }
@@ -497,7 +497,7 @@ class OutboxProcessor {
             requestType: "Timesheet",
             requesterName: employeeName,
             details: `Period: ${periodStart} - ${periodEnd}`,
-            actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/manager/approvals/timesheets/${timesheetId}`,
+            actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/manager/approvals/timesheets/${timesheetId}`,
           }
         );
       }
@@ -564,7 +564,7 @@ class OutboxProcessor {
         {
           title: "Timesheet Approved",
           message: "Your timesheet has been approved and submitted for processing.",
-          actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/employee/time`,
+          actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/time`,
           actionText: "View Timesheet",
         }
       );
@@ -634,7 +634,7 @@ class OutboxProcessor {
           startDate,
           endDate,
           totalDays,
-          actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/manager/approvals/leave/${requestId}`,
+          actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/manager/approvals/leave/${requestId}`,
         }
       );
     }
@@ -701,7 +701,7 @@ class OutboxProcessor {
         {
           title: "Leave Request Approved",
           message: `Your leave request for ${startDate} - ${endDate} has been approved.`,
-          actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/employee/leave`,
+          actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/leave`,
           actionText: "View Leave Balance",
         }
       );
@@ -754,7 +754,7 @@ class OutboxProcessor {
         {
           title: "Leave Request Declined",
           message,
-          actionUrl: `${process.env["APP_URL"] || "https://app.hris.local"}/employee/leave`,
+          actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/leave`,
           actionText: "View Details",
         }
       );

@@ -1,7 +1,7 @@
 /**
  * Shared Utilities
  *
- * This file exports all shared utility functions used across the HRIS platform.
+ * This file exports all shared utility functions used across the Staffora platform.
  */
 
 // =============================================================================

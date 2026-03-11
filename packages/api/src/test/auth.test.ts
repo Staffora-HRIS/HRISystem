@@ -233,7 +233,7 @@ describe("Existing Auth API (Legacy)", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email: "root@hris.local",
+            email: "root@staffora.co.uk",
             password: "RootPassword123!",
           }),
         })

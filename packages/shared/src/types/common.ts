@@ -1,7 +1,7 @@
 /**
  * Common Types
  *
- * Shared type definitions used across the HRIS platform.
+ * Shared type definitions used across the Staffora platform.
  * These types provide a foundation for consistent data structures.
  */
 

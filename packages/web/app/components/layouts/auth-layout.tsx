@@ -95,7 +95,7 @@ export function AuthLayout({
                   </svg>
                 </div>
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                  HRIS
+                  Staffora
                 </span>
               </Link>
             </div>
@@ -126,7 +126,7 @@ export function AuthLayout({
 
       {/* Footer */}
       <footer className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>&copy; {new Date().getFullYear()} HRIS Platform. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} Staffora. All rights reserved.</p>
       </footer>
     </div>
   );

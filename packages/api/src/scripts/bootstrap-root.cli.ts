@@ -14,7 +14,7 @@ function loadDatabaseUrl(): string {
   return `postgres://${user}:${password}@${host}:${port}/${database}`;
 }
 
-const email = process.env["ROOT_EMAIL"] ?? "root@hris.local";
+const email = process.env["ROOT_EMAIL"] ?? "root@staffora.co.uk";
 const password = process.env["ROOT_PASSWORD"] ?? `${crypto.randomUUID()}-${crypto.randomUUID()}`;
 
 const tenantId = process.env["ROOT_TENANT_ID"];

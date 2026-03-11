@@ -381,6 +381,11 @@ export function errorsPlugin() {
         );
       }
 
+      // Handle auth errors (e.g., from requireAuthContext beforeHandle guard)
+      if (error instanceof AuthError) {
+        set.status = error.statusCode;
+        return createErrorResponse(error.code, error.message, requestId);
+      }
 
       // Handle tenant errors
       if (error instanceof TenantError) {

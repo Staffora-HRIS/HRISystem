@@ -17,8 +17,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
     return "";
   })();
-  const hasSessionToken = cookies.includes("hris.session_token=");
-  const hasSessionData = cookies.includes("hris.session_data=");
+  const hasSessionToken = cookies.includes("staffora.session_token=");
+  const hasSessionData = cookies.includes("staffora.session_data=");
   const hasLegacySession = cookies.includes("session=");
   const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
 

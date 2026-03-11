@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Timesheet {
@@ -47,6 +48,7 @@ const statusColors: Record<string, string> = {
 export default function TimesheetsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
 
@@ -112,7 +114,7 @@ export default function TimesheetsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Timesheets</h1>
           <p className="text-gray-600">Review and approve employee timesheets</p>
         </div>
-        <Button variant="outline" onClick={() => alert("Export timesheets")}>
+        <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Timesheet export will be available in a future update." })}>
           <Download className="h-4 w-4 mr-2" />
           Export
         </Button>

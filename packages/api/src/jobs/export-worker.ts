@@ -174,7 +174,7 @@ export class LocalStorage implements ExportStorage {
   private baseUrl: string;
 
   constructor() {
-    this.basePath = process.env["EXPORT_STORAGE_PATH"] || "/tmp/hris-exports";
+    this.basePath = process.env["EXPORT_STORAGE_PATH"] || "/tmp/staffora-exports";
     this.baseUrl = process.env["EXPORT_BASE_URL"] || "http://localhost:3000/api/exports";
   }
 
@@ -220,7 +220,7 @@ export class S3Storage implements ExportStorage {
   private s3Client: import("@aws-sdk/client-s3").S3Client | null = null;
 
   constructor() {
-    this.bucket = process.env["S3_EXPORT_BUCKET"] || "hris-exports";
+    this.bucket = process.env["S3_EXPORT_BUCKET"] || "staffora-exports";
     this.region = process.env["S3_REGION"] || "us-east-1";
     this.prefix = process.env["S3_EXPORT_PREFIX"] || "exports/";
   }
@@ -441,7 +441,7 @@ async function generateExcel(
   const ExcelJS = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
 
-  workbook.creator = "HRIS Platform";
+  workbook.creator = "Staffora";
   workbook.created = new Date();
   workbook.modified = new Date();
 

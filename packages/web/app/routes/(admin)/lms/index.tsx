@@ -4,6 +4,7 @@ import { BookOpen, Plus, Users, Award } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface Course {
@@ -19,6 +20,8 @@ interface Course {
 }
 
 export default function LmsAdminPage() {
+  const toast = useToast();
+
   const { data, isLoading } = useQuery({
     queryKey: ["admin-courses"],
     queryFn: () => api.get<{ courses: Course[]; count: number }>("/lms/courses"),
@@ -108,7 +111,7 @@ export default function LmsAdminPage() {
                       : "N/A"}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <Button variant="outline" size="sm">Edit</Button>
+                    <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Course editing will be available in a future update." })}>Edit</Button>
                   </td>
                 </tr>
               ))}

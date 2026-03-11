@@ -81,12 +81,12 @@ export interface AuthState {
 }
 
 // =============================================================================
-// Auth API (HRIS-specific endpoints)
+// Auth API (Staffora-specific endpoints)
 // =============================================================================
 
 export const authApi = {
   /**
-   * Get current user with tenants (HRIS-specific)
+   * Get current user with tenants (Staffora-specific)
    */
   async getMe(): Promise<UserWithTenants> {
     return api.get<UserWithTenants>("/auth/me");
@@ -151,7 +151,7 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const { session, user, isAuthenticated, isLoading, error } = useSession();
 
-  // Get user with tenants (HRIS-specific data)
+  // Get user with tenants (Staffora-specific data)
   const {
     data: userData,
     isLoading: isLoadingUser,

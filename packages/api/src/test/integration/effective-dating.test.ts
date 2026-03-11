@@ -25,7 +25,7 @@ import {
   rangesOverlap,
   type DateRange,
   type EffectiveDatedRecord,
-} from "@hris/shared";
+} from "@staffora/shared";
 
 describe("Effective Dating", () => {
   let db: ReturnType<typeof getTestDb> | null = null;

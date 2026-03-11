@@ -23,7 +23,7 @@ set -e
 # Configuration - must match docker-compose.yml and application defaults
 DB_USER="${POSTGRES_USER:-hris}"
 DB_PASSWORD="${POSTGRES_PASSWORD:-hris_dev_password}"
-CONTAINER_NAME="hris-postgres"
+CONTAINER_NAME="staffora-postgres"
 
 echo "============================================="
 echo "PostgreSQL Password Reset Script"

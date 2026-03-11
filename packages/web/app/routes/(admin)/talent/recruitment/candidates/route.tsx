@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
+import { useToast } from "~/components/ui/toast";
 import { Button } from "~/components/ui/button";
 import { api } from "~/lib/api-client";
 
@@ -80,6 +81,7 @@ const sourceLabels: Record<string, string> = {
 
 export default function CandidatesPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const requisitionIdFilter = searchParams.get("requisitionId") || "";
 
@@ -150,7 +152,7 @@ export default function CandidatesPage() {
             {requisitionIdFilter ? "Candidates for this requisition" : "All candidates across requisitions"}
           </p>
         </div>
-        <Button onClick={() => alert("Add candidate modal")}>
+        <Button onClick={() => toast.info("Coming Soon", { message: "Candidate creation will be available in a future update." })}>
           <Plus className="h-4 w-4 mr-2" />
           Add Candidate
         </Button>
@@ -267,7 +269,7 @@ export default function CandidatesPage() {
                 <div
                   key={candidate.id}
                   className="p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => alert(`View candidate: ${candidate.id}`)}
+                  onClick={() => toast.info("Coming Soon", { message: "Candidate detail view will be available in a future update." })}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">

@@ -1,7 +1,7 @@
 /**
  * Shared Constants
  *
- * This file exports all shared constants used across the HRIS platform.
+ * This file exports all shared constants used across the Staffora platform.
  */
 
 // =============================================================================
@@ -106,7 +106,7 @@ export const RateLimits = {
 
 export const SessionConfig = {
   /** Cookie name for session */
-  COOKIE_NAME: "hris_session",
+  COOKIE_NAME: "staffora_session",
 
   /** Session duration in milliseconds: 24 hours */
   DURATION: 24 * 60 * 60 * 1000,
