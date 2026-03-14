@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -124,14 +124,14 @@ export default function BenefitsEnrollmentsPage() {
 
   const enrollments = data?.items ?? [];
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: enrollments.length,
     active: enrollments.filter((e) => e.status === "active").length,
     pending: enrollments.filter((e) => e.status === "pending").length,
     waived: enrollments.filter((e) => e.status === "waived").length,
-  };
+  }), [enrollments]);
 
-  const columns: ColumnDef<BenefitEnrollment>[] = [
+  const columns = useMemo<ColumnDef<BenefitEnrollment>[]>(() => [
     {
       id: "employee",
       header: "Employee",
@@ -240,7 +240,7 @@ export default function BenefitsEnrollmentsPage() {
         </Button>
       ),
     },
-  ];
+  ], [toast]);
 
   return (
     <div className="space-y-6">
