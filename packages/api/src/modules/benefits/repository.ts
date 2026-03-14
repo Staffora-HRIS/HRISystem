@@ -398,23 +398,20 @@ export class BenefitsRepository {
 
     const plan = rows[0]!;
 
-    // Insert plan costs if provided
+    // Insert plan costs if provided (batch insert)
     if (data.costs && data.costs.length > 0) {
-      for (const cost of data.costs) {
-        await tx`
-          INSERT INTO app.benefit_plan_costs (
-            tenant_id, plan_id, coverage_level, employee_cost, employer_cost, effective_from
-          )
-          VALUES (
-            ${context.tenantId}::uuid,
-            ${plan.id}::uuid,
-            ${cost.coverage_level}::app.coverage_level,
-            ${cost.employee_cost},
-            ${cost.employer_cost},
-            ${data.effective_from}::date
-          )
-        `;
-      }
+      await tx`
+        INSERT INTO app.benefit_plan_costs ${tx(
+          data.costs.map(cost => ({
+            tenant_id: context.tenantId,
+            plan_id: plan.id,
+            coverage_level: cost.coverage_level,
+            employee_cost: cost.employee_cost,
+            employer_cost: cost.employer_cost,
+            effective_from: data.effective_from,
+          }))
+        )}
+      `;
     }
 
     return plan;
