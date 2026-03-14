@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
@@ -123,11 +123,11 @@ export default function DocumentTemplatesPage() {
 
   const templates = templatesData?.items ?? [];
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: templates.length,
     active: templates.filter((t) => t.isActive).length,
     inactive: templates.filter((t) => !t.isActive).length,
-  };
+  }), [templates]);
 
   function resetForm() {
     setFormName("");
@@ -157,7 +157,7 @@ export default function DocumentTemplatesPage() {
     }
   }
 
-  const columns: ColumnDef<DocumentTemplate>[] = [
+  const columns = useMemo<ColumnDef<DocumentTemplate>[]>(() => [
     {
       id: "name",
       header: "Name",
@@ -244,7 +244,7 @@ export default function DocumentTemplatesPage() {
         </Button>
       ),
     },
-  ];
+  ], [toast]);
 
   return (
     <div className="space-y-6">

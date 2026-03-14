@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -96,12 +96,12 @@ export default function TimesheetsPage() {
     </span>
   );
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: timesheets.length,
     pending: timesheets.filter((t) => t.status === "submitted").length,
     approved: timesheets.filter((t) => t.status === "approved").length,
     rejected: timesheets.filter((t) => t.status === "rejected").length,
-  };
+  }), [timesheets]);
 
   return (
     <div className="space-y-6">

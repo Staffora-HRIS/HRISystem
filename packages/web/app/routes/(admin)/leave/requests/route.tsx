@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
@@ -143,16 +143,14 @@ export default function AdminLeaveRequestsPage() {
   const requests = requestsData?.items ?? [];
 
   // Calculate stats
-  const totalRequests = requests.length;
-  const pendingRequests = requests.filter((r) => r.status === "pending").length;
-  const approvedRequests = requests.filter(
-    (r) => r.status === "approved"
-  ).length;
-  const rejectedRequests = requests.filter(
-    (r) => r.status === "rejected"
-  ).length;
+  const { totalRequests, pendingRequests, approvedRequests, rejectedRequests } = useMemo(() => ({
+    totalRequests: requests.length,
+    pendingRequests: requests.filter((r) => r.status === "pending").length,
+    approvedRequests: requests.filter((r) => r.status === "approved").length,
+    rejectedRequests: requests.filter((r) => r.status === "rejected").length,
+  }), [requests]);
 
-  const columns: ColumnDef<LeaveRequest>[] = [
+  const columns = useMemo<ColumnDef<LeaveRequest>[]>(() => [
     {
       id: "employee",
       header: "Employee",
@@ -259,7 +257,7 @@ export default function AdminLeaveRequestsPage() {
         );
       },
     },
-  ];
+  ], [setConfirmAction]);
 
   const isActionPending = approveMutation.isPending || rejectMutation.isPending;
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -96,14 +96,14 @@ export default function ActiveOnboardingPage() {
 
   const instances = data?.instances ?? [];
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: instances.length,
     inProgress: instances.filter((i) => i.status === "in_progress").length,
     completed: instances.filter((i) => i.status === "completed").length,
     notStarted: instances.filter((i) => i.status === "not_started").length,
-  };
+  }), [instances]);
 
-  const columns: ColumnDef<OnboardingInstance>[] = [
+  const columns = useMemo<ColumnDef<OnboardingInstance>[]>(() => [
     {
       id: "employee",
       header: "Employee",
@@ -211,7 +211,7 @@ export default function ActiveOnboardingPage() {
         </Button>
       ),
     },
-  ];
+  ], [toast]);
 
   return (
     <div className="space-y-6">
