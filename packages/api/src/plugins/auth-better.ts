@@ -316,6 +316,41 @@ export class AuthService {
 }
 
 /**
+ * Paths that skip session resolution entirely.
+ * Health probes and metrics endpoints do not need authentication,
+ * and resolving a session would add unnecessary Redis/DB latency.
+ */
+const SKIP_AUTH_PATHS = new Set([
+  "/",
+  "/health",
+  "/ready",
+  "/live",
+  "/docs",
+  "/docs/json",
+  "/login",
+]);
+
+/**
+ * Prefix patterns that skip session resolution.
+ * Any path starting with one of these prefixes is skipped.
+ */
+const SKIP_AUTH_PREFIXES = [
+  "/health/",   // /health/ready, /health/detailed, etc.
+  "/api/auth/", // Better Auth endpoints (handled by betterAuthPlugin)
+];
+
+/**
+ * Check whether a request path should skip auth session resolution.
+ */
+function shouldSkipAuth(pathname: string): boolean {
+  if (SKIP_AUTH_PATHS.has(pathname)) return true;
+  for (const prefix of SKIP_AUTH_PREFIXES) {
+    if (pathname.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/**
  * Main auth plugin using Better Auth
  */
 export function authPlugin(options: AuthPluginOptions = {}) {
@@ -332,6 +367,20 @@ export function authPlugin(options: AuthPluginOptions = {}) {
 
       if (!authServiceSingleton) {
         authServiceSingleton = new AuthService(db, cache);
+      }
+
+      // Skip expensive session resolution for health checks, docs, and auth endpoints.
+      // These paths don't need user/session context and should respond as fast as possible.
+      {
+        const pathname = new URL(request.url).pathname;
+        if (shouldSkipAuth(pathname)) {
+          return {
+            user: null,
+            session: null,
+            isAuthenticated: false as const,
+            authService: authServiceSingleton,
+          };
+        }
       }
 
       const isResponseLike = (value: unknown): value is Response => {
