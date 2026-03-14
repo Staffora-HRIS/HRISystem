@@ -165,6 +165,37 @@ export class WorkflowService {
     return this.formatStep(step);
   }
 
+  async bulkProcessSteps(
+    ctx: TenantContext,
+    stepIds: string[],
+    decision: string,
+    comments: string | undefined,
+    processedBy: string
+  ): Promise<{ processed: string[]; failed: Array<{ stepId: string; error: string }> }> {
+    const processed: string[] = [];
+    const failed: Array<{ stepId: string; error: string }> = [];
+
+    for (const stepId of stepIds) {
+      try {
+        const step = await this.repository.processStep(ctx, stepId, {
+          decision,
+          comments,
+          processedBy,
+        });
+
+        if (!step) {
+          failed.push({ stepId, error: "Step not found or not in active state" });
+        } else {
+          processed.push(stepId);
+        }
+      } catch (error: any) {
+        failed.push({ stepId, error: error.message || "Unknown error" });
+      }
+    }
+
+    return { processed, failed };
+  }
+
   async reassignStep(ctx: TenantContext, stepId: string, data: ReassignStep) {
     const step = await this.repository.reassignStep(ctx, stepId, data.newAssigneeId, data.reason);
     if (!step) {

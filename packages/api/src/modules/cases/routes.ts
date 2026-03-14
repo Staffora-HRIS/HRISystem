@@ -23,9 +23,12 @@ const CASES_ERROR_CODES: Record<string, number> = {
   CANNOT_RESOLVE: 409,
   CANNOT_CLOSE: 409,
   INVALID_TRANSITION: 409,
+  INVALID_STATUS: 409,
   CREATE_FAILED: 500,
   UPDATE_FAILED: 500,
   COMMENT_FAILED: 500,
+  APPEAL_FAILED: 500,
+  APPEAL_DECISION_FAILED: 500,
 };
 
 export const casesRoutes = new Elysia({ prefix: "/cases" })
@@ -185,6 +188,89 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     }),
     beforeHandle: [requirePermission("cases", "write")],
     detail: { tags: ["Cases"], summary: "Add case comment" }
+  })
+
+  // ===========================================================================
+  // Appeal Routes
+  // ===========================================================================
+
+  // POST /:id/appeal - File an appeal against a resolved case
+  .post("/:id/appeal", async (ctx) => {
+    const { casesService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await casesService.fileAppeal(tenantContext, params.id, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    set.status = 201;
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: t.Object({
+      reason: t.String({ minLength: 1, maxLength: 5000 }),
+      appealReviewerId: t.Optional(UuidSchema),
+    }),
+    beforeHandle: [requirePermission("cases", "write")],
+    detail: {
+      tags: ["Cases"],
+      summary: "File case appeal",
+      description: "File an appeal against a resolved case. Only the original requester can appeal.",
+    },
+  })
+
+  // GET /:id/appeal - Get the appeal for a case
+  .get("/:id/appeal", async (ctx) => {
+    const { casesService, tenantContext, params, set } = ctx as any;
+
+    const result = await casesService.getAppeal(tenantContext, params.id);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("cases", "read")],
+    detail: {
+      tags: ["Cases"],
+      summary: "Get case appeal",
+      description: "Get the most recent appeal for a case.",
+    },
+  })
+
+  // POST /:id/appeal/decide - Decide an appeal outcome
+  .post("/:id/appeal/decide", async (ctx) => {
+    const { casesService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await casesService.decideAppeal(tenantContext, params.id, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: t.Object({
+      decision: t.Union([
+        t.Literal("upheld"),
+        t.Literal("overturned"),
+        t.Literal("partially_upheld"),
+      ]),
+      outcome: t.String({ minLength: 1, maxLength: 5000 }),
+    }),
+    beforeHandle: [requirePermission("cases", "write")],
+    detail: {
+      tags: ["Cases"],
+      summary: "Decide case appeal",
+      description: "Decide the outcome of a pending appeal. Overturned appeals reopen the case; upheld/partially upheld close it.",
+    },
   })
 
   // My Cases

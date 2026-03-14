@@ -19,6 +19,8 @@ import type {
   PayrollRunRow,
   PayrollLineRow,
   TaxDetailsRow,
+  PayScheduleRow,
+  PayAssignmentRow,
 } from "./repository";
 import type {
   ServiceResult,
@@ -1042,6 +1044,135 @@ export class PayrollService {
         run: this.mapRunToResponse(run),
         line: this.mapLineToResponse(line),
       },
+    };
+  }
+
+  // =========================================================================
+  // Pay Schedules
+  // =========================================================================
+
+  async createPaySchedule(
+    context: TenantContext,
+    data: { name: string; frequency: string; payDayOfWeek?: number | null; payDayOfMonth?: number | null; taxWeekStart?: string | null; isDefault?: boolean }
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const schedule = await this.repository.createPaySchedule(context, data);
+      return { success: true, data: this.mapScheduleToResponse(schedule) };
+    } catch (error: any) {
+      if (error.message?.includes("duplicate key") || error.message?.includes("unique")) {
+        return { success: false, error: { code: ErrorCodes.CONFLICT, message: "A pay schedule with that name already exists" } };
+      }
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create pay schedule" } };
+    }
+  }
+
+  async getPaySchedules(context: TenantContext): Promise<ServiceResult<unknown[]>> {
+    try {
+      const schedules = await this.repository.getPaySchedules(context);
+      return { success: true, data: schedules.map((s) => this.mapScheduleToResponse(s)) };
+    } catch {
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch pay schedules" } };
+    }
+  }
+
+  async getPayScheduleById(context: TenantContext, id: string): Promise<ServiceResult<unknown>> {
+    try {
+      const schedule = await this.repository.getPayScheduleById(context, id);
+      if (!schedule) {
+        return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "Pay schedule not found" } };
+      }
+      return { success: true, data: this.mapScheduleToResponse(schedule) };
+    } catch {
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch pay schedule" } };
+    }
+  }
+
+  async updatePaySchedule(
+    context: TenantContext,
+    id: string,
+    data: Partial<{ name: string; payDayOfWeek: number | null; payDayOfMonth: number | null; taxWeekStart: string | null; isDefault: boolean }>
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const schedule = await this.repository.updatePaySchedule(context, id, data);
+      if (!schedule) {
+        return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "Pay schedule not found" } };
+      }
+      return { success: true, data: this.mapScheduleToResponse(schedule) };
+    } catch {
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update pay schedule" } };
+    }
+  }
+
+  // =========================================================================
+  // Employee Pay Assignments
+  // =========================================================================
+
+  async assignEmployeeToSchedule(
+    context: TenantContext,
+    data: { employeeId: string; payScheduleId: string; effectiveFrom: string; effectiveTo?: string | null }
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const assignment = await this.repository.assignEmployeeToSchedule(context, data);
+      return { success: true, data: this.mapAssignmentToResponse(assignment) };
+    } catch (error: any) {
+      if (error.message?.includes("excl_pay_assignment_overlap")) {
+        return { success: false, error: { code: ErrorCodes.CONFLICT, message: "Overlapping pay schedule assignment for this employee" } };
+      }
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to assign employee to pay schedule" } };
+    }
+  }
+
+  async getEmployeePayAssignments(context: TenantContext, employeeId: string): Promise<ServiceResult<unknown[]>> {
+    try {
+      const assignments = await this.repository.getEmployeePayAssignments(context, employeeId);
+      return { success: true, data: assignments.map((a) => this.mapAssignmentToResponse(a)) };
+    } catch {
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch pay assignments" } };
+    }
+  }
+
+  async getCurrentPayAssignment(context: TenantContext, employeeId: string): Promise<ServiceResult<unknown>> {
+    try {
+      const assignment = await this.repository.getCurrentPayAssignment(context, employeeId);
+      if (!assignment) {
+        return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No current pay schedule assignment found" } };
+      }
+      return { success: true, data: this.mapAssignmentToResponse(assignment) };
+    } catch {
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch current pay assignment" } };
+    }
+  }
+
+  // =========================================================================
+  // Formatters
+  // =========================================================================
+
+  private mapScheduleToResponse(row: PayScheduleRow) {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      name: row.name,
+      frequency: row.frequency,
+      payDayOfWeek: row.payDayOfWeek,
+      payDayOfMonth: row.payDayOfMonth,
+      taxWeekStart: row.taxWeekStart instanceof Date ? row.taxWeekStart.toISOString().split("T")[0] : row.taxWeekStart,
+      isDefault: row.isDefault,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    };
+  }
+
+  private mapAssignmentToResponse(row: PayAssignmentRow) {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      employeeId: row.employeeId,
+      payScheduleId: row.payScheduleId,
+      scheduleName: row.scheduleName ?? null,
+      scheduleFrequency: row.scheduleFrequency ?? null,
+      effectiveFrom: row.effectiveFrom instanceof Date ? row.effectiveFrom.toISOString().split("T")[0] : row.effectiveFrom,
+      effectiveTo: row.effectiveTo instanceof Date ? row.effectiveTo.toISOString().split("T")[0] : row.effectiveTo,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     };
   }
 }

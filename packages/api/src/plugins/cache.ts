@@ -508,13 +508,15 @@ export class CacheClient {
       return null; // Lock is held by someone else
     }
 
-    // Return a release function
+    // Return a release function using atomic Lua compare-and-delete
     return async () => {
-      // Only release if we still own the lock
-      const currentValue = await this.redis.get(lockKey);
-      if (currentValue === lockValue) {
-        await this.redis.del(lockKey);
-      }
+      // Only release if we still own the lock (atomic to prevent race conditions)
+      await this.redis.eval(
+        "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",
+        1,
+        lockKey,
+        lockValue
+      );
     };
   }
 

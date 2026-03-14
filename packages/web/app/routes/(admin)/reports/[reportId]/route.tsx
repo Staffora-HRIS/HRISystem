@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -13,6 +13,9 @@ import {
   BarChart3,
   AlertCircle,
   RefreshCw,
+  Edit3,
+  Copy,
+  Star,
 } from "lucide-react";
 import {
   Card,
@@ -28,6 +31,12 @@ import {
 } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
 import { queryKeys } from "~/lib/query-client";
+import {
+  useDuplicateReport,
+  useAddFavourite,
+  useRemoveFavourite,
+  useExportReport,
+} from "../hooks";
 
 interface ReportDefinition {
   id: string;
@@ -69,8 +78,10 @@ interface ReportExecutionResult {
 export default function AdminReportPage() {
   const params = useParams();
   const reportId = params.reportId ?? "";
+  const navigate = useNavigate();
 
   const [parameters, setParameters] = useState<Record<string, string>>({});
+  const [isFavourited, setIsFavourited] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [hasResults, setHasResults] = useState(false);
   const [reportData, setReportData] = useState<(string | number)[][]>([]);
@@ -89,6 +100,12 @@ export default function AdminReportPage() {
     queryFn: () => api.get<ReportDefinition>(`/api/v1/reports/${reportId}`),
     enabled: !!reportId,
   });
+
+  // Mutations
+  const duplicateReport = useDuplicateReport();
+  const addFavourite = useAddFavourite();
+  const removeFavourite = useRemoveFavourite();
+  const exportReport = useExportReport();
 
   const reportParams = report?.config?.parameters ?? [];
   const configColumns = report?.config?.columns?.map((c) => c.header) ?? [];
@@ -152,25 +169,34 @@ export default function AdminReportPage() {
     }
   };
 
-  const handleExport = (format: "csv" | "excel" | "pdf") => {
-    if (reportData.length === 0) {
-      toast.info("No data to export. Run the report first.");
-      return;
+  const handleExport = async (format: "csv" | "excel" | "pdf") => {
+    const apiFormat = format === "excel" ? "xlsx" : format;
+    try {
+      await exportReport.mutateAsync({
+        id: reportId,
+        format: apiFormat as "csv" | "xlsx" | "pdf",
+      });
+      toast.success(`Report exported as ${format.toUpperCase()}`);
+    } catch {
+      // Fallback to client-side CSV if server export fails
+      if (reportData.length === 0) {
+        toast.info("No data to export. Run the report first.");
+        return;
+      }
+      const headerRow = activeColumns.join(",");
+      const dataRows = reportData.map((row) =>
+        row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")
+      );
+      const csv = [headerRow, ...dataRows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${reportId}-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Exported as CSV (client-side fallback)");
     }
-
-    const headerRow = activeColumns.join(",");
-    const dataRows = reportData.map((row) =>
-      row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")
-    );
-    const csv = [headerRow, ...dataRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${reportId}-${new Date().toISOString().split("T")[0]}.${format === "excel" ? "csv" : format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Report exported as ${format.toUpperCase()}`);
   };
 
   // Loading state for the report definition
@@ -255,7 +281,53 @@ export default function AdminReportPage() {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled title="Scheduling is not yet available">
+          <Link to={`/admin/reports/${reportId}/edit`}>
+            <Button variant="outline" size="sm">
+              <Edit3 className="h-4 w-4 mr-1" />
+              Edit
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={duplicateReport.isPending}
+            onClick={async () => {
+              try {
+                const result = await duplicateReport.mutateAsync(reportId);
+                toast.success("Report duplicated!");
+                if (result?.data?.id) navigate(`/admin/reports/${result.data.id}/edit`);
+              } catch {
+                toast.error("Failed to duplicate report");
+              }
+            }}
+          >
+            <Copy className="h-4 w-4 mr-1" />
+            {duplicateReport.isPending ? "Duplicating..." : "Duplicate"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={addFavourite.isPending || removeFavourite.isPending}
+            onClick={async () => {
+              try {
+                if (isFavourited) {
+                  await removeFavourite.mutateAsync(reportId);
+                  setIsFavourited(false);
+                  toast.success("Removed from favourites");
+                } else {
+                  await addFavourite.mutateAsync(reportId);
+                  setIsFavourited(true);
+                  toast.success("Added to favourites");
+                }
+              } catch {
+                toast.error("Failed to update favourite");
+              }
+            }}
+          >
+            <Star className={`h-4 w-4 mr-1 ${isFavourited ? "fill-yellow-400 text-yellow-500" : ""}`} />
+            {isFavourited ? "Unfavourite" : "Favourite"}
+          </Button>
+          <Button variant="outline" size="sm" disabled title="Coming soon">
             <Calendar className="h-4 w-4 mr-1" />
             Schedule
           </Button>

@@ -168,19 +168,18 @@ export class BankDetailRepository {
     effectiveTo: string | null,
     excludeId?: string
   ): Promise<boolean> {
-    const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM employee_bank_details
-        WHERE employee_id = ${employeeId}::uuid
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || "9999-12-31"}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+    return await this.db.withTransaction(context, async (tx) => {
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM employee_bank_details
+          WHERE employee_id = ${employeeId}::uuid
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || "9999-12-31"}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
-      return rows;
+      return rows[0]?.exists === true;
     });
-
-    return parseInt(result[0]?.count || "0", 10) > 0;
   }
 
   /**

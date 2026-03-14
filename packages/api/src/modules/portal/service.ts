@@ -162,6 +162,48 @@ export class PortalService {
   }
 
   // ===========================================================================
+  // Employee Directory
+  // ===========================================================================
+
+  async searchDirectory(
+    ctx: TenantContext,
+    filters: { search?: string; departmentId?: string; locationId?: string },
+    pagination: { cursor?: string; limit?: number }
+  ) {
+    const result = await this.repository.searchEmployeeDirectory(ctx, filters, pagination);
+
+    return {
+      employees: result.items.map((e: any) => ({
+        id: e.id,
+        employeeNumber: e.employeeNumber ?? e.employee_number,
+        firstName: e.firstName ?? e.first_name,
+        lastName: e.lastName ?? e.last_name,
+        preferredName: e.preferredName ?? e.preferred_name ?? null,
+        positionTitle: e.positionTitle ?? e.position_title ?? null,
+        departmentId: e.departmentId ?? e.department_id ?? null,
+        departmentName: e.departmentName ?? e.department_name ?? null,
+        workEmail: e.workEmail ?? e.work_email ?? null,
+        workPhone: e.workPhone ?? e.work_phone ?? null,
+        startDate: e.startDate ?? e.start_date ?? null,
+      })),
+      nextCursor: result.nextCursor,
+      hasMore: result.hasMore,
+    };
+  }
+
+  async getDepartments(ctx: TenantContext) {
+    const departments = await this.repository.getDepartmentList(ctx);
+
+    return {
+      departments: departments.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        employeeCount: d.employeeCount ?? d.employee_count ?? 0,
+      })),
+    };
+  }
+
+  // ===========================================================================
   // Portal Access & Navigation
   // ===========================================================================
 

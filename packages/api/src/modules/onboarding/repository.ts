@@ -110,7 +110,10 @@ export class OnboardingRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: any) => {
         return tx`
-          SELECT * FROM app.onboarding_template_tasks
+          SELECT
+            id, template_id, name, description, task_type, assignee_type,
+            assignee_id, due_days_offset, is_required, "order", created_at, updated_at
+          FROM app.onboarding_template_tasks
           WHERE template_id = ${id}::uuid
           ORDER BY "order" ASC, created_at ASC
         `;

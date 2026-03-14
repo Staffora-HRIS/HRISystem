@@ -132,9 +132,44 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
         // Auth routes still fall through to generic rate limiting below
       }
 
+      // Unauthenticated endpoint rate limiting — stricter IP-only limits
+      // when there is no authenticated user, to prevent anonymous abuse
+      const userId = (ctx as any).user?.id;
+      if (!userId) {
+        const unauthKey = `unauth:rate_limit:${ip}:${request.method}:${path}`;
+        const unauthMaxRequests = Math.min(maxRequests, 30); // stricter cap for unauthenticated
+        const unauthWindowSeconds = Math.max(windowSeconds, 60);
+        try {
+          const { count, exceeded } = await cache.incrementRateLimit(
+            unauthKey,
+            unauthWindowSeconds,
+            unauthMaxRequests
+          );
+
+          set.headers["X-RateLimit-Limit"] = String(unauthMaxRequests);
+          set.headers["X-RateLimit-Remaining"] = String(
+            Math.max(0, unauthMaxRequests - count)
+          );
+          set.headers["X-RateLimit-Window"] = String(unauthWindowSeconds);
+
+          if (exceeded) {
+            set.status = 429;
+            set.headers["Retry-After"] = String(unauthWindowSeconds);
+            return createErrorResponse(
+              ErrorCodes.TOO_MANY_REQUESTS,
+              "Rate limit exceeded",
+              safeRequestId,
+              { maxRequests: unauthMaxRequests, windowMs: unauthWindowSeconds * 1000 }
+            );
+          }
+        } catch (error) {
+          console.warn("[RateLimit] Failed to apply unauthenticated rate limiting", error);
+        }
+        return; // Skip generic rate limiting for unauthenticated requests
+      }
+
       // Generic rate limiting — use only validated tenant context, never the raw header
       const tenantId = (ctx as any).tenantId ?? "public";
-      const userId = (ctx as any).user?.id ?? `ip:${ip}`;
       const endpoint = `${request.method}:${path}`;
       const key = CacheKeys.rateLimit(tenantId, userId, endpoint);
 

@@ -78,6 +78,7 @@ export default function AdminLeaveTypesPage() {
 
   const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateLeaveTypeForm>(initialFormState);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -99,6 +100,24 @@ export default function AdminLeaveTypesPage() {
     },
     onError: () => {
       toast.error("Failed to create leave type", {
+        message: "Please try again or check your input.",
+      });
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put(`/absence/leave-types/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-leave-types"] });
+      toast.success("Leave type updated successfully");
+      setShowCreateModal(false);
+      setEditingId(null);
+      setFormData(initialFormState);
+    },
+    onError: () => {
+      toast.error("Failed to update leave type", {
         message: "Please try again or check your input.",
       });
     },
@@ -136,12 +155,12 @@ export default function AdminLeaveTypesPage() {
   const activeTypes = leaveTypes.filter((t) => t.isActive).length;
   const inactiveTypes = leaveTypes.filter((t) => !t.isActive).length;
 
-  const handleCreateSubmit = () => {
+  const handleFormSubmit = () => {
     if (!formData.name.trim() || !formData.code.trim()) {
       toast.warning("Please fill in required fields");
       return;
     }
-    createMutation.mutate({
+    const payload = {
       name: formData.name.trim(),
       code: formData.code.trim(),
       description: formData.description.trim() || undefined,
@@ -155,7 +174,29 @@ export default function AdminLeaveTypesPage() {
         ? Number(formData.minNoticeDays)
         : 0,
       color: formData.color || undefined,
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const handleEditClick = (leaveType: LeaveType) => {
+    setEditingId(leaveType.id);
+    setFormData({
+      name: leaveType.name,
+      code: leaveType.code,
+      description: leaveType.description ?? "",
+      isPaid: leaveType.isPaid,
+      requiresApproval: leaveType.requiresApproval,
+      requiresAttachment: leaveType.requiresAttachment,
+      maxConsecutiveDays: leaveType.maxConsecutiveDays != null ? String(leaveType.maxConsecutiveDays) : "",
+      minNoticeDays: String(leaveType.minNoticeDays),
+      color: leaveType.color ?? "#3B82F6",
     });
+    setShowCreateModal(true);
   };
 
   const columns: ColumnDef<LeaveType>[] = [
@@ -237,9 +278,7 @@ export default function AdminLeaveTypesPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              toast.info("Coming Soon", {
-                message: "Leave type editing will be available in a future update.",
-              });
+              handleEditClick(row);
             }}
             aria-label={`Edit ${row.name}`}
           >
@@ -368,12 +407,13 @@ export default function AdminLeaveTypesPage() {
           open
           onClose={() => {
             setShowCreateModal(false);
+            setEditingId(null);
             setFormData(initialFormState);
           }}
           size="lg"
         >
           <ModalHeader>
-            <h3 className="text-lg font-semibold">Add Leave Type</h3>
+            <h3 className="text-lg font-semibold">{editingId ? "Edit Leave Type" : "Add Leave Type"}</h3>
           </ModalHeader>
           <ModalBody>
             <div className="space-y-4">
@@ -477,20 +517,24 @@ export default function AdminLeaveTypesPage() {
               variant="outline"
               onClick={() => {
                 setShowCreateModal(false);
+                setEditingId(null);
                 setFormData(initialFormState);
               }}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateSubmit}
+              onClick={handleFormSubmit}
               disabled={
                 !formData.name.trim() ||
                 !formData.code.trim() ||
-                createMutation.isPending
+                createMutation.isPending ||
+                updateMutation.isPending
               }
             >
-              {createMutation.isPending ? "Creating..." : "Add Leave Type"}
+              {(createMutation.isPending || updateMutation.isPending)
+                ? (editingId ? "Saving..." : "Creating...")
+                : (editingId ? "Save Changes" : "Add Leave Type")}
             </Button>
           </ModalFooter>
         </Modal>

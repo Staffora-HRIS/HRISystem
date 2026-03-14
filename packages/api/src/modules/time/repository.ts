@@ -197,7 +197,11 @@ export class TimeRepository {
 
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<TimeEventRow[]>`
-        SELECT * FROM app.time_events
+        SELECT
+          id, tenant_id, employee_id, event_type, event_time, recorded_time,
+          device_id, latitude, longitude, ip_address, user_agent,
+          is_manual, manual_reason, approved_by, approved_at, session_id, created_at
+        FROM app.time_events
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
         ${filters.eventType ? tx`AND event_type = ${filters.eventType}` : tx``}
@@ -220,7 +224,11 @@ export class TimeRepository {
   async getTimeEventById(ctx: TenantContext, id: string): Promise<TimeEventRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<TimeEventRow[]>`
-        SELECT * FROM app.time_events
+        SELECT
+          id, tenant_id, employee_id, event_type, event_time, recorded_time,
+          device_id, latitude, longitude, ip_address, user_agent,
+          is_manual, manual_reason, approved_by, approved_at, session_id, created_at
+        FROM app.time_events
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -273,7 +281,10 @@ export class TimeRepository {
 
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<ScheduleRow[]>`
-        SELECT * FROM app.schedules
+        SELECT
+          id, tenant_id, name, description, start_date, end_date,
+          org_unit_id, is_template, status, created_at, updated_at
+        FROM app.schedules
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.orgUnitId ? tx`AND org_unit_id = ${filters.orgUnitId}::uuid` : tx``}
         ${filters.isTemplate !== undefined ? tx`AND is_template = ${filters.isTemplate}` : tx``}
@@ -293,7 +304,10 @@ export class TimeRepository {
   async getScheduleById(ctx: TenantContext, id: string): Promise<ScheduleRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<ScheduleRow[]>`
-        SELECT * FROM app.schedules
+        SELECT
+          id, tenant_id, name, description, start_date, end_date,
+          org_unit_id, is_template, status, created_at, updated_at
+        FROM app.schedules
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -379,7 +393,10 @@ export class TimeRepository {
   async getShiftById(ctx: TenantContext, id: string): Promise<ShiftRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<ShiftRow[]>`
-        SELECT * FROM app.shifts
+        SELECT
+          id, tenant_id, schedule_id, name, start_time, end_time,
+          break_minutes, is_overnight, color, min_staff, max_staff, metadata, created_at, updated_at
+        FROM app.shifts
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -392,7 +409,10 @@ export class TimeRepository {
   ): Promise<ShiftRow[]> {
     return this.db.withTransaction(ctx, async (tx) => {
       const rows = await tx<ShiftRow[]>`
-        SELECT * FROM app.shifts
+        SELECT
+          id, tenant_id, schedule_id, name, start_time, end_time,
+          break_minutes, is_overnight, color, min_staff, max_staff, metadata, created_at, updated_at
+        FROM app.shifts
         WHERE tenant_id = ${ctx.tenantId}::uuid
           AND schedule_id = ${scheduleId}::uuid
         ORDER BY start_time
@@ -482,7 +502,10 @@ export class TimeRepository {
 
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<TimesheetRow[]>`
-        SELECT * FROM app.timesheets
+        SELECT
+          id, tenant_id, employee_id, period_start, period_end, status,
+          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by_id, created_at, updated_at
+        FROM app.timesheets
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
         ${filters.status ? tx`AND status = ${filters.status}` : tx``}
@@ -504,7 +527,10 @@ export class TimeRepository {
   async getTimesheetById(ctx: TenantContext, id: string): Promise<TimesheetRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return tx<TimesheetRow[]>`
-        SELECT * FROM app.timesheets
+        SELECT
+          id, tenant_id, employee_id, period_start, period_end, status,
+          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by_id, created_at, updated_at
+        FROM app.timesheets
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -514,7 +540,10 @@ export class TimeRepository {
   async getTimesheetLines(ctx: TenantContext, timesheetId: string): Promise<TimesheetLineRow[]> {
     return this.db.withTransaction(ctx, async (tx) => {
       const rows = await tx<TimesheetLineRow[]>`
-        SELECT * FROM app.timesheet_lines
+        SELECT
+          id, timesheet_id, date, regular_hours, overtime_hours,
+          break_minutes, project_id, task_code, notes
+        FROM app.timesheet_lines
         WHERE timesheet_id = ${timesheetId}::uuid
         ORDER BY date
       `;

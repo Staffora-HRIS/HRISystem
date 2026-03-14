@@ -169,12 +169,8 @@ async function startOutboxPoller(): Promise<void> {
   // Ensure cache is connected
   await cache.connect();
 
-  // Create a Redis client for the outbox poller
-  const Redis = (await import("ioredis")).default;
-  const redis = new Redis(config.redisUrl, {
-    maxRetriesPerRequest: 3,
-    lazyConnect: false,
-  });
+  // Reuse the singleton CacheClient's underlying Redis connection
+  const redis = cache.client;
 
   outboxPoller = await startOutboxPolling(
     { db, cache, redis },
