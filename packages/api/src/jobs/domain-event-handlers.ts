@@ -229,6 +229,31 @@ async function handleEmployeeStatusChanged(
       `;
     });
 
+    // Terminate active benefit enrollments
+    await ctx.db.withSystemContext(async (tx) => {
+      const terminated = await tx<Array<{ id: string; plan_name: string }>>`
+        UPDATE app.benefit_enrollments be
+        SET
+          status = 'terminated'::app.enrollment_status,
+          effective_to = CURRENT_DATE,
+          updated_at = now()
+        FROM app.benefit_plans bp
+        WHERE be.plan_id = bp.id
+          AND be.employee_id = ${employeeId}::uuid
+          AND be.tenant_id = ${event.tenantId}::uuid
+          AND be.status = 'active'::app.enrollment_status
+        RETURNING be.id, bp.name as plan_name
+      `;
+
+      if (terminated.length > 0) {
+        ctx.log.info("Terminated active benefit enrollments on employee termination", {
+          employeeId,
+          enrollmentsTerminated: terminated.length,
+          plans: terminated.map((e) => e.plan_name),
+        });
+      }
+    });
+
     // Notify HR department
     await ctx.redis.xadd(
       StreamKeys.NOTIFICATIONS,

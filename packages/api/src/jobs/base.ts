@@ -404,9 +404,12 @@ export class BaseWorker {
 
       // Acknowledge success
       await this.redis.xack(streamKey, this.config.consumerGroup, messageId);
-      // Trim stream to prevent unbounded growth (approximate, keeps ~100k entries)
-      await this.redis.xtrim(streamKey, "MAXLEN", "~", 100000);
       this.processedJobs++;
+
+      // Trim stream periodically (every 100 jobs) instead of on every job
+      if (this.processedJobs % 100 === 0) {
+        await this.redis.xtrim(streamKey, "MAXLEN", "~", 100000);
+      }
 
       const duration = Date.now() - startTime;
       log.info(`Job completed successfully`, { durationMs: duration });
@@ -440,8 +443,6 @@ export class BaseWorker {
 
       // Always acknowledge to prevent infinite loop
       await this.redis.xack(streamKey, this.config.consumerGroup, messageId);
-      // Trim stream to prevent unbounded growth (approximate, keeps ~100k entries)
-      await this.redis.xtrim(streamKey, "MAXLEN", "~", 100000);
     } finally {
       this.activeJobs--;
     }

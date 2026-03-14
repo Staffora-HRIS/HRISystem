@@ -358,13 +358,14 @@ export class DataErasureRepository {
     tx: TransactionSql,
     employeeId: string
   ): Promise<boolean> {
-    const [row] = await tx<{ count: number }[]>`
-      SELECT COUNT(*)::int AS count
-      FROM erasure_requests
-      WHERE employee_id = ${employeeId}::uuid
-        AND status NOT IN ('completed', 'rejected', 'partially_completed')
+    const [row] = await tx<{ exists: boolean }[]>`
+      SELECT EXISTS(
+        SELECT 1 FROM erasure_requests
+        WHERE employee_id = ${employeeId}::uuid
+          AND status NOT IN ('completed', 'rejected', 'partially_completed')
+      ) as exists
     `;
-    return (row?.count ?? 0) > 0;
+    return row?.exists === true;
   }
 
   // ===========================================================================

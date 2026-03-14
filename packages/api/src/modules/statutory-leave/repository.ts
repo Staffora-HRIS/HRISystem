@@ -531,7 +531,11 @@ export class StatutoryLeaveRepository {
   ): Promise<StatutoryLeaveRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<StatutoryLeaveRow[]>`
-        SELECT *
+        SELECT
+          id, tenant_id, employee_id, leave_type, expected_date, actual_date,
+          start_date, end_date, total_weeks, matb1_received, matb1_date,
+          partner_employee_id, curtailment_date, status,
+          average_weekly_earnings, notes, created_by, created_at, updated_at
         FROM app.statutory_leave_records
         WHERE employee_id = ${employeeId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid

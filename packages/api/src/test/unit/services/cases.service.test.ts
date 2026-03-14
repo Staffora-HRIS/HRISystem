@@ -20,14 +20,15 @@ import { describe, it, expect } from "bun:test";
 // Extracted Business Logic (from modules/cases/service.ts)
 // =============================================================================
 
-type CaseStatus = "open" | "in_progress" | "pending_info" | "escalated" | "resolved" | "closed" | "cancelled";
+type CaseStatus = "open" | "in_progress" | "pending_info" | "escalated" | "resolved" | "appealed" | "closed" | "cancelled";
 
 const VALID_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
   open: ["in_progress", "pending_info", "escalated", "resolved", "cancelled"],
   in_progress: ["pending_info", "escalated", "resolved", "cancelled"],
   pending_info: ["in_progress", "escalated", "resolved", "cancelled"],
   escalated: ["in_progress", "resolved", "cancelled"],
-  resolved: ["closed", "in_progress"], // Can reopen
+  resolved: ["closed", "in_progress", "appealed"], // Can reopen or appeal
+  appealed: ["in_progress", "resolved", "closed"], // Appeal review can reopen, uphold, or close
   closed: [], // Terminal state
   cancelled: [], // Terminal state
 };
@@ -510,6 +511,132 @@ describe("CasesService", () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe("CASE_CLOSED");
+    });
+
+    it("should allow comments on appealed case", () => {
+      const result = canAddComment("appealed");
+      expect(result.success).toBe(true);
+    });
+  });
+
+  // ===========================================================================
+  // Appeal Process Tests
+  // ===========================================================================
+
+  describe("Appeal Process", () => {
+    describe("filing appeals", () => {
+      it("should allow appealing a resolved case", () => {
+        const result = validateStatusTransition("resolved", "appealed");
+        expect(result.success).toBe(true);
+      });
+
+      it("should not allow appealing an open case", () => {
+        const result = validateStatusTransition("open", "appealed");
+        expect(result.success).toBe(false);
+      });
+
+      it("should not allow appealing an in_progress case", () => {
+        const result = validateStatusTransition("in_progress", "appealed");
+        expect(result.success).toBe(false);
+      });
+
+      it("should not allow appealing a closed case", () => {
+        const result = validateStatusTransition("closed", "appealed");
+        expect(result.success).toBe(false);
+      });
+
+      it("should not allow appealing a cancelled case", () => {
+        const result = validateStatusTransition("cancelled", "appealed");
+        expect(result.success).toBe(false);
+      });
+
+      it("should not allow appealing an already appealed case", () => {
+        const result = validateStatusTransition("appealed", "appealed");
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe("appeal decisions", () => {
+      it("should allow transitioning appealed case to in_progress (overturned)", () => {
+        const result = validateStatusTransition("appealed", "in_progress");
+        expect(result.success).toBe(true);
+      });
+
+      it("should allow transitioning appealed case to resolved (upheld)", () => {
+        const result = validateStatusTransition("appealed", "resolved");
+        expect(result.success).toBe(true);
+      });
+
+      it("should allow transitioning appealed case to closed (final)", () => {
+        const result = validateStatusTransition("appealed", "closed");
+        expect(result.success).toBe(true);
+      });
+
+      it("should not allow transitioning appealed case to cancelled", () => {
+        const result = validateStatusTransition("appealed", "cancelled");
+        expect(result.success).toBe(false);
+      });
+
+      it("should not allow transitioning appealed case to escalated", () => {
+        const result = validateStatusTransition("appealed", "escalated");
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe("appeal requester validation", () => {
+      const REQUESTER_ID = "user-requester-001";
+      const OTHER_USER_ID = "user-other-002";
+
+      function canFileAppeal(caseStatus: CaseStatus, requesterId: string, currentUserId: string): ServiceResult<any> {
+        if (caseStatus !== "resolved") {
+          return { success: false, error: { code: "INVALID_STATUS", message: "Only resolved cases can be appealed" } };
+        }
+        if (requesterId !== currentUserId) {
+          return { success: false, error: { code: "FORBIDDEN", message: "Only the case requester can file an appeal" } };
+        }
+        return { success: true, data: { appealId: "test" } };
+      }
+
+      it("should allow requester to appeal their own resolved case", () => {
+        const result = canFileAppeal("resolved", REQUESTER_ID, REQUESTER_ID);
+        expect(result.success).toBe(true);
+      });
+
+      it("should reject non-requester from appealing", () => {
+        const result = canFileAppeal("resolved", REQUESTER_ID, OTHER_USER_ID);
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe("FORBIDDEN");
+      });
+
+      it("should reject appealing a non-resolved case even by requester", () => {
+        const result = canFileAppeal("open", REQUESTER_ID, REQUESTER_ID);
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe("INVALID_STATUS");
+      });
+
+      it("should reject appealing closed case even by requester", () => {
+        const result = canFileAppeal("closed", REQUESTER_ID, REQUESTER_ID);
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe("INVALID_STATUS");
+      });
+    });
+
+    describe("appeal decision outcome mapping", () => {
+      function getNewCaseStatus(decision: "upheld" | "overturned" | "partially_upheld"): CaseStatus {
+        return decision === "overturned" ? "in_progress" : "closed";
+      }
+
+      it("should reopen case when appeal is overturned", () => {
+        expect(getNewCaseStatus("overturned")).toBe("in_progress");
+      });
+
+      it("should close case when appeal is upheld", () => {
+        expect(getNewCaseStatus("upheld")).toBe("closed");
+      });
+
+      it("should close case when appeal is partially upheld", () => {
+        expect(getNewCaseStatus("partially_upheld")).toBe("closed");
+      });
     });
   });
 });

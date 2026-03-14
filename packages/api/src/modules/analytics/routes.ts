@@ -16,6 +16,8 @@ import {
   AttendanceFiltersSchema,
   LeaveFiltersSchema,
   RecruitmentFiltersSchema,
+  DiversityFiltersSchema,
+  CompensationFiltersSchema,
   HeadcountSummarySchema,
   HeadcountByDepartmentSchema,
   HeadcountTrendSchema,
@@ -26,6 +28,8 @@ import {
   LeaveSummarySchema,
   LeaveByTypeSchema,
   RecruitmentSummarySchema,
+  DiversityDashboardSchema,
+  CompensationDashboardSchema,
   ExecutiveDashboardSchema,
   ManagerDashboardSchema,
   PeriodSchema,
@@ -572,5 +576,91 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       },
     }
   );
+
+// ===========================================================================
+// Diversity Analytics
+// ===========================================================================
+
+// GET /analytics/diversity - Diversity dashboard
+analyticsRoutes.get(
+  "/diversity",
+  async (ctx) => {
+    const { analyticsService, query, set } = ctx as any;
+    const { tenant, user } = ctx as any;
+    const context: TenantContext = { tenantId: tenant?.id, userId: user?.id };
+
+    try {
+      const result = await analyticsService.getDiversityDashboard(context, query || {});
+
+      if (!result.success) {
+        set.status = mapErrorToStatus(result.error.code, ANALYTICS_ERROR_CODES);
+        return { error: result.error };
+      }
+
+      return result.data;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: "INTERNAL_ERROR", message: error.message || "Failed to get diversity analytics" } };
+    }
+  },
+  {
+    query: DiversityFiltersSchema,
+    beforeHandle: [requirePermission("analytics", "read")],
+    response: {
+      200: DiversityDashboardSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics"],
+      summary: "Get diversity dashboard",
+      description: "Get diversity analytics including gender, age band, nationality, and department breakdowns for active employees.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// ===========================================================================
+// Compensation Analytics
+// ===========================================================================
+
+// GET /analytics/compensation - Compensation dashboard
+analyticsRoutes.get(
+  "/compensation",
+  async (ctx) => {
+    const { analyticsService, query, set } = ctx as any;
+    const { tenant, user } = ctx as any;
+    const context: TenantContext = { tenantId: tenant?.id, userId: user?.id };
+
+    try {
+      const result = await analyticsService.getCompensationDashboard(context, query || {});
+
+      if (!result.success) {
+        set.status = mapErrorToStatus(result.error.code, ANALYTICS_ERROR_CODES);
+        return { error: result.error };
+      }
+
+      return result.data;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: "INTERNAL_ERROR", message: error.message || "Failed to get compensation analytics" } };
+    }
+  },
+  {
+    query: CompensationFiltersSchema,
+    beforeHandle: [requirePermission("analytics", "read")],
+    response: {
+      200: CompensationDashboardSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics"],
+      summary: "Get compensation dashboard",
+      description: "Get compensation analytics including salary summary, salary band distribution, department breakdown, and recent compensation changes.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
 
 export type AnalyticsRoutes = typeof analyticsRoutes;

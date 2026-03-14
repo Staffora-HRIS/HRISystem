@@ -580,7 +580,15 @@ export class FamilyLeaveRepository {
   ): Promise<EntitlementRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<EntitlementRow[]>`
-        SELECT *
+        SELECT
+          id, tenant_id, employee_id, leave_type, expected_date, actual_date,
+          start_date, end_date, total_weeks, matb1_received, matb1_date,
+          partner_employee_id, curtailment_date, status,
+          average_weekly_earnings, notes, created_by,
+          notice_given_date, qualifying_week, qualifies_for_statutory_pay,
+          earnings_above_lel, paternity_block_number,
+          spl_weeks_available, spl_pay_weeks_available,
+          created_at, updated_at
         FROM app.statutory_leave_records
         WHERE employee_id = ${employeeId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid

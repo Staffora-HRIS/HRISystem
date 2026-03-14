@@ -35,8 +35,8 @@ export const queryClient = new QueryClient({
         return failureCount < 3;
       },
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      refetchOnWindowFocus: "always",
+      refetchOnReconnect: true,
     },
     mutations: {
       retry: false,
@@ -193,6 +193,15 @@ export const queryKeys = {
     report: (id: string) => [...queryKeys.reports.all(), id] as const,
     execute: (id: string, params?: Record<string, unknown>) =>
       [...queryKeys.reports.report(id), "execute", params] as const,
+    fieldCatalog: () => [...queryKeys.reports.all(), "fields"] as const,
+    fieldCategories: () => [...queryKeys.reports.all(), "fields", "categories"] as const,
+    fieldValues: (fieldKey: string) =>
+      [...queryKeys.reports.all(), "fields", fieldKey, "values"] as const,
+    templates: () => [...queryKeys.reports.all(), "templates"] as const,
+    favourites: () => [...queryKeys.reports.all(), "favourites"] as const,
+    executions: (id: string) =>
+      [...queryKeys.reports.report(id), "executions"] as const,
+    scheduled: () => [...queryKeys.reports.all(), "scheduled"] as const,
   },
 
   // LMS
@@ -221,6 +230,29 @@ export const queryKeys = {
     available: () => [...queryKeys.portal.all(), "available"] as const,
     navigation: (portalCode: string) =>
       [...queryKeys.portal.all(), "navigation", portalCode] as const,
+  },
+
+  // Analytics
+  analytics: {
+    all: () => ["analytics", queryKeys._tenantScope()] as const,
+    headcount: (filters?: Record<string, unknown>) =>
+      [...queryKeys.analytics.all(), "headcount", filters] as const,
+    turnover: (filters?: Record<string, unknown>) =>
+      [...queryKeys.analytics.all(), "turnover", filters] as const,
+    diversity: (filters?: Record<string, unknown>) =>
+      [...queryKeys.analytics.all(), "diversity", filters] as const,
+    compensation: (filters?: Record<string, unknown>) =>
+      [...queryKeys.analytics.all(), "compensation", filters] as const,
+    executive: () => [...queryKeys.analytics.all(), "executive"] as const,
+    manager: () => [...queryKeys.analytics.all(), "manager"] as const,
+  },
+
+  // Directory
+  directory: {
+    all: () => ["directory", queryKeys._tenantScope()] as const,
+    search: (filters?: Record<string, unknown>) =>
+      [...queryKeys.directory.all(), "search", filters] as const,
+    departments: () => [...queryKeys.directory.all(), "departments"] as const,
   },
 
   // Dashboard
@@ -279,6 +311,17 @@ export const invalidationPatterns = {
   security: () => [
     queryKeys.security.all(),
     queryKeys.auth.permissions(),
+  ],
+
+  // After report mutation
+  report: () => [
+    queryKeys.reports.all(),
+  ],
+
+  // After analytics-relevant mutation (employee changes, compensation, etc.)
+  analytics: () => [
+    queryKeys.analytics.all(),
+    queryKeys.dashboard.all(),
   ],
 };
 

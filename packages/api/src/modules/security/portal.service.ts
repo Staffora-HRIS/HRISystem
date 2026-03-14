@@ -204,18 +204,19 @@ export class PortalService {
   ): Promise<void> {
     await this.db.withTransaction(ctx, async (tx) => {
       // First check if user has access to this portal
-      const accessCheck = await tx<{ count: number }[]>`
-        SELECT COUNT(*) as count
-        FROM app.user_portal_access upa
-        JOIN app.portals p ON p.id = upa.portal_id
-        WHERE upa.user_id = ${ctx.userId}::uuid
-          AND upa.tenant_id = ${ctx.tenantId}::uuid
-          AND p.code = ${portalCode}::app.portal_type
-          AND upa.is_active = true
-          AND upa.revoked_at IS NULL
+      const accessCheck = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.user_portal_access upa
+          JOIN app.portals p ON p.id = upa.portal_id
+          WHERE upa.user_id = ${ctx.userId}::uuid
+            AND upa.tenant_id = ${ctx.tenantId}::uuid
+            AND p.code = ${portalCode}::app.portal_type
+            AND upa.is_active = true
+            AND upa.revoked_at IS NULL
+        ) as exists
       `;
 
-      if ((accessCheck[0]?.count ?? 0) === 0) {
+      if (accessCheck[0]?.exists !== true) {
         throw new PortalAccessError(
           `User does not have access to portal: ${portalCode}`
         );

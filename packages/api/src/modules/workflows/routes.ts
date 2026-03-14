@@ -282,6 +282,55 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     detail: { tags: ["Workflows"], summary: "Reassign workflow step" }
   })
 
+  // Bulk Process Steps (approve/reject multiple at once)
+  .post("/steps/bulk-process", async (ctx) => {
+    const { tenant, user, workflowService, body, set } = ctx as any;
+    const { stepIds, decision, comments } = body as {
+      stepIds: string[];
+      decision: string;
+      comments?: string;
+    };
+
+    if (!stepIds || !Array.isArray(stepIds) || stepIds.length === 0) {
+      set.status = 400;
+      return { error: { code: ErrorCodes.VALIDATION_ERROR, message: "stepIds must be a non-empty array" } };
+    }
+
+    if (stepIds.length > 50) {
+      set.status = 400;
+      return { error: { code: ErrorCodes.VALIDATION_ERROR, message: "Maximum 50 steps per bulk operation" } };
+    }
+
+    if (!decision || !["approve", "reject"].includes(decision)) {
+      set.status = 400;
+      return { error: { code: ErrorCodes.VALIDATION_ERROR, message: "decision must be 'approve' or 'reject'" } };
+    }
+
+    try {
+      const result = await workflowService.bulkProcessSteps(
+        { tenantId: tenant.id, userId: user.id },
+        stepIds,
+        decision,
+        comments,
+        user.id
+      );
+      return {
+        data: result,
+        summary: {
+          total: stepIds.length,
+          processed: result.processed.length,
+          failed: result.failed.length,
+        },
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    beforeHandle: [requirePermission("workflows", "write")],
+    detail: { tags: ["Workflows"], summary: "Bulk process workflow steps (approve/reject multiple)" }
+  })
+
   // My Approvals
   .get("/my-approvals", async (ctx) => {
     const { tenant, user, workflowService, set } = ctx as any;

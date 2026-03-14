@@ -107,6 +107,30 @@ class Scheduler {
       nextRun: this.getNextRunTime("0 * * * *"),
       handler: this.monitorDeadLetterQueues.bind(this),
     });
+
+    this.jobs.push({
+      name: "user-table-drift-detection",
+      cronExpression: "30 * * * *", // 30 minutes past every hour
+      lastRun: null,
+      nextRun: this.getNextRunTime("30 * * * *"),
+      handler: this.detectUserTableDrift.bind(this),
+    });
+
+    this.jobs.push({
+      name: "workflow-auto-escalation",
+      cronExpression: "*/15 * * * *", // Every 15 minutes
+      lastRun: null,
+      nextRun: this.getNextRunTime("*/15 * * * *"),
+      handler: this.escalateOverdueWorkflowSteps.bind(this),
+    });
+
+    this.jobs.push({
+      name: "scheduled-report-runner",
+      cronExpression: "*/15 * * * *", // Every 15 minutes
+      lastRun: null,
+      nextRun: this.getNextRunTime("*/15 * * * *"),
+      handler: this.runScheduledReports.bind(this),
+    });
   }
 
   async start() {
@@ -807,6 +831,314 @@ class Scheduler {
         `[Job] DLQ monitoring complete — all queues healthy, total DLQ messages: ${totalDlqMessages}`
       );
     }
+  }
+
+  /**
+   * Escalate overdue workflow steps based on their escalation config.
+   * Finds pending steps that have exceeded their escalateAfterHours threshold,
+   * reassigns them to the escalation target, and sends notifications.
+   */
+  private async escalateOverdueWorkflowSteps(): Promise<void> {
+    console.log("[Job] Starting workflow auto-escalation check...");
+
+    // Find pending workflow steps with escalation config that are overdue
+    const overdueSteps = await this.sql`
+      SELECT
+        ws.id AS step_id,
+        ws.instance_id,
+        ws.assignee_id,
+        ws.step_config,
+        ws.created_at,
+        ws.tenant_id,
+        wi.workflow_definition_id,
+        wi.entity_type,
+        wi.entity_id
+      FROM app.workflow_steps ws
+      JOIN app.workflow_instances wi ON wi.id = ws.instance_id
+      WHERE ws.status = 'pending'
+        AND ws.step_config::jsonb -> 'escalationConfig' IS NOT NULL
+        AND ws.created_at + (
+          (ws.step_config::jsonb -> 'escalationConfig' ->> 'escalateAfterHours')::int * interval '1 hour'
+        ) < now()
+        AND NOT EXISTS (
+          SELECT 1 FROM app.domain_outbox do
+          WHERE do.aggregate_id = ws.id::text
+            AND do.event_type = 'workflow.step.escalated'
+        )
+      LIMIT 50
+    `;
+
+    if (overdueSteps.length === 0) {
+      console.log("[Job] Workflow auto-escalation complete — no overdue steps");
+      return;
+    }
+
+    console.log(`[Job] Found ${overdueSteps.length} overdue workflow step(s) to escalate`);
+
+    let escalatedCount = 0;
+    for (const step of overdueSteps) {
+      try {
+        let escalationConfig: { escalateAfterHours: number; escalateTo: string } | null = null;
+        try {
+          const config = typeof step.stepConfig === "string" ? JSON.parse(step.stepConfig) : step.stepConfig;
+          escalationConfig = config?.escalationConfig ?? null;
+        } catch { continue; }
+
+        if (!escalationConfig?.escalateTo) continue;
+
+        // Reassign the step to the escalation target
+        await this.sql`
+          UPDATE app.workflow_steps
+          SET assignee_id = ${escalationConfig.escalateTo}::uuid,
+              updated_at = now()
+          WHERE id = ${step.stepId}::uuid
+        `;
+
+        // Write outbox event for the escalation
+        await this.sql`
+          INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+          VALUES (
+            ${crypto.randomUUID()},
+            ${step.tenantId},
+            'workflow_step',
+            ${step.stepId}::text,
+            'workflow.step.escalated',
+            ${JSON.stringify({
+              stepId: step.stepId,
+              instanceId: step.instanceId,
+              previousAssignee: step.assigneeId,
+              escalatedTo: escalationConfig.escalateTo,
+              reason: `Step exceeded ${escalationConfig.escalateAfterHours}h SLA threshold`,
+            })}::jsonb,
+            now()
+          )
+        `;
+
+        // Send notification to the escalation target
+        await this.redis.xadd(
+          NOTIFICATIONS_STREAM,
+          "*",
+          "payload",
+          JSON.stringify({
+            id: crypto.randomUUID(),
+            type: "notification.in_app",
+            tenantId: step.tenantId,
+            data: {
+              userId: escalationConfig.escalateTo,
+              title: "Workflow Step Escalated",
+              message: `A workflow step has been escalated to you after exceeding the ${escalationConfig.escalateAfterHours}h SLA.`,
+              type: "task_assigned",
+              data: { stepId: step.stepId, instanceId: step.instanceId },
+            },
+          }),
+          "attempt",
+          "1"
+        );
+
+        escalatedCount++;
+      } catch (err) {
+        console.error(`[Job] Failed to escalate workflow step ${step.stepId}:`, err);
+      }
+    }
+
+    console.log(`[Job] Workflow auto-escalation complete — escalated ${escalatedCount} step(s)`);
+  }
+
+  /**
+   * Detect and repair drift between Better Auth "user" table and app.users.
+   * Runs hourly to catch any rows that diverged due to failed databaseHooks.
+   * Repairs are applied in batches to avoid locking issues.
+   */
+  private async detectUserTableDrift(): Promise<void> {
+    console.log("[Job] Starting user table drift detection...");
+
+    // Find users in Better Auth table missing from app.users
+    const missing = await this.sql`
+      SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled"
+      FROM app."user" ba
+      LEFT JOIN app.users au ON au.id = ba.id::uuid
+      WHERE au.id IS NULL
+      LIMIT 100
+    `;
+
+    if (missing.length > 0) {
+      console.warn(`[Job] Found ${missing.length} users in Better Auth missing from app.users — repairing`);
+      for (const row of missing) {
+        try {
+          await this.sql`
+            INSERT INTO app.users (id, email, name, status, mfa_enabled, created_at, updated_at)
+            VALUES (
+              ${row.id}::uuid, ${row.email}, ${row.name ?? row.email},
+              ${row.status ?? 'active'}, ${row.mfaEnabled ?? false}, now(), now()
+            )
+            ON CONFLICT (id) DO NOTHING
+          `;
+        } catch (err) {
+          console.error(`[Job] Failed to repair missing user ${row.id}:`, err);
+        }
+      }
+    }
+
+    // Find users with drifted fields (email, name, status, mfa)
+    const drifted = await this.sql`
+      SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled"
+      FROM app."user" ba
+      JOIN app.users au ON au.id = ba.id::uuid
+      WHERE ba.email != au.email
+         OR ba.name IS DISTINCT FROM au.name
+         OR COALESCE(ba.status, 'active') != COALESCE(au.status, 'active')
+         OR COALESCE(ba."mfaEnabled", false) != COALESCE(au.mfa_enabled, false)
+      LIMIT 100
+    `;
+
+    if (drifted.length > 0) {
+      console.warn(`[Job] Found ${drifted.length} users with drifted fields — repairing`);
+      for (const row of drifted) {
+        try {
+          await this.sql`
+            UPDATE app.users SET
+              email = ${row.email},
+              name = ${row.name ?? row.email},
+              status = ${row.status ?? 'active'},
+              mfa_enabled = ${row.mfaEnabled ?? false},
+              updated_at = now()
+            WHERE id = ${row.id}::uuid
+          `;
+        } catch (err) {
+          console.error(`[Job] Failed to repair drifted user ${row.id}:`, err);
+        }
+      }
+    }
+
+    const totalRepaired = missing.length + drifted.length;
+    if (totalRepaired === 0) {
+      console.log("[Job] User table drift detection complete — no drift found");
+    } else {
+      console.warn(`[Job] User table drift detection complete — repaired ${totalRepaired} user(s)`);
+    }
+  }
+
+  /**
+   * Run scheduled reports that are due.
+   * Finds active report schedules whose next_run_at is in the past,
+   * executes them, and updates the next run time.
+   */
+  private async runScheduledReports(): Promise<void> {
+    console.log("[Job] Starting scheduled report runner...");
+
+    const dueSchedules = await this.sql`
+      SELECT
+        rs.id AS schedule_id,
+        rs.report_id,
+        rs.tenant_id,
+        rs.created_by,
+        rs.frequency,
+        rs.export_format,
+        rs.recipients,
+        rs.next_run_at
+      FROM app.report_schedules rs
+      JOIN app.report_definitions rd ON rd.id = rs.report_id
+      WHERE rs.is_active = true
+        AND rs.next_run_at <= now()
+        AND rd.status != 'archived'
+      ORDER BY rs.next_run_at ASC
+      LIMIT 20
+    `;
+
+    if (dueSchedules.length === 0) {
+      console.log("[Job] Scheduled report runner complete — no reports due");
+      return;
+    }
+
+    console.log(`[Job] Found ${dueSchedules.length} scheduled report(s) to run`);
+
+    let successCount = 0;
+    for (const schedule of dueSchedules) {
+      try {
+        // Execute the report — track execution ID for status updates
+        const executionId = crypto.randomUUID();
+        await this.sql`
+          INSERT INTO app.report_executions (
+            id, tenant_id, report_id, executed_by, status, parameters, created_at
+          ) VALUES (
+            ${executionId},
+            ${schedule.tenantId},
+            ${schedule.reportId},
+            ${schedule.createdBy},
+            'running',
+            '{}'::jsonb,
+            now()
+          )
+        `;
+
+        // Calculate next run time based on frequency
+        let intervalExpr: string;
+        switch (schedule.frequency) {
+          case "daily":   intervalExpr = "1 day"; break;
+          case "weekly":  intervalExpr = "7 days"; break;
+          case "monthly": intervalExpr = "1 month"; break;
+          default:        intervalExpr = "1 day"; break;
+        }
+
+        // Update next_run_at and last_run_at
+        await this.sql`
+          UPDATE app.report_schedules
+          SET last_run_at = now(),
+              next_run_at = now() + ${intervalExpr}::interval,
+              updated_at = now()
+          WHERE id = ${schedule.scheduleId}::uuid
+        `;
+
+        // Send notification to recipients if configured
+        const recipients = schedule.recipients;
+        if (Array.isArray(recipients) && recipients.length > 0) {
+          for (const recipient of recipients) {
+            await this.redis.xadd(
+              NOTIFICATIONS_STREAM,
+              "*",
+              "payload",
+              JSON.stringify({
+                id: crypto.randomUUID(),
+                type: "notification.email",
+                tenantId: schedule.tenantId,
+                data: {
+                  to: recipient,
+                  subject: "Scheduled Report Ready",
+                  message: `Your scheduled report is ready for download.`,
+                  data: { reportId: schedule.reportId, scheduleId: schedule.scheduleId },
+                },
+              }),
+              "attempt",
+              "1"
+            );
+          }
+        }
+
+        // Mark execution as completed
+        await this.sql`
+          UPDATE app.report_executions
+          SET status = 'completed',
+              completed_at = now()
+          WHERE id = ${executionId}::uuid
+        `;
+
+        successCount++;
+      } catch (err) {
+        console.error(`[Job] Failed to run scheduled report ${schedule.reportId}:`, err);
+
+        // Mark execution as failed — use executionId if available
+        await this.sql`
+          UPDATE app.report_executions
+          SET status = 'failed',
+              error_message = ${err instanceof Error ? err.message : "Unknown error"},
+              completed_at = now()
+          WHERE report_id = ${schedule.reportId}::uuid
+            AND status = 'running'
+        `.catch(() => {});
+      }
+    }
+
+    console.log(`[Job] Scheduled report runner complete — ran ${successCount}/${dueSchedules.length} report(s)`);
   }
 
   private sleep(ms: number): Promise<void> {

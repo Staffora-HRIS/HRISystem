@@ -290,20 +290,37 @@ export class RbacService {
     };
   }
 
+  // In-memory cache for MFA requirement lookups (config data, rarely changes)
+  private mfaRequirementCache = new Map<string, { value: boolean; expiresAt: number }>();
+  private static readonly MFA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   /**
-   * Check if a permission requires MFA
+   * Check if a permission requires MFA.
+   * Cached in-memory since permission-MFA mappings are configuration data.
    */
   async permissionRequiresMfa(
     resource: string,
     action: string
   ): Promise<boolean> {
+    const cacheKey = `${resource}:${action}`;
+    const cached = this.mfaRequirementCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     const results = await this.db.withSystemContext(async (tx) => {
       return await tx<{ requiresMfa: boolean }[]>`
         SELECT app.permission_requires_mfa(${resource}, ${action}) as requires_mfa
       `;
     });
 
-    return results.length > 0 && results[0]?.requiresMfa === true;
+    const value = results.length > 0 && results[0]?.requiresMfa === true;
+    this.mfaRequirementCache.set(cacheKey, {
+      value,
+      expiresAt: Date.now() + RbacService.MFA_CACHE_TTL_MS,
+    });
+
+    return value;
   }
 
   /**

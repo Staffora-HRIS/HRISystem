@@ -91,14 +91,14 @@ export class ManagerService {
     if (!employeeId) return false;
 
     const result = await this.db.withTransaction(ctx, async (tx) => {
-      const rows = await tx<{ count: number }[]>`
-        SELECT COUNT(*) as count
-        FROM app.manager_subordinates
-        WHERE manager_id = ${employeeId}::uuid
-          AND tenant_id = ${ctx.tenantId}::uuid
-        LIMIT 1
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.manager_subordinates
+          WHERE manager_id = ${employeeId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+        ) as exists
       `;
-      return (rows[0]?.count ?? 0) > 0;
+      return rows[0]?.exists === true;
     });
 
     return result;

@@ -24,7 +24,8 @@ const VALID_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
   in_progress: ["pending_info", "escalated", "resolved", "cancelled"],
   pending_info: ["in_progress", "escalated", "resolved", "cancelled"],
   escalated: ["in_progress", "resolved", "cancelled"],
-  resolved: ["closed", "in_progress"], // Can reopen
+  resolved: ["closed", "in_progress", "appealed"], // Can reopen or appeal
+  appealed: ["in_progress", "resolved", "closed"], // Appeal review can reopen, uphold, or close
   closed: [], // Terminal state
   cancelled: [], // Terminal state
 };
@@ -591,6 +592,209 @@ export class CasesService {
           code: "COMMENT_FAILED",
           message: error.message || "Failed to add comment",
         },
+      };
+    }
+  }
+
+  // ===========================================================================
+  // Appeal Operations
+  // ===========================================================================
+
+  /**
+   * File an appeal against a resolved case.
+   * Only the original requester can appeal, and only resolved cases can be appealed.
+   */
+  async fileAppeal(
+    ctx: TenantContext,
+    caseId: string,
+    data: { reason: string; appealReviewerId?: string }
+  ): Promise<ServiceResult<any>> {
+    const hrCase = await this.repository.getCaseById(ctx, caseId);
+    if (!hrCase) {
+      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "Case not found" } };
+    }
+
+    if (hrCase.status !== "resolved") {
+      return {
+        success: false,
+        error: { code: "INVALID_STATUS", message: "Only resolved cases can be appealed" },
+      };
+    }
+
+    if (hrCase.requesterId !== ctx.userId) {
+      return {
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: "Only the case requester can file an appeal" },
+      };
+    }
+
+    try {
+      const appeal = await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          // Create the appeal record
+          const [row] = await tx<Array<Record<string, any>>>`
+            INSERT INTO app.case_appeals (
+              id, tenant_id, case_id, appealed_by, reason, reviewer_id, status, created_at
+            ) VALUES (
+              gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseId}::uuid,
+              ${ctx.userId}::uuid, ${data.reason},
+              ${data.appealReviewerId ?? null}::uuid,
+              'pending', now()
+            )
+            RETURNING id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
+          `;
+
+          // Transition case to appealed status
+          await tx`
+            UPDATE app.cases
+            SET status = 'appealed', updated_at = now()
+            WHERE id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          `;
+
+          // Emit domain event
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: caseId,
+            eventType: "cases.appealed",
+            payload: {
+              caseId,
+              appealId: row.id,
+              appealedBy: ctx.userId,
+              reviewerId: data.appealReviewerId ?? null,
+            },
+          });
+
+          return row;
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          id: appeal.id,
+          caseId: appeal.caseId ?? appeal.case_id,
+          appealedBy: appeal.appealedBy ?? appeal.appealed_by,
+          reason: appeal.reason,
+          reviewerId: appeal.reviewerId ?? appeal.reviewer_id ?? null,
+          status: appeal.status,
+          outcome: appeal.outcome ?? null,
+          decidedAt: appeal.decidedAt ?? appeal.decided_at ?? null,
+          createdAt: (appeal.createdAt ?? appeal.created_at)?.toISOString?.() ?? appeal.createdAt ?? appeal.created_at,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: { code: "APPEAL_FAILED", message: error.message || "Failed to file appeal" },
+      };
+    }
+  }
+
+  /**
+   * Get the appeal for a case (if one exists).
+   */
+  async getAppeal(ctx: TenantContext, caseId: string): Promise<ServiceResult<any>> {
+    const rows = await this.db.query`
+      SELECT id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
+      FROM app.case_appeals
+      WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (rows.length === 0) {
+      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No appeal found for this case" } };
+    }
+
+    const r = rows[0];
+    return {
+      success: true,
+      data: {
+        id: r.id,
+        caseId: r.caseId ?? r.case_id,
+        appealedBy: r.appealedBy ?? r.appealed_by,
+        reason: r.reason,
+        reviewerId: r.reviewerId ?? r.reviewer_id ?? null,
+        status: r.status,
+        outcome: r.outcome ?? null,
+        decidedAt: (r.decidedAt ?? r.decided_at)?.toISOString?.() ?? null,
+        createdAt: (r.createdAt ?? r.created_at)?.toISOString?.() ?? r.createdAt ?? r.created_at,
+      },
+    };
+  }
+
+  /**
+   * Decide an appeal outcome (upheld, overturned, partially_upheld).
+   * Only the assigned reviewer or an admin can decide.
+   */
+  async decideAppeal(
+    ctx: TenantContext,
+    caseId: string,
+    data: { decision: "upheld" | "overturned" | "partially_upheld"; outcome: string }
+  ): Promise<ServiceResult<any>> {
+    const rows = await this.db.query`
+      SELECT id, reviewer_id, status
+      FROM app.case_appeals
+      WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'pending'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (rows.length === 0) {
+      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No pending appeal found" } };
+    }
+
+    const appeal = rows[0];
+
+    try {
+      await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        async (tx: TransactionSql) => {
+          // Update appeal status
+          await tx`
+            UPDATE app.case_appeals
+            SET status = ${data.decision}, outcome = ${data.outcome}, decided_at = now()
+            WHERE id = ${appeal.id}::uuid
+          `;
+
+          // Transition case based on decision
+          const newCaseStatus = data.decision === "overturned" ? "in_progress" : "closed";
+          await tx`
+            UPDATE app.cases
+            SET status = ${newCaseStatus}, updated_at = now()
+            WHERE id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          `;
+
+          // Emit domain event
+          await this.emitDomainEvent(tx, ctx, {
+            aggregateType: "case",
+            aggregateId: caseId,
+            eventType: "cases.appeal.decided",
+            payload: {
+              caseId,
+              appealId: appeal.id,
+              decision: data.decision,
+              outcome: data.outcome,
+              decidedBy: ctx.userId,
+            },
+          });
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          appealId: appeal.id,
+          caseId,
+          decision: data.decision,
+          outcome: data.outcome,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: { code: "APPEAL_DECISION_FAILED", message: error.message || "Failed to decide appeal" },
       };
     }
   }

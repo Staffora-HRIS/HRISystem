@@ -556,6 +556,149 @@ export const payrollRoutes = new Elysia({
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Pay Schedules
+  // ===========================================================================
+
+  .get(
+    "/pay-schedules",
+    async (ctx) => {
+      const { payrollService, tenantContext, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const result = await payrollService.getPaySchedules(tenantContext!);
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      detail: { tags: ["Payroll"], summary: "List pay schedules" },
+    }
+  )
+
+  .post(
+    "/pay-schedules",
+    async (ctx) => {
+      const { payrollService, tenantContext, body, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const { name, frequency, payDayOfWeek, payDayOfMonth, taxWeekStart, isDefault } = body as any;
+      const result = await payrollService.createPaySchedule(tenantContext!, {
+        name, frequency, payDayOfWeek, payDayOfMonth, taxWeekStart, isDefault,
+      });
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      detail: { tags: ["Payroll"], summary: "Create pay schedule" },
+    }
+  )
+
+  .get(
+    "/pay-schedules/:id",
+    async (ctx) => {
+      const { payrollService, tenantContext, params, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const result = await payrollService.getPayScheduleById(tenantContext!, params.id);
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      params: IdParamsSchema,
+      detail: { tags: ["Payroll"], summary: "Get pay schedule by ID" },
+    }
+  )
+
+  .put(
+    "/pay-schedules/:id",
+    async (ctx) => {
+      const { payrollService, tenantContext, params, body, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const result = await payrollService.updatePaySchedule(tenantContext!, params.id, body as any);
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      params: IdParamsSchema,
+      detail: { tags: ["Payroll"], summary: "Update pay schedule" },
+    }
+  )
+
+  // ===========================================================================
+  // Employee Pay Assignments
+  // ===========================================================================
+
+  .post(
+    "/employees/:id/pay-assignment",
+    async (ctx) => {
+      const { payrollService, tenantContext, params, body, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const { payScheduleId, effectiveFrom, effectiveTo } = body as any;
+      const result = await payrollService.assignEmployeeToSchedule(tenantContext!, {
+        employeeId: params.id,
+        payScheduleId,
+        effectiveFrom,
+        effectiveTo,
+      });
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      params: IdParamsSchema,
+      detail: { tags: ["Payroll"], summary: "Assign employee to pay schedule" },
+    }
+  )
+
+  .get(
+    "/employees/:id/pay-assignments",
+    async (ctx) => {
+      const { payrollService, tenantContext, params, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const result = await payrollService.getEmployeePayAssignments(tenantContext!, params.id);
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      params: IdParamsSchema,
+      detail: { tags: ["Payroll"], summary: "Get employee pay schedule assignments" },
+    }
+  )
+
+  .get(
+    "/employees/:id/pay-assignment/current",
+    async (ctx) => {
+      const { payrollService, tenantContext, params, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+      const result = await payrollService.getCurrentPayAssignment(tenantContext!, params.id);
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      params: IdParamsSchema,
+      detail: { tags: ["Payroll"], summary: "Get current pay schedule assignment for employee" },
+    }
   );
 
 export type PayrollRoutes = typeof payrollRoutes;

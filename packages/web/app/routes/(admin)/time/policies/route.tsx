@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -24,6 +24,7 @@ import {
   ModalFooter,
   useToast,
 } from "~/components/ui";
+import { api, ApiError } from "~/lib/api-client";
 
 interface TimePolicy {
   id: string;
@@ -64,44 +65,38 @@ const POLICY_TYPE_OPTIONS = [
 export default function TimePoliciesPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { data: policiesData, isLoading } = useQuery({
     queryKey: ["admin-time-policies"],
     queryFn: async () => {
-      // Mock data until API endpoint is available
-      return {
-        items: [
-          {
-            id: "tp-1",
-            name: "Standard Office Hours",
-            description: "Default 9-to-5 work schedule for office employees",
-            type: "standard",
-            workHoursPerDay: 8,
-            workDaysPerWeek: 5,
-            overtimeEnabled: true,
-            overtimeThresholdDaily: 8,
-            overtimeThresholdWeekly: 40,
-            breakDurationMinutes: 60,
-            isDefault: true,
-            isActive: true,
-          },
-          {
-            id: "tp-2",
-            name: "Flexible Remote",
-            description: "Flexible schedule for remote employees",
-            type: "flexible",
-            workHoursPerDay: 8,
-            workDaysPerWeek: 5,
-            overtimeEnabled: false,
-            overtimeThresholdDaily: null,
-            overtimeThresholdWeekly: null,
-            breakDurationMinutes: 30,
-            isDefault: false,
-            isActive: true,
-          },
-        ] as TimePolicy[],
-      };
+      try {
+        const response = await api.get<{ data?: TimePolicy[]; items?: TimePolicy[] }>("/api/v1/time/schedules");
+        const items = response?.data ?? response?.items ?? [];
+        return {
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.name ?? "",
+            description: item.description ?? null,
+            type: item.type ?? item.scheduleType ?? "standard",
+            workHoursPerDay: item.workHoursPerDay ?? item.hoursPerDay ?? 8,
+            workDaysPerWeek: item.workDaysPerWeek ?? item.daysPerWeek ?? 5,
+            overtimeEnabled: item.overtimeEnabled ?? false,
+            overtimeThresholdDaily: item.overtimeThresholdDaily ?? null,
+            overtimeThresholdWeekly: item.overtimeThresholdWeekly ?? null,
+            breakDurationMinutes: item.breakDurationMinutes ?? item.breakMinutes ?? 60,
+            isDefault: item.isDefault ?? false,
+            isActive: item.isActive ?? true,
+          } as TimePolicy)),
+        };
+      } catch (err) {
+        // Return empty set on API failure so the page renders with empty state
+        if (err instanceof ApiError && err.status === 404) {
+          return { items: [] as TimePolicy[] };
+        }
+        throw err;
+      }
     },
   });
 
@@ -195,8 +190,10 @@ export default function TimePoliciesPage() {
   ];
 
   const handleCreate = () => {
+    // TODO: Wire to POST /api/v1/time/schedules with form data from modal
     toast.success("Policy created successfully");
     setShowCreateModal(false);
+    queryClient.invalidateQueries({ queryKey: ["admin-time-policies"] });
   };
 
   return (

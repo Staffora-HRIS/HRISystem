@@ -249,13 +249,14 @@ export class DataRetentionRepository {
     dataCategory: RetentionDataCategory,
     excludeId?: string
   ): Promise<boolean> {
-    const [row] = await tx<{ count: number }[]>`
-      SELECT COUNT(*)::int AS count
-      FROM retention_policies
-      WHERE data_category = ${dataCategory}::app.retention_data_category
-        ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+    const [row] = await tx<{ exists: boolean }[]>`
+      SELECT EXISTS(
+        SELECT 1 FROM retention_policies
+        WHERE data_category = ${dataCategory}::app.retention_data_category
+          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+      ) as exists
     `;
-    return (row?.count ?? 0) > 0;
+    return row?.exists === true;
   }
 
   // ===========================================================================

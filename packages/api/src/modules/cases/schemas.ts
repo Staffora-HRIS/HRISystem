@@ -22,6 +22,7 @@ export const CaseStatusSchema = t.Union([
   t.Literal("pending_info"),
   t.Literal("escalated"),
   t.Literal("resolved"),
+  t.Literal("appealed"),
   t.Literal("closed"),
   t.Literal("cancelled"),
 ]);
@@ -167,6 +168,23 @@ export const ResolveCaseSchema = t.Object({
 export const CloseCaseSchema = t.Object({
   closeReason: t.Optional(t.String({ maxLength: 500 })),
   satisfactionRating: t.Optional(t.Number({ minimum: 1, maximum: 5 })),
+});
+
+export const AppealCaseSchema = t.Object({
+  reason: t.String({ minLength: 1, maxLength: 5000 }),
+  appealReviewerId: t.Optional(UuidSchema),
+});
+
+export const AppealResponseSchema = t.Object({
+  id: UuidSchema,
+  caseId: UuidSchema,
+  appealedBy: UuidSchema,
+  reason: t.String(),
+  reviewerId: t.Union([UuidSchema, t.Null()]),
+  status: t.Union([t.Literal("pending"), t.Literal("upheld"), t.Literal("overturned"), t.Literal("partially_upheld")]),
+  outcome: t.Union([t.String(), t.Null()]),
+  decidedAt: t.Union([t.String(), t.Null()]),
+  createdAt: t.String(),
 });
 
 // =============================================================================

@@ -106,6 +106,30 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
     }
   )
 
+  .put(
+    "/leave-types/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, body, error } = ctx as any;
+      const result = await absenceService.updateLeaveType(tenantContext, params.id, body as any);
+      if (!result.success) {
+        return error(result.error?.code === "LEAVE_TYPE_NOT_FOUND" ? 404 : 500, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      body: CreateLeaveTypeSchema,
+      response: {
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Update leave type" },
+    }
+  )
+
   // Leave Policies
   .get(
     "/policies",
@@ -331,6 +355,32 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
         year: t.Optional(t.String()),
       }),
       detail: { tags: ["Absence"], summary: "Get employee leave balances" },
+    }
+  )
+
+  // Bradford Factor
+  .get(
+    "/bradford-factor/:employeeId",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, query, error } = ctx as any;
+      const months = query.months ? parseInt(query.months, 10) : 12;
+      const result = await absenceService.getBradfordFactor(
+        tenantContext,
+        params.employeeId,
+        months
+      );
+      if (!result.success) {
+        return error(404, { error: result.error });
+      }
+      return { data: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      params: EmployeeIdParamsSchema,
+      query: t.Object({
+        months: t.Optional(t.String()),
+      }),
+      detail: { tags: ["Absence"], summary: "Get employee Bradford Factor score" },
     }
   );
 

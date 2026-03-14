@@ -229,7 +229,14 @@ export class ReportsRepository {
 
   async getReportById(tx: TransactionSql, id: string): Promise<ReportDefinitionRow | null> {
     const rows = await tx`
-      SELECT * FROM report_definitions WHERE id = ${id}
+      SELECT
+        id, tenant_id, name, description, report_type, status, category, tags, config,
+        chart_type, chart_config, is_scheduled, schedule_frequency, schedule_cron,
+        schedule_time, schedule_day_of_week, schedule_day_of_month, schedule_recipients,
+        schedule_export_format, last_scheduled_run, next_scheduled_run, created_by,
+        is_public, is_system, shared_with, required_permission, version,
+        last_run_at, run_count, avg_execution_ms, created_at, updated_at
+      FROM report_definitions WHERE id = ${id}
     ` as ReportDefinitionRow[];
     return rows[0] ?? null;
   }
@@ -404,7 +411,11 @@ export class ReportsRepository {
     limit: number = 20
   ): Promise<ReportExecutionRow[]> {
     return await tx`
-      SELECT * FROM report_executions
+      SELECT
+        id, tenant_id, report_id, executed_by, executed_at, execution_ms,
+        row_count, parameters, result_cache_key, result_expires_at,
+        export_format, export_file_key, status, error_message, created_at
+      FROM report_executions
       WHERE report_id = ${reportId}
       ORDER BY executed_at DESC
       LIMIT ${limit}
@@ -510,7 +521,14 @@ export class ReportsRepository {
 
   async getScheduledReportsDue(tx: TransactionSql): Promise<ReportDefinitionRow[]> {
     return await tx`
-      SELECT * FROM report_definitions
+      SELECT
+        id, tenant_id, name, description, report_type, status, category, tags, config,
+        chart_type, chart_config, is_scheduled, schedule_frequency, schedule_cron,
+        schedule_time, schedule_day_of_week, schedule_day_of_month, schedule_recipients,
+        schedule_export_format, last_scheduled_run, next_scheduled_run, created_by,
+        is_public, is_system, shared_with, required_permission, version,
+        last_run_at, run_count, avg_execution_ms, created_at, updated_at
+      FROM report_definitions
       WHERE is_scheduled = true
         AND next_scheduled_run IS NOT NULL
         AND next_scheduled_run <= now()
@@ -525,7 +543,14 @@ export class ReportsRepository {
 
   async listSystemTemplates(tx: TransactionSql): Promise<ReportDefinitionRow[]> {
     return await tx`
-      SELECT * FROM report_definitions
+      SELECT
+        id, tenant_id, name, description, report_type, status, category, tags, config,
+        chart_type, chart_config, is_scheduled, schedule_frequency, schedule_cron,
+        schedule_time, schedule_day_of_week, schedule_day_of_month, schedule_recipients,
+        schedule_export_format, last_scheduled_run, next_scheduled_run, created_by,
+        is_public, is_system, shared_with, required_permission, version,
+        last_run_at, run_count, avg_execution_ms, created_at, updated_at
+      FROM report_definitions
       WHERE is_system = true
       ORDER BY category, name
     ` as ReportDefinitionRow[];
