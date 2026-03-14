@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -104,16 +104,16 @@ export default function AdminEmployeesPage() {
   });
 
   // Calculate stats from data
-  const stats: EmployeeStats = {
+  const stats: EmployeeStats = useMemo(() => ({
     total: employeesData?.items.length ?? 0,
     active: employeesData?.items.filter((e) => e.status === "active").length ?? 0,
     onLeave: employeesData?.items.filter((e) => e.status === "on_leave").length ?? 0,
     terminated: employeesData?.items.filter((e) => e.status === "terminated").length ?? 0,
-  };
+  }), [employeesData?.items]);
 
   const employees = employeesData?.items ?? [];
 
-  const columns: ColumnDef<Employee>[] = [
+  const columns = useMemo<ColumnDef<Employee>[]>(() => [
     {
       id: "employee",
       header: "Employee",
@@ -188,7 +188,7 @@ export default function AdminEmployeesPage() {
         </Button>
       ),
     },
-  ];
+  ], [navigate]);
 
   return (
     <div className="space-y-6">

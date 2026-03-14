@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -123,14 +123,14 @@ export default function CasesListPage() {
 
   const cases = casesData?.cases ?? [];
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: cases.length,
     open: cases.filter((c) => c.status === "open").length,
     inProgress: cases.filter((c) => c.status === "in_progress").length,
     escalated: cases.filter((c) => c.status === "escalated").length,
-  };
+  }), [cases]);
 
-  const columns: ColumnDef<CaseListItem>[] = [
+  const columns = useMemo<ColumnDef<CaseListItem>[]>(() => [
     {
       id: "caseNumber",
       header: "Case #",
@@ -227,7 +227,7 @@ export default function CasesListPage() {
         </Button>
       ),
     },
-  ];
+  ], [navigate]);
 
   return (
     <div className="space-y-6">
