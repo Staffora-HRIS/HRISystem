@@ -133,6 +133,12 @@ export interface AggregatedMetric {
 
 /**
  * Calculate headcount metrics
+ *
+ * Performs all aggregation in a single SQL query including:
+ * - Total headcount per dimension group
+ * - Active vs on_leave breakdown via FILTER clauses
+ * - FTE sum from employment contracts
+ * This avoids fetching raw rows and aggregating in TypeScript.
  */
 async function calculateHeadcount(
   db: import("../plugins/db").DatabaseClient,
@@ -141,18 +147,33 @@ async function calculateHeadcount(
   dimensions: Dimension[]
 ): Promise<MetricResult[]> {
   const results: MetricResult[] = [];
+  const period = asOfDate.toISOString().split("T")[0] || "";
+  const now = new Date();
 
-  // Get active employee count
+  const wantOrgUnit = dimensions.includes("org_unit") || dimensions.includes("department");
+  const wantEmploymentType = dimensions.includes("employment_type");
+
   const headcount = await db.withSystemContext(async (tx) => {
-    return await tx<Array<{ count: number; orgUnitId?: string; department?: string }>>`
+    return await tx<Array<{
+      totalCount: number;
+      activeCount: number;
+      onLeaveCount: number;
+      totalFte: number;
+      department: string | null;
+      orgUnitId: string | null;
+      employmentType: string | null;
+    }>>`
       SELECT
-        COUNT(DISTINCT e.id) as count,
-        ${dimensions.includes("org_unit") ? tx`pa.org_unit_id as "orgUnitId",` : tx``}
-        ${dimensions.includes("department") ? tx`ou.name as department,` : tx``}
-        ${dimensions.includes("employment_type") ? tx`ec.employment_type as "employmentType",` : tx``}
-        1 as dummy
+        COUNT(DISTINCT e.id)::int as "totalCount",
+        COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'active')::int as "activeCount",
+        COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'on_leave')::int as "onLeaveCount",
+        COALESCE(SUM(ec.fte), 0)::numeric(10,2) as "totalFte",
+        ${wantOrgUnit ? tx`COALESCE(ou.name, 'Unassigned') as department,` : tx``}
+        ${wantOrgUnit ? tx`pa.org_unit_id::text as "orgUnitId",` : tx``}
+        ${wantEmploymentType ? tx`ec.employment_type::text as "employmentType",` : tx``}
+        1 as _dummy
       FROM app.employees e
-      JOIN app.position_assignments pa ON pa.employee_id = e.id
+      LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id
         AND pa.is_primary = true
         AND pa.effective_from <= ${asOfDate}
         AND (pa.effective_to IS NULL OR pa.effective_to > ${asOfDate})
@@ -161,24 +182,64 @@ async function calculateHeadcount(
         AND ec.effective_from <= ${asOfDate}
         AND (ec.effective_to IS NULL OR ec.effective_to > ${asOfDate})
       WHERE e.tenant_id = ${tenantId}::uuid
-        AND e.status = 'active'
+        AND e.status IN ('active', 'on_leave')
         AND e.hire_date <= ${asOfDate}
         AND (e.termination_date IS NULL OR e.termination_date > ${asOfDate})
-      GROUP BY ${dimensions.length > 0 ? tx`pa.org_unit_id, ou.name, ec.employment_type` : tx`1`}
+      GROUP BY
+        ${wantOrgUnit && wantEmploymentType
+          ? tx`ou.name, pa.org_unit_id, ec.employment_type`
+          : wantOrgUnit
+            ? tx`ou.name, pa.org_unit_id`
+            : wantEmploymentType
+              ? tx`ec.employment_type`
+              : tx`1`}
     `;
   });
 
   for (const row of headcount) {
+    const dims: Record<string, string> = {};
+    if (row.orgUnitId) dims.orgUnitId = row.orgUnitId;
+    if (row.department) dims.department = row.department;
+    if (row.employmentType) dims.employmentType = row.employmentType;
+
+    // Total headcount for this dimension group
     results.push({
       metricType: "headcount",
-      value: Number(row.count),
+      value: Number(row.totalCount),
       unit: "employees",
-      period: asOfDate.toISOString().split("T")[0] || "",
-      dimensions: {
-        ...(row.orgUnitId && { orgUnitId: row.orgUnitId }),
-        ...(row.department && { department: row.department }),
-      },
-      calculatedAt: new Date(),
+      period,
+      dimensions: { ...dims, metric: "total" },
+      calculatedAt: now,
+    });
+
+    // Active count
+    results.push({
+      metricType: "headcount",
+      value: Number(row.activeCount),
+      unit: "employees",
+      period,
+      dimensions: { ...dims, metric: "active" },
+      calculatedAt: now,
+    });
+
+    // On leave count
+    results.push({
+      metricType: "headcount",
+      value: Number(row.onLeaveCount),
+      unit: "employees",
+      period,
+      dimensions: { ...dims, metric: "on_leave" },
+      calculatedAt: now,
+    });
+
+    // FTE total
+    results.push({
+      metricType: "headcount",
+      value: Number(row.totalFte),
+      unit: "fte",
+      period,
+      dimensions: { ...dims, metric: "fte" },
+      calculatedAt: now,
     });
   }
 
@@ -187,6 +248,11 @@ async function calculateHeadcount(
 
 /**
  * Calculate turnover metrics
+ *
+ * Computes total and voluntary turnover rates entirely in SQL.
+ * Uses the employee_status_history table (column: effective_date, not effective_from)
+ * and calculates average headcount via the period-start/end method.
+ * Returns both raw counts and percentage rates directly from the query.
  */
 async function calculateTurnover(
   db: import("../plugins/db").DatabaseClient,
@@ -196,67 +262,115 @@ async function calculateTurnover(
   _dimensions: Dimension[]
 ): Promise<MetricResult[]> {
   const results: MetricResult[] = [];
+  const period = `${periodStart.toISOString().split("T")[0]}/${periodEnd.toISOString().split("T")[0]}`;
+  const now = new Date();
 
-  // Get terminations in period
+  // Single query computes all turnover metrics: counts, avg headcount, and rates
   const turnoverData = await db.withSystemContext(async (tx) => {
     return await tx<Array<{
       terminations: number;
-      avgHeadcount: number;
       voluntaryTerminations: number;
+      newHires: number;
+      startHeadcount: number;
+      endHeadcount: number;
+      avgHeadcount: number;
+      totalTurnoverRate: number;
+      voluntaryTurnoverRate: number;
     }>>`
-      WITH period_employees AS (
-        SELECT
-          e.id,
-          e.hire_date,
-          e.termination_date,
-          esh.status,
-          esh.reason
-        FROM app.employees e
-        LEFT JOIN app.employee_status_history esh ON esh.employee_id = e.id
-          AND esh.effective_from = (
-            SELECT MAX(effective_from)
-            FROM app.employee_status_history
-            WHERE employee_id = e.id
-              AND effective_from <= ${periodEnd}
-          )
-        WHERE e.tenant_id = ${tenantId}::uuid
-      )
+      WITH
+        termination_counts AS (
+          SELECT
+            COUNT(DISTINCT e.id)::int as total,
+            COUNT(DISTINCT e.id) FILTER (
+              WHERE esh.reason = 'resignation'
+            )::int as voluntary
+          FROM app.employees e
+          INNER JOIN app.employee_status_history esh ON esh.employee_id = e.id
+            AND esh.to_status = 'terminated'
+            AND esh.effective_date BETWEEN ${periodStart}::date AND ${periodEnd}::date
+          WHERE e.tenant_id = ${tenantId}::uuid
+        ),
+        hire_counts AS (
+          SELECT COUNT(DISTINCT e.id)::int as total
+          FROM app.employees e
+          WHERE e.tenant_id = ${tenantId}::uuid
+            AND e.hire_date BETWEEN ${periodStart}::date AND ${periodEnd}::date
+        ),
+        headcount_start AS (
+          SELECT COUNT(*)::int as cnt
+          FROM app.employees e
+          WHERE e.tenant_id = ${tenantId}::uuid
+            AND e.hire_date <= ${periodStart}::date
+            AND (e.termination_date IS NULL OR e.termination_date > ${periodStart}::date)
+        ),
+        headcount_end AS (
+          SELECT COUNT(*)::int as cnt
+          FROM app.employees e
+          WHERE e.tenant_id = ${tenantId}::uuid
+            AND e.hire_date <= ${periodEnd}::date
+            AND (e.termination_date IS NULL OR e.termination_date > ${periodEnd}::date)
+        )
       SELECT
-        COUNT(DISTINCT CASE WHEN termination_date BETWEEN ${periodStart} AND ${periodEnd} THEN id END) as terminations,
-        COUNT(DISTINCT CASE WHEN reason = 'resignation' AND termination_date BETWEEN ${periodStart} AND ${periodEnd} THEN id END) as "voluntaryTerminations",
-        (
-          COUNT(DISTINCT CASE WHEN hire_date <= ${periodStart} AND (termination_date IS NULL OR termination_date > ${periodStart}) THEN id END) +
-          COUNT(DISTINCT CASE WHEN hire_date <= ${periodEnd} AND (termination_date IS NULL OR termination_date > ${periodEnd}) THEN id END)
-        ) / 2.0 as "avgHeadcount"
-      FROM period_employees
+        tc.total as terminations,
+        tc.voluntary as "voluntaryTerminations",
+        hc.total as "newHires",
+        hs.cnt as "startHeadcount",
+        he.cnt as "endHeadcount",
+        GREATEST((hs.cnt + he.cnt) / 2.0, 1) as "avgHeadcount",
+        CASE WHEN (hs.cnt + he.cnt) > 0
+          THEN ROUND((tc.total::numeric / GREATEST((hs.cnt + he.cnt) / 2.0, 1)) * 100, 2)
+          ELSE 0
+        END as "totalTurnoverRate",
+        CASE WHEN (hs.cnt + he.cnt) > 0
+          THEN ROUND((tc.voluntary::numeric / GREATEST((hs.cnt + he.cnt) / 2.0, 1)) * 100, 2)
+          ELSE 0
+        END as "voluntaryTurnoverRate"
+      FROM termination_counts tc
+      CROSS JOIN hire_counts hc
+      CROSS JOIN headcount_start hs
+      CROSS JOIN headcount_end he
     `;
   });
 
   const data = turnoverData[0];
-  const terminations = Number(data?.terminations ?? 0);
-  const avgHeadcount = Number(data?.avgHeadcount ?? 1);
-  const voluntaryTerminations = Number(data?.voluntaryTerminations ?? 0);
 
-  // Total turnover rate
-  const turnoverRate = avgHeadcount > 0 ? (terminations / avgHeadcount) * 100 : 0;
+  // Total turnover rate (already computed in SQL)
   results.push({
     metricType: "turnover",
-    value: Math.round(turnoverRate * 100) / 100,
+    value: Number(data?.totalTurnoverRate ?? 0),
     unit: "percent",
-    period: `${periodStart.toISOString().split("T")[0]}/${periodEnd.toISOString().split("T")[0]}`,
+    period,
     dimensions: { type: "total" },
-    calculatedAt: new Date(),
+    calculatedAt: now,
   });
 
   // Voluntary turnover rate
-  const voluntaryRate = avgHeadcount > 0 ? (voluntaryTerminations / avgHeadcount) * 100 : 0;
   results.push({
     metricType: "turnover",
-    value: Math.round(voluntaryRate * 100) / 100,
+    value: Number(data?.voluntaryTurnoverRate ?? 0),
     unit: "percent",
-    period: `${periodStart.toISOString().split("T")[0]}/${periodEnd.toISOString().split("T")[0]}`,
+    period,
     dimensions: { type: "voluntary" },
-    calculatedAt: new Date(),
+    calculatedAt: now,
+  });
+
+  // Raw counts (useful for dashboards)
+  results.push({
+    metricType: "turnover",
+    value: Number(data?.terminations ?? 0),
+    unit: "employees",
+    period,
+    dimensions: { type: "termination_count" },
+    calculatedAt: now,
+  });
+
+  results.push({
+    metricType: "turnover",
+    value: Number(data?.newHires ?? 0),
+    unit: "employees",
+    period,
+    dimensions: { type: "new_hire_count" },
+    calculatedAt: now,
   });
 
   return results;
@@ -393,6 +507,12 @@ async function calculateLeaveUtilization(
 
 /**
  * Calculate absence rate metrics
+ *
+ * Computes absence rate entirely in SQL including:
+ * - Calendar days in period (computed via date arithmetic in SQL)
+ * - Total absence days clipped to period boundaries
+ * - Employee count and absence rate percentage
+ * This avoids the previous pattern of computing working days in TypeScript.
  */
 async function calculateAbsenceRate(
   db: import("../plugins/db").DatabaseClient,
@@ -402,54 +522,83 @@ async function calculateAbsenceRate(
   _dimensions: Dimension[]
 ): Promise<MetricResult[]> {
   const results: MetricResult[] = [];
+  const period = `${periodStart.toISOString().split("T")[0]}/${periodEnd.toISOString().split("T")[0]}`;
+  const now = new Date();
 
-  // Calculate total working days in period
-  const workingDays = Math.ceil(
-    (periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  // Get absence data
+  // Single query computes employee count, absence days, calendar days, and rate
   const absenceData = await db.withSystemContext(async (tx) => {
     return await tx<Array<{
       employeeCount: number;
       absenceDays: number;
+      calendarDays: number;
+      absenceRate: number;
     }>>`
-      WITH employee_absences AS (
-        SELECT
-          e.id as employee_id,
-          COALESCE(SUM(
-            CASE WHEN lr.status = 'approved' THEN
-              LEAST(lr.end_date, ${periodEnd}::date) - GREATEST(lr.start_date, ${periodStart}::date) + 1
-            ELSE 0 END
-          ), 0) as absence_days
-        FROM app.employees e
-        LEFT JOIN app.leave_requests lr ON lr.employee_id = e.id
-          AND lr.start_date <= ${periodEnd}
-          AND lr.end_date >= ${periodStart}
-        WHERE e.tenant_id = ${tenantId}::uuid
-          AND e.status = 'active'
-        GROUP BY e.id
-      )
+      WITH
+        period_info AS (
+          SELECT
+            (${periodEnd}::date - ${periodStart}::date + 1)::int as calendar_days
+        ),
+        employee_absences AS (
+          SELECT
+            e.id as employee_id,
+            COALESCE(SUM(
+              CASE WHEN lr.status = 'approved' THEN
+                LEAST(lr.end_date, ${periodEnd}::date) - GREATEST(lr.start_date, ${periodStart}::date) + 1
+              ELSE 0 END
+            ), 0)::int as absence_days
+          FROM app.employees e
+          LEFT JOIN app.leave_requests lr ON lr.employee_id = e.id
+            AND lr.start_date <= ${periodEnd}::date
+            AND lr.end_date >= ${periodStart}::date
+          WHERE e.tenant_id = ${tenantId}::uuid
+            AND e.status IN ('active', 'on_leave')
+          GROUP BY e.id
+        )
       SELECT
-        COUNT(DISTINCT employee_id) as "employeeCount",
-        COALESCE(SUM(absence_days), 0) as "absenceDays"
-      FROM employee_absences
+        COUNT(DISTINCT ea.employee_id)::int as "employeeCount",
+        COALESCE(SUM(ea.absence_days), 0)::int as "absenceDays",
+        pi.calendar_days as "calendarDays",
+        CASE WHEN COUNT(DISTINCT ea.employee_id) * pi.calendar_days > 0
+          THEN ROUND(
+            (SUM(ea.absence_days)::numeric / (COUNT(DISTINCT ea.employee_id) * pi.calendar_days)) * 100,
+            2
+          )
+          ELSE 0
+        END as "absenceRate"
+      FROM employee_absences ea
+      CROSS JOIN period_info pi
+      GROUP BY pi.calendar_days
     `;
   });
 
   const data = absenceData[0];
-  const employeeCount = Number(data?.employeeCount ?? 1);
-  const absenceDays = Number(data?.absenceDays ?? 0);
-  const totalWorkingDays = employeeCount * workingDays;
-  const absenceRate = totalWorkingDays > 0 ? (absenceDays / totalWorkingDays) * 100 : 0;
 
   results.push({
     metricType: "absence_rate",
-    value: Math.round(absenceRate * 100) / 100,
+    value: Number(data?.absenceRate ?? 0),
     unit: "percent",
-    period: `${periodStart.toISOString().split("T")[0]}/${periodEnd.toISOString().split("T")[0]}`,
+    period,
     dimensions: {},
-    calculatedAt: new Date(),
+    calculatedAt: now,
+  });
+
+  // Also emit raw absence days for dashboard use
+  results.push({
+    metricType: "absence_rate",
+    value: Number(data?.absenceDays ?? 0),
+    unit: "days",
+    period,
+    dimensions: { metric: "total_absence_days" },
+    calculatedAt: now,
+  });
+
+  results.push({
+    metricType: "absence_rate",
+    value: Number(data?.employeeCount ?? 0),
+    unit: "employees",
+    period,
+    dimensions: { metric: "employee_count" },
+    calculatedAt: now,
   });
 
   return results;
@@ -457,6 +606,10 @@ async function calculateAbsenceRate(
 
 /**
  * Calculate tenure metrics
+ *
+ * Computes average, median, and band-percentage distribution entirely in SQL.
+ * The percentage calculation (count per band / total * 100) is done in the query
+ * rather than in TypeScript to avoid division in the application layer.
  */
 async function calculateTenure(
   db: import("../plugins/db").DatabaseClient,
@@ -465,36 +618,54 @@ async function calculateTenure(
   _dimensions: Dimension[]
 ): Promise<MetricResult[]> {
   const results: MetricResult[] = [];
+  const period = asOfDate.toISOString().split("T")[0] || "";
+  const now = new Date();
 
-  // Get tenure distribution
+  // Single query: stats + band percentages computed in SQL
   const tenureData = await db.withSystemContext(async (tx) => {
     return await tx<Array<{
       avgTenure: number;
       medianTenure: number;
-      lessThan1Year: number;
-      oneToThreeYears: number;
-      threeToFiveYears: number;
-      moreThan5Years: number;
       totalEmployees: number;
+      lessThan1YearPct: number;
+      oneToThreeYearsPct: number;
+      threeToFiveYearsPct: number;
+      moreThan5YearsPct: number;
+      lessThan1YearCount: number;
+      oneToThreeYearsCount: number;
+      threeToFiveYearsCount: number;
+      moreThan5YearsCount: number;
     }>>`
       WITH employee_tenure AS (
         SELECT
           e.id,
-          EXTRACT(YEAR FROM age(${asOfDate}, e.hire_date)) +
-          EXTRACT(MONTH FROM age(${asOfDate}, e.hire_date)) / 12.0 as tenure_years
+          EXTRACT(YEAR FROM age(${asOfDate}::date, e.hire_date)) +
+          EXTRACT(MONTH FROM age(${asOfDate}::date, e.hire_date)) / 12.0 as tenure_years
         FROM app.employees e
         WHERE e.tenant_id = ${tenantId}::uuid
           AND e.status = 'active'
-          AND e.hire_date <= ${asOfDate}
+          AND e.hire_date <= ${asOfDate}::date
       )
       SELECT
-        COALESCE(AVG(tenure_years), 0) as "avgTenure",
-        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tenure_years), 0) as "medianTenure",
-        COUNT(CASE WHEN tenure_years < 1 THEN 1 END) as "lessThan1Year",
-        COUNT(CASE WHEN tenure_years >= 1 AND tenure_years < 3 THEN 1 END) as "oneToThreeYears",
-        COUNT(CASE WHEN tenure_years >= 3 AND tenure_years < 5 THEN 1 END) as "threeToFiveYears",
-        COUNT(CASE WHEN tenure_years >= 5 THEN 1 END) as "moreThan5Years",
-        COUNT(*) as "totalEmployees"
+        ROUND(COALESCE(AVG(tenure_years), 0)::numeric, 2) as "avgTenure",
+        ROUND(COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tenure_years), 0)::numeric, 2) as "medianTenure",
+        COUNT(*)::int as "totalEmployees",
+        COUNT(CASE WHEN tenure_years < 1 THEN 1 END)::int as "lessThan1YearCount",
+        COUNT(CASE WHEN tenure_years >= 1 AND tenure_years < 3 THEN 1 END)::int as "oneToThreeYearsCount",
+        COUNT(CASE WHEN tenure_years >= 3 AND tenure_years < 5 THEN 1 END)::int as "threeToFiveYearsCount",
+        COUNT(CASE WHEN tenure_years >= 5 THEN 1 END)::int as "moreThan5YearsCount",
+        CASE WHEN COUNT(*) > 0
+          THEN ROUND(COUNT(CASE WHEN tenure_years < 1 THEN 1 END)::numeric / COUNT(*) * 100, 2)
+          ELSE 0 END as "lessThan1YearPct",
+        CASE WHEN COUNT(*) > 0
+          THEN ROUND(COUNT(CASE WHEN tenure_years >= 1 AND tenure_years < 3 THEN 1 END)::numeric / COUNT(*) * 100, 2)
+          ELSE 0 END as "oneToThreeYearsPct",
+        CASE WHEN COUNT(*) > 0
+          THEN ROUND(COUNT(CASE WHEN tenure_years >= 3 AND tenure_years < 5 THEN 1 END)::numeric / COUNT(*) * 100, 2)
+          ELSE 0 END as "threeToFiveYearsPct",
+        CASE WHEN COUNT(*) > 0
+          THEN ROUND(COUNT(CASE WHEN tenure_years >= 5 THEN 1 END)::numeric / COUNT(*) * 100, 2)
+          ELSE 0 END as "moreThan5YearsPct"
       FROM employee_tenure
     `;
   });
@@ -503,43 +674,89 @@ async function calculateTenure(
 
   results.push({
     metricType: "tenure",
-    value: Math.round(Number(data?.avgTenure ?? 0) * 100) / 100,
+    value: Number(data?.avgTenure ?? 0),
     unit: "years",
-    period: asOfDate.toISOString().split("T")[0] || "",
+    period,
     dimensions: { metric: "average" },
-    calculatedAt: new Date(),
+    calculatedAt: now,
   });
 
   results.push({
     metricType: "tenure",
-    value: Math.round(Number(data?.medianTenure ?? 0) * 100) / 100,
+    value: Number(data?.medianTenure ?? 0),
     unit: "years",
-    period: asOfDate.toISOString().split("T")[0] || "",
+    period,
     dimensions: { metric: "median" },
-    calculatedAt: new Date(),
+    calculatedAt: now,
   });
 
-  // Tenure distribution
-  const total = Number(data?.totalEmployees ?? 1);
-  const bands = [
-    { band: "<1 year", count: Number(data?.lessThan1Year ?? 0) },
-    { band: "1-3 years", count: Number(data?.oneToThreeYears ?? 0) },
-    { band: "3-5 years", count: Number(data?.threeToFiveYears ?? 0) },
-    { band: "5+ years", count: Number(data?.moreThan5Years ?? 0) },
+  // Tenure distribution percentages (already computed in SQL)
+  const bands: Array<{ band: string; pct: number; count: number }> = [
+    { band: "<1 year", pct: Number(data?.lessThan1YearPct ?? 0), count: Number(data?.lessThan1YearCount ?? 0) },
+    { band: "1-3 years", pct: Number(data?.oneToThreeYearsPct ?? 0), count: Number(data?.oneToThreeYearsCount ?? 0) },
+    { band: "3-5 years", pct: Number(data?.threeToFiveYearsPct ?? 0), count: Number(data?.threeToFiveYearsCount ?? 0) },
+    { band: "5+ years", pct: Number(data?.moreThan5YearsPct ?? 0), count: Number(data?.moreThan5YearsCount ?? 0) },
   ];
 
-  for (const { band, count } of bands) {
+  for (const { band, pct, count } of bands) {
     results.push({
       metricType: "tenure",
-      value: Math.round((count / total) * 10000) / 100,
+      value: pct,
       unit: "percent",
-      period: asOfDate.toISOString().split("T")[0] || "",
+      period,
       dimensions: { band },
-      calculatedAt: new Date(),
+      calculatedAt: now,
+    });
+
+    // Also emit raw counts per band
+    results.push({
+      metricType: "tenure",
+      value: count,
+      unit: "employees",
+      period,
+      dimensions: { band, metric: "count" },
+      calculatedAt: now,
     });
   }
 
   return results;
+}
+
+// =============================================================================
+// Incremental Computation Check
+// =============================================================================
+
+/**
+ * Default staleness threshold for analytics data (in minutes).
+ * If the last computation was within this window, skip recalculation.
+ */
+const STALENESS_THRESHOLD_MINUTES = 60;
+
+/**
+ * Check if a metric was recently computed and can be skipped.
+ * Returns true if the metric was computed within the staleness threshold.
+ */
+async function isRecentlyComputed(
+  db: import("../plugins/db").DatabaseClient,
+  tenantId: string,
+  metricType: MetricType,
+  granularity: TimeGranularity,
+  periodStart: Date,
+  thresholdMinutes: number = STALENESS_THRESHOLD_MINUTES
+): Promise<boolean> {
+  const result = await db.withSystemContext(async (tx) => {
+    return await tx<Array<{ recentCount: number }>>`
+      SELECT COUNT(*)::int as "recentCount"
+      FROM app.analytics_aggregates
+      WHERE tenant_id = ${tenantId}::uuid
+        AND metric_type = ${metricType}
+        AND granularity = ${granularity}
+        AND period_start = ${periodStart}
+        AND calculated_at > now() - make_interval(mins => ${thresholdMinutes})
+      LIMIT 1
+    `;
+  });
+  return Number(result[0]?.recentCount ?? 0) > 0;
 }
 
 // =============================================================================
@@ -576,6 +793,18 @@ async function processAnalyticsAggregate(
 
   const startDate = new Date(periodStart);
   const endDate = new Date(periodEnd);
+
+  // Incremental computation: skip if recently computed and not forced
+  if (!forceRecalculate) {
+    const recent = await isRecentlyComputed(
+      db, payload.tenantId, metricType, granularity, startDate
+    );
+    if (recent) {
+      log.info(`Skipping ${metricType} aggregation — computed within last ${STALENESS_THRESHOLD_MINUTES} minutes`);
+      return;
+    }
+  }
+
   const results: MetricResult[] = [];
 
   try {
@@ -610,24 +839,28 @@ async function processAnalyticsAggregate(
         log.warn(`Unknown metric type: ${metricType}`);
     }
 
-    // Store aggregated metrics
-    for (const result of results) {
-      await storeAggregatedMetric(db, {
-        tenantId: payload.tenantId,
-        metricType: result.metricType,
-        granularity,
-        periodStart: startDate,
-        periodEnd: endDate,
-        dimensions: result.dimensions,
-        value: result.value,
-        count: 1,
-        sum: result.value,
-        min: result.value,
-        max: result.value,
-        avg: result.value,
-        metadata: { unit: result.unit },
-        calculatedAt: result.calculatedAt,
-      }, forceRecalculate ?? false);
+    // Store aggregated metrics in batch (single transaction)
+    if (results.length > 0) {
+      await storeAggregatedMetricsBatch(
+        db,
+        results.map((result) => ({
+          tenantId: payload.tenantId!,
+          metricType: result.metricType,
+          granularity,
+          periodStart: startDate,
+          periodEnd: endDate,
+          dimensions: result.dimensions,
+          value: result.value,
+          count: 1,
+          sum: result.value,
+          min: result.value,
+          max: result.value,
+          avg: result.value,
+          metadata: { unit: result.unit },
+          calculatedAt: result.calculatedAt,
+        })),
+        forceRecalculate ?? false
+      );
     }
 
     log.info(`Stored ${results.length} aggregated metrics`);
@@ -697,17 +930,17 @@ async function processAnalyticsMetrics(
       await sleep(100);
     }
 
-    // Store all results
-    for (const result of allResults) {
-      await storeMetricSnapshot(db, {
-        tenantId: payload.tenantId,
+    // Store all results in a single transaction (batch)
+    if (allResults.length > 0) {
+      await storeMetricSnapshotsBatch(db, allResults.map((result) => ({
+        tenantId: payload.tenantId!,
         metricType: result.metricType,
         asOfDate: date,
         dimensions: result.dimensions,
         value: result.value,
         unit: result.unit,
         calculatedAt: result.calculatedAt,
-      });
+      })));
     }
 
     log.info(`Calculated and stored ${allResults.length} metric values`);
@@ -797,6 +1030,80 @@ async function storeAggregatedMetric(
 }
 
 /**
+ * Store multiple aggregated metrics in a single transaction.
+ * Reduces round-trips compared to storing one at a time.
+ */
+async function storeAggregatedMetricsBatch(
+  db: import("../plugins/db").DatabaseClient,
+  metrics: AggregatedMetric[],
+  forceRecalculate: boolean
+): Promise<void> {
+  if (metrics.length === 0) return;
+
+  await db.withSystemContext(async (tx) => {
+    if (forceRecalculate) {
+      // Delete all existing metrics for these period/dimension combos
+      // Use the first metric to scope the bulk delete (they share tenant/period)
+      const first = metrics[0]!;
+      await tx`
+        DELETE FROM app.analytics_aggregates
+        WHERE tenant_id = ${first.tenantId}::uuid
+          AND metric_type = ${first.metricType}
+          AND granularity = ${first.granularity}
+          AND period_start = ${first.periodStart}
+          AND period_end = ${first.periodEnd}
+      `;
+    }
+
+    // Batch insert/upsert all metrics in one statement using UNNEST
+    const tenantIds = metrics.map((m) => m.tenantId);
+    const metricTypes = metrics.map((m) => m.metricType);
+    const granularities = metrics.map((m) => m.granularity);
+    const periodStarts = metrics.map((m) => m.periodStart);
+    const periodEnds = metrics.map((m) => m.periodEnd);
+    const dimensionsArr = metrics.map((m) => JSON.stringify(m.dimensions));
+    const values = metrics.map((m) => m.value);
+    const counts = metrics.map((m) => m.count);
+    const sums = metrics.map((m) => m.sum);
+    const mins = metrics.map((m) => m.min);
+    const maxes = metrics.map((m) => m.max);
+    const avgs = metrics.map((m) => m.avg);
+    const metadataArr = metrics.map((m) => JSON.stringify(m.metadata));
+    const calculatedAts = metrics.map((m) => m.calculatedAt);
+
+    // Use individual upserts within the same transaction for compatibility
+    // with postgres.js tagged templates (UNNEST with jsonb is complex)
+    for (let i = 0; i < metrics.length; i++) {
+      await tx`
+        INSERT INTO app.analytics_aggregates (
+          tenant_id, metric_type, granularity,
+          period_start, period_end, dimensions,
+          value, count, sum, min, max, avg,
+          metadata, calculated_at, created_at, updated_at
+        )
+        VALUES (
+          ${tenantIds[i]}::uuid, ${metricTypes[i]}, ${granularities[i]},
+          ${periodStarts[i]}, ${periodEnds[i]}, ${dimensionsArr[i]}::jsonb,
+          ${values[i]}, ${counts[i]}, ${sums[i]}, ${mins[i]}, ${maxes[i]}, ${avgs[i]},
+          ${metadataArr[i]}::jsonb, ${calculatedAts[i]}, now(), now()
+        )
+        ON CONFLICT (tenant_id, metric_type, granularity, period_start, dimensions)
+        DO UPDATE SET
+          value = EXCLUDED.value,
+          count = EXCLUDED.count,
+          sum = EXCLUDED.sum,
+          min = EXCLUDED.min,
+          max = EXCLUDED.max,
+          avg = EXCLUDED.avg,
+          metadata = EXCLUDED.metadata,
+          calculated_at = EXCLUDED.calculated_at,
+          updated_at = now()
+      `;
+    }
+  });
+}
+
+/**
  * Store metric snapshot
  */
 async function storeMetricSnapshot(
@@ -838,6 +1145,46 @@ async function storeMetricSnapshot(
         value = EXCLUDED.value,
         calculated_at = EXCLUDED.calculated_at
     `;
+  });
+}
+
+/**
+ * Store multiple metric snapshots in a single transaction.
+ * Reduces round-trips compared to storing one at a time.
+ */
+async function storeMetricSnapshotsBatch(
+  db: import("../plugins/db").DatabaseClient,
+  metrics: Array<{
+    tenantId: string;
+    metricType: MetricType;
+    asOfDate: Date;
+    dimensions: Record<string, string>;
+    value: number;
+    unit: string;
+    calculatedAt: Date;
+  }>
+): Promise<void> {
+  if (metrics.length === 0) return;
+
+  await db.withSystemContext(async (tx) => {
+    for (const metric of metrics) {
+      await tx`
+        INSERT INTO app.analytics_snapshots (
+          tenant_id, metric_type, as_of_date,
+          dimensions, value, unit,
+          calculated_at, created_at
+        )
+        VALUES (
+          ${metric.tenantId}::uuid, ${metric.metricType}, ${metric.asOfDate},
+          ${JSON.stringify(metric.dimensions)}::jsonb, ${metric.value}, ${metric.unit},
+          ${metric.calculatedAt}, now()
+        )
+        ON CONFLICT (tenant_id, metric_type, as_of_date, dimensions)
+        DO UPDATE SET
+          value = EXCLUDED.value,
+          calculated_at = EXCLUDED.calculated_at
+      `;
+    }
   });
 }
 
@@ -893,7 +1240,16 @@ export async function runScheduledAnalytics(
 
       console.log(`[Analytics] Calculating ${metricType}...`);
 
-      // Calculate and store metrics
+      // Skip if recently computed (incremental)
+      const recent = await isRecentlyComputed(
+        db, tenantId, metricType, granularity, periodStart
+      );
+      if (recent) {
+        console.log(`[Analytics] ${metricType}: skipping — recently computed`);
+        continue;
+      }
+
+      // Calculate metrics
       let results: MetricResult[] = [];
 
       switch (metricType) {
@@ -914,23 +1270,28 @@ export async function runScheduledAnalytics(
           break;
       }
 
-      for (const result of results) {
-        await storeAggregatedMetric(db, {
-          tenantId,
-          metricType: result.metricType,
-          granularity,
-          periodStart,
-          periodEnd,
-          dimensions: result.dimensions,
-          value: result.value,
-          count: 1,
-          sum: result.value,
-          min: result.value,
-          max: result.value,
-          avg: result.value,
-          metadata: { unit: result.unit },
-          calculatedAt: result.calculatedAt,
-        }, false);
+      // Batch store all results in one transaction
+      if (results.length > 0) {
+        await storeAggregatedMetricsBatch(
+          db,
+          results.map((result) => ({
+            tenantId,
+            metricType: result.metricType,
+            granularity,
+            periodStart,
+            periodEnd,
+            dimensions: result.dimensions,
+            value: result.value,
+            count: 1,
+            sum: result.value,
+            min: result.value,
+            max: result.value,
+            avg: result.value,
+            metadata: { unit: result.unit },
+            calculatedAt: result.calculatedAt,
+          })),
+          false
+        );
       }
 
       console.log(`[Analytics] ${metricType}: stored ${results.length} metrics`);
