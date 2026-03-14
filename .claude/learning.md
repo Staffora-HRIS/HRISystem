@@ -176,6 +176,26 @@ Notes: `CacheKeys.orgTree(tenantId)` is already defined but never populated. Exe
 
 ---
 
+### Learning Entry
+
+Date: 2026-03-14
+Agent: Claude Code (perf/full-optimization branch)
+Category: Performance / Bug
+
+Context: Outbox processor in `packages/api/src/worker/outbox-processor.ts` used wrong column names and lacked backoff.
+
+Problem: (1) Code referenced `locked_until` and `last_error` columns which do not exist in the `domain_outbox` table (migration 0011). Actual columns are `next_retry_at` and `error_message`. These queries would fail at runtime. (2) Failed events had their retry_count incremented but no `next_retry_at` was set, so they were immediately re-fetched and retried in a tight loop during outages. (3) Fixed 5-second polling interval wasted CPU when idle.
+
+Root Cause: (1) Column names were likely written from memory or copied from a different schema version. The migration has always used `next_retry_at` and `error_message`. (2) The error handler never calculated a backoff delay. (3) No adaptive polling logic existed.
+
+Solution: (1) Fixed all SQL to use correct column names (`next_retry_at`, `error_message`). (2) Added exponential backoff for failed events: `min(1000 * 2^retryCount, 300000)` ms, stored in `next_retry_at`. Added `WHERE (next_retry_at IS NULL OR next_retry_at <= now())` to the fetch query. (3) Added adaptive polling: after 3 consecutive empty polls, interval increases by 5s increments (5s -> 10s -> 15s -> ... -> 30s cap). Resets to 5s when events are found. Also removed the non-existent `locked_until` locking mechanism (the `FOR UPDATE SKIP LOCKED` already handles concurrency).
+
+Prevention: Always verify column names against migration SQL before writing repository/worker code. The migration 0011 also provides DB-level functions (`app.claim_outbox_events`, `app.mark_outbox_event_failed`) with built-in backoff that could be used instead of inline SQL.
+
+Affected Files: `packages/api/src/worker/outbox-processor.ts`
+
+---
+
 ## Agent Workflow Improvements
 
 *Better ways agents should operate in this repository.*

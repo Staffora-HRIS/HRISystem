@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Mail,
   Monitor,
   Clock,
   Save,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Card,
@@ -15,6 +18,19 @@ import {
   Input,
   useToast,
 } from "~/components/ui";
+import { api, ApiError } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
+
+/** Shape returned by GET /tenant/current */
+interface TenantData {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  settings: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
 
 interface NotificationOption {
   id: string;
@@ -62,17 +78,156 @@ const DIGEST_OPTIONS = [
   { value: "weekly", label: "Weekly digest" },
 ];
 
+/** Notification preferences stored in tenant settings JSONB */
+interface NotificationPreferences {
+  email: Record<string, boolean>;
+  inApp: Record<string, boolean>;
+  digestFrequency: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+}
+
+const DEFAULT_PREFS: NotificationPreferences = {
+  email: Object.fromEntries(NOTIFICATION_OPTIONS.map((o) => [o.id, true])),
+  inApp: Object.fromEntries(NOTIFICATION_OPTIONS.map((o) => [o.id, true])),
+  digestFrequency: "real_time",
+  quietHoursStart: "22:00",
+  quietHoursEnd: "07:00",
+};
+
+/** Extract notification preferences from tenant settings */
+function extractPrefs(settings: Record<string, unknown>): NotificationPreferences {
+  const raw = settings.notifications;
+  if (!raw || typeof raw !== "object") return DEFAULT_PREFS;
+  const n = raw as Record<string, unknown>;
+
+  return {
+    email: (n.email && typeof n.email === "object" && !Array.isArray(n.email))
+      ? { ...DEFAULT_PREFS.email, ...(n.email as Record<string, boolean>) }
+      : DEFAULT_PREFS.email,
+    inApp: (n.inApp && typeof n.inApp === "object" && !Array.isArray(n.inApp))
+      ? { ...DEFAULT_PREFS.inApp, ...(n.inApp as Record<string, boolean>) }
+      : DEFAULT_PREFS.inApp,
+    digestFrequency: typeof n.digestFrequency === "string" ? n.digestFrequency : DEFAULT_PREFS.digestFrequency,
+    quietHoursStart: typeof n.quietHoursStart === "string" ? n.quietHoursStart : DEFAULT_PREFS.quietHoursStart,
+    quietHoursEnd: typeof n.quietHoursEnd === "string" ? n.quietHoursEnd : DEFAULT_PREFS.quietHoursEnd,
+  };
+}
+
 export default function NotificationSettingsPage() {
   const toast = useToast();
-  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    // Simulate save
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success("Settings saved successfully");
+  const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_PREFS);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Fetch current tenant data (includes settings JSONB)
+  const {
+    data: tenant,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.tenant.current(),
+    queryFn: () => api.get<TenantData>("/api/v1/tenant/current"),
+  });
+
+  // Sync prefs from server data
+  useEffect(() => {
+    if (tenant) {
+      setPrefs(extractPrefs(tenant.settings));
+      setIsDirty(false);
+    }
+  }, [tenant]);
+
+  const updatePref = useCallback(
+    <K extends keyof NotificationPreferences>(
+      key: K,
+      value: NotificationPreferences[K]
+    ) => {
+      setPrefs((prev) => ({ ...prev, [key]: value }));
+      setIsDirty(true);
+    },
+    []
+  );
+
+  const toggleEmailPref = useCallback((optionId: string, checked: boolean) => {
+    setPrefs((prev) => ({
+      ...prev,
+      email: { ...prev.email, [optionId]: checked },
+    }));
+    setIsDirty(true);
+  }, []);
+
+  const toggleInAppPref = useCallback((optionId: string, checked: boolean) => {
+    setPrefs((prev) => ({
+      ...prev,
+      inApp: { ...prev.inApp, [optionId]: checked },
+    }));
+    setIsDirty(true);
+  }, []);
+
+  // Save mutation -- merges notification prefs into existing tenant settings
+  const saveMutation = useMutation({
+    mutationFn: async (notifPrefs: NotificationPreferences) => {
+      // Merge with existing settings to preserve other keys
+      const existingSettings = tenant?.settings ?? {};
+      const mergedSettings = {
+        ...existingSettings,
+        notifications: notifPrefs,
+      };
+      return api.put<TenantData>("/api/v1/tenant/settings", {
+        settings: mergedSettings,
+      });
+    },
+    onSuccess: (updated) => {
+      toast.success("Notification settings saved successfully");
+      setIsDirty(false);
+      if (updated) {
+        queryClient.setQueryData(queryKeys.tenant.current(), updated);
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenant.settings() });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to save notification settings. Please try again.";
+      toast.error(message);
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate(prefs);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12" role="status">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="sr-only">Loading notification settings...</span>
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-400" />
+        <p className="text-gray-700 font-medium">Failed to load notification settings</p>
+        <p className="text-sm text-gray-500">
+          {error instanceof ApiError ? error.message : "An unexpected error occurred."}
+        </p>
+        <Button variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -86,9 +241,12 @@ export default function NotificationSettingsPage() {
             Configure how and when you receive notifications
           </p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button
+          onClick={handleSave}
+          disabled={saveMutation.isPending || !isDirty}
+        >
           <Save className="h-4 w-4 mr-2" />
-          {isSaving ? "Saving..." : "Save Changes"}
+          {saveMutation.isPending ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -106,7 +264,8 @@ export default function NotificationSettingsPage() {
               <div key={option.id} className="flex items-start gap-3">
                 <Checkbox
                   id={`email_${option.id}`}
-                  defaultChecked={true}
+                  checked={prefs.email[option.id] ?? true}
+                  onChange={(e) => toggleEmailPref(option.id, e.target.checked)}
                   aria-label={`Email: ${option.label}`}
                 />
                 <label
@@ -138,7 +297,8 @@ export default function NotificationSettingsPage() {
               <div key={option.id} className="flex items-start gap-3">
                 <Checkbox
                   id={`inapp_${option.id}`}
-                  defaultChecked={true}
+                  checked={prefs.inApp[option.id] ?? true}
+                  onChange={(e) => toggleInAppPref(option.id, e.target.checked)}
                   aria-label={`In-App: ${option.label}`}
                 />
                 <label
@@ -169,17 +329,20 @@ export default function NotificationSettingsPage() {
             <Select
               label="Digest Frequency"
               options={DIGEST_OPTIONS}
-              defaultValue="real_time"
+              value={prefs.digestFrequency}
+              onChange={(e) => updatePref("digestFrequency", e.target.value)}
             />
             <Input
               label="Quiet Hours Start"
               type="time"
-              defaultValue="22:00"
+              value={prefs.quietHoursStart}
+              onChange={(e) => updatePref("quietHoursStart", e.target.value)}
             />
             <Input
               label="Quiet Hours End"
               type="time"
-              defaultValue="07:00"
+              value={prefs.quietHoursEnd}
+              onChange={(e) => updatePref("quietHoursEnd", e.target.value)}
             />
           </div>
           <p className="text-xs text-gray-500 mt-3">

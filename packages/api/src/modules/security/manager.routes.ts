@@ -266,6 +266,56 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
     }
   )
 
+  // Bulk approve/reject requests
+  .post(
+    "/approvals/bulk",
+    async (ctx) => {
+      const { tenant, user, db, body, set, requestId } = ctx as any;
+
+      try {
+        const service = new ManagerService(db);
+        const result = await service.bulkApproveRequests(
+          { tenantId: tenant.id, userId: user.id },
+          body.items
+        );
+
+        return result;
+      } catch (error: any) {
+        if (error.name === "ManagerAccessError") {
+          set.status = 403;
+          return {
+            error: {
+              code: ErrorCodes.FORBIDDEN,
+              message: error.message,
+              requestId,
+            },
+          };
+        }
+        throw error;
+      }
+    },
+    {
+      beforeHandle: [requireAuthContext, requireTenantContext],
+      body: t.Object({
+        items: t.Array(
+          t.Object({
+            type: t.Union([t.Literal("leave_request"), t.Literal("timesheet")]),
+            id: t.String({ format: "uuid" }),
+            action: t.Union([t.Literal("approve"), t.Literal("reject")]),
+            notes: t.Optional(t.String({ maxLength: 1000 })),
+          }),
+          { minItems: 1, maxItems: 50 }
+        ),
+      }),
+      detail: {
+        tags: ["Manager"],
+        summary: "Bulk approve or reject requests",
+        description:
+          "Process multiple leave requests and timesheets in a single call. Each item is processed independently; partial success is possible.",
+      },
+    }
+  )
+
   // Get team absence calendar
   .get(
     "/absence/calendar",

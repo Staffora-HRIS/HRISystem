@@ -432,20 +432,26 @@ export class ManagerService {
 
           // Create approval record
           await tx`
-            INSERT INTO app.leave_approvals (
+            INSERT INTO app.leave_request_approvals (
               tenant_id,
-              leave_request_id,
-              approver_id,
-              decision,
+              request_id,
+              action,
+              actor_id,
+              actor_role,
               comment,
-              decided_at
+              previous_status,
+              new_status,
+              created_at
             )
             VALUES (
               ${ctx.tenantId}::uuid,
               ${requestId}::uuid,
-              ${employeeId}::uuid,
-              'approved',
+              'approve',
+              ${ctx.userId}::uuid,
+              'manager',
               ${comment ?? null},
+              'pending',
+              'approved',
               now()
             )
           `;
@@ -496,26 +502,33 @@ export class ManagerService {
             UPDATE app.leave_requests
             SET
               status = 'rejected',
+              rejection_reason = ${comment ?? 'Rejected by manager'},
               updated_at = now()
             WHERE id = ${requestId}::uuid
           `;
 
           // Create approval record
           await tx`
-            INSERT INTO app.leave_approvals (
+            INSERT INTO app.leave_request_approvals (
               tenant_id,
-              leave_request_id,
-              approver_id,
-              decision,
+              request_id,
+              action,
+              actor_id,
+              actor_role,
               comment,
-              decided_at
+              previous_status,
+              new_status,
+              created_at
             )
             VALUES (
               ${ctx.tenantId}::uuid,
               ${requestId}::uuid,
-              ${employeeId}::uuid,
+              'reject',
+              ${ctx.userId}::uuid,
+              'manager',
+              ${comment ?? 'Rejected by manager'},
+              'pending',
               'rejected',
-              ${comment ?? null},
               now()
             )
           `;
@@ -525,6 +538,201 @@ export class ManagerService {
           throw new ManagerAccessError(`Unsupported approval type: ${type}`);
       }
     });
+  }
+
+  /**
+   * Bulk approve/reject requests
+   * Processes each item individually so partial success is possible.
+   */
+  async bulkApproveRequests(
+    ctx: TenantContext,
+    items: Array<{
+      type: "leave_request" | "timesheet";
+      id: string;
+      action: "approve" | "reject";
+      notes?: string;
+    }>
+  ): Promise<{ approved: string[]; failed: Array<{ id: string; reason: string }> }> {
+    const employeeId = await this.getCurrentEmployeeId(ctx);
+    if (!employeeId) {
+      throw new ManagerAccessError("User is not an employee");
+    }
+
+    const approved: string[] = [];
+    const failed: Array<{ id: string; reason: string }> = [];
+
+    for (const item of items) {
+      try {
+        await this.db.withTransaction(ctx, async (tx) => {
+          switch (item.type) {
+            case "leave_request": {
+              // Verify the request is for a subordinate and is pending
+              const verification = await tx<{ employee_id: string }[]>`
+                SELECT lr.employee_id
+                FROM app.leave_requests lr
+                JOIN app.manager_subordinates ms ON ms.subordinate_id = lr.employee_id
+                WHERE lr.id = ${item.id}::uuid
+                  AND ms.manager_id = ${employeeId}::uuid
+                  AND ms.tenant_id = ${ctx.tenantId}::uuid
+                  AND lr.status = 'pending'
+              `;
+
+              if (verification.length === 0) {
+                throw new ManagerAccessError(
+                  "Leave request not found, not pending, or not authorized"
+                );
+              }
+
+              const newStatus = item.action === "approve" ? "approved" : "rejected";
+
+              // Update the request status
+              if (item.action === "approve") {
+                await tx`
+                  UPDATE app.leave_requests
+                  SET status = 'approved', updated_at = now()
+                  WHERE id = ${item.id}::uuid
+                `;
+              } else {
+                await tx`
+                  UPDATE app.leave_requests
+                  SET status = 'rejected',
+                      rejection_reason = ${item.notes ?? "Rejected by manager"},
+                      updated_at = now()
+                  WHERE id = ${item.id}::uuid
+                `;
+              }
+
+              // Create approval audit record
+              await tx`
+                INSERT INTO app.leave_request_approvals (
+                  tenant_id, request_id, action, actor_id, actor_role,
+                  comment, previous_status, new_status, created_at
+                )
+                VALUES (
+                  ${ctx.tenantId}::uuid, ${item.id}::uuid,
+                  ${item.action}, ${ctx.userId}::uuid, 'manager',
+                  ${item.notes ?? null}, 'pending', ${newStatus}, now()
+                )
+              `;
+
+              // Emit outbox event
+              await tx`
+                INSERT INTO app.domain_outbox (
+                  id, tenant_id, aggregate_type, aggregate_id,
+                  event_type, payload, created_at
+                )
+                VALUES (
+                  gen_random_uuid(), ${ctx.tenantId}::uuid,
+                  'leave_request', ${item.id}::uuid,
+                  ${`absence.leave_request.${newStatus}`},
+                  ${JSON.stringify({
+                    requestId: item.id,
+                    action: item.action,
+                    employeeId: verification[0]!.employee_id,
+                    notes: item.notes,
+                    actor: ctx.userId,
+                  })}::jsonb,
+                  now()
+                )
+              `;
+              break;
+            }
+
+            case "timesheet": {
+              // Verify the timesheet is for a subordinate and is submitted
+              const verification = await tx<{ employee_id: string }[]>`
+                SELECT ts.employee_id
+                FROM app.timesheets ts
+                JOIN app.manager_subordinates ms ON ms.subordinate_id = ts.employee_id
+                WHERE ts.id = ${item.id}::uuid
+                  AND ms.manager_id = ${employeeId}::uuid
+                  AND ms.tenant_id = ${ctx.tenantId}::uuid
+                  AND ts.status = 'submitted'
+              `;
+
+              if (verification.length === 0) {
+                throw new ManagerAccessError(
+                  "Timesheet not found, not submitted, or not authorized"
+                );
+              }
+
+              if (item.action === "approve") {
+                await tx`
+                  UPDATE app.timesheets
+                  SET status = 'approved',
+                      approved_at = now(),
+                      approved_by = ${ctx.userId}::uuid,
+                      updated_at = now()
+                  WHERE id = ${item.id}::uuid
+                `;
+              } else {
+                await tx`
+                  UPDATE app.timesheets
+                  SET status = 'rejected',
+                      rejected_at = now(),
+                      rejected_by = ${ctx.userId}::uuid,
+                      rejection_reason = ${item.notes ?? "Rejected by manager"},
+                      updated_at = now()
+                  WHERE id = ${item.id}::uuid
+                `;
+              }
+
+              const newStatus = item.action === "approve" ? "approved" : "rejected";
+
+              // Create timesheet approval audit record
+              await tx`
+                INSERT INTO app.timesheet_approvals (
+                  tenant_id, timesheet_id, action, actor_id, comment, created_at
+                )
+                VALUES (
+                  ${ctx.tenantId}::uuid, ${item.id}::uuid,
+                  ${item.action}::app.timesheet_approval_action,
+                  ${ctx.userId}::uuid,
+                  ${item.notes ?? null},
+                  now()
+                )
+              `;
+
+              // Emit outbox event
+              await tx`
+                INSERT INTO app.domain_outbox (
+                  id, tenant_id, aggregate_type, aggregate_id,
+                  event_type, payload, created_at
+                )
+                VALUES (
+                  gen_random_uuid(), ${ctx.tenantId}::uuid,
+                  'timesheet', ${item.id}::uuid,
+                  ${`time.timesheet.${newStatus}`},
+                  ${JSON.stringify({
+                    timesheetId: item.id,
+                    action: item.action,
+                    employeeId: verification[0]!.employee_id,
+                    notes: item.notes,
+                    actor: ctx.userId,
+                  })}::jsonb,
+                  now()
+                )
+              `;
+              break;
+            }
+
+            default:
+              throw new ManagerAccessError(
+                `Unsupported approval type: ${item.type}`
+              );
+          }
+        });
+
+        approved.push(item.id);
+      } catch (error: any) {
+        failed.push({
+          id: item.id,
+          reason: error.message || "Unknown error",
+        });
+      }
+    }
+
+    return { approved, failed };
   }
 
   /**

@@ -60,14 +60,14 @@ services:
     image: redis:7
     container_name: staffora-redis
     restart: unless-stopped
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-staffora_redis_dev}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-staffora_redis_dev} --no-auth-warning ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,7 +103,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       SESSION_SECRET: ${SESSION_SECRET:-dev_session_secret_32chars_min}
       CSRF_SECRET: ${CSRF_SECRET:-dev_csrf_secret_32chars_min}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev_better_auth_secret_32chars}
@@ -157,7 +157,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       WORKER_TYPE: all
       WORKER_HEALTH_PORT: 3001
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -222,7 +222,8 @@ services:
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:5173/ || exit 1"]
       interval: 30s

@@ -1,15 +1,11 @@
 /**
  * Centralized Database Configuration Constants
- * 
- * This module provides a single source of truth for all database configuration
- * defaults to prevent inconsistencies that cause authentication failures.
- * 
- * FIX: Created to prevent password mismatch issues where different modules
- * used different default passwords (e.g., "hris" vs "hris_dev_password")
- * causing PostgreSQL authentication failures.
- * 
- * IMPORTANT: All modules that need database connection defaults should import
- * from this module instead of hardcoding their own values.
+ *
+ * This module provides a single source of truth for all database configuration.
+ *
+ * IMPORTANT: No passwords are hardcoded in source. All credentials must come
+ * from environment variables (DATABASE_APP_URL, DATABASE_URL, DB_PASSWORD, etc.)
+ * or docker/.env. The application will refuse to start without proper configuration.
  */
 
 // =============================================================================
@@ -21,17 +17,6 @@
  * Must match docker-compose.yml: POSTGRES_USER default
  */
 export const DEFAULT_DB_USER = "hris";
-
-/**
- * Default PostgreSQL password for development
- * Must match docker-compose.yml: POSTGRES_PASSWORD default
- * 
- * CRITICAL: This value MUST be kept in sync with:
- * - docker/docker-compose.yml (POSTGRES_PASSWORD default)
- * - docker/.env.example (POSTGRES_PASSWORD)
- * - docker/.env (POSTGRES_PASSWORD)
- */
-export const DEFAULT_DB_PASSWORD = "hris_dev_password";
 
 /**
  * Default PostgreSQL database name
@@ -59,17 +44,18 @@ export const DEFAULT_TEST_DB_NAME = "hris_test";
 // =============================================================================
 
 /**
- * Build a PostgreSQL connection URL from components
+ * Build a PostgreSQL connection URL from components.
+ * Password is required -- no hardcoded fallback.
  */
 export function buildDatabaseUrl(options: {
   user?: string;
-  password?: string;
+  password: string;
   host?: string;
   port?: number;
   database?: string;
-} = {}): string {
+}): string {
   const user = encodeURIComponent(options.user || DEFAULT_DB_USER);
-  const password = encodeURIComponent(options.password || DEFAULT_DB_PASSWORD);
+  const password = encodeURIComponent(options.password);
   const host = options.host || DEFAULT_DB_HOST;
   const port = options.port || DEFAULT_DB_PORT;
   const database = options.database || DEFAULT_DB_NAME;
@@ -78,31 +64,31 @@ export function buildDatabaseUrl(options: {
 }
 
 /**
- * Get default database URL for development
- */
-export function getDefaultDatabaseUrl(): string {
-  return buildDatabaseUrl();
-}
-
-/**
- * Get default test database URL for development
- */
-export function getDefaultTestDatabaseUrl(): string {
-  return buildDatabaseUrl({ database: DEFAULT_TEST_DB_NAME });
-}
-
-/**
- * Get database URL from environment or use development default
+ * Get database URL from environment.
+ * Requires DATABASE_URL to be set. Throws if missing.
  */
 export function getDatabaseUrl(): string {
-  return process.env["DATABASE_URL"] || getDefaultDatabaseUrl();
+  const url = process.env["DATABASE_URL"];
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL environment variable is required. Set it in docker/.env"
+    );
+  }
+  return url;
 }
 
 /**
- * Get test database URL from environment or use development default
+ * Get test database URL from environment.
+ * Falls back to TEST_DATABASE_URL env var; throws if missing.
  */
 export function getTestDatabaseUrl(): string {
-  return process.env["TEST_DATABASE_URL"] || getDefaultTestDatabaseUrl();
+  const url = process.env["TEST_DATABASE_URL"];
+  if (!url) {
+    throw new Error(
+      "TEST_DATABASE_URL environment variable is required for tests."
+    );
+  }
+  return url;
 }
 
 // =============================================================================

@@ -32,10 +32,15 @@ export interface DbConfig {
 }
 
 /**
- * Load database configuration from environment
+ * Load database configuration from environment.
+ *
+ * Requires DATABASE_APP_URL (preferred) or DATABASE_URL to be set.
+ * Falls back to component env vars (DB_HOST, DB_PORT, etc.) only if
+ * DB_PASSWORD is also set. Throws on startup if no credentials are available.
  */
 function loadDbConfig(): DbConfig {
-  const databaseUrl = process.env["DATABASE_URL"];
+  // Prefer DATABASE_APP_URL (hris_app with NOBYPASSRLS) over DATABASE_URL
+  const databaseUrl = process.env["DATABASE_APP_URL"] || process.env["DATABASE_URL"];
   if (databaseUrl) {
     const url = new URL(databaseUrl);
 
@@ -59,12 +64,20 @@ function loadDbConfig(): DbConfig {
     };
   }
 
+  // Component env var fallback -- DB_PASSWORD is required (no hardcoded default)
+  const dbPassword = process.env["DB_PASSWORD"];
+  if (!dbPassword) {
+    throw new Error(
+      "DATABASE_APP_URL environment variable is required. Set it in docker/.env"
+    );
+  }
+
   return {
     host: process.env["DB_HOST"] || "localhost",
     port: Number(process.env["DB_PORT"]) || 5432,
     database: process.env["DB_NAME"] || "hris",
     username: process.env["DB_USER"] || "hris",
-    password: process.env["DB_PASSWORD"] || "hris_dev_password",
+    password: dbPassword,
     maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || 20,
     idleTimeout: Number(process.env["DB_IDLE_TIMEOUT"]) || 30,
     connectTimeout: Number(process.env["DB_CONNECT_TIMEOUT"]) || 10,
@@ -110,10 +123,12 @@ export interface QueryResult<T extends Row> {
  */
 export class DatabaseClient {
   private sql: Sql<Record<string, unknown>>;
-  private isProduction: boolean;
+  /** The PostgreSQL role name used for this connection pool */
+  public readonly connectionUser: string;
 
   constructor(config: DbConfig) {
-    this.isProduction = process.env["NODE_ENV"] === "production";
+    this.connectionUser = config.username;
+    const debugEnabled = process.env["DB_DEBUG"] === "true";
 
     this.sql = postgres({
       host: config.host,
@@ -136,20 +151,20 @@ export class DatabaseClient {
           from: postgres.fromCamel,
         },
       },
-      // Debug logging in development
-      debug: (connection, query, params) => {
-        if (!this.isProduction) {
-          console.log(`[DB Query] ${query.substring(0, 200)}...`);
-          if (params && params.length > 0) {
-            console.log(`[DB Params] ${JSON.stringify(params).substring(0, 100)}`);
+      // Debug logging is opt-in via DB_DEBUG=true to avoid leaking PII
+      debug: debugEnabled
+        ? (_connection: number, query: string, params: unknown[]) => {
+            console.log(`[DB Query] ${query.substring(0, 200)}`);
+            if (params && params.length > 0) {
+              console.log(`[DB Params] count=${params.length}`);
+            }
           }
-        }
-      },
-      onnotice: (notice) => {
-        if (!this.isProduction) {
-          console.log(`[DB Notice] ${notice.message}`);
-        }
-      },
+        : undefined,
+      onnotice: debugEnabled
+        ? (notice) => {
+            console.log(`[DB Notice] ${notice.message}`);
+          }
+        : undefined,
     });
   }
 
@@ -207,24 +222,45 @@ export class DatabaseClient {
         throw new Error("Tenant context required for transaction");
       }
 
+      // Set isolation level using a whitelist of known values (no sql.unsafe)
       if (isolationLevel) {
-        await tx.unsafe(
-          `SET TRANSACTION ISOLATION LEVEL ${isolationLevel.toUpperCase()}`
-        );
+        switch (isolationLevel) {
+          case "read committed":
+            await tx`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
+            break;
+          case "repeatable read":
+            await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`;
+            break;
+          case "serializable":
+            await tx`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+            break;
+          default: {
+            const _exhaustive: never = isolationLevel;
+            throw new Error(`Invalid isolation level: ${_exhaustive}`);
+          }
+        }
       }
 
+      // Set access mode using a whitelist of known values (no sql.unsafe)
       if (accessMode) {
-        await tx.unsafe(`SET TRANSACTION ${accessMode.toUpperCase()}`);
+        switch (accessMode) {
+          case "read write":
+            await tx`SET TRANSACTION READ WRITE`;
+            break;
+          case "read only":
+            await tx`SET TRANSACTION READ ONLY`;
+            break;
+          default: {
+            const _exhaustive: never = accessMode;
+            throw new Error(`Invalid access mode: ${_exhaustive}`);
+          }
+        }
       }
 
       // Set tenant context for RLS
       await tx`SELECT app.set_tenant_context(${context.tenantId}::uuid, ${context.userId || null}::uuid)`;
 
-      try {
-        return await callback(tx);
-      } catch (error) {
-        throw error;
-      }
+      return await callback(tx);
     })) as T;
   }
 
@@ -337,12 +373,12 @@ export function dbPlugin() {
   return new Elysia({ name: "db" })
     .decorate("db", db)
     .onStart(async () => {
-      console.log("[DB] Database plugin initialized");
+      console.log(`[DB] Database plugin initialized (role=${db.connectionUser})`);
 
       // Verify connection on startup
       const health = await db.healthCheck();
       if (health.status === "up") {
-        console.log(`[DB] Connection verified (${health.latency}ms)`);
+        console.log(`[DB] Connection verified (${health.latency}ms, role=${db.connectionUser})`);
       } else {
         console.error("[DB] Failed to connect to database");
         throw new Error("Database connection failed");
