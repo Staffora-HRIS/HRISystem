@@ -18,3 +18,25 @@
 
 .env
 .env.*
+
+# Test files — not needed in production images
+**/src/test
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Documentation and project management — not needed in images
+Docs/
+.claude/
+.blender-toolkit/
+audit/
+issues/
+project-management/
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
