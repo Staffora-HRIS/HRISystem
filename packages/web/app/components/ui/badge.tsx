@@ -2,9 +2,11 @@
  * Badge Component
  *
  * A versatile badge/tag component for labels, statuses, and counts.
+ * Badge and its variants are wrapped with React.memo since they are
+ * frequently rendered in lists and tables without internal state.
  */
 
-import { type ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 export type BadgeVariant =
@@ -89,7 +91,7 @@ const dotColors: Record<BadgeVariant, string> = {
   outline: "bg-gray-500",
 };
 
-export function Badge({
+export const Badge = React.memo(function Badge({
   variant = "default",
   size = "md",
   rounded = false,
@@ -141,7 +143,7 @@ export function Badge({
       )}
     </span>
   );
-}
+});
 
 /**
  * Status Badge - Pre-configured for common statuses
@@ -182,7 +184,7 @@ const statusConfig: Record<
   cancelled: { variant: "default", label: "Cancelled" },
 };
 
-export function StatusBadge({ status, size = "sm", className }: StatusBadgeProps) {
+export const StatusBadge = React.memo(function StatusBadge({ status, size = "sm", className }: StatusBadgeProps) {
   const config = statusConfig[status];
 
   return (
@@ -190,7 +192,7 @@ export function StatusBadge({ status, size = "sm", className }: StatusBadgeProps
       {config.label}
     </Badge>
   );
-}
+});
 
 /**
  * Count Badge - For notification counts
@@ -203,7 +205,7 @@ export interface CountBadgeProps {
   className?: string;
 }
 
-export function CountBadge({
+export const CountBadge = React.memo(function CountBadge({
   count,
   max = 99,
   variant = "error",
@@ -226,7 +228,7 @@ export function CountBadge({
       {displayCount}
     </span>
   );
-}
+});
 
 /**
  * BadgeGroup - Group of badges
@@ -263,7 +265,7 @@ const priorityConfig: Record<
   urgent: { variant: "error", label: "Urgent" },
 };
 
-export function PriorityBadge({ priority, size = "sm", className }: PriorityBadgeProps) {
+export const PriorityBadge = React.memo(function PriorityBadge({ priority, size = "sm", className }: PriorityBadgeProps) {
   const config = priorityConfig[priority];
 
   return (
@@ -271,7 +273,7 @@ export function PriorityBadge({ priority, size = "sm", className }: PriorityBadg
       {config.label}
     </Badge>
   );
-}
+});
 
 /**
  * Type Badge - For categorization
@@ -283,7 +285,7 @@ export interface TypeBadgeProps {
   className?: string;
 }
 
-export function TypeBadge({
+export const TypeBadge = React.memo(function TypeBadge({
   type,
   variant = "secondary",
   size = "sm",
@@ -294,4 +296,4 @@ export function TypeBadge({
       {type}
     </Badge>
   );
-}
+});

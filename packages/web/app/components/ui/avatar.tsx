@@ -1,9 +1,12 @@
 /**
  * Avatar Component
  *
- * User avatar with fallback initials and image support
+ * User avatar with fallback initials and image support.
+ * Wrapped with React.memo since avatars are frequently rendered
+ * in lists, tables, and search results without internal state.
  */
 
+import React from "react";
 import { cn } from "../../lib/utils";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
@@ -73,7 +76,7 @@ function getColorFromName(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function Avatar({
+export const Avatar = React.memo(function Avatar({
   src,
   alt,
   name,
@@ -122,7 +125,7 @@ export function Avatar({
       )}
     </div>
   );
-}
+});
 
 export interface AvatarGroupProps {
   avatars: Array<{ src?: string; name?: string }>;
@@ -131,7 +134,7 @@ export interface AvatarGroupProps {
   className?: string;
 }
 
-export function AvatarGroup({
+export const AvatarGroup = React.memo(function AvatarGroup({
   avatars,
   max = 4,
   size = "md",
@@ -163,4 +166,4 @@ export function AvatarGroup({
       )}
     </div>
   );
-}
+});
