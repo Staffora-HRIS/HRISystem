@@ -24,11 +24,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hris_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-hris}
       # Production: Tune shared_buffers, work_mem via postgres.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hris} -d ${POSTGRES_DB:-hris}"]
       interval: 10s
