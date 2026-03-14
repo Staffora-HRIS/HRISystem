@@ -221,6 +221,12 @@ services:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5173/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - staffora-network
     deploy:
