@@ -278,7 +278,7 @@ export class BaseWorker {
         "CREATE",
         streamKey,
         this.config.consumerGroup,
-        "0",
+        "$",
         "MKSTREAM"
       );
       console.log(`[Worker] Created consumer group ${this.config.consumerGroup} for ${streamKey}`);
@@ -348,6 +348,8 @@ export class BaseWorker {
       "failedAt",
       new Date().toISOString()
     );
+    // Trim DLQ to prevent unbounded growth (approximate, keeps ~10k entries)
+    await this.redis.xtrim(dlqKey, "MAXLEN", "~", 10000);
 
     console.log(`[Worker] Moved job ${payload.id} to DLQ: ${dlqKey}`);
   }
@@ -402,6 +404,8 @@ export class BaseWorker {
 
       // Acknowledge success
       await this.redis.xack(streamKey, this.config.consumerGroup, messageId);
+      // Trim stream to prevent unbounded growth (approximate, keeps ~100k entries)
+      await this.redis.xtrim(streamKey, "MAXLEN", "~", 100000);
       this.processedJobs++;
 
       const duration = Date.now() - startTime;
@@ -436,6 +440,8 @@ export class BaseWorker {
 
       // Always acknowledge to prevent infinite loop
       await this.redis.xack(streamKey, this.config.consumerGroup, messageId);
+      // Trim stream to prevent unbounded growth (approximate, keeps ~100k entries)
+      await this.redis.xtrim(streamKey, "MAXLEN", "~", 100000);
     } finally {
       this.activeJobs--;
     }
