@@ -1021,41 +1021,43 @@ export class HRRepository {
       reportingLineId = reportingRows[0]?.id;
     }
 
-    // Create contacts if provided
+    // Create contacts if provided (batch insert)
     if (data.contacts && data.contacts.length > 0) {
-      for (const contact of data.contacts) {
-        await tx`
-          INSERT INTO app.employee_contacts (
-            tenant_id, employee_id, effective_from,
-            contact_type, value, is_primary, created_by
-          )
-          VALUES (
-            ${context.tenantId}::uuid, ${employee.id}::uuid, ${data.contract.hire_date}::date,
-            ${contact.contact_type}::app.contact_type, ${contact.value},
-            ${contact.is_primary || false}, ${createdBy}::uuid
-          )
-        `;
-      }
+      await tx`
+        INSERT INTO app.employee_contacts ${tx(
+          data.contacts.map(contact => ({
+            tenant_id: context.tenantId,
+            employee_id: employee.id,
+            effective_from: data.contract.hire_date,
+            contact_type: contact.contact_type,
+            value: contact.value,
+            is_primary: contact.is_primary || false,
+            created_by: createdBy,
+          }))
+        )}
+      `;
     }
 
-    // Create addresses if provided
+    // Create addresses if provided (batch insert)
     if (data.addresses && data.addresses.length > 0) {
-      for (const address of data.addresses) {
-        await tx`
-          INSERT INTO app.employee_addresses (
-            tenant_id, employee_id, effective_from,
-            address_type, street_line1, street_line2, city,
-            state_province, postal_code, country, is_primary, created_by
-          )
-          VALUES (
-            ${context.tenantId}::uuid, ${employee.id}::uuid, ${data.contract.hire_date}::date,
-            ${address.address_type}::app.address_type, ${address.street_line1},
-            ${address.street_line2 || null}, ${address.city}, ${address.state_province || null},
-            ${address.postal_code}, ${address.country}, ${address.is_primary || false},
-            ${createdBy}::uuid
-          )
-        `;
-      }
+      await tx`
+        INSERT INTO app.employee_addresses ${tx(
+          data.addresses.map(address => ({
+            tenant_id: context.tenantId,
+            employee_id: employee.id,
+            effective_from: data.contract.hire_date,
+            address_type: address.address_type,
+            street_line1: address.street_line1,
+            street_line2: address.street_line2 || null,
+            city: address.city,
+            state_province: address.state_province || null,
+            postal_code: address.postal_code,
+            country: address.country,
+            is_primary: address.is_primary || false,
+            created_by: createdBy,
+          }))
+        )}
+      `;
     }
 
     return {
