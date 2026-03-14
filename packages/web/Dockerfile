@@ -1,44 +1,84 @@
-# Build stage
-FROM oven/bun:1.1.38 AS builder
+# Staffora Platform Web Dockerfile
+# Multi-stage build for React Router v7 SSR application
+#
+# This app uses server-side rendering (react-router-serve) and requires
+# a Bun runtime. It cannot be served by a static file server like nginx.
+
+# =============================================================================
+# Stage 1: Install dependencies
+# =============================================================================
+FROM oven/bun:1.1.38-alpine AS deps
 
 WORKDIR /app
 
-ENV NODE_ENV=development
-
-RUN mkdir -p packages/api packages/web packages/shared
-
-# Copy package files
+# Copy workspace root package files for monorepo resolution
 COPY package.json bun.lock ./
-COPY packages/api/package.json ./packages/api/package.json
-COPY packages/web/package.json ./packages/web/package.json
-COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/api/package.json ./packages/api/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/web/package.json ./packages/web/
 COPY Website/package.json ./Website/
 
-# Install dependencies
+# Install all dependencies (dev deps needed for build step)
 RUN bun install --frozen-lockfile --ignore-scripts
 
-# Copy source files
-COPY packages/shared ./packages/shared
-COPY packages/web ./packages/web
-COPY tsconfig.base.json ./
-
-# Build the application
-RUN bun run --filter @staffora/web build
-
-# Production stage
-FROM oven/bun:1.1.38-slim AS production
+# =============================================================================
+# Stage 2: Build the application
+# =============================================================================
+FROM oven/bun:1.1.38-alpine AS builder
 
 WORKDIR /app
 
-# Copy built assets and dependencies
-COPY --from=builder /app/packages/web/build ./build
-COPY --from=builder /app/packages/web/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Accept build arguments that Vite inlines into the client bundle
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-USER nextjs
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy source code needed for building
+COPY tsconfig.base.json ./
+COPY packages/shared ./packages/shared
+COPY packages/web ./packages/web
+
+# Build the React Router v7 SSR application
+# This produces build/server/index.js and build/client/ assets
+RUN bun run --filter @staffora/web build
+
+# =============================================================================
+# Stage 3: Production runtime
+# =============================================================================
+FROM oven/bun:1.1.38-alpine AS runner
+
+WORKDIR /app
+
+# Create non-root user for security (matching API Dockerfile convention)
+RUN addgroup --system --gid 1001 staffora && \
+    adduser --system --uid 1001 --ingroup staffora staffora
+
+# Install production-only dependencies
+# Copy workspace package files for monorepo resolution
+COPY package.json bun.lock ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/web/package.json ./packages/web/
+COPY Website/package.json ./Website/
+
+RUN bun install --frozen-lockfile --ignore-scripts --production && \
+    rm -rf /tmp/* ~/.bun/install/cache
+
+# Copy the shared package (needed at runtime for imports)
+COPY --from=builder --chown=staffora:staffora /app/packages/shared ./packages/shared
+
+# Copy built application output (server bundle + client assets)
+COPY --from=builder --chown=staffora:staffora /app/packages/web/build ./packages/web/build
+
+# Copy the web package.json (needed for react-router-serve start script)
+COPY --from=builder --chown=staffora:staffora /app/packages/web/package.json ./packages/web/package.json
+
+# Switch to non-root user
+USER staffora
+
+WORKDIR /app/packages/web
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -49,7 +89,7 @@ EXPOSE 5173
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:5173/ || exit 1
+    CMD wget -q --spider http://localhost:5173/ || exit 1
 
-# Start the application
+# Start the SSR server via react-router-serve
 CMD ["bun", "run", "start"]
