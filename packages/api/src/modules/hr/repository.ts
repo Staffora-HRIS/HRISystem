@@ -80,6 +80,7 @@ export interface EmployeeRow extends Row {
   hireDate: Date;
   terminationDate: Date | null;
   terminationReason: string | null;
+  niCategory: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -407,15 +408,16 @@ export class HRRepository {
     id: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.org_units
-        WHERE parent_id = ${id}::uuid AND is_active = true
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.org_units
+          WHERE parent_id = ${id}::uuid AND is_active = true
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -426,18 +428,19 @@ export class HRRepository {
     id: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.position_assignments pa
-        INNER JOIN app.employees e ON pa.employee_id = e.id
-        WHERE pa.org_unit_id = ${id}::uuid
-          AND pa.effective_to IS NULL
-          AND e.status IN ('active', 'on_leave')
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.position_assignments pa
+          INNER JOIN app.employees e ON pa.employee_id = e.id
+          WHERE pa.org_unit_id = ${id}::uuid
+            AND pa.effective_to IS NULL
+            AND e.status IN ('active', 'on_leave')
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -662,18 +665,19 @@ export class HRRepository {
     id: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.position_assignments pa
-        INNER JOIN app.employees e ON pa.employee_id = e.id
-        WHERE pa.position_id = ${id}::uuid
-          AND pa.effective_to IS NULL
-          AND e.status IN ('active', 'on_leave')
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.position_assignments pa
+          INNER JOIN app.employees e ON pa.employee_id = e.id
+          WHERE pa.position_id = ${id}::uuid
+            AND pa.effective_to IS NULL
+            AND e.status IN ('active', 'on_leave')
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -1338,6 +1342,27 @@ export class HRRepository {
   }
 
   /**
+   * Update employee NI category
+   */
+  async updateNiCategory(
+    tx: TransactionSql,
+    context: TenantContext,
+    employeeId: string,
+    niCategory: string
+  ): Promise<boolean> {
+    const result = await tx`
+      UPDATE app.employees
+      SET
+        ni_category = ${niCategory}::app.ni_category,
+        updated_at = now()
+      WHERE id = ${employeeId}::uuid
+        AND tenant_id = ${context.tenantId}::uuid
+    `;
+
+    return result.count > 0;
+  }
+
+  /**
    * Terminate employee
    */
   async terminateEmployee(
@@ -1571,18 +1596,19 @@ export class HRRepository {
     excludeId?: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.employee_personal
-        WHERE employee_id = ${employeeId}::uuid
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || '9999-12-31'}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.employee_personal
+          WHERE employee_id = ${employeeId}::uuid
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || '9999-12-31'}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -1596,18 +1622,19 @@ export class HRRepository {
     excludeId?: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.employment_contracts
-        WHERE employee_id = ${employeeId}::uuid
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || '9999-12-31'}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.employment_contracts
+          WHERE employee_id = ${employeeId}::uuid
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || '9999-12-31'}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -1624,19 +1651,20 @@ export class HRRepository {
     if (!isPrimary) return false;
 
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.position_assignments
-        WHERE employee_id = ${employeeId}::uuid
-          AND is_primary = true
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || '9999-12-31'}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.position_assignments
+          WHERE employee_id = ${employeeId}::uuid
+            AND is_primary = true
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || '9999-12-31'}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -1650,18 +1678,19 @@ export class HRRepository {
     excludeId?: string
   ): Promise<boolean> {
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.compensation_history
-        WHERE employee_id = ${employeeId}::uuid
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || '9999-12-31'}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.compensation_history
+          WHERE employee_id = ${employeeId}::uuid
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || '9999-12-31'}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**
@@ -1678,19 +1707,20 @@ export class HRRepository {
     if (!isPrimary) return false;
 
     const result = await this.db.withTransaction(context, async (tx) => {
-      const rows = await tx<{ count: string }[]>`
-        SELECT COUNT(*)::text as count
-        FROM app.reporting_lines
-        WHERE employee_id = ${employeeId}::uuid
-          AND is_primary = true
-          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
-          AND effective_from < ${effectiveTo || '9999-12-31'}::date
-          AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+      const rows = await tx<{ exists: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM app.reporting_lines
+          WHERE employee_id = ${employeeId}::uuid
+            AND is_primary = true
+            ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+            AND effective_from < ${effectiveTo || '9999-12-31'}::date
+            AND (effective_to IS NULL OR effective_to > ${effectiveFrom}::date)
+        ) as exists
       `;
       return rows;
     });
 
-    return parseInt(result[0]?.count || "0", 10) > 0;
+    return result[0]?.exists ?? false;
   }
 
   /**

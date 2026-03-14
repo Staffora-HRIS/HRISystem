@@ -546,7 +546,9 @@ export class CompetenciesRepository {
   ): Promise<CompetencyGapRow[]> {
     return await this.db.withTransaction(context, async (tx) => {
       return tx<CompetencyGapRow[]>`
-        SELECT * FROM app.get_competency_gaps(${employeeId}::uuid)
+        SELECT competency_id, competency_name, competency_category,
+               required_level, current_level, gap, is_required
+        FROM app.get_competency_gaps(${employeeId}::uuid)
       `;
     });
   }
@@ -557,7 +559,9 @@ export class CompetenciesRepository {
   ): Promise<any[]> {
     return await this.db.withTransaction(context, async (tx) => {
       return tx<any[]>`
-        SELECT * FROM app.get_competencies_due_assessment(
+        SELECT employee_id, employee_name, competency_name,
+               current_level, next_assessment_due, days_until_due
+        FROM app.get_competencies_due_assessment(
           ${context.tenantId}::uuid,
           ${daysAhead}
         )
@@ -571,7 +575,9 @@ export class CompetenciesRepository {
   ): Promise<any[]> {
     return await this.db.withTransaction(context, async (tx) => {
       return tx<any[]>`
-        SELECT * FROM app.get_team_competency_overview(${managerId}::uuid)
+        SELECT competency_id, competency_name, team_size,
+               avg_level, min_level, max_level, gap_count
+        FROM app.get_team_competency_overview(${managerId}::uuid)
       `;
     });
   }

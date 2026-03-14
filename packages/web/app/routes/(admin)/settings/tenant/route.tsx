@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   Globe,
   Clock,
-  DollarSign,
+  Palette,
   Save,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Card,
@@ -16,19 +18,42 @@ import {
   Select,
   useToast,
 } from "~/components/ui";
+import { api, ApiError } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
 
-interface TenantSettings {
+/** Shape returned by GET /tenant/current */
+interface TenantData {
   id: string;
   name: string;
   slug: string;
+  status: string;
+  settings: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/** Local form state derived from tenant data + settings JSONB */
+interface TenantFormState {
+  name: string;
   timezone: string;
   dateFormat: string;
   currency: string;
-  fiscalYearStart: string;
   workWeekStart: string;
-  logoUrl: string | null;
-  primaryColor: string | null;
+  fiscalYearStartMonth: string;
+  fiscalYearStartDay: string;
+  primaryColor: string;
 }
+
+const DEFAULTS: TenantFormState = {
+  name: "",
+  timezone: "UTC",
+  dateFormat: "YYYY-MM-DD",
+  currency: "GBP",
+  workWeekStart: "monday",
+  fiscalYearStartMonth: "01",
+  fiscalYearStartDay: "1",
+  primaryColor: "#3B82F6",
+};
 
 const TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (US & Canada)" },
@@ -64,41 +89,126 @@ const WEEKDAYS = [
   { value: "saturday", label: "Saturday" },
 ];
 
+/** Convert API response into form state */
+function tenantToFormState(tenant: TenantData): TenantFormState {
+  const s = tenant.settings ?? {};
+  return {
+    name: tenant.name ?? DEFAULTS.name,
+    timezone: (s.timezone as string) ?? DEFAULTS.timezone,
+    dateFormat: (s.dateFormat as string) ?? DEFAULTS.dateFormat,
+    currency: (s.currency as string) ?? DEFAULTS.currency,
+    workWeekStart: (s.workWeekStart as string) ?? DEFAULTS.workWeekStart,
+    fiscalYearStartMonth: (s.fiscalYearStartMonth as string) ?? DEFAULTS.fiscalYearStartMonth,
+    fiscalYearStartDay: (s.fiscalYearStartDay as string) ?? DEFAULTS.fiscalYearStartDay,
+    primaryColor: (s.primaryColor as string) ?? DEFAULTS.primaryColor,
+  };
+}
+
+/** Build the PUT body from form state */
+function formStateToPayload(form: TenantFormState) {
+  return {
+    name: form.name,
+    settings: {
+      timezone: form.timezone,
+      dateFormat: form.dateFormat,
+      currency: form.currency,
+      workWeekStart: form.workWeekStart,
+      fiscalYearStartMonth: form.fiscalYearStartMonth,
+      fiscalYearStartDay: form.fiscalYearStartDay,
+      primaryColor: form.primaryColor,
+    },
+  };
+}
+
 export default function AdminTenantSettingsPage() {
   const toast = useToast();
-  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: tenant, isLoading } = useQuery({
-    queryKey: ["admin-tenant-settings"],
-    queryFn: async () => {
-      // Return mock data for now
-      return {
-        id: "tenant-1",
-        name: "Acme Corporation",
-        slug: "acme",
-        timezone: "America/New_York",
-        dateFormat: "MM/DD/YYYY",
-        currency: "USD",
-        fiscalYearStart: "01-01",
-        workWeekStart: "monday",
-        logoUrl: null,
-        primaryColor: "#3B82F6",
-      } as TenantSettings;
+  const [form, setForm] = useState<TenantFormState>(DEFAULTS);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Fetch current tenant data
+  const {
+    data: tenant,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.tenant.current(),
+    queryFn: () => api.get<TenantData>("/api/v1/tenant/current"),
+  });
+
+  // Sync form state when data loads
+  useEffect(() => {
+    if (tenant) {
+      setForm(tenantToFormState(tenant));
+      setIsDirty(false);
+    }
+  }, [tenant]);
+
+  // Field change handler
+  const updateField = useCallback(
+    <K extends keyof TenantFormState>(field: K, value: TenantFormState[K]) => {
+      setForm((prev) => ({ ...prev, [field]: value }));
+      setIsDirty(true);
+    },
+    []
+  );
+
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: (payload: ReturnType<typeof formStateToPayload>) =>
+      api.put<TenantData>("/api/v1/tenant/settings", payload),
+    onSuccess: (updated) => {
+      toast.success("Settings saved successfully");
+      setIsDirty(false);
+      // Update cached tenant data so other components see the change
+      if (updated) {
+        queryClient.setQueryData(queryKeys.tenant.current(), updated);
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenant.settings() });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to save settings. Please try again.";
+      toast.error(message);
     },
   });
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    // Simulate save
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success("Settings saved successfully");
+  const handleSave = () => {
+    if (!form.name.trim()) {
+      toast.error("Organization name is required");
+      return;
+    }
+    saveMutation.mutate(formStateToPayload(form));
   };
 
+  // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center py-12" role="status">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="sr-only">Loading tenant settings...</span>
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-400" />
+        <p className="text-gray-700 font-medium">Failed to load tenant settings</p>
+        <p className="text-sm text-gray-500">
+          {error instanceof ApiError ? error.message : "An unexpected error occurred."}
+        </p>
+        <Button variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
       </div>
     );
   }
@@ -111,9 +221,12 @@ export default function AdminTenantSettingsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Tenant Settings</h1>
           <p className="text-gray-600">Configure your organization settings</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button
+          onClick={handleSave}
+          disabled={saveMutation.isPending || !isDirty}
+        >
           <Save className="h-4 w-4 mr-2" />
-          {isSaving ? "Saving..." : "Save Changes"}
+          {saveMutation.isPending ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -129,14 +242,17 @@ export default function AdminTenantSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Organization Name"
-              defaultValue={tenant?.name}
+              value={form.name}
+              onChange={(e) => updateField("name", e.target.value)}
               placeholder="Enter organization name"
+              error={!form.name.trim() ? "Organization name is required" : undefined}
             />
             <Input
               label="URL Slug"
-              defaultValue={tenant?.slug}
+              value={tenant?.slug ?? ""}
               placeholder="acme"
               disabled
+              hint="The URL slug cannot be changed after creation"
             />
           </div>
           <div>
@@ -145,22 +261,14 @@ export default function AdminTenantSettingsPage() {
             </label>
             <div className="flex items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
-                {tenant?.logoUrl ? (
-                  <img
-                    src={tenant.logoUrl}
-                    alt="Logo"
-                    className="h-full w-full object-contain rounded-lg"
-                  />
-                ) : (
-                  <Building2 className="h-8 w-8 text-gray-400" />
-                )}
+                <Building2 className="h-8 w-8 text-gray-400" />
               </div>
               <div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled>
                   Upload Logo
                 </Button>
                 <p className="text-xs text-gray-500 mt-1">
-                  PNG, JPG up to 2MB. Recommended: 200x200px
+                  Logo upload is not yet available. PNG, JPG up to 2MB. Recommended: 200x200px
                 </p>
               </div>
             </div>
@@ -180,22 +288,26 @@ export default function AdminTenantSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Timezone"
-              defaultValue={tenant?.timezone}
+              value={form.timezone}
+              onChange={(e) => updateField("timezone", e.target.value)}
               options={TIMEZONES}
             />
             <Select
               label="Date Format"
-              defaultValue={tenant?.dateFormat}
+              value={form.dateFormat}
+              onChange={(e) => updateField("dateFormat", e.target.value)}
               options={DATE_FORMATS}
             />
             <Select
               label="Currency"
-              defaultValue={tenant?.currency}
+              value={form.currency}
+              onChange={(e) => updateField("currency", e.target.value)}
               options={CURRENCIES}
             />
             <Select
               label="Work Week Starts On"
-              defaultValue={tenant?.workWeekStart}
+              value={form.workWeekStart}
+              onChange={(e) => updateField("workWeekStart", e.target.value)}
               options={WEEKDAYS}
             />
           </div>
@@ -214,7 +326,8 @@ export default function AdminTenantSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Fiscal Year Start Month"
-              defaultValue="01"
+              value={form.fiscalYearStartMonth}
+              onChange={(e) => updateField("fiscalYearStartMonth", e.target.value)}
               options={[
                 { value: "01", label: "January" },
                 { value: "02", label: "February" },
@@ -232,7 +345,8 @@ export default function AdminTenantSettingsPage() {
             />
             <Select
               label="Fiscal Year Start Day"
-              defaultValue="1"
+              value={form.fiscalYearStartDay}
+              onChange={(e) => updateField("fiscalYearStartDay", e.target.value)}
               options={Array.from({ length: 28 }, (_, i) => ({
                 value: String(i + 1),
                 label: String(i + 1),
@@ -246,14 +360,17 @@ export default function AdminTenantSettingsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-gray-500" />
+            <Palette className="h-5 w-5 text-gray-500" />
             <h2 className="font-semibold">Branding</h2>
           </div>
         </CardHeader>
         <CardBody>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="primary-color-picker"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Primary Color
               </label>
               <div className="flex items-center gap-2">
@@ -262,11 +379,13 @@ export default function AdminTenantSettingsPage() {
                   id="primary-color-picker"
                   title="Select primary color"
                   aria-label="Primary color picker"
-                  defaultValue={tenant?.primaryColor || "#3B82F6"}
+                  value={form.primaryColor}
+                  onChange={(e) => updateField("primaryColor", e.target.value)}
                   className="h-10 w-14 rounded border border-gray-300 cursor-pointer"
                 />
                 <Input
-                  defaultValue={tenant?.primaryColor || "#3B82F6"}
+                  value={form.primaryColor}
+                  onChange={(e) => updateField("primaryColor", e.target.value)}
                   placeholder="#3B82F6"
                   className="flex-1"
                 />

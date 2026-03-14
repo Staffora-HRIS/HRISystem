@@ -1,0 +1,8 @@
+# Exclude test files from Docker build context
+src/test/
+**/*.test.ts
+**/*.spec.ts
+
+# Development files
+*.md
+.env*

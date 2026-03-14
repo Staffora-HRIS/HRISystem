@@ -37,6 +37,8 @@ import {
   UpdateEmployeeManagerSchema,
   EmployeeStatusTransitionSchema,
   EmployeeTerminationSchema,
+  UpdateNiCategorySchema,
+  NiCategorySchema,
   EmployeeResponseSchema,
   EmployeeListResponseSchema,
   EmployeeFiltersSchema,
@@ -1223,6 +1225,73 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
     }
   )
 
+  // PATCH /employees/:id/ni-category - Update NI category
+  .patch(
+    "/employees/:id/ni-category",
+    async (ctx) => {
+      const {
+        hrService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as any;
+
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await hrService.updateNiCategory(
+        tenantContext,
+        params.id,
+        body.ni_category,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log NI category change
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee",
+          resourceId: params.id,
+          newValues: { ni_category: body.ni_category },
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "ni_category_change",
+          },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: IdParamsSchema,
+      body: UpdateNiCategorySchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: EmployeeResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employees"],
+        summary: "Update employee NI category",
+        description: "Update the National Insurance category for an employee. Used for payroll NI contribution rate determination.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
   // ===========================================================================
   // Org Chart Routes
   // ===========================================================================
@@ -1350,6 +1419,53 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
         tags: ["Org Chart"],
         summary: "Get reporting chain",
         description: "Get the full reporting chain from employee up to CEO",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Statutory Notice Routes (UK Employment Rights Act 1996)
+  // ===========================================================================
+
+  // GET /employees/:id/statutory-notice - Calculate statutory minimum notice period
+  .get(
+    "/employees/:id/statutory-notice",
+    async (ctx) => {
+      const { hrService, params, tenantContext, error } = ctx as any;
+      const result = await hrService.getStatutoryNoticePeriod(tenantContext, params.id);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read") as any],
+      params: t.Object({ id: UuidSchema }),
+      response: {
+        200: t.Object({
+          employee_id: t.String(),
+          hire_date: t.String(),
+          reference_date: t.String(),
+          years_of_service: t.Number(),
+          months_of_service: t.Number(),
+          statutory_notice_weeks: t.Number(),
+          statutory_notice_days: t.Number(),
+          contractual_notice_days: t.Union([t.Number(), t.Null()]),
+          is_compliant: t.Boolean(),
+          compliance_message: t.String(),
+        }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employees"],
+        summary: "Get statutory notice period",
+        description:
+          "Calculate the statutory minimum notice period under UK Employment Rights Act 1996 s.86 (1 week per year of service, max 12 weeks). Returns compliance status against the current contractual notice period.",
         security: [{ bearerAuth: [] }],
       },
     }

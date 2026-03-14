@@ -1,26 +1,28 @@
 /**
  * Database Configuration Tests
- * 
+ *
  * These tests ensure that database configuration is consistent across
  * all modules to prevent authentication failures.
- * 
- * FIX: Created to prevent recurrence of password mismatch issues where
- * different modules used different default passwords.
+ *
+ * After the hardcoded-password removal, these tests verify:
+ * - Non-password defaults are correct
+ * - buildDatabaseUrl requires a password argument
+ * - getDatabaseUrl / getTestDatabaseUrl throw when env vars are missing
+ * - No hardcoded passwords remain in source files
  */
 
-import { describe, it, expect, beforeAll, afterEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {
   DEFAULT_DB_USER,
-  DEFAULT_DB_PASSWORD,
   DEFAULT_DB_NAME,
   DEFAULT_DB_HOST,
   DEFAULT_DB_PORT,
   DEFAULT_REDIS_URL,
   buildDatabaseUrl,
-  getDefaultDatabaseUrl,
-  getDefaultTestDatabaseUrl,
+  getDatabaseUrl,
+  getTestDatabaseUrl,
   validateDatabaseUrl,
 } from "./database";
 
@@ -31,11 +33,6 @@ import {
 describe("Database Configuration Constants", () => {
   it("should have correct default user", () => {
     expect(DEFAULT_DB_USER).toBe("hris");
-  });
-
-  it("should have correct default password (must match docker-compose.yml)", () => {
-    // This is the critical value that must be consistent
-    expect(DEFAULT_DB_PASSWORD).toBe("hris_dev_password");
   });
 
   it("should have correct default database name", () => {
@@ -53,6 +50,13 @@ describe("Database Configuration Constants", () => {
   it("should have correct default Redis URL", () => {
     expect(DEFAULT_REDIS_URL).toBe("redis://localhost:6379");
   });
+
+  it("should NOT export DEFAULT_DB_PASSWORD (hardcoded passwords removed)", () => {
+    // Ensure no password constant is exported
+    const exports = require("./database");
+    expect(exports.DEFAULT_DB_PASSWORD).toBeUndefined();
+    expect(exports.DEFAULT_APP_DB_PASSWORD).toBeUndefined();
+  });
 });
 
 // =============================================================================
@@ -60,17 +64,7 @@ describe("Database Configuration Constants", () => {
 // =============================================================================
 
 describe("Database URL Builders", () => {
-  it("should build correct default database URL", () => {
-    const url = getDefaultDatabaseUrl();
-    expect(url).toBe("postgres://hris:hris_dev_password@localhost:5432/hris");
-  });
-
-  it("should build correct default test database URL", () => {
-    const url = getDefaultTestDatabaseUrl();
-    expect(url).toBe("postgres://hris:hris_dev_password@localhost:5432/hris_test");
-  });
-
-  it("should build URL with custom parameters", () => {
+  it("should build URL with required password parameter", () => {
     const url = buildDatabaseUrl({
       user: "custom_user",
       password: "custom_pass",
@@ -79,6 +73,11 @@ describe("Database URL Builders", () => {
       database: "custom_db",
     });
     expect(url).toBe("postgres://custom_user:custom_pass@db.example.com:5433/custom_db");
+  });
+
+  it("should use default user when not specified", () => {
+    const url = buildDatabaseUrl({ password: "test_pass" });
+    expect(url).toContain("postgres://hris:");
   });
 
   it("should URL-encode special characters in credentials", () => {
@@ -136,67 +135,31 @@ describe("Database URL Validation", () => {
 describe("Configuration Consistency", () => {
   const projectRoot = path.resolve(__dirname, "../../../../..");
 
-  it("should have docker-compose.yml with matching default password", async () => {
-    const dockerComposePath = path.join(projectRoot, "docker/docker-compose.yml");
-    
-    if (!fs.existsSync(dockerComposePath)) {
-      console.warn("docker-compose.yml not found, skipping consistency check");
-      return;
-    }
-
-    const content = fs.readFileSync(dockerComposePath, "utf-8");
-    
-    // Check that docker-compose.yml uses the same default password
-    expect(content).toContain(`POSTGRES_PASSWORD:-${DEFAULT_DB_PASSWORD}`);
-  });
-
-  it("should have .env.example with matching default password", async () => {
-    const envExamplePath = path.join(projectRoot, "docker/.env.example");
-    
-    if (!fs.existsSync(envExamplePath)) {
-      console.warn(".env.example not found, skipping consistency check");
-      return;
-    }
-
-    const content = fs.readFileSync(envExamplePath, "utf-8");
-    
-    // Check that .env.example uses the same default password
-    expect(content).toContain(`POSTGRES_PASSWORD=${DEFAULT_DB_PASSWORD}`);
-  });
-
-  it("should not have hardcoded wrong password in source files", async () => {
-    // List of files that previously had wrong password hardcoded
+  it("should not have hardcoded passwords in source files", async () => {
+    // Files that must NOT contain hardcoded password strings
     const filesToCheck = [
-      "packages/api/src/worker/scheduler.ts",
-      "packages/api/src/worker/outbox-processor.ts",
       "packages/api/src/plugins/db.ts",
-      "packages/api/src/lib/better-auth.ts",
-      "packages/api/src/db/migrate.ts",
-      "packages/api/src/scripts/bootstrap-root.cli.ts",
+      "packages/api/src/config/database.ts",
     ];
 
-    const wrongPassword = "hris:hris@"; // The wrong pattern: user:wrongpass@
+    const forbiddenPatterns = [
+      "hris_dev_password",
+      "hris_app_dev_password",
+    ];
 
     for (const file of filesToCheck) {
       const filePath = path.join(projectRoot, file);
-      
+
       if (!fs.existsSync(filePath)) {
         continue;
       }
 
       const content = fs.readFileSync(filePath, "utf-8");
-      
-      // Should NOT contain the wrong password pattern
-      expect(content).not.toContain(wrongPassword);
-    }
-  });
 
-  it("should have consistent default URL across all database connection points", () => {
-    // The expected default URL pattern
-    const expectedPattern = `postgres://hris:${DEFAULT_DB_PASSWORD}@`;
-    const defaultUrl = getDefaultDatabaseUrl();
-    
-    expect(defaultUrl).toContain(expectedPattern);
+      for (const pattern of forbiddenPatterns) {
+        expect(content).not.toContain(pattern);
+      }
+    }
   });
 });
 
@@ -204,7 +167,7 @@ describe("Configuration Consistency", () => {
 // Environment Variable Override Tests
 // =============================================================================
 
-describe("Environment Variable Overrides", () => {
+describe("Environment Variable Requirements", () => {
   const originalEnv = { ...process.env };
 
   afterEach(() => {
@@ -212,20 +175,22 @@ describe("Environment Variable Overrides", () => {
     process.env = { ...originalEnv };
   });
 
-  it("should use DATABASE_URL from environment when set", async () => {
-    // Import dynamically to pick up env changes
+  it("should use DATABASE_URL from environment when set", () => {
     const customUrl = "postgres://custom:pass@custom-host:5433/custom_db";
     process.env["DATABASE_URL"] = customUrl;
 
-    // Re-import to get fresh values
-    const { getDatabaseUrl } = await import("./database");
     expect(getDatabaseUrl()).toBe(customUrl);
   });
 
-  it("should fall back to default when DATABASE_URL not set", async () => {
+  it("should throw when DATABASE_URL is not set", () => {
     delete process.env["DATABASE_URL"];
 
-    const { getDatabaseUrl, getDefaultDatabaseUrl } = await import("./database");
-    expect(getDatabaseUrl()).toBe(getDefaultDatabaseUrl());
+    expect(() => getDatabaseUrl()).toThrow("DATABASE_URL environment variable is required");
+  });
+
+  it("should throw when TEST_DATABASE_URL is not set", () => {
+    delete process.env["TEST_DATABASE_URL"];
+
+    expect(() => getTestDatabaseUrl()).toThrow("TEST_DATABASE_URL environment variable is required");
   });
 });

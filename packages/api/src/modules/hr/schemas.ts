@@ -72,6 +72,30 @@ export const MaritalStatusSchema = t.Union([
 export type MaritalStatus = Static<typeof MaritalStatusSchema>;
 
 /**
+ * NI (National Insurance) category enum
+ * Determines contribution rates for payroll
+ */
+export const NiCategorySchema = t.Union([
+  t.Literal("A"),
+  t.Literal("B"),
+  t.Literal("C"),
+  t.Literal("D"),
+  t.Literal("E"),
+  t.Literal("F"),
+  t.Literal("H"),
+  t.Literal("J"),
+  t.Literal("L"),
+  t.Literal("M"),
+  t.Literal("N"),
+  t.Literal("S"),
+  t.Literal("V"),
+  t.Literal("X"),
+  t.Literal("Z"),
+]);
+
+export type NiCategory = Static<typeof NiCategorySchema>;
+
+/**
  * Address type enum
  */
 export const AddressTypeSchema = t.Union([
@@ -531,6 +555,15 @@ export const UpdateEmployeeManagerSchema = t.Object({
 });
 
 export type UpdateEmployeeManager = Static<typeof UpdateEmployeeManagerSchema>;
+
+/**
+ * Update employee NI category
+ */
+export const UpdateNiCategorySchema = t.Object({
+  ni_category: NiCategorySchema,
+});
+
+export type UpdateNiCategory = Static<typeof UpdateNiCategorySchema>;
 
 /**
  * Employee status transition

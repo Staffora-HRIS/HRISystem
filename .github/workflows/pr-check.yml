@@ -1,0 +1,74 @@
+# =============================================================================
+# Staffora Platform - Pull Request Check
+# =============================================================================
+#
+# Lightweight, fast-feedback workflow that runs on every PR targeting main.
+# Validates types and lint rules without requiring database/Redis services.
+#
+# For the full test suite (with database, migrations, integration tests),
+# see test.yml which also runs on pull_request events.
+# =============================================================================
+
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same PR to save resources
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type checking
+        run: bun run typecheck
+
+      - name: Linting
+        run: bun run lint
+
+  # ---------------------------------------------------------------------------
+  # Build verification - ensures Docker images can be built
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Verify Docker Build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: packages/api/Dockerfile
+          - name: web
+            dockerfile: packages/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }} image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production

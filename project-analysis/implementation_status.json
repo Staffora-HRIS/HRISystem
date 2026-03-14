@@ -1,0 +1,175 @@
+{
+  "metadata": {
+    "generated": "2026-03-14",
+    "platform": "Staffora HRIS",
+    "audit_version": "3.0",
+    "phases_completed": 15,
+    "overall_completion_percent": 57,
+    "production_readiness": "CONDITIONAL",
+    "overall_score": 75
+  },
+  "scores": {
+    "security": { "score": 90, "max": 100, "rating": "GOOD" },
+    "testing": { "score": 55, "max": 100, "rating": "NEEDS_WORK" },
+    "infrastructure": { "score": 80, "max": 100, "rating": "GOOD" },
+    "architecture": { "score": 78, "max": 100, "rating": "GOOD" },
+    "technical_debt": { "score": 68, "max": 100, "rating": "FAIR" },
+    "uk_compliance": { "score": 72, "max": 100, "rating": "FAIR" }
+  },
+  "feature_counts": {
+    "total": 603,
+    "implemented": 344,
+    "partial": 118,
+    "not_implemented": 141
+  },
+  "categories": [
+    { "name": "Security & Access Control", "items": 26, "coverage_percent": 95, "status": "GOOD" },
+    { "name": "Workflow & Approvals", "items": 16, "coverage_percent": 85, "status": "GOOD" },
+    { "name": "Benefits Administration", "items": 18, "coverage_percent": 82, "status": "GOOD" },
+    { "name": "Employee Self-Service Portal", "items": 19, "coverage_percent": 82, "status": "GOOD" },
+    { "name": "Talent Management", "items": 14, "coverage_percent": 80, "status": "GOOD" },
+    { "name": "Document Management", "items": 16, "coverage_percent": 80, "status": "GOOD" },
+    { "name": "System Administration", "items": 21, "coverage_percent": 80, "status": "GOOD" },
+    { "name": "Employee Records & Personal Data", "items": 28, "coverage_percent": 80, "status": "GOOD" },
+    { "name": "Employee Lifecycle Management", "items": 32, "coverage_percent": 78, "status": "GOOD" },
+    { "name": "Organisation Structure", "items": 24, "coverage_percent": 75, "status": "FAIR" },
+    { "name": "Manager Self-Service", "items": 14, "coverage_percent": 75, "status": "FAIR" },
+    { "name": "Case Management", "items": 20, "coverage_percent": 75, "status": "FAIR" },
+    { "name": "Position & Job Management", "items": 15, "coverage_percent": 73, "status": "FAIR" },
+    { "name": "UK Employment Compliance", "items": 28, "coverage_percent": 72, "status": "FAIR" },
+    { "name": "Learning & Development", "items": 20, "coverage_percent": 72, "status": "FAIR" },
+    { "name": "Performance Management", "items": 25, "coverage_percent": 70, "status": "FAIR" },
+    { "name": "Absence & Leave Management", "items": 49, "coverage_percent": 67, "status": "FAIR" },
+    { "name": "Contracts & Employment Terms", "items": 30, "coverage_percent": 68, "status": "FAIR" },
+    { "name": "Integration & APIs", "items": 18, "coverage_percent": 68, "status": "FAIR" },
+    { "name": "Onboarding", "items": 24, "coverage_percent": 68, "status": "FAIR" },
+    { "name": "Time & Attendance", "items": 30, "coverage_percent": 68, "status": "FAIR" },
+    { "name": "Reporting & Analytics", "items": 24, "coverage_percent": 65, "status": "NEEDS_WORK" },
+    { "name": "Recruitment & ATS", "items": 32, "coverage_percent": 65, "status": "NEEDS_WORK" },
+    { "name": "Mobile & Accessibility", "items": 16, "coverage_percent": 58, "status": "NEEDS_WORK" },
+    { "name": "Compensation & Payroll", "items": 44, "coverage_percent": 38, "status": "CRITICAL_GAP" }
+  ],
+  "critical_gaps": [
+    {
+      "id": "TODO-006",
+      "title": "Remove hardcoded DB password fallback",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "CRITICAL",
+      "effort": "SMALL",
+      "area": "security"
+    },
+    {
+      "id": "TODO-012",
+      "title": "Fix leave_approvals table name mismatch",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "CRITICAL",
+      "effort": "SMALL",
+      "area": "data_integrity"
+    },
+    {
+      "id": "TODO-013",
+      "title": "Consolidate dual user tables (Better Auth vs app.users)",
+      "status": "PARTIAL",
+      "priority": "CRITICAL",
+      "effort": "LARGE",
+      "area": "architecture"
+    },
+    {
+      "id": "TODO-014",
+      "title": "Consolidate database connection pools",
+      "status": "PARTIAL",
+      "priority": "CRITICAL",
+      "effort": "MEDIUM",
+      "area": "infrastructure"
+    },
+    {
+      "id": "TODO-028",
+      "title": "MFA recovery code flow",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "MEDIUM",
+      "area": "security"
+    },
+    {
+      "id": "TODO-047",
+      "title": "Replace Redis KEYS with SCAN",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "SMALL",
+      "area": "architecture"
+    },
+    {
+      "id": "TODO-064",
+      "title": "HMRC RTI/FPS/EPS submission",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "LARGE",
+      "area": "uk_compliance"
+    },
+    {
+      "id": "TODO-128",
+      "title": "Payslip generation",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "LARGE",
+      "area": "payroll"
+    },
+    {
+      "id": "TODO-129",
+      "title": "P45 generation on termination",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "MEDIUM",
+      "area": "payroll"
+    },
+    {
+      "id": "TODO-130",
+      "title": "P60 annual generation",
+      "status": "NOT_IMPLEMENTED",
+      "priority": "HIGH",
+      "effort": "MEDIUM",
+      "area": "payroll"
+    },
+    {
+      "id": "TODO-031",
+      "title": "Fix 14 partial service unit tests",
+      "status": "PARTIAL",
+      "priority": "HIGH",
+      "effort": "LARGE",
+      "area": "testing"
+    },
+    {
+      "id": "TODO-032",
+      "title": "Convert route tests to real HTTP (app.handle)",
+      "status": "PARTIAL",
+      "priority": "HIGH",
+      "effort": "LARGE",
+      "area": "testing"
+    }
+  ],
+  "remaining_todos": {
+    "total": 158,
+    "critical": 4,
+    "high": 34,
+    "medium": 76,
+    "low": 44
+  },
+  "recommended_phases": {
+    "phase_16_immediate": [
+      "TODO-006", "TODO-012", "TODO-041", "TODO-042", "TODO-047",
+      "TODO-051", "TODO-052", "TODO-053", "TODO-054", "TODO-056",
+      "TODO-083", "TODO-084", "TODO-085", "TODO-086", "TODO-090",
+      "TODO-107", "TODO-127", "TODO-145", "TODO-157"
+    ],
+    "phase_17_short_term": [
+      "TODO-025", "TODO-028", "TODO-031", "TODO-032", "TODO-039",
+      "TODO-065", "TODO-113", "TODO-124", "TODO-126", "TODO-134",
+      "TODO-149", "TODO-150", "TODO-152", "TODO-156"
+    ],
+    "phase_18_medium_term": [
+      "TODO-064", "TODO-081", "TODO-082", "TODO-087", "TODO-088",
+      "TODO-113", "TODO-128", "TODO-129", "TODO-130", "TODO-131",
+      "TODO-140", "TODO-141", "TODO-146", "TODO-147", "TODO-148"
+    ]
+  }
+}

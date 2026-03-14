@@ -71,7 +71,9 @@ type DomainEventType =
   | "hr.employee.transferred"
   | "hr.employee.promoted"
   | "hr.employee.terminated"
-  | "hr.employee.status_changed";
+  | "hr.employee.status_changed"
+  | "hr.employee.ni_category_changed"
+  | "benefits.enrollment.ceased";
 
 // =============================================================================
 // HR Service
@@ -1380,15 +1382,195 @@ export class HRService {
         context.userId || "system"
       );
 
-      // Emit event
+      // End all active benefit enrollments
+      await tx`
+        UPDATE app.benefit_enrollments
+        SET effective_to = ${data.termination_date}::date,
+            updated_at = now()
+        WHERE employee_id = ${employeeId}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+          AND (effective_to IS NULL OR effective_to > ${data.termination_date}::date)
+          AND status = 'active'
+      `;
+
+      // Emit termination event
       await this.emitEvent(tx, context, "employee", employeeId, "hr.employee.terminated", {
         employeeId,
         terminationDate: data.termination_date,
         reason: data.reason,
       });
+
+      // Emit benefits cessation event
+      await this.emitEvent(tx, context, "employee", employeeId, "benefits.enrollment.ceased", {
+        employeeId,
+        terminationDate: data.termination_date,
+      });
     });
 
     return this.getEmployee(context, employeeId);
+  }
+
+  /**
+   * Update employee NI category
+   */
+  async updateNiCategory(
+    context: TenantContext,
+    employeeId: string,
+    niCategory: string,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<EmployeeResponse>> {
+    // Get current employee
+    const employeeResult = await this.repository.findEmployeeById(context, employeeId);
+    if (!employeeResult.employee) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Employee not found",
+          details: { id: employeeId },
+        },
+      };
+    }
+
+    // Cannot update terminated employees
+    if (employeeResult.employee.status === "terminated") {
+      return {
+        success: false,
+        error: {
+          code: "TERMINATED",
+          message: "Cannot update NI category for terminated employee",
+          details: { id: employeeId },
+        },
+      };
+    }
+
+    const previousCategory = employeeResult.employee.niCategory ?? "A";
+
+    // Update in transaction with outbox event
+    await this.db.withTransaction(context, async (tx) => {
+      await this.repository.updateNiCategory(tx, context, employeeId, niCategory);
+
+      await this.emitEvent(tx, context, "employee", employeeId, "hr.employee.ni_category_changed", {
+        employeeId,
+        previousCategory,
+        newCategory: niCategory,
+      });
+    });
+
+    return this.getEmployee(context, employeeId);
+  }
+
+  // ===========================================================================
+  // Statutory Notice Calculation (UK Employment Rights Act 1996, s.86)
+  // ===========================================================================
+
+  /**
+   * Calculate the statutory minimum notice period for an employee.
+   *
+   * UK Employment Rights Act 1996, s.86:
+   *  - < 1 month continuous service: no statutory entitlement
+   *  - 1 month to 2 years: minimum 1 week
+   *  - 2+ complete years: 1 week per year, maximum 12 weeks
+   *
+   * Returns { statutory_notice_weeks, contractual_notice_days, is_compliant }
+   */
+  async getStatutoryNoticePeriod(
+    context: TenantContext,
+    employeeId: string
+  ): Promise<ServiceResult<{
+    employee_id: string;
+    hire_date: string;
+    reference_date: string;
+    years_of_service: number;
+    months_of_service: number;
+    statutory_notice_weeks: number;
+    statutory_notice_days: number;
+    contractual_notice_days: number | null;
+    is_compliant: boolean;
+    compliance_message: string;
+  }>> {
+    const employeeResult = await this.repository.findEmployeeById(context, employeeId);
+    if (!employeeResult.employee) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Employee not found",
+          details: { id: employeeId },
+        },
+      };
+    }
+
+    const employee = employeeResult.employee;
+    const hireDate = new Date(employee.hireDate);
+    const referenceDate = employee.terminationDate
+      ? new Date(employee.terminationDate)
+      : new Date();
+
+    // Calculate months and years of service
+    const diffMs = referenceDate.getTime() - hireDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const monthsOfService = Math.floor(diffDays / 30.44); // average days per month
+    const yearsOfService = Math.floor(diffDays / 365.25);
+
+    // Statutory notice weeks (Employment Rights Act 1996, s.86)
+    let statutoryNoticeWeeks: number;
+    if (monthsOfService < 1) {
+      statutoryNoticeWeeks = 0;
+    } else if (yearsOfService < 2) {
+      statutoryNoticeWeeks = 1;
+    } else {
+      statutoryNoticeWeeks = Math.min(yearsOfService, 12);
+    }
+
+    const statutoryNoticeDays = statutoryNoticeWeeks * 7;
+
+    // Get current contractual notice period
+    const contractRows = await this.db.withTransaction(context, async (tx) => {
+      return tx`
+        SELECT notice_period_days
+        FROM app.employment_contracts
+        WHERE employee_id = ${employeeId}::uuid
+          AND tenant_id = ${context.tenantId}::uuid
+          AND effective_to IS NULL
+        ORDER BY effective_from DESC
+        LIMIT 1
+      `;
+    });
+
+    const contractualNoticeDays = contractRows[0]?.noticePeriodDays ?? null;
+
+    // Compliance: contractual must be >= statutory (employer-to-employee notice)
+    const isCompliant = contractualNoticeDays === null
+      ? statutoryNoticeWeeks === 0 // no contract needed if < 1 month
+      : contractualNoticeDays >= statutoryNoticeDays;
+
+    let complianceMessage: string;
+    if (monthsOfService < 1) {
+      complianceMessage = "Employee has less than 1 month service — no statutory notice entitlement yet.";
+    } else if (contractualNoticeDays === null) {
+      complianceMessage = `No contractual notice period set. Statutory minimum is ${statutoryNoticeWeeks} week(s).`;
+    } else if (isCompliant) {
+      complianceMessage = `Contractual notice (${contractualNoticeDays} days) meets or exceeds statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks).`;
+    } else {
+      complianceMessage = `NON-COMPLIANT: Contractual notice (${contractualNoticeDays} days) is below statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks). Update the employment contract.`;
+    }
+
+    return {
+      success: true,
+      data: {
+        employee_id: employeeId,
+        hire_date: employee.hireDate,
+        reference_date: referenceDate.toISOString().split("T")[0],
+        years_of_service: yearsOfService,
+        months_of_service: monthsOfService,
+        statutory_notice_weeks: statutoryNoticeWeeks,
+        statutory_notice_days: statutoryNoticeDays,
+        contractual_notice_days: contractualNoticeDays ?? null,
+        is_compliant: isCompliant,
+        compliance_message: complianceMessage,
+      },
+    };
   }
 
   // ===========================================================================
