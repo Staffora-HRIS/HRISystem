@@ -2,8 +2,10 @@
  * CompetencyCard Component
  *
  * Displays a single competency with its levels and assessment status.
+ * Wrapped with React.memo to prevent unnecessary re-renders in competency lists.
  */
 
+import React from "react";
 import { Award, TrendingUp, Target } from "lucide-react";
 import { Card, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -86,7 +88,7 @@ function LevelIndicator({
   );
 }
 
-export function CompetencyCard({
+export const CompetencyCard = React.memo(function CompetencyCard({
   competency,
   showAssessment = false,
   onAssess,
@@ -165,4 +167,4 @@ export function CompetencyCard({
       </CardBody>
     </Card>
   );
-}
+});

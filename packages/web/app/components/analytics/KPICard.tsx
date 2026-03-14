@@ -2,8 +2,10 @@
  * KPI Card Component
  *
  * Displays a key performance indicator with trend indicator.
+ * Wrapped with React.memo to prevent unnecessary re-renders in dashboard grids.
  */
 
+import React from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -17,7 +19,7 @@ interface KPICardProps {
   className?: string;
 }
 
-export function KPICard({
+export const KPICard = React.memo(function KPICard({
   title,
   value,
   subtitle,
@@ -74,6 +76,6 @@ export function KPICard({
       </div>
     </div>
   );
-}
+});
 
 export default KPICard;

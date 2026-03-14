@@ -1,9 +1,12 @@
 /**
  * Skeleton Component
  *
- * Loading placeholder component for content that is loading
+ * Loading placeholder component for content that is loading.
+ * Wrapped with React.memo since skeletons are rendered in arrays
+ * during loading states and their props rarely change.
  */
 
+import React from "react";
 import { cn } from "../../lib/utils";
 
 export interface SkeletonProps {
@@ -14,7 +17,7 @@ export interface SkeletonProps {
   animate?: boolean;
 }
 
-export function Skeleton({
+export const Skeleton = React.memo(function Skeleton({
   className,
   width,
   height,
@@ -43,9 +46,9 @@ export function Skeleton({
       }}
     />
   );
-}
+});
 
-export function SkeletonText({
+export const SkeletonText = React.memo(function SkeletonText({
   lines = 3,
   className,
 }: {
@@ -63,9 +66,9 @@ export function SkeletonText({
       ))}
     </div>
   );
-}
+});
 
-export function SkeletonCard({ className }: { className?: string }) {
+export const SkeletonCard = React.memo(function SkeletonCard({ className }: { className?: string }) {
   return (
     <div className={cn("p-4 border border-gray-200 rounded-lg", className)}>
       <div className="flex items-center gap-4 mb-4">
@@ -78,9 +81,9 @@ export function SkeletonCard({ className }: { className?: string }) {
       <SkeletonText lines={2} />
     </div>
   );
-}
+});
 
-export function SkeletonTable({
+export const SkeletonTable = React.memo(function SkeletonTable({
   rows = 5,
   columns = 4,
   className,
@@ -107,9 +110,9 @@ export function SkeletonTable({
       ))}
     </div>
   );
-}
+});
 
-export function SkeletonAvatar({
+export const SkeletonAvatar = React.memo(function SkeletonAvatar({
   size = "md",
   className,
 }: {
@@ -131,4 +134,4 @@ export function SkeletonAvatar({
       className={className}
     />
   );
-}
+});

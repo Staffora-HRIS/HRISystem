@@ -1,10 +1,12 @@
 /**
  * Alert Component
  *
- * Alert messages for success, error, warning, and info states
+ * Alert messages for success, error, warning, and info states.
+ * Wrapped with React.memo since alerts are pure presentational
+ * components that depend only on their props.
  */
 
-import { type ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import {
   CheckCircle2,
   AlertCircle,
@@ -40,7 +42,7 @@ const variantIcons: Record<AlertVariant, ReactNode> = {
   info: <Info className="h-5 w-5 text-blue-500" />,
 };
 
-export function Alert({
+export const Alert = React.memo(function Alert({
   variant = "info",
   title,
   children,
@@ -75,13 +77,13 @@ export function Alert({
       )}
     </div>
   );
-}
+});
 
 export interface AlertBannerProps extends AlertProps {
   action?: ReactNode;
 }
 
-export function AlertBanner({
+export const AlertBanner = React.memo(function AlertBanner({
   variant = "info",
   title,
   children,
@@ -118,4 +120,4 @@ export function AlertBanner({
       )}
     </div>
   );
-}
+});
