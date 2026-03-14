@@ -5,7 +5,7 @@
  * Supports multiple variants and interactive states.
  */
 
-import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
+import React, { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 export type CardVariant = "default" | "bordered" | "elevated" | "flat";
@@ -197,7 +197,7 @@ export interface StatCardProps {
   className?: string;
 }
 
-export function StatCard({
+export const StatCard = React.memo(function StatCard({
   title,
   value,
   change,
@@ -260,7 +260,7 @@ export function StatCard({
       </CardBody>
     </Card>
   );
-}
+});
 
 /**
  * ListCard Component - Pre-built card for displaying lists

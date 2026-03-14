@@ -2,8 +2,11 @@
  * Spinner Component
  *
  * A loading spinner with multiple sizes and color variants.
+ * Wrapped with React.memo since spinners are pure presentational
+ * components that depend only on their props.
  */
 
+import React from "react";
 import { cn } from "../../lib/utils";
 
 export type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl";
@@ -30,7 +33,7 @@ const variantStyles: Record<SpinnerVariant, string> = {
   gray: "border-gray-200 border-t-gray-600 dark:border-gray-700 dark:border-t-gray-400",
 };
 
-export function Spinner({
+export const Spinner = React.memo(function Spinner({
   size = "md",
   variant = "primary",
   className,
@@ -50,7 +53,7 @@ export function Spinner({
       <span className="sr-only">{label}</span>
     </div>
   );
-}
+});
 
 /**
  * FullPageSpinner - Centered spinner for full page loading states
