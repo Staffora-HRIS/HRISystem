@@ -1,0 +1,385 @@
+# =============================================================================
+# Staffora Platform - Continuous Deployment Pipeline
+# =============================================================================
+#
+# Triggers:
+#   - Automatically on push to main (deploys to staging)
+#   - Manually via workflow_dispatch (choose staging or production)
+#
+# Pipeline:
+#   1. test        - Run full test suite (typecheck, lint, build, migrations, tests)
+#   2. build       - Build and push Docker images to GHCR (api + web in parallel)
+#   3. deploy      - Deploy to the target environment (staging or production)
+#
+# Prerequisites:
+#   - GitHub Environments "staging" and "production" configured in repo settings
+#   - Production environment should have required reviewers for approval gates
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+# Cancel in-progress runs for the same branch/ref to avoid stale deploys
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository }}/api
+  WEB_IMAGE: ghcr.io/${{ github.repository }}/web
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ===========================================================================
+  # Job 1: Full Test Suite
+  # ===========================================================================
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hris
+          POSTGRES_PASSWORD: hris_dev_password
+          POSTGRES_DB: hris
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hris"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Redis password
+        run: |
+          redis-cli CONFIG SET requirepass staffora_redis_ci
+          redis-cli -a staffora_redis_ci ping
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type checking
+        run: bun run typecheck
+
+      - name: Linting
+        run: bun run lint
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Initialize database schema
+        run: |
+          # The init.sql script creates the app schema, hris_app role, and
+          # RLS helper functions. In CI we run it manually since there is no
+          # Docker entrypoint init volume.
+          PGPASSWORD=hris_dev_password psql -h localhost -U hris -d hris -f docker/postgres/init.sql
+        env:
+          PGCLIENTENCODING: UTF8
+
+      - name: Run migrations
+        run: bun run migrate:up
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: hris
+          DB_USER: hris
+          DB_PASSWORD: hris_dev_password
+
+      - name: Run API tests
+        run: bun run test:api
+        env:
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: '5432'
+          TEST_DB_NAME: hris
+          TEST_DB_USER: hris_app
+          TEST_DB_PASSWORD: hris_app_dev_password
+          TEST_DB_ADMIN_USER: hris
+          TEST_DB_ADMIN_PASSWORD: hris_dev_password
+          TEST_REDIS_HOST: localhost
+          TEST_REDIS_PORT: '6379'
+          TEST_REDIS_PASSWORD: staffora_redis_ci
+          REDIS_URL: redis://:staffora_redis_ci@localhost:6379
+          BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+          SESSION_SECRET: test-session-secret-32-characters-long
+          CSRF_SECRET: test-csrf-secret-that-is-32-chars
+
+      - name: Run shared package tests
+        run: bun test packages/shared
+
+      - name: Run frontend tests
+        run: bun run test:web -- --run
+
+  # ===========================================================================
+  # Job 2: Build and Push Docker Images
+  # ===========================================================================
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: packages/api/Dockerfile
+            image_env: API_IMAGE
+          - name: web
+            dockerfile: packages/web/Dockerfile
+            image_env: WEB_IMAGE
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env[matrix.image_env] }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYYMMDD-HHmmss'}}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+
+  # ===========================================================================
+  # Job 3a: Deploy to Staging
+  # ===========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.staffora.co.uk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying images tagged: sha-${SHORT_SHA}"
+
+      - name: Deploy to staging
+        env:
+          API_IMAGE_TAG: ${{ env.API_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+          WEB_IMAGE_TAG: ${{ env.WEB_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+        run: |
+          echo "============================================="
+          echo "  Deploying to STAGING"
+          echo "============================================="
+          echo ""
+          echo "API image: ${API_IMAGE_TAG}"
+          echo "Web image: ${WEB_IMAGE_TAG}"
+          echo "Commit:    ${{ github.sha }}"
+          echo "Actor:     ${{ github.actor }}"
+          echo ""
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Add deployment commands below"
+          echo "---------------------------------------------"
+          echo ""
+          echo "Options (uncomment the one that matches your hosting):"
+          echo ""
+          echo "# Option A: Docker Compose on a VPS via SSH"
+          echo "#   ssh deploy@staging.staffora.co.uk \\"
+          echo "#     'cd /opt/staffora && docker compose pull && docker compose up -d'"
+          echo ""
+          echo "# Option B: Kubernetes"
+          echo "#   kubectl set image deployment/staffora-api api=\${API_IMAGE_TAG}"
+          echo "#   kubectl set image deployment/staffora-web web=\${WEB_IMAGE_TAG}"
+          echo "#   kubectl rollout status deployment/staffora-api --timeout=300s"
+          echo "#   kubectl rollout status deployment/staffora-web --timeout=300s"
+          echo ""
+          echo "# Option C: AWS ECS"
+          echo "#   aws ecs update-service --cluster staffora-staging \\"
+          echo "#     --service staffora-api --force-new-deployment"
+          echo "#   aws ecs update-service --cluster staffora-staging \\"
+          echo "#     --service staffora-web --force-new-deployment"
+          echo ""
+          echo "# Option D: Fly.io / Railway / Render"
+          echo "#   flyctl deploy --image \${API_IMAGE_TAG} --app staffora-api-staging"
+          echo "#   flyctl deploy --image \${WEB_IMAGE_TAG} --app staffora-web-staging"
+
+      - name: Run database migrations (staging)
+        run: |
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Run migrations on staging DB"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# ssh deploy@staging.staffora.co.uk \\"
+          echo "#   'cd /opt/staffora && docker compose exec api bun run migrate:up'"
+          echo ""
+          echo "# Or use a migration job container:"
+          echo "# docker run --rm --network=staffora \\"
+          echo "#   -e DATABASE_URL=\$DATABASE_URL \\"
+          echo "#   \${API_IMAGE_TAG} bun run src/db/migrate.ts up"
+
+      - name: Verify deployment health
+        run: |
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Health check verification"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# curl --fail --retry 5 --retry-delay 10 \\"
+          echo "#   https://staging-api.staffora.co.uk/health"
+          echo ""
+          echo "# curl --fail --retry 5 --retry-delay 10 \\"
+          echo "#   https://staging.staffora.co.uk/"
+
+  # ===========================================================================
+  # Job 3b: Deploy to Production (manual trigger only)
+  # ===========================================================================
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://staffora.co.uk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying images tagged: sha-${SHORT_SHA}"
+
+      - name: Pre-deployment checks
+        run: |
+          echo "============================================="
+          echo "  Pre-deployment Checks for PRODUCTION"
+          echo "============================================="
+          echo ""
+          echo "Commit SHA:   ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Ref:          ${{ github.ref }}"
+          echo ""
+          echo "Ensure the following before proceeding:"
+          echo "  1. Staging deployment has been verified"
+          echo "  2. All integration tests have passed"
+          echo "  3. Required approvals have been granted"
+
+      - name: Deploy to production
+        env:
+          API_IMAGE_TAG: ${{ env.API_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+          WEB_IMAGE_TAG: ${{ env.WEB_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+        run: |
+          echo "============================================="
+          echo "  Deploying to PRODUCTION"
+          echo "============================================="
+          echo ""
+          echo "API image: ${API_IMAGE_TAG}"
+          echo "Web image: ${WEB_IMAGE_TAG}"
+          echo "Commit:    ${{ github.sha }}"
+          echo "Actor:     ${{ github.actor }}"
+          echo ""
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Add deployment commands below"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# See staging deploy job for example commands."
+          echo "# Production deployments should additionally:"
+          echo "#   - Create a database backup before migrating"
+          echo "#   - Use rolling updates (zero-downtime)"
+          echo "#   - Notify the team via Slack/webhook"
+
+      - name: Run database migrations (production)
+        run: |
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Run migrations on production DB"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# IMPORTANT: Back up the database before running migrations!"
+          echo "# pg_dump -h prod-db.staffora.co.uk -U hris hris | gzip > backup.sql.gz"
+          echo ""
+          echo "# Then run migrations:"
+          echo "# docker run --rm --network=staffora \\"
+          echo "#   -e DATABASE_URL=\$DATABASE_URL \\"
+          echo "#   \${API_IMAGE_TAG} bun run src/db/migrate.ts up"
+
+      - name: Verify deployment health
+        run: |
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Health check verification"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# curl --fail --retry 10 --retry-delay 15 \\"
+          echo "#   https://api.staffora.co.uk/health"
+          echo ""
+          echo "# curl --fail --retry 10 --retry-delay 15 \\"
+          echo "#   https://staffora.co.uk/"
+
+      - name: Post-deployment notification
+        if: always()
+        run: |
+          echo "---------------------------------------------"
+          echo "  PLACEHOLDER: Post-deployment notification"
+          echo "---------------------------------------------"
+          echo ""
+          echo "# Notify via Slack webhook:"
+          echo "# curl -X POST \$SLACK_WEBHOOK_URL \\"
+          echo "#   -H 'Content-Type: application/json' \\"
+          echo "#   -d '{\"text\": \"Production deploy: ${{ job.status }} (commit ${{ github.sha }})\"}'​"

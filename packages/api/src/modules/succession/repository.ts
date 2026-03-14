@@ -535,7 +535,10 @@ export class SuccessionRepository {
   async getPipeline(context: TenantContext): Promise<any[]> {
     return await this.db.withTransaction(context, async (tx) => {
       return tx<any[]>`
-        SELECT * FROM app.get_succession_pipeline(${context.tenantId}::uuid)
+        SELECT position_id, position_title, org_unit_name,
+               is_critical, risk_level, incumbent_name,
+               candidate_count, ready_now_count, ready_1_year_count
+        FROM app.get_succession_pipeline(${context.tenantId}::uuid)
       `;
     });
   }
@@ -543,7 +546,9 @@ export class SuccessionRepository {
   async getGaps(context: TenantContext): Promise<any[]> {
     return await this.db.withTransaction(context, async (tx) => {
       return tx<any[]>`
-        SELECT * FROM app.get_succession_gaps(${context.tenantId}::uuid)
+        SELECT position_id, position_title, org_unit_name,
+               risk_level, gap_severity
+        FROM app.get_succession_gaps(${context.tenantId}::uuid)
       `;
     });
   }

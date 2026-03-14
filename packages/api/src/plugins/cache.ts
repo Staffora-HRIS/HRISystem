@@ -392,20 +392,34 @@ export class CacheClient {
   }
 
   /**
-   * Invalidate all cache for a tenant (use with caution)
+   * Invalidate all cache for a tenant (use with caution).
+   * Uses cursor-based SCAN instead of KEYS to avoid blocking Redis.
    */
   async invalidateTenantCache(tenantId: string): Promise<number> {
     const pattern = `${this.config.keyPrefix}t:${tenantId}:*`;
-    const keys = await this.redis.keys(pattern);
+    let cursor = "0";
+    let totalDeleted = 0;
 
-    if (keys.length === 0) return 0;
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        "MATCH",
+        pattern,
+        "COUNT",
+        100
+      );
+      cursor = nextCursor;
 
-    // Remove the prefix since del will add it
-    const keysWithoutPrefix = keys.map((k) =>
-      k.replace(this.config.keyPrefix, "")
-    );
+      if (keys.length > 0) {
+        // Remove the prefix since del will add it back
+        const keysWithoutPrefix = keys.map((k) =>
+          k.replace(this.config.keyPrefix, "")
+        );
+        totalDeleted += await this.delMany(keysWithoutPrefix);
+      }
+    } while (cursor !== "0");
 
-    return await this.delMany(keysWithoutPrefix);
+    return totalDeleted;
   }
 
   // ===========================================================================

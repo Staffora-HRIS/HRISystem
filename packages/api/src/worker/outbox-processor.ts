@@ -14,8 +14,11 @@ import { getDatabaseUrl, getRedisUrl } from "../config/database";
 const DB_URL = getDatabaseUrl();
 const REDIS_URL = getRedisUrl();
 const BATCH_SIZE = 100;
-const POLL_INTERVAL_MS = 5000;
+const BASE_POLL_INTERVAL_MS = 5000;
+const MAX_POLL_INTERVAL_MS = 30000;
+const EMPTY_POLLS_BEFORE_BACKOFF = 3;
 const MAX_RETRIES = 5;
+const MAX_RETRY_BACKOFF_MS = 300000; // 5 minutes cap for failed event retry
 
 // Stream keys for notifications
 const NOTIFICATIONS_STREAM = "staffora:notifications";
@@ -37,6 +40,8 @@ class OutboxProcessor {
   private redis: Redis;
   private running = false;
   private handlers: Map<string, (event: OutboxEvent) => Promise<void>> = new Map();
+  private consecutiveEmptyPolls = 0;
+  private currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
 
   constructor() {
     this.sql = postgres(DB_URL, { transform: postgres.toCamel });
@@ -72,12 +77,13 @@ class OutboxProcessor {
 
     while (this.running) {
       try {
-        await this.processBatch();
+        const eventsFound = await this.processBatch();
+        this.adjustPollingInterval(eventsFound);
       } catch (error) {
         console.error("[OutboxProcessor] Error processing batch:", error instanceof Error ? error.message : String(error));
       }
 
-      await this.sleep(POLL_INTERVAL_MS);
+      await this.sleep(this.currentPollIntervalMs);
     }
   }
 
@@ -88,26 +94,28 @@ class OutboxProcessor {
     await this.sql.end();
   }
 
-  private async processBatch() {
-    // Fetch unprocessed events
+  private async processBatch(): Promise<boolean> {
+    // Fetch unprocessed events, skipping those whose retry time hasn't passed yet
     const events = await this.sql<OutboxEvent[]>`
       SELECT id, tenant_id, aggregate_type, aggregate_id, event_type, payload, retry_count, created_at
       FROM app.domain_outbox
       WHERE processed_at IS NULL
         AND retry_count < ${MAX_RETRIES}
-        AND (locked_until IS NULL OR locked_until < now())
+        AND (next_retry_at IS NULL OR next_retry_at <= now())
       ORDER BY created_at ASC
       LIMIT ${BATCH_SIZE}
       FOR UPDATE SKIP LOCKED
     `;
 
-    if (events.length === 0) return;
+    if (events.length === 0) return false;
 
     console.log(`[OutboxProcessor] Processing ${events.length} events`);
 
     for (const event of events) {
       await this.processEvent(event);
     }
+
+    return true;
   }
 
   private async processEvent(event: OutboxEvent) {
@@ -121,13 +129,6 @@ class OutboxProcessor {
     }
 
     try {
-      // Lock the event
-      await this.sql`
-        UPDATE app.domain_outbox
-        SET locked_until = now() + interval '5 minutes'
-        WHERE id = ${event.id}::uuid
-      `;
-
       // Process the event
       await handler(event);
 
@@ -139,21 +140,29 @@ class OutboxProcessor {
       const errorMessage = rawMessage.substring(0, 500).replace(/password|secret|token|key/gi, "[REDACTED]");
       console.error(`[OutboxProcessor] Failed to process event ${event.id}:`, errorMessage);
 
-      // Increment retry count
+      // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 5 minutes
+      const backoffMs = Math.min(1000 * Math.pow(2, event.retryCount || 0), MAX_RETRY_BACKOFF_MS);
+      const nextRetryAt = new Date(Date.now() + backoffMs);
+
+      // Increment retry count and schedule next retry
       await this.sql`
         UPDATE app.domain_outbox
         SET retry_count = retry_count + 1,
-            last_error = ${errorMessage},
-            locked_until = NULL
+            error_message = ${errorMessage},
+            next_retry_at = ${nextRetryAt}
         WHERE id = ${event.id}::uuid
       `;
+
+      console.log(`[OutboxProcessor] Event ${event.id} scheduled for retry in ${backoffMs}ms (attempt ${(event.retryCount || 0) + 1}/${MAX_RETRIES})`);
     }
   }
 
   private async markProcessed(eventId: string) {
     await this.sql`
       UPDATE app.domain_outbox
-      SET processed_at = now(), locked_until = NULL
+      SET processed_at = now(),
+          next_retry_at = NULL,
+          error_message = NULL
       WHERE id = ${eventId}::uuid
     `;
   }
@@ -878,6 +887,32 @@ class OutboxProcessor {
     } else {
       // No more pending tasks - workflow may be completing
       console.log(`[Handler] No more pending tasks for workflow ${instanceId}`);
+    }
+  }
+
+  private adjustPollingInterval(eventsFound: boolean) {
+    if (eventsFound) {
+      // Reset to base interval when events are found
+      this.consecutiveEmptyPolls = 0;
+      if (this.currentPollIntervalMs !== BASE_POLL_INTERVAL_MS) {
+        this.currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
+        console.log(`[OutboxProcessor] Events found, polling interval reset to ${BASE_POLL_INTERVAL_MS}ms`);
+      }
+    } else {
+      this.consecutiveEmptyPolls++;
+
+      if (this.consecutiveEmptyPolls >= EMPTY_POLLS_BEFORE_BACKOFF) {
+        // Increase interval: 5s -> 10s -> 15s -> 20s -> 25s -> 30s (capped)
+        const newInterval = Math.min(
+          BASE_POLL_INTERVAL_MS + (this.consecutiveEmptyPolls - EMPTY_POLLS_BEFORE_BACKOFF + 1) * BASE_POLL_INTERVAL_MS,
+          MAX_POLL_INTERVAL_MS
+        );
+
+        if (newInterval !== this.currentPollIntervalMs) {
+          this.currentPollIntervalMs = newInterval;
+          console.log(`[OutboxProcessor] No events for ${this.consecutiveEmptyPolls} polls, interval increased to ${this.currentPollIntervalMs}ms`);
+        }
+      }
     }
   }
 

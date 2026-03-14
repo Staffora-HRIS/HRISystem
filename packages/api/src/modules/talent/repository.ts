@@ -42,7 +42,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT g.*, e.first_name || ' ' || e.last_name as employee_name
+          SELECT g.id, g.tenant_id, g.employee_id, g.cycle_id, g.title,
+                 g.description, g.status, g.weight, g.target_value,
+                 g.current_value, g.unit, g.due_date, g.parent_goal_id,
+                 g.created_at, g.created_by, g.updated_at,
+                 e.first_name || ' ' || e.last_name as employee_name
           FROM app.goals g
           JOIN app.employees e ON e.id = g.employee_id
           WHERE g.tenant_id = ${ctx.tenantId}::uuid
@@ -50,7 +54,7 @@ export class TalentRepository {
           ${filters.status ? tx`AND g.status = ${filters.status}` : tx``}
           ${filters.category ? tx`AND g.category = ${filters.category}` : tx``}
           ${pagination.cursor ? tx`AND g.id > ${pagination.cursor}::uuid` : tx``}
-          ORDER BY g.target_date ASC, g.id ASC
+          ORDER BY g.due_date ASC, g.id ASC
           LIMIT ${limit + 1}
         `;
       }
@@ -68,7 +72,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT g.*, e.first_name || ' ' || e.last_name as employee_name
+          SELECT g.id, g.tenant_id, g.employee_id, g.cycle_id, g.title,
+                 g.description, g.status, g.weight, g.target_value,
+                 g.current_value, g.unit, g.due_date, g.parent_goal_id,
+                 g.created_at, g.created_by, g.updated_at,
+                 e.first_name || ' ' || e.last_name as employee_name
           FROM app.goals g
           JOIN app.employees e ON e.id = g.employee_id
           WHERE g.id = ${id}::uuid AND g.tenant_id = ${ctx.tenantId}::uuid
@@ -85,16 +93,19 @@ export class TalentRepository {
       async (tx: any) => {
         return tx`
           INSERT INTO app.goals (
-            id, tenant_id, employee_id, title, description, category,
-            weight, target_date, metrics, parent_goal_id, status, progress
+            id, tenant_id, employee_id, title, description,
+            weight, due_date,
+            parent_goal_id, status
           ) VALUES (
             gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
-            ${data.title}, ${data.description || null}, ${data.category || null},
+            ${data.title}, ${data.description || null},
             ${data.weight || 0}, ${data.targetDate}::date,
-            ${data.metrics ? JSON.stringify(data.metrics) : null}::jsonb,
-            ${data.parentGoalId || null}::uuid, 'active', 0
+            ${data.parentGoalId || null}::uuid, 'active'
           )
-          RETURNING *
+          RETURNING id, tenant_id, employee_id, cycle_id, title,
+                    description, status, weight, target_value,
+                    current_value, unit, due_date, parent_goal_id,
+                    created_at, created_by, updated_at
         `;
       }
     );
@@ -110,15 +121,15 @@ export class TalentRepository {
           UPDATE app.goals SET
             title = COALESCE(${data.title}, title),
             description = COALESCE(${data.description}, description),
-            category = COALESCE(${data.category}, category),
             weight = COALESCE(${data.weight}, weight),
-            target_date = COALESCE(${data.targetDate}::date, target_date),
+            due_date = COALESCE(${data.targetDate}::date, due_date),
             status = COALESCE(${data.status}, status),
-            progress = COALESCE(${data.progress}, progress),
-            metrics = COALESCE(${data.metrics ? JSON.stringify(data.metrics) : null}::jsonb, metrics),
             updated_at = now()
           WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
+          RETURNING id, tenant_id, employee_id, cycle_id, title,
+                    description, status, weight, target_value,
+                    current_value, unit, due_date, parent_goal_id,
+                    created_at, created_by, updated_at
         `;
       }
     );
@@ -157,7 +168,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT * FROM app.performance_cycles
+          SELECT id, tenant_id, name, description, status, cycle_type,
+                 start_date, end_date, goal_setting_start, goal_setting_end,
+                 review_start, review_end, calibration_start, calibration_end,
+                 org_unit_id, created_at, created_by, updated_at
+          FROM app.performance_cycles
           WHERE tenant_id = ${ctx.tenantId}::uuid
           ${pagination.cursor ? tx`AND id > ${pagination.cursor}::uuid` : tx``}
           ORDER BY end_date DESC, id ASC
@@ -178,7 +193,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT * FROM app.performance_cycles
+          SELECT id, tenant_id, name, description, status, cycle_type,
+                 start_date, end_date, goal_setting_start, goal_setting_end,
+                 review_start, review_end, calibration_start, calibration_end,
+                 org_unit_id, created_at, created_by, updated_at
+          FROM app.performance_cycles
           WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         `;
       }
@@ -201,7 +220,10 @@ export class TalentRepository {
             ${data.selfReviewDeadline || data.reviewStart}::date, ${data.managerReviewDeadline || data.reviewEnd}::date,
             ${data.calibrationDeadline || data.calibrationStart || null}::date, 'draft'
           )
-          RETURNING *
+          RETURNING id, tenant_id, name, description, status, cycle_type,
+                    start_date, end_date, goal_setting_start, goal_setting_end,
+                    review_start, review_end, calibration_start, calibration_end,
+                    org_unit_id, created_at, created_by, updated_at
         `;
       }
     );
@@ -223,7 +245,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT r.*, e.first_name || ' ' || e.last_name as employee_name,
+          SELECT r.id, r.tenant_id, r.employee_id, r.cycle_id, r.reviewer_id,
+                 r.reviewer_type, r.status, r.overall_rating, r.ratings,
+                 r.strengths, r.development_areas, r.comments,
+                 r.submitted_at, r.acknowledged_at, r.created_at, r.updated_at,
+                 e.first_name || ' ' || e.last_name as employee_name,
                  rc.name as cycle_name
           FROM app.reviews r
           JOIN app.employees e ON e.id = r.employee_id
@@ -248,7 +274,11 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT r.*, e.first_name || ' ' || e.last_name as employee_name,
+          SELECT r.id, r.tenant_id, r.employee_id, r.cycle_id, r.reviewer_id,
+                 r.reviewer_type, r.status, r.overall_rating, r.ratings,
+                 r.strengths, r.development_areas, r.comments,
+                 r.submitted_at, r.acknowledged_at, r.created_at, r.updated_at,
+                 e.first_name || ' ' || e.last_name as employee_name,
                  rc.name as cycle_name
           FROM app.reviews r
           JOIN app.employees e ON e.id = r.employee_id
@@ -272,7 +302,10 @@ export class TalentRepository {
             gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.reviewCycleId || data.cycleId}::uuid,
             ${data.employeeId}::uuid, ${data.reviewerId}::uuid, 'draft'
           )
-          RETURNING *
+          RETURNING id, tenant_id, employee_id, cycle_id, reviewer_id,
+                    reviewer_type, status, overall_rating, ratings,
+                    strengths, development_areas, comments,
+                    submitted_at, acknowledged_at, created_at, updated_at
         `;
       }
     );
@@ -286,12 +319,15 @@ export class TalentRepository {
       async (tx: any) => {
         return tx`
           UPDATE app.reviews SET
-            self_review = ${JSON.stringify(selfReviewData)}::jsonb,
-            status = 'self_review',
-            self_review_submitted_at = now(),
+            ratings = ${JSON.stringify(selfReviewData)}::jsonb,
+            status = 'in_progress',
+            submitted_at = now(),
             updated_at = now()
           WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
+          RETURNING id, tenant_id, employee_id, cycle_id, reviewer_id,
+                    reviewer_type, status, overall_rating, ratings,
+                    strengths, development_areas, comments,
+                    submitted_at, acknowledged_at, created_at, updated_at
         `;
       }
     );
@@ -305,12 +341,15 @@ export class TalentRepository {
       async (tx: any) => {
         return tx`
           UPDATE app.reviews SET
-            manager_review = ${JSON.stringify(managerReviewData)}::jsonb,
-            status = 'manager_review',
-            manager_review_submitted_at = now(),
+            ratings = ${JSON.stringify(managerReviewData)}::jsonb,
+            status = 'submitted',
+            submitted_at = now(),
             updated_at = now()
           WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
+          RETURNING id, tenant_id, employee_id, cycle_id, reviewer_id,
+                    reviewer_type, status, overall_rating, ratings,
+                    strengths, development_areas, comments,
+                    submitted_at, acknowledged_at, created_at, updated_at
         `;
       }
     );
@@ -332,7 +371,10 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT * FROM app.competencies
+          SELECT id, tenant_id, code, name, category, description,
+                 levels, assessment_criteria, behavioral_indicators,
+                 is_active, created_at, updated_at
+          FROM app.competencies
           WHERE tenant_id = ${ctx.tenantId}::uuid
           ${pagination.cursor ? tx`AND id > ${pagination.cursor}::uuid` : tx``}
           ORDER BY category, name, id ASC
@@ -353,7 +395,10 @@ export class TalentRepository {
       ctx,
       async (tx: any) => {
         return tx`
-          SELECT * FROM app.competencies
+          SELECT id, tenant_id, code, name, category, description,
+                 levels, assessment_criteria, behavioral_indicators,
+                 is_active, created_at, updated_at
+          FROM app.competencies
           WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         `;
       }
@@ -374,7 +419,9 @@ export class TalentRepository {
             ${data.description || null}, ${data.category},
             ${JSON.stringify(data.levels)}::jsonb
           )
-          RETURNING *
+          RETURNING id, tenant_id, code, name, category, description,
+                    levels, assessment_criteria, behavioral_indicators,
+                    is_active, created_at, updated_at
         `;
       }
     );

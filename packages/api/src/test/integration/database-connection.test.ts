@@ -1,27 +1,22 @@
 /**
  * Database Connection Integration Tests
- * 
+ *
  * These tests verify that the database connection works correctly with
  * the configured credentials. They help catch configuration issues early
  * before deployment.
- * 
- * FIX: Created to prevent recurrence of authentication failures caused by
- * password mismatch between PostgreSQL and application configuration.
- * 
+ *
  * Run with: bun test src/test/integration/database-connection.test.ts
- * 
+ *
  * Prerequisites:
  *   - PostgreSQL must be running
- *   - DATABASE_URL must be set or defaults must match running database
+ *   - DATABASE_URL or DATABASE_APP_URL must be set
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import postgres from "postgres";
 import {
   getDatabaseUrl,
-  getDefaultDatabaseUrl,
   validateDatabaseUrl,
-  DEFAULT_DB_PASSWORD,
 } from "../../config/database";
 
 describe("Database Connection Integration", () => {
@@ -30,8 +25,16 @@ describe("Database Connection Integration", () => {
   const requireDb = process.env["REQUIRE_TEST_DB"] === "true";
 
   beforeAll(async () => {
-    const dbUrl = getDatabaseUrl();
-    
+    let dbUrl: string;
+    try {
+      dbUrl = getDatabaseUrl();
+    } catch {
+      connectionError = new Error(
+        "DATABASE_URL is not set. Set it in docker/.env or as an environment variable."
+      );
+      return;
+    }
+
     // Validate URL format first
     const validation = validateDatabaseUrl(dbUrl);
     if (!validation.valid) {
@@ -70,21 +73,17 @@ describe("Database Connection Integration", () => {
 
       // Provide helpful error message for common issues
       const errorMessage = connectionError.message.toLowerCase();
-      
+
       if (errorMessage.includes("password authentication failed")) {
         throw new Error(
           `Database authentication failed!\n\n` +
           `This usually means the password in your configuration doesn't match ` +
           `the password in the PostgreSQL database.\n\n` +
-          `Expected password: ${DEFAULT_DB_PASSWORD}\n\n` +
-          `To fix this, run one of the following:\n` +
-          `  - PowerShell: .\\docker\\scripts\\reset-db-password.ps1\n` +
-          `  - Bash: ./docker/scripts/reset-db-password.sh\n` +
-          `  - Or delete the postgres volume: docker volume rm docker_postgres_data\n\n` +
+          `Ensure DATABASE_URL or DATABASE_APP_URL is set correctly in docker/.env.\n\n` +
           `Original error: ${connectionError.message}`
         );
       }
-      
+
       if (errorMessage.includes("connection refused") || errorMessage.includes("econnrefused")) {
         throw new Error(
           `Database connection refused!\n\n` +
@@ -108,7 +107,7 @@ describe("Database Connection Integration", () => {
     }
 
     const result = await sql`SELECT current_database() as db_name, current_user as user_name`;
-    
+
     expect(result).toBeDefined();
     expect(result.length).toBe(1);
     expect(result[0].db_name).toBeDefined();
@@ -124,11 +123,11 @@ describe("Database Connection Integration", () => {
     try {
       // Check if app schema exists
       const result = await sql`
-        SELECT schema_name 
-        FROM information_schema.schemata 
+        SELECT schema_name
+        FROM information_schema.schemata
         WHERE schema_name = 'app'
       `;
-      
+
       expect(result.length).toBe(1);
       expect(result[0].schema_name).toBe("app");
     } catch (error) {
@@ -147,7 +146,7 @@ describe("Database Connection Integration", () => {
     const result = await sql`
       SELECT has_schema_privilege(current_user, 'app', 'USAGE') as has_usage
     `;
-    
+
     // This might be false if migrations haven't run, which is okay for this test
     expect(result).toBeDefined();
     expect(result.length).toBe(1);
@@ -155,39 +154,30 @@ describe("Database Connection Integration", () => {
 });
 
 describe("Database URL Configuration", () => {
-  it("should have valid default database URL", () => {
-    const defaultUrl = getDefaultDatabaseUrl();
-    const validation = validateDatabaseUrl(defaultUrl);
-    
-    expect(validation.valid).toBe(true);
-    expect(validation.user).toBe("hris");
-    expect(validation.database).toBe("hris");
-  });
-
-  it("should use environment DATABASE_URL if set", () => {
+  it("should require DATABASE_URL to be set", () => {
+    // getDatabaseUrl now throws if DATABASE_URL is not set
+    // If it IS set (as in CI/docker), it should return a valid URL
     const envUrl = process.env["DATABASE_URL"];
-    const currentUrl = getDatabaseUrl();
-    const defaultUrl = getDefaultDatabaseUrl();
-
     if (envUrl) {
-      expect(currentUrl).toBe(envUrl);
+      expect(getDatabaseUrl()).toBe(envUrl);
+      const validation = validateDatabaseUrl(envUrl);
+      expect(validation.valid).toBe(true);
     } else {
-      expect(currentUrl).toBe(defaultUrl);
+      expect(() => getDatabaseUrl()).toThrow();
     }
-  });
-
-  it("should have matching password in default URL", () => {
-    const defaultUrl = getDefaultDatabaseUrl();
-    
-    // Ensure the default URL contains the correct password
-    expect(defaultUrl).toContain(`:${DEFAULT_DB_PASSWORD}@`);
   });
 });
 
 describe("Connection Pool Behavior", () => {
   it("should handle connection pool creation and cleanup", async () => {
-    const dbUrl = getDatabaseUrl();
-    
+    let dbUrl: string;
+    try {
+      dbUrl = getDatabaseUrl();
+    } catch {
+      console.warn("Pool test skipped - DATABASE_URL not set");
+      return;
+    }
+
     // Create a new pool
     const pool = postgres(dbUrl, {
       max: 2,
@@ -208,8 +198,7 @@ describe("Connection Pool Behavior", () => {
       // Connection might fail if DB isn't running - that's okay for this test
       if (error instanceof Error && error.message.includes("authentication failed")) {
         throw new Error(
-          `Authentication failed - password mismatch detected!\n` +
-          `Run reset-db-password script to fix.`
+          `Authentication failed - check DATABASE_URL credentials in docker/.env.`
         );
       }
       console.warn("Pool test skipped - database not available");

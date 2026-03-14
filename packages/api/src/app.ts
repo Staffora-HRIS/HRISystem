@@ -52,6 +52,59 @@ import { analyticsRoutes } from "./modules/analytics";
 import { competenciesRoutes } from "./modules/competencies";
 import { recruitmentRoutes } from "./modules/recruitment";
 
+// UK Compliance & HR modules (Phase 11-15)
+import { agencyRoutes } from "./modules/agencies";
+import { assessmentRoutes } from "./modules/assessments";
+import { bankDetailRoutes } from "./modules/bank-details";
+import { bankHolidayRoutes } from "./modules/bank-holidays";
+import { bereavementRoutes } from "./modules/bereavement";
+import { carersLeaveRoutes } from "./modules/carers-leave";
+import { consentRoutes } from "./modules/consent";
+import { contractAmendmentRoutes } from "./modules/contract-amendments";
+import { contractStatementsRoutes } from "./modules/contract-statements";
+import { courseRatingRoutes } from "./modules/course-ratings";
+import { cpdRoutes } from "./modules/cpd";
+import { dataBreachRoutes } from "./modules/data-breach";
+import { dataErasureRoutes } from "./modules/data-erasure";
+import { dataRetentionRoutes } from "./modules/data-retention";
+import { dbsCheckRoutes } from "./modules/dbs-checks";
+import { deductionRoutes } from "./modules/deductions";
+import { delegationRoutes } from "./modules/delegations";
+import { diversityRoutes } from "./modules/diversity";
+import { dsarRoutes } from "./modules/dsar";
+import { emergencyContactRoutes } from "./modules/emergency-contacts";
+import { employeePhotoRoutes } from "./modules/employee-photos";
+import { equipmentRoutes } from "./modules/equipment";
+import { familyLeaveRoutes } from "./modules/family-leave";
+import { flexibleWorkingRoutes } from "./modules/flexible-working";
+import { genderPayGapRoutes } from "./modules/gender-pay-gap";
+import { geofenceRoutes } from "./modules/geofence";
+import { headcountPlanningRoutes } from "./modules/headcount-planning";
+import { healthSafetyRoutes } from "./modules/health-safety";
+import { jobsRoutes } from "./modules/jobs";
+import { letterTemplateRoutes } from "./modules/letter-templates";
+import { nmwRoutes } from "./modules/nmw";
+import { notificationsRoutes } from "./modules/notifications";
+import { parentalLeaveRoutes } from "./modules/parental-leave";
+import { payrollRoutes } from "./modules/payroll";
+import { payrollConfigRoutes } from "./modules/payroll-config";
+import { payslipRoutes } from "./modules/payslips";
+import { pensionRoutes } from "./modules/pension";
+import { privacyNoticeRoutes } from "./modules/privacy-notices";
+import { probationRoutes } from "./modules/probation";
+import { reasonableAdjustmentsRoutes } from "./modules/reasonable-adjustments";
+import { referenceCheckRoutes } from "./modules/reference-checks";
+import { reportsRoutes } from "./modules/reports";
+import { returnToWorkRoutes } from "./modules/return-to-work";
+import { rightToWorkRoutes } from "./modules/right-to-work";
+import { secondmentRoutes } from "./modules/secondments";
+import { sspRoutes } from "./modules/ssp";
+import { statutoryLeaveRoutes } from "./modules/statutory-leave";
+import { taxCodeRoutes } from "./modules/tax-codes";
+import { trainingBudgetRoutes } from "./modules/training-budgets";
+import { warningsRoutes } from "./modules/warnings";
+import { wtrRoutes } from "./modules/wtr";
+
 /**
  * Environment configuration with validation
  */
@@ -443,6 +496,69 @@ export const app = new Elysia()
       .use(recruitmentRoutes)
       // Portal aggregations
       .use(portalRoutes)
+
+      // UK Compliance modules (Employment Rights Act, GDPR, etc.)
+      .use(rightToWorkRoutes)
+      .use(sspRoutes)
+      .use(statutoryLeaveRoutes)
+      .use(familyLeaveRoutes)
+      .use(parentalLeaveRoutes)
+      .use(bereavementRoutes)
+      .use(carersLeaveRoutes)
+      .use(flexibleWorkingRoutes)
+      .use(contractStatementsRoutes)
+      .use(contractAmendmentRoutes)
+      .use(genderPayGapRoutes)
+      .use(nmwRoutes)
+      .use(wtrRoutes)
+      .use(healthSafetyRoutes)
+      .use(warningsRoutes)
+      .use(pensionRoutes)
+      .use(probationRoutes)
+      .use(returnToWorkRoutes)
+      .use(bankHolidayRoutes)
+
+      // GDPR & Data Privacy modules
+      .use(dsarRoutes)
+      .use(dataErasureRoutes)
+      .use(dataBreachRoutes)
+      .use(dataRetentionRoutes)
+      .use(consentRoutes)
+      .use(privacyNoticeRoutes)
+
+      // Employee data modules
+      .use(bankDetailRoutes)
+      .use(emergencyContactRoutes)
+      .use(employeePhotoRoutes)
+      .use(diversityRoutes)
+      .use(reasonableAdjustmentsRoutes)
+      .use(secondmentRoutes)
+
+      // Payroll & Compensation modules
+      .use(payrollRoutes)
+      .use(payrollConfigRoutes)
+      .use(payslipRoutes)
+      .use(taxCodeRoutes)
+      .use(deductionRoutes)
+
+      // Talent & Learning additional modules
+      .use(trainingBudgetRoutes)
+      .use(cpdRoutes)
+      .use(courseRatingRoutes)
+      .use(assessmentRoutes)
+      .use(dbsCheckRoutes)
+      .use(referenceCheckRoutes)
+      .use(agencyRoutes)
+
+      // Operations modules
+      .use(equipmentRoutes)
+      .use(geofenceRoutes)
+      .use(headcountPlanningRoutes)
+      .use(jobsRoutes)
+      .use(letterTemplateRoutes)
+      .use(notificationsRoutes)
+      .use(delegationRoutes)
+      .use(reportsRoutes)
   )
 
   // 404 handler (must be last)
