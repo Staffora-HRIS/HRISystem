@@ -2,8 +2,10 @@
  * Benefit Plan Card Component
  *
  * Displays a benefit plan with enrollment status and actions.
+ * Wrapped with React.memo to prevent unnecessary re-renders in plan lists.
  */
 
+import React from "react";
 import { Check, X, Clock, DollarSign, Users, Calendar } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -82,7 +84,7 @@ function getEnrollmentStatusBadge(status?: string) {
   }
 }
 
-export function PlanCard({
+export const PlanCard = React.memo(function PlanCard({
   plan,
   onEnroll,
   onWaive,
@@ -225,6 +227,6 @@ export function PlanCard({
       </div>
     </div>
   );
-}
+});
 
 export default PlanCard;

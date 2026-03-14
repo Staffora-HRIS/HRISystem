@@ -2,8 +2,10 @@
  * Succession Plan Card Component
  *
  * Displays a succession plan with candidates and readiness levels.
+ * Wrapped with React.memo to prevent unnecessary re-renders in succession plan lists.
  */
 
+import React from "react";
 import { Users, AlertTriangle, CheckCircle, Clock, TrendingUp } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -79,7 +81,7 @@ function getReadinessLabel(level: string): string {
   return labels[level] || level;
 }
 
-export function SuccessionPlanCard({
+export const SuccessionPlanCard = React.memo(function SuccessionPlanCard({
   plan,
   onViewDetails,
   onAddCandidate,
@@ -216,6 +218,6 @@ export function SuccessionPlanCard({
       </div>
     </div>
   );
-}
+});
 
 export default SuccessionPlanCard;
