@@ -80,6 +80,51 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     }
   }, { beforeHandle: [requireAuthContext, requireTenantContext], detail: { tags: ["Portal"], summary: "Get my pending approvals" } })
 
+  // Employee directory search
+  .get("/directory", async (ctx) => {
+    const { portalService, tenantContext, query, set } = ctx as any;
+
+    try {
+      const { cursor, limit, search, departmentId, locationId } = query || {};
+      return await portalService.searchDirectory(
+        tenantContext,
+        { search, departmentId, locationId },
+        { cursor, limit: limit ? Number(limit) : undefined }
+      );
+    } catch (error: any) {
+      console.error("Portal /directory error:", error);
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to search directory", requestId: "" } };
+    }
+  }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
+    detail: {
+      tags: ["Portal"],
+      summary: "Search employee directory",
+      description: "Search and browse active employees by name, department, or position. Returns basic contact info visible to all authenticated users.",
+    },
+  })
+
+  // Department list for directory filtering
+  .get("/directory/departments", async (ctx) => {
+    const { portalService, tenantContext, set } = ctx as any;
+
+    try {
+      return await portalService.getDepartments(tenantContext);
+    } catch (error: any) {
+      console.error("Portal /directory/departments error:", error);
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get departments", requestId: "" } };
+    }
+  }, {
+    beforeHandle: [requireAuthContext, requireTenantContext],
+    detail: {
+      tags: ["Portal"],
+      summary: "List departments for directory",
+      description: "Get list of active departments with employee counts for directory filtering.",
+    },
+  })
+
   // Dashboard summary
   .get("/dashboard", async (ctx) => {
     const { user, tenant, portalService, tenantContext, set } = ctx as any;

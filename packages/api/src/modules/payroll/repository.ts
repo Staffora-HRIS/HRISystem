@@ -102,6 +102,32 @@ export interface ActiveEmployeeRow extends Row {
   salaryCurrency: string | null;
 }
 
+export interface PayScheduleRow extends Row {
+  id: string;
+  tenantId: string;
+  name: string;
+  frequency: string;
+  payDayOfWeek: number | null;
+  payDayOfMonth: number | null;
+  taxWeekStart: Date | null;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PayAssignmentRow extends Row {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  payScheduleId: string;
+  effectiveFrom: Date;
+  effectiveTo: Date | null;
+  createdAt: Date;
+  // Joined fields
+  scheduleName?: string;
+  scheduleFrequency?: string;
+}
+
 // =============================================================================
 // Repository
 // =============================================================================
@@ -612,6 +638,163 @@ export class PayrollRepository {
         created_at, updated_at
     `;
     return row as unknown as TaxDetailsRow;
+  }
+
+  // =========================================================================
+  // Pay Schedules
+  // =========================================================================
+
+  async createPaySchedule(
+    ctx: TenantContext,
+    data: {
+      name: string;
+      frequency: string;
+      payDayOfWeek?: number | null;
+      payDayOfMonth?: number | null;
+      taxWeekStart?: string | null;
+      isDefault?: boolean;
+    }
+  ): Promise<PayScheduleRow> {
+    const id = crypto.randomUUID();
+    const [row] = await this.db.withTransaction(ctx, async (tx) => {
+      // If setting as default, unset any existing default
+      if (data.isDefault) {
+        await tx`
+          UPDATE app.pay_schedules
+          SET is_default = false, updated_at = now()
+          WHERE tenant_id = ${ctx.tenantId}::uuid AND is_default = true
+        `;
+      }
+
+      return tx<PayScheduleRow[]>`
+        INSERT INTO app.pay_schedules (
+          id, tenant_id, name, frequency,
+          pay_day_of_week, pay_day_of_month, tax_week_start, is_default
+        ) VALUES (
+          ${id}::uuid, ${ctx.tenantId}::uuid, ${data.name},
+          ${data.frequency}::app.pay_frequency,
+          ${data.payDayOfWeek ?? null}, ${data.payDayOfMonth ?? null},
+          ${data.taxWeekStart ?? null}::date, ${data.isDefault ?? false}
+        )
+        RETURNING *
+      `;
+    });
+    return row as PayScheduleRow;
+  }
+
+  async getPaySchedules(ctx: TenantContext): Promise<PayScheduleRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      const rows = await tx<PayScheduleRow[]>`
+        SELECT id, tenant_id, name, frequency,
+               pay_day_of_week, pay_day_of_month, tax_week_start,
+               is_default, created_at, updated_at
+        FROM app.pay_schedules
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+        ORDER BY is_default DESC, name
+      `;
+      return rows;
+    });
+  }
+
+  async getPayScheduleById(ctx: TenantContext, id: string): Promise<PayScheduleRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PayScheduleRow[]>`
+        SELECT id, tenant_id, name, frequency,
+               pay_day_of_week, pay_day_of_month, tax_week_start,
+               is_default, created_at, updated_at
+        FROM app.pay_schedules
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
+    return rows.length > 0 ? (rows[0] as PayScheduleRow) : null;
+  }
+
+  async updatePaySchedule(
+    ctx: TenantContext,
+    id: string,
+    data: Partial<{ name: string; payDayOfWeek: number | null; payDayOfMonth: number | null; taxWeekStart: string | null; isDefault: boolean }>
+  ): Promise<PayScheduleRow | null> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      if (data.isDefault) {
+        await tx`
+          UPDATE app.pay_schedules
+          SET is_default = false, updated_at = now()
+          WHERE tenant_id = ${ctx.tenantId}::uuid AND is_default = true AND id != ${id}::uuid
+        `;
+      }
+
+      const [row] = await tx<PayScheduleRow[]>`
+        UPDATE app.pay_schedules SET
+          name = COALESCE(${data.name ?? null}, name),
+          pay_day_of_week = COALESCE(${data.payDayOfWeek ?? null}, pay_day_of_week),
+          pay_day_of_month = COALESCE(${data.payDayOfMonth ?? null}, pay_day_of_month),
+          tax_week_start = COALESCE(${data.taxWeekStart ?? null}::date, tax_week_start),
+          is_default = COALESCE(${data.isDefault ?? null}, is_default),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+      return (row as PayScheduleRow) ?? null;
+    });
+  }
+
+  // =========================================================================
+  // Employee Pay Assignments
+  // =========================================================================
+
+  async assignEmployeeToSchedule(
+    ctx: TenantContext,
+    data: { employeeId: string; payScheduleId: string; effectiveFrom: string; effectiveTo?: string | null }
+  ): Promise<PayAssignmentRow> {
+    const id = crypto.randomUUID();
+    const [row] = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PayAssignmentRow[]>`
+        INSERT INTO app.employee_pay_assignments (
+          id, tenant_id, employee_id, pay_schedule_id, effective_from, effective_to
+        ) VALUES (
+          ${id}::uuid, ${ctx.tenantId}::uuid,
+          ${data.employeeId}::uuid, ${data.payScheduleId}::uuid,
+          ${data.effectiveFrom}::date, ${data.effectiveTo ?? null}::date
+        )
+        RETURNING *
+      `;
+    });
+    return row as PayAssignmentRow;
+  }
+
+  async getEmployeePayAssignments(ctx: TenantContext, employeeId: string): Promise<PayAssignmentRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      const rows = await tx<PayAssignmentRow[]>`
+        SELECT epa.id, epa.tenant_id, epa.employee_id, epa.pay_schedule_id,
+               epa.effective_from, epa.effective_to, epa.created_at,
+               ps.name as schedule_name, ps.frequency as schedule_frequency
+        FROM app.employee_pay_assignments epa
+        JOIN app.pay_schedules ps ON ps.id = epa.pay_schedule_id
+        WHERE epa.tenant_id = ${ctx.tenantId}::uuid
+          AND epa.employee_id = ${employeeId}::uuid
+        ORDER BY epa.effective_from DESC
+      `;
+      return rows;
+    });
+  }
+
+  async getCurrentPayAssignment(ctx: TenantContext, employeeId: string): Promise<PayAssignmentRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PayAssignmentRow[]>`
+        SELECT epa.id, epa.tenant_id, epa.employee_id, epa.pay_schedule_id,
+               epa.effective_from, epa.effective_to, epa.created_at,
+               ps.name as schedule_name, ps.frequency as schedule_frequency
+        FROM app.employee_pay_assignments epa
+        JOIN app.pay_schedules ps ON ps.id = epa.pay_schedule_id
+        WHERE epa.tenant_id = ${ctx.tenantId}::uuid
+          AND epa.employee_id = ${employeeId}::uuid
+          AND epa.effective_from <= CURRENT_DATE
+          AND (epa.effective_to IS NULL OR epa.effective_to >= CURRENT_DATE)
+        ORDER BY epa.effective_from DESC
+        LIMIT 1
+      `;
+    });
+    return rows.length > 0 ? (rows[0] as PayAssignmentRow) : null;
   }
 
   async hasOverlappingTaxDetails(

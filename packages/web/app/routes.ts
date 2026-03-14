@@ -134,7 +134,11 @@ export default [
       // Reports
       ...prefix("reports", [
         index("routes/(admin)/reports/route.tsx"),
+        route("new", "routes/(admin)/reports/new/route.tsx"),
+        route("templates", "routes/(admin)/reports/templates/route.tsx"),
+        route("favourites", "routes/(admin)/reports/favourites/route.tsx"),
         route(":reportId", "routes/(admin)/reports/[reportId]/route.tsx"),
+        route(":reportId/edit", "routes/(admin)/reports/[reportId]/edit/route.tsx"),
       ]),
 
       // LMS Administration

@@ -572,9 +572,14 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
           return value;
         };
 
+        // Prefer already-parsed body (zero-copy) over request.clone() which
+        // duplicates the entire body buffer into memory.
         let bodyForHash: unknown = null;
 
-        if (!request.bodyUsed) {
+        const parsedBody = (ctx as any).body;
+        if (parsedBody !== undefined && parsedBody !== null) {
+          bodyForHash = canonicalize(parsedBody);
+        } else if (!request.bodyUsed) {
           try {
             const raw = await request.clone().text();
             if (raw) {
@@ -586,13 +591,6 @@ export function idempotencyPlugin(options: IdempotencyPluginOptions = {}) {
             }
           } catch {
             // ignore
-          }
-        }
-
-        if (bodyForHash === null) {
-          const parsedBody = (ctx as any).body;
-          if (parsedBody !== undefined) {
-            bodyForHash = canonicalize(parsedBody);
           }
         }
 

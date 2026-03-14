@@ -112,11 +112,80 @@ function createMockAnalyticsRepository() {
     ),
     getManagerDashboard: mock((_ctx: unknown) =>
       Promise.resolve({
-        teamSize: 12,
-        pendingApprovals: 3,
-        openCases: 2,
-        upcomingReviews: 5,
+        team_headcount: 12,
+        pending_approvals: 3,
+        team_attendance_rate: 95.0,
+        team_on_leave_today: 1,
+        upcoming_reviews: 5,
+        overdue_timesheets: 0,
       })
+    ),
+    // Diversity Analytics
+    getDiversityByGender: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { gender: "male", count: 70 },
+        { gender: "female", count: 55 },
+        { gender: "not_specified", count: 5 },
+      ])
+    ),
+    getDiversityByAgeBand: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { age_band: "Under 25", count: 15 },
+        { age_band: "25-34", count: 45 },
+        { age_band: "35-44", count: 40 },
+        { age_band: "45-54", count: 20 },
+        { age_band: "55-64", count: 10 },
+      ])
+    ),
+    getDiversityByNationality: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { nationality: "British", count: 80 },
+        { nationality: "Polish", count: 20 },
+        { nationality: "Indian", count: 15 },
+        { nationality: "Unknown", count: 15 },
+      ])
+    ),
+    getDiversityByDepartment: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { org_unit_id: "ou1", org_unit_name: "Engineering", gender: "male", count: 30 },
+        { org_unit_id: "ou1", org_unit_name: "Engineering", gender: "female", count: 15 },
+        { org_unit_id: "ou2", org_unit_name: "HR", gender: "male", count: 5 },
+        { org_unit_id: "ou2", org_unit_name: "HR", gender: "female", count: 10 },
+      ])
+    ),
+    // Compensation Analytics
+    getCompensationSummary: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve({
+        total_employees: 100,
+        avg_salary: 45000,
+        median_salary: 42000,
+        min_salary: 22000,
+        max_salary: 95000,
+        total_payroll: 4500000,
+        currency: "GBP",
+      })
+    ),
+    getCompensationByBand: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { band: "Under £25k", count: 10, avg_salary: 22000 },
+        { band: "£25k-£35k", count: 25, avg_salary: 30000 },
+        { band: "£35k-£50k", count: 35, avg_salary: 42000 },
+        { band: "£50k-£75k", count: 20, avg_salary: 60000 },
+        { band: "£75k-£100k", count: 10, avg_salary: 85000 },
+      ])
+    ),
+    getCompensationByDepartment: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { org_unit_id: "ou1", org_unit_name: "Engineering", headcount: 50, avg_salary: 55000, min_salary: 30000, max_salary: 95000, total_payroll: 2750000 },
+        { org_unit_id: "ou2", org_unit_name: "HR", headcount: 15, avg_salary: 38000, min_salary: 25000, max_salary: 60000, total_payroll: 570000 },
+      ])
+    ),
+    getRecentCompensationChanges: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { change_reason: "merit", count: 40, avg_change_percentage: 3.5 },
+        { change_reason: "promotion", count: 12, avg_change_percentage: 8.2 },
+        { change_reason: "market", count: 5, avg_change_percentage: 5.0 },
+      ])
     ),
   };
 }
@@ -181,7 +250,7 @@ describe("AnalyticsService", () => {
       });
 
       it("should pass filters to repository", async () => {
-        const filters = { orgUnitId: "ou1" };
+        const filters = { org_unit_id: "ou1" };
         await service.getHeadcountSummary(ctx, filters);
 
         expect(repository.getHeadcountSummary).toHaveBeenCalledWith(ctx, filters);
@@ -372,8 +441,181 @@ describe("AnalyticsService", () => {
 
         expect(result.success).toBe(true);
         expect(result.data).toBeDefined();
-        expect(result.data?.teamSize).toBe(12);
-        expect(result.data?.pendingApprovals).toBe(3);
+        expect(result.data?.team_headcount).toBeDefined();
+        expect(result.data?.pending_approvals).toBeDefined();
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Diversity Analytics
+  // ===========================================================================
+
+  describe("Diversity Analytics", () => {
+    describe("getDiversityDashboard", () => {
+      it("should return diversity dashboard with all breakdowns", async () => {
+        const result = await service.getDiversityDashboard(ctx);
+
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+        expect(result.data!.total_employees).toBe(130); // 70+55+5
+        expect(result.data!.by_gender).toHaveLength(3);
+        expect(result.data!.by_age_band).toHaveLength(5);
+        expect(result.data!.by_nationality).toHaveLength(4);
+        expect(result.data!.by_department).toHaveLength(2);
+        expect(result.data!.as_of_date).toBeDefined();
+      });
+
+      it("should calculate gender percentages correctly", async () => {
+        const result = await service.getDiversityDashboard(ctx);
+
+        const male = result.data!.by_gender.find((g) => g.gender === "male");
+        expect(male?.count).toBe(70);
+        // 70/130 = 53.8%
+        expect(male?.percentage).toBeCloseTo(53.8, 0);
+
+        const female = result.data!.by_gender.find((g) => g.gender === "female");
+        expect(female?.count).toBe(55);
+        // 55/130 = 42.3%
+        expect(female?.percentage).toBeCloseTo(42.3, 0);
+      });
+
+      it("should calculate age band percentages", async () => {
+        const result = await service.getDiversityDashboard(ctx);
+
+        const band2534 = result.data!.by_age_band.find((b) => b.age_band === "25-34");
+        expect(band2534?.count).toBe(45);
+        expect(band2534?.percentage).toBeGreaterThan(0);
+      });
+
+      it("should group department rows by org_unit with gender breakdown", async () => {
+        const result = await service.getDiversityDashboard(ctx);
+
+        const eng = result.data!.by_department.find((d) => d.org_unit_name === "Engineering");
+        expect(eng).toBeDefined();
+        expect(eng!.total).toBe(45); // 30 male + 15 female
+        expect(eng!.gender_breakdown).toHaveLength(2);
+
+        const engMale = eng!.gender_breakdown.find((g) => g.gender === "male");
+        expect(engMale?.count).toBe(30);
+        // 30/45 = 66.7%
+        expect(engMale?.percentage).toBeCloseTo(66.7, 0);
+      });
+
+      it("should handle empty results gracefully", async () => {
+        repository.getDiversityByGender = mock(() => Promise.resolve([]));
+        repository.getDiversityByAgeBand = mock(() => Promise.resolve([]));
+        repository.getDiversityByNationality = mock(() => Promise.resolve([]));
+        repository.getDiversityByDepartment = mock(() => Promise.resolve([]));
+
+        const result = await service.getDiversityDashboard(ctx);
+
+        expect(result.success).toBe(true);
+        expect(result.data!.total_employees).toBe(0);
+        expect(result.data!.by_gender).toHaveLength(0);
+        expect(result.data!.by_department).toHaveLength(0);
+      });
+
+      it("should pass filters to all repository calls", async () => {
+        const filters = { org_unit_id: "ou1" };
+        await service.getDiversityDashboard(ctx, filters);
+
+        expect(repository.getDiversityByGender).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getDiversityByAgeBand).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getDiversityByNationality).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getDiversityByDepartment).toHaveBeenCalledWith(ctx, filters);
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Compensation Analytics
+  // ===========================================================================
+
+  describe("Compensation Analytics", () => {
+    describe("getCompensationDashboard", () => {
+      it("should return compensation dashboard with all sections", async () => {
+        const result = await service.getCompensationDashboard(ctx);
+
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+        expect(result.data!.summary).toBeDefined();
+        expect(result.data!.by_band).toHaveLength(5);
+        expect(result.data!.by_department).toHaveLength(2);
+        expect(result.data!.recent_changes).toHaveLength(3);
+      });
+
+      it("should return correct summary values", async () => {
+        const result = await service.getCompensationDashboard(ctx);
+
+        expect(result.data!.summary.total_employees).toBe(100);
+        expect(result.data!.summary.avg_salary).toBe(45000);
+        expect(result.data!.summary.median_salary).toBe(42000);
+        expect(result.data!.summary.currency).toBe("GBP");
+      });
+
+      it("should calculate band percentages correctly", async () => {
+        const result = await service.getCompensationDashboard(ctx);
+
+        // Total from bands: 10+25+35+20+10 = 100
+        const band35to50 = result.data!.by_band.find((b) => b.band === "\u00a335k-\u00a350k");
+        expect(band35to50?.count).toBe(35);
+        expect(band35to50?.percentage).toBe(35); // 35/100 = 35%
+        expect(band35to50?.avg_salary).toBe(42000);
+
+        // Percentages should sum to 100
+        const totalPct = result.data!.by_band.reduce((s, b) => s + b.percentage, 0);
+        expect(totalPct).toBe(100);
+      });
+
+      it("should return department compensation breakdowns", async () => {
+        const result = await service.getCompensationDashboard(ctx);
+
+        const eng = result.data!.by_department.find((d) => d.org_unit_name === "Engineering");
+        expect(eng?.headcount).toBe(50);
+        expect(eng?.avg_salary).toBe(55000);
+        expect(eng?.total_payroll).toBe(2750000);
+      });
+
+      it("should return recent compensation changes", async () => {
+        const result = await service.getCompensationDashboard(ctx);
+
+        const merit = result.data!.recent_changes.find((c) => c.change_reason === "merit");
+        expect(merit?.count).toBe(40);
+        expect(merit?.avg_change_percentage).toBe(3.5);
+
+        const promo = result.data!.recent_changes.find((c) => c.change_reason === "promotion");
+        expect(promo?.avg_change_percentage).toBe(8.2);
+      });
+
+      it("should handle empty results gracefully", async () => {
+        repository.getCompensationSummary = mock(() =>
+          Promise.resolve({
+            total_employees: 0, avg_salary: 0, median_salary: 0,
+            min_salary: 0, max_salary: 0, total_payroll: 0, currency: "GBP",
+          })
+        );
+        repository.getCompensationByBand = mock(() => Promise.resolve([]));
+        repository.getCompensationByDepartment = mock(() => Promise.resolve([]));
+        repository.getRecentCompensationChanges = mock(() => Promise.resolve([]));
+
+        const result = await service.getCompensationDashboard(ctx);
+
+        expect(result.success).toBe(true);
+        expect(result.data!.summary.total_employees).toBe(0);
+        expect(result.data!.by_band).toHaveLength(0);
+        expect(result.data!.by_department).toHaveLength(0);
+        expect(result.data!.recent_changes).toHaveLength(0);
+      });
+
+      it("should pass filters to all repository calls", async () => {
+        const filters = { org_unit_id: "ou1", currency: "USD" };
+        await service.getCompensationDashboard(ctx, filters);
+
+        expect(repository.getCompensationSummary).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getCompensationByBand).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getCompensationByDepartment).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getRecentCompensationChanges).toHaveBeenCalledWith(ctx, filters);
       });
     });
   });

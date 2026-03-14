@@ -217,6 +217,110 @@ export const RecruitmentBySourceSchema = t.Object({
 });
 
 // =============================================================================
+// Filter Schemas - Diversity
+// =============================================================================
+
+export const DiversityFiltersSchema = t.Object({
+  org_unit_id: t.Optional(t.String({ format: "uuid" })),
+  as_of_date: t.Optional(t.String({ format: "date" })),
+});
+
+// =============================================================================
+// Response Schemas - Diversity
+// =============================================================================
+
+export const DiversityByGenderSchema = t.Object({
+  gender: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+});
+
+export const DiversityByAgeBandSchema = t.Object({
+  age_band: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+});
+
+export const DiversityByNationalitySchema = t.Object({
+  nationality: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+});
+
+export const DiversityByDepartmentSchema = t.Object({
+  org_unit_id: t.String(),
+  org_unit_name: t.String(),
+  total: t.Number(),
+  gender_breakdown: t.Array(t.Object({
+    gender: t.String(),
+    count: t.Number(),
+    percentage: t.Number(),
+  })),
+});
+
+export const DiversityDashboardSchema = t.Object({
+  total_employees: t.Number(),
+  by_gender: t.Array(DiversityByGenderSchema),
+  by_age_band: t.Array(DiversityByAgeBandSchema),
+  by_nationality: t.Array(DiversityByNationalitySchema),
+  by_department: t.Array(DiversityByDepartmentSchema),
+  as_of_date: t.String(),
+});
+
+// =============================================================================
+// Filter Schemas - Compensation
+// =============================================================================
+
+export const CompensationFiltersSchema = t.Object({
+  org_unit_id: t.Optional(t.String({ format: "uuid" })),
+  currency: t.Optional(t.String()),
+});
+
+// =============================================================================
+// Response Schemas - Compensation
+// =============================================================================
+
+export const CompensationSummarySchema = t.Object({
+  total_employees: t.Number(),
+  avg_salary: t.Number(),
+  median_salary: t.Number(),
+  min_salary: t.Number(),
+  max_salary: t.Number(),
+  total_payroll: t.Number(),
+  currency: t.String(),
+});
+
+export const CompensationByBandSchema = t.Object({
+  band: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+  avg_salary: t.Number(),
+});
+
+export const CompensationByDepartmentSchema = t.Object({
+  org_unit_id: t.String(),
+  org_unit_name: t.String(),
+  headcount: t.Number(),
+  avg_salary: t.Number(),
+  min_salary: t.Number(),
+  max_salary: t.Number(),
+  total_payroll: t.Number(),
+});
+
+export const CompensationChangeSchema = t.Object({
+  change_reason: t.String(),
+  count: t.Number(),
+  avg_change_percentage: t.Number(),
+});
+
+export const CompensationDashboardSchema = t.Object({
+  summary: CompensationSummarySchema,
+  by_band: t.Array(CompensationByBandSchema),
+  by_department: t.Array(CompensationByDepartmentSchema),
+  recent_changes: t.Array(CompensationChangeSchema),
+});
+
+// =============================================================================
 // Response Schemas - Dashboard
 // =============================================================================
 
@@ -285,3 +389,17 @@ export type RecruitmentBySource = Static<typeof RecruitmentBySourceSchema>;
 
 export type ExecutiveDashboard = Static<typeof ExecutiveDashboardSchema>;
 export type ManagerDashboard = Static<typeof ManagerDashboardSchema>;
+
+export type DiversityFilters = Static<typeof DiversityFiltersSchema>;
+export type DiversityByGender = Static<typeof DiversityByGenderSchema>;
+export type DiversityByAgeBand = Static<typeof DiversityByAgeBandSchema>;
+export type DiversityByNationality = Static<typeof DiversityByNationalitySchema>;
+export type DiversityByDepartment = Static<typeof DiversityByDepartmentSchema>;
+export type DiversityDashboard = Static<typeof DiversityDashboardSchema>;
+
+export type CompensationFilters = Static<typeof CompensationFiltersSchema>;
+export type CompensationSummary = Static<typeof CompensationSummarySchema>;
+export type CompensationByBand = Static<typeof CompensationByBandSchema>;
+export type CompensationByDepartment = Static<typeof CompensationByDepartmentSchema>;
+export type CompensationChange = Static<typeof CompensationChangeSchema>;
+export type CompensationDashboard = Static<typeof CompensationDashboardSchema>;

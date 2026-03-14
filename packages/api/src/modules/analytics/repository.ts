@@ -12,6 +12,8 @@ import type {
   AttendanceFilters,
   LeaveFilters,
   RecruitmentFilters,
+  DiversityFilters,
+  CompensationFilters,
 } from "./schemas";
 
 import type { TenantContext } from "../../types/service-result";
@@ -48,7 +50,7 @@ export class AnalyticsRepository {
           COUNT(*) FILTER (WHERE status = 'pending') as pending_employees,
           COUNT(*) FILTER (WHERE status = 'terminated') as terminated_employees
         FROM app.employees e
-        WHERE e.tenant_id = ${context.tenantId}::uuid
+        WHERE true
           ${filters.org_unit_id
             ? tx`AND EXISTS (
                 SELECT 1 FROM app.position_assignments pa
@@ -84,8 +86,7 @@ export class AnalyticsRepository {
           AND pa.is_primary = true
         LEFT JOIN app.employees e ON e.id = pa.employee_id
           AND e.status IN ('active', 'on_leave')
-        WHERE ou.tenant_id = ${context.tenantId}::uuid
-          AND ou.is_active = true
+        WHERE ou.is_active = true
         GROUP BY ou.id, ou.name
         ORDER BY headcount DESC
       `;
@@ -118,8 +119,7 @@ export class AnalyticsRepository {
             date_trunc(${period}, hire_date)::date as period_date,
             COUNT(*) as count
           FROM app.employees
-          WHERE tenant_id = ${context.tenantId}::uuid
-            AND hire_date BETWEEN ${startDate}::date AND ${endDate}::date
+          WHERE hire_date BETWEEN ${startDate}::date AND ${endDate}::date
           GROUP BY 1
         ),
         terms AS (
@@ -127,8 +127,7 @@ export class AnalyticsRepository {
             date_trunc(${period}, termination_date)::date as period_date,
             COUNT(*) as count
           FROM app.employees
-          WHERE tenant_id = ${context.tenantId}::uuid
-            AND termination_date BETWEEN ${startDate}::date AND ${endDate}::date
+          WHERE termination_date BETWEEN ${startDate}::date AND ${endDate}::date
           GROUP BY 1
         )
         SELECT
@@ -162,8 +161,7 @@ export class AnalyticsRepository {
             e.hire_date,
             e.termination_reason
           FROM app.employees e
-          WHERE e.tenant_id = ${context.tenantId}::uuid
-            AND e.status = 'terminated'
+          WHERE e.status = 'terminated'
             AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
             ${filters.org_unit_id
               ? tx`AND EXISTS (
@@ -177,8 +175,7 @@ export class AnalyticsRepository {
         avg_headcount AS (
           SELECT COUNT(*)::numeric as count
           FROM app.employees
-          WHERE tenant_id = ${context.tenantId}::uuid
-            AND status != 'terminated'
+          WHERE status != 'terminated'
         )
         SELECT
           COUNT(*) as total_terminations,
@@ -214,8 +211,7 @@ export class AnalyticsRepository {
           INNER JOIN app.position_assignments pa ON pa.employee_id = e.id
           INNER JOIN app.positions p ON pa.position_id = p.id
           INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-          WHERE e.tenant_id = ${context.tenantId}::uuid
-            AND e.status = 'terminated'
+          WHERE e.status = 'terminated'
             AND e.termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
           GROUP BY ou.id, ou.name
         ),
@@ -228,7 +224,6 @@ export class AnalyticsRepository {
             AND pa.effective_to IS NULL
           INNER JOIN app.positions p ON pa.position_id = p.id
           INNER JOIN app.org_units ou ON p.org_unit_id = ou.id
-          WHERE e.tenant_id = ${context.tenantId}::uuid
           GROUP BY ou.id
         )
         SELECT
@@ -253,8 +248,7 @@ export class AnalyticsRepository {
           COALESCE(termination_reason, 'unspecified') as reason,
           COUNT(*) as count
         FROM app.employees
-        WHERE tenant_id = ${context.tenantId}::uuid
-          AND status = 'terminated'
+        WHERE status = 'terminated'
           AND termination_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
         GROUP BY termination_reason
         ORDER BY count DESC
@@ -280,8 +274,7 @@ export class AnalyticsRepository {
           COALESCE(SUM(tl.overtime_hours), 0) as overtime_hours
         FROM app.timesheets ts
         LEFT JOIN app.timesheet_lines tl ON tl.timesheet_id = ts.id
-        WHERE ts.tenant_id = ${context.tenantId}::uuid
-          AND tl.work_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
+        WHERE tl.work_date BETWEEN ${filters.start_date}::date AND ${filters.end_date}::date
           ${filters.employee_id ? tx`AND ts.employee_id = ${filters.employee_id}::uuid` : tx``}
           ${filters.org_unit_id
             ? tx`AND EXISTS (
@@ -340,8 +333,7 @@ export class AnalyticsRepository {
             ELSE NULL END
           ), 1) as avg_days_per_request
         FROM app.leave_requests lr
-        WHERE lr.tenant_id = ${context.tenantId}::uuid
-          AND lr.start_date <= ${filters.end_date}::date
+        WHERE lr.start_date <= ${filters.end_date}::date
           AND lr.end_date >= ${filters.start_date}::date
           ${filters.leave_type_id ? tx`AND lr.leave_type_id = ${filters.leave_type_id}::uuid` : tx``}
           ${filters.org_unit_id
@@ -382,11 +374,9 @@ export class AnalyticsRepository {
           ), 0) as days_taken
         FROM app.leave_types lt
         LEFT JOIN app.leave_requests lr ON lr.leave_type_id = lt.id
-          AND lr.tenant_id = ${context.tenantId}::uuid
           AND lr.start_date <= ${filters.end_date}::date
           AND lr.end_date >= ${filters.start_date}::date
-        WHERE lt.tenant_id = ${context.tenantId}::uuid
-          AND lt.is_active = true
+        WHERE lt.is_active = true
         GROUP BY lt.id, lt.name
         ORDER BY days_taken DESC
       `;
@@ -468,23 +458,414 @@ export class AnalyticsRepository {
   }
 
   // ===========================================================================
-  // Recruitment Analytics (placeholder)
+  // Recruitment Analytics
   // ===========================================================================
 
   async getRecruitmentSummary(
     context: TenantContext,
     filters: RecruitmentFilters
   ): Promise<any> {
-    // Placeholder - would query from recruitment tables
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH req_stats AS (
+          SELECT
+            COUNT(*) FILTER (WHERE r.status = 'open') AS open_requisitions,
+            COUNT(*) FILTER (WHERE r.status = 'filled') AS filled_requisitions
+          FROM app.requisitions r
+          WHERE r.tenant_id = ${context.tenantId}::uuid
+            ${filters.org_unit_id
+              ? tx`AND r.org_unit_id = ${filters.org_unit_id}::uuid`
+              : tx``}
+            ${filters.start_date
+              ? tx`AND r.created_at >= ${filters.start_date}::date`
+              : tx``}
+            ${filters.end_date
+              ? tx`AND r.created_at <= ${filters.end_date}::date`
+              : tx``}
+        ),
+        cand_stats AS (
+          SELECT
+            COUNT(*) AS total_applications,
+            COUNT(*) FILTER (WHERE c.current_stage IN ('screening', 'phone_screen')) AS applications_in_review,
+            COUNT(*) FILTER (WHERE c.current_stage = 'interview') AS interviews_scheduled,
+            COUNT(*) FILTER (WHERE c.current_stage = 'offer') AS offers_extended,
+            COUNT(*) FILTER (WHERE c.current_stage = 'hired') AS offers_accepted,
+            ROUND(AVG(
+              CASE WHEN c.current_stage = 'hired'
+                THEN EXTRACT(DAY FROM c.updated_at - c.created_at)
+              END
+            ), 1) AS avg_time_to_hire_days
+          FROM app.candidates c
+          JOIN app.requisitions r ON r.id = c.requisition_id
+          WHERE c.tenant_id = ${context.tenantId}::uuid
+            ${filters.org_unit_id
+              ? tx`AND r.org_unit_id = ${filters.org_unit_id}::uuid`
+              : tx``}
+            ${filters.start_date
+              ? tx`AND c.created_at >= ${filters.start_date}::date`
+              : tx``}
+            ${filters.end_date
+              ? tx`AND c.created_at <= ${filters.end_date}::date`
+              : tx``}
+        ),
+        fill_time AS (
+          SELECT
+            ROUND(AVG(
+              EXTRACT(DAY FROM r.updated_at - r.created_at)
+            ), 1) AS avg_time_to_fill_days
+          FROM app.requisitions r
+          WHERE r.tenant_id = ${context.tenantId}::uuid
+            AND r.status = 'filled'
+            ${filters.org_unit_id
+              ? tx`AND r.org_unit_id = ${filters.org_unit_id}::uuid`
+              : tx``}
+            ${filters.start_date
+              ? tx`AND r.created_at >= ${filters.start_date}::date`
+              : tx``}
+            ${filters.end_date
+              ? tx`AND r.created_at <= ${filters.end_date}::date`
+              : tx``}
+        )
+        SELECT
+          rs.open_requisitions,
+          cs.total_applications,
+          cs.applications_in_review,
+          cs.interviews_scheduled,
+          cs.offers_extended,
+          cs.offers_accepted,
+          cs.avg_time_to_hire_days,
+          ft.avg_time_to_fill_days
+        FROM req_stats rs, cand_stats cs, fill_time ft
+      `;
+    });
+
+    const r = rows[0] || {};
     return {
-      open_requisitions: 0,
-      total_applications: 0,
-      applications_in_review: 0,
-      interviews_scheduled: 0,
-      offers_extended: 0,
-      offers_accepted: 0,
-      avg_time_to_hire_days: 0,
-      avg_time_to_fill_days: 0,
+      open_requisitions: Number(r.open_requisitions ?? r.openRequisitions) || 0,
+      total_applications: Number(r.total_applications ?? r.totalApplications) || 0,
+      applications_in_review: Number(r.applications_in_review ?? r.applicationsInReview) || 0,
+      interviews_scheduled: Number(r.interviews_scheduled ?? r.interviewsScheduled) || 0,
+      offers_extended: Number(r.offers_extended ?? r.offersExtended) || 0,
+      offers_accepted: Number(r.offers_accepted ?? r.offersAccepted) || 0,
+      avg_time_to_hire_days: Number(r.avg_time_to_hire_days ?? r.avgTimeToHireDays) || 0,
+      avg_time_to_fill_days: Number(r.avg_time_to_fill_days ?? r.avgTimeToFillDays) || 0,
     };
+  }
+
+  // ===========================================================================
+  // Diversity Analytics
+  // ===========================================================================
+
+  async getDiversityByGender(
+    context: TenantContext,
+    filters: DiversityFilters = {}
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COALESCE(ep.gender::text, 'not_specified') AS gender,
+          COUNT(*)::int AS count
+        FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id
+          AND ep.tenant_id = e.tenant_id
+          AND ep.effective_to IS NULL
+        WHERE e.tenant_id = ${context.tenantId}::uuid
+          AND e.status = 'active'
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+        GROUP BY ep.gender
+        ORDER BY count DESC
+      `;
+    });
+  }
+
+  async getDiversityByAgeBand(
+    context: TenantContext,
+    filters: DiversityFilters = {}
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          CASE
+            WHEN ep.date_of_birth IS NULL THEN 'Unknown'
+            WHEN EXTRACT(YEAR FROM age(ep.date_of_birth)) < 25 THEN 'Under 25'
+            WHEN EXTRACT(YEAR FROM age(ep.date_of_birth)) < 35 THEN '25-34'
+            WHEN EXTRACT(YEAR FROM age(ep.date_of_birth)) < 45 THEN '35-44'
+            WHEN EXTRACT(YEAR FROM age(ep.date_of_birth)) < 55 THEN '45-54'
+            WHEN EXTRACT(YEAR FROM age(ep.date_of_birth)) < 65 THEN '55-64'
+            ELSE '65+'
+          END AS age_band,
+          COUNT(*)::int AS count
+        FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id
+          AND ep.tenant_id = e.tenant_id
+          AND ep.effective_to IS NULL
+        WHERE e.tenant_id = ${context.tenantId}::uuid
+          AND e.status = 'active'
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+        GROUP BY age_band
+        ORDER BY
+          CASE age_band
+            WHEN 'Under 25' THEN 1
+            WHEN '25-34' THEN 2
+            WHEN '35-44' THEN 3
+            WHEN '45-54' THEN 4
+            WHEN '55-64' THEN 5
+            WHEN '65+' THEN 6
+            ELSE 7
+          END
+      `;
+    });
+  }
+
+  async getDiversityByNationality(
+    context: TenantContext,
+    filters: DiversityFilters = {}
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COALESCE(ep.nationality, 'Unknown') AS nationality,
+          COUNT(*)::int AS count
+        FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id
+          AND ep.tenant_id = e.tenant_id
+          AND ep.effective_to IS NULL
+        WHERE e.tenant_id = ${context.tenantId}::uuid
+          AND e.status = 'active'
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+        GROUP BY ep.nationality
+        ORDER BY count DESC
+        LIMIT 20
+      `;
+    });
+  }
+
+  async getDiversityByDepartment(
+    context: TenantContext,
+    filters: DiversityFilters = {}
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          o.id AS org_unit_id,
+          o.name AS org_unit_name,
+          COALESCE(ep.gender::text, 'not_specified') AS gender,
+          COUNT(*)::int AS count
+        FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id
+          AND ep.tenant_id = e.tenant_id
+          AND ep.effective_to IS NULL
+        LEFT JOIN app.position_assignments pa
+          ON pa.employee_id = e.id
+          AND pa.tenant_id = e.tenant_id
+          AND pa.is_primary = true
+          AND pa.effective_to IS NULL
+        LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
+        WHERE e.tenant_id = ${context.tenantId}::uuid
+          AND e.status = 'active'
+          ${filters.org_unit_id
+            ? tx`AND o.id = ${filters.org_unit_id}::uuid`
+            : tx``}
+        GROUP BY o.id, o.name, ep.gender
+        ORDER BY o.name, count DESC
+      `;
+    });
+  }
+
+  // ===========================================================================
+  // Compensation Analytics
+  // ===========================================================================
+
+  async getCompensationSummary(
+    context: TenantContext,
+    filters: CompensationFilters = {}
+  ): Promise<any> {
+    const currency = filters.currency || "GBP";
+
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COUNT(*)::int AS total_employees,
+          ROUND(AVG(ch.base_salary), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ch.base_salary), 2) AS median_salary,
+          ROUND(MIN(ch.base_salary), 2) AS min_salary,
+          ROUND(MAX(ch.base_salary), 2) AS max_salary,
+          ROUND(SUM(ch.base_salary), 2) AS total_payroll
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e
+          ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        WHERE ch.tenant_id = ${context.tenantId}::uuid
+          AND ch.effective_to IS NULL
+          AND e.status = 'active'
+          AND ch.currency = ${currency}
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+      `;
+    });
+
+    const r = rows[0] || {};
+    return {
+      total_employees: Number(r.total_employees) || 0,
+      avg_salary: Number(r.avg_salary) || 0,
+      median_salary: Number(r.median_salary) || 0,
+      min_salary: Number(r.min_salary) || 0,
+      max_salary: Number(r.max_salary) || 0,
+      total_payroll: Number(r.total_payroll) || 0,
+      currency,
+    };
+  }
+
+  async getCompensationByBand(
+    context: TenantContext,
+    filters: CompensationFilters = {}
+  ): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          CASE
+            WHEN ch.base_salary < 25000 THEN 'Under £25k'
+            WHEN ch.base_salary < 35000 THEN '£25k-£35k'
+            WHEN ch.base_salary < 50000 THEN '£35k-£50k'
+            WHEN ch.base_salary < 75000 THEN '£50k-£75k'
+            WHEN ch.base_salary < 100000 THEN '£75k-£100k'
+            ELSE '£100k+'
+          END AS band,
+          COUNT(*)::int AS count,
+          ROUND(AVG(ch.base_salary), 2) AS avg_salary
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e
+          ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        WHERE ch.tenant_id = ${context.tenantId}::uuid
+          AND ch.effective_to IS NULL
+          AND e.status = 'active'
+          AND ch.currency = ${currency}
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+        GROUP BY band
+        ORDER BY
+          CASE band
+            WHEN 'Under £25k' THEN 1
+            WHEN '£25k-£35k' THEN 2
+            WHEN '£35k-£50k' THEN 3
+            WHEN '£50k-£75k' THEN 4
+            WHEN '£75k-£100k' THEN 5
+            WHEN '£100k+' THEN 6
+          END
+      `;
+    });
+  }
+
+  async getCompensationByDepartment(
+    context: TenantContext,
+    filters: CompensationFilters = {}
+  ): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COALESCE(o.id::text, 'unassigned') AS org_unit_id,
+          COALESCE(o.name, 'Unassigned') AS org_unit_name,
+          COUNT(*)::int AS headcount,
+          ROUND(AVG(ch.base_salary), 2) AS avg_salary,
+          ROUND(MIN(ch.base_salary), 2) AS min_salary,
+          ROUND(MAX(ch.base_salary), 2) AS max_salary,
+          ROUND(SUM(ch.base_salary), 2) AS total_payroll
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e
+          ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.position_assignments pa
+          ON pa.employee_id = e.id
+          AND pa.tenant_id = e.tenant_id
+          AND pa.is_primary = true
+          AND pa.effective_to IS NULL
+        LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
+        WHERE ch.tenant_id = ${context.tenantId}::uuid
+          AND ch.effective_to IS NULL
+          AND e.status = 'active'
+          AND ch.currency = ${currency}
+          ${filters.org_unit_id
+            ? tx`AND o.id = ${filters.org_unit_id}::uuid`
+            : tx``}
+        GROUP BY o.id, o.name
+        ORDER BY avg_salary DESC
+      `;
+    });
+  }
+
+  async getRecentCompensationChanges(
+    context: TenantContext,
+    filters: CompensationFilters = {}
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COALESCE(ch.change_reason, 'unspecified') AS change_reason,
+          COUNT(*)::int AS count,
+          ROUND(AVG(ch.change_percentage), 2) AS avg_change_percentage
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e
+          ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        WHERE ch.tenant_id = ${context.tenantId}::uuid
+          AND ch.effective_from >= (CURRENT_DATE - INTERVAL '12 months')
+          AND e.status = 'active'
+          AND ch.change_reason IS NOT NULL
+          ${filters.org_unit_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM app.position_assignments pa
+                WHERE pa.employee_id = e.id
+                  AND pa.org_unit_id = ${filters.org_unit_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+        GROUP BY ch.change_reason
+        ORDER BY count DESC
+      `;
+    });
   }
 }

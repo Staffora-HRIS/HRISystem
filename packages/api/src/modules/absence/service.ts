@@ -6,6 +6,7 @@ import { AbsenceRepository, type TenantContext } from "./repository";
 import type { CreateLeaveType, CreateLeavePolicy, CreateLeaveRequest, LeaveRequestFilters } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { calculateBradfordFactor, getBradfordLevelDescription, type AbsenceSpell } from "@staffora/shared";
 
 export const AbsenceErrorCodes = {
   LEAVE_TYPE_NOT_FOUND: "LEAVE_TYPE_NOT_FOUND",
@@ -74,6 +75,28 @@ export class AbsenceService {
     } catch (error) {
       console.error("Error deleting leave type:", error);
       return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete leave type" } };
+    }
+  }
+
+  async updateLeaveType(ctx: TenantContext, id: string, input: Partial<CreateLeaveType>): Promise<ServiceResult<unknown>> {
+    try {
+      const updated = await this.repo.updateLeaveType(ctx, id, {
+        name: input.name,
+        description: input.description,
+        isPaid: input.isPaid,
+        requiresApproval: input.requiresApproval,
+        requiresAttachment: input.requiresAttachment,
+        maxConsecutiveDays: input.maxConsecutiveDays,
+        minNoticeDays: input.minNoticeDays,
+        color: input.color,
+      });
+      if (!updated) {
+        return { success: false, error: { code: AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND, message: "Leave type not found" } };
+      }
+      return { success: true, data: this.formatLeaveType(updated) };
+    } catch (error) {
+      console.error("Error updating leave type:", error);
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update leave type" } };
     }
   }
 
@@ -240,6 +263,45 @@ export class AbsenceService {
   }
 
   // Formatters
+  // Bradford Factor
+  async getBradfordFactor(
+    ctx: TenantContext,
+    employeeId: string,
+    periodMonths: number = 12
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const spells = await this.repo.getCompletedAbsenceSpells(ctx, employeeId, periodMonths);
+
+      const absenceSpells: AbsenceSpell[] = spells.map((s: any) => ({
+        startDate: s.startDate,
+        endDate: s.endDate,
+      }));
+
+      const result = calculateBradfordFactor(absenceSpells, periodMonths);
+
+      return {
+        success: true,
+        data: {
+          employeeId,
+          score: result.score,
+          spells: result.spells,
+          totalDays: result.totalDays,
+          level: result.level,
+          levelDescription: getBradfordLevelDescription(result.level),
+          periodStart: result.periodStart.toISOString().split("T")[0],
+          periodEnd: result.periodEnd.toISOString().split("T")[0],
+          periodMonths,
+        },
+      };
+    } catch (error) {
+      console.error("Error calculating Bradford Factor:", error);
+      return {
+        success: false,
+        error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to calculate Bradford Factor" },
+      };
+    }
+  }
+
   private formatLeaveType(type: any) {
     return {
       id: type.id,

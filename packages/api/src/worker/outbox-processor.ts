@@ -38,14 +38,17 @@ interface OutboxEvent {
 class OutboxProcessor {
   private sql: postgres.Sql;
   private redis: Redis;
+  private ownsConnections: boolean;
   private running = false;
   private handlers: Map<string, (event: OutboxEvent) => Promise<void>> = new Map();
   private consecutiveEmptyPolls = 0;
   private currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
 
-  constructor() {
-    this.sql = postgres(DB_URL, { transform: postgres.toCamel });
-    this.redis = new Redis(REDIS_URL);
+  constructor(injectedSql?: postgres.Sql, injectedRedis?: Redis) {
+    // Reuse injected connections if provided; otherwise create our own
+    this.ownsConnections = !injectedSql || !injectedRedis;
+    this.sql = injectedSql ?? postgres(DB_URL, { transform: postgres.toCamel });
+    this.redis = injectedRedis ?? new Redis(REDIS_URL);
     this.registerDefaultHandlers();
   }
 
@@ -90,8 +93,11 @@ class OutboxProcessor {
   async stop() {
     console.log("[OutboxProcessor] Stopping...");
     this.running = false;
-    await this.redis.quit();
-    await this.sql.end();
+    // Only close connections we created ourselves
+    if (this.ownsConnections) {
+      await this.redis.quit();
+      await this.sql.end();
+    }
   }
 
   private async processBatch(): Promise<boolean> {

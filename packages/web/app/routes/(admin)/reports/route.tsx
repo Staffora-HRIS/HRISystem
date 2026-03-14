@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Plus,
@@ -14,6 +14,8 @@ import {
   Layout,
   AlertCircle,
   RefreshCw,
+  Star,
+  Copy,
 } from "lucide-react";
 import {
   Card,
@@ -138,13 +140,27 @@ export default function ReportsLibraryPage() {
             Build, run, and schedule reports across all HR data
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => navigate("/admin/reports/new")}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Report
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/admin/reports/favourites">
+            <Button variant="outline" size="sm">
+              <Star className="h-4 w-4 mr-1.5" />
+              Favourites
+            </Button>
+          </Link>
+          <Link to="/admin/reports/templates">
+            <Button variant="outline" size="sm">
+              <Copy className="h-4 w-4 mr-1.5" />
+              Templates
+            </Button>
+          </Link>
+          <Button
+            variant="primary"
+            onClick={() => navigate("/admin/reports/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Report
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -163,6 +179,7 @@ export default function ReportsLibraryPage() {
         </div>
         {categories.length > 0 && (
           <select
+            aria-label="Filter by category"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="text-sm border border-gray-300 rounded-lg px-3 py-2"
@@ -176,6 +193,7 @@ export default function ReportsLibraryPage() {
           </select>
         )}
         <select
+          aria-label="Filter by report type"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           className="text-sm border border-gray-300 rounded-lg px-3 py-2"

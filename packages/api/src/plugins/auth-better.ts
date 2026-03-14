@@ -284,6 +284,78 @@ export class AuthService {
   }
 
   /**
+   * Verify and repair sync between Better Auth "user" table and app.users.
+   * Called during session resolution to catch drift caused by failed databaseHooks.
+   * Only runs the repair if actual drift is detected (email, name, status mismatch).
+   */
+  async verifySyncOnLogin(userId: string): Promise<void> {
+    try {
+      const rows = await this.db.query<{
+        ba_email: string | null;
+        ba_name: string | null;
+        ba_status: string | null;
+        ba_mfa: boolean | null;
+        au_email: string | null;
+        au_name: string | null;
+        au_status: string | null;
+        au_mfa: boolean | null;
+        au_exists: boolean;
+      }>`
+        SELECT
+          ba.email     AS ba_email,
+          ba.name      AS ba_name,
+          ba.status    AS ba_status,
+          ba."mfaEnabled" AS ba_mfa,
+          au.email     AS au_email,
+          au.name      AS au_name,
+          au.status    AS au_status,
+          au.mfa_enabled AS au_mfa,
+          (au.id IS NOT NULL) AS au_exists
+        FROM app."user" ba
+        LEFT JOIN app.users au ON au.id = ba.id::uuid
+        WHERE ba.id = ${userId}
+      `;
+
+      if (rows.length === 0) return; // Better Auth user not found — nothing to sync
+      const r = rows[0]!;
+
+      if (!r.au_exists) {
+        // app.users row missing entirely — recreate it
+        await this.db.query`
+          INSERT INTO app.users (id, email, name, status, mfa_enabled, created_at, updated_at)
+          VALUES (${userId}::uuid, ${r.ba_email}, ${r.ba_name ?? r.ba_email}, ${r.ba_status ?? 'active'}, ${r.ba_mfa ?? false}, now(), now())
+          ON CONFLICT (id) DO NOTHING
+        `;
+        console.warn(`[AuthService.verifySyncOnLogin] Repaired missing app.users row for user ${userId}`);
+        return;
+      }
+
+      // Check for drift between the two tables
+      const hasDrift =
+        r.ba_email !== r.au_email ||
+        r.ba_name !== r.au_name ||
+        (r.ba_status ?? "active") !== (r.au_status ?? "active") ||
+        Boolean(r.ba_mfa) !== Boolean(r.au_mfa);
+
+      if (hasDrift) {
+        await this.db.query`
+          UPDATE app.users SET
+            email = ${r.ba_email},
+            name = ${r.ba_name ?? r.ba_email},
+            status = ${r.ba_status ?? 'active'},
+            mfa_enabled = ${r.ba_mfa ?? false},
+            updated_at = now()
+          WHERE id = ${userId}::uuid
+        `;
+        console.warn(`[AuthService.verifySyncOnLogin] Repaired drift for user ${userId}`);
+      }
+    } catch (error) {
+      // Non-fatal — log and continue so login is not blocked
+      console.error(`[AuthService.verifySyncOnLogin] Error verifying user sync for ${userId}:`, error);
+    }
+  }
+
+  /**
    * Switch session to a different tenant
    */
   async switchTenant(userId: string, sessionId: string, tenantId: string): Promise<boolean> {
@@ -383,33 +455,13 @@ export function authPlugin(options: AuthPluginOptions = {}) {
         }
       }
 
-      const isResponseLike = (value: unknown): value is Response => {
-        if (!value || typeof value !== "object") return false;
-        const anyVal = value as any;
-        return (
-          typeof anyVal.status === "number" &&
-          typeof anyVal.json === "function" &&
-          typeof anyVal.text === "function" &&
-          typeof anyVal.headers?.get === "function"
-        );
-      };
-
       try {
-        // Resolve session using the same code path as the public /api/auth/get-session
-        // endpoint. Cloning from the original request keeps Cookie handling consistent.
-        const url = new URL(request.url);
-        url.pathname = "/api/auth/get-session";
-        url.search = "";
-
-        const cookieHeader = request.headers.get("cookie") ?? "";
-        const handlerRes = await auth.handler(
-          new Request(url.toString(), {
-            method: "GET",
-            headers: cookieHeader ? { Cookie: cookieHeader } : undefined,
-          })
-        );
-
-        const sessionData: any = handlerRes.status === 200 ? await handlerRes.json() : null;
+        // Resolve session directly via Better Auth API — avoids creating a
+        // fake Request, running it through the HTTP handler, and parsing
+        // the JSON Response (~2-5ms saved per authenticated request).
+        const sessionData = await auth.api.getSession({
+          headers: request.headers,
+        });
 
         if (!sessionData || !sessionData.session || !sessionData.user) {
           return {
@@ -421,6 +473,11 @@ export function authPlugin(options: AuthPluginOptions = {}) {
         }
 
         const { session, user } = sessionData;
+
+        // Fire-and-forget user table sync verification to catch drift
+        // between Better Auth "user" table and app.users.
+        // Non-blocking: does not delay the response.
+        authServiceSingleton.verifySyncOnLogin(user.id).catch(() => {});
 
         return {
           user: user as User,

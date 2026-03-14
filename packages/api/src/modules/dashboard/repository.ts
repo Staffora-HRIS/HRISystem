@@ -85,46 +85,46 @@ export class DashboardRepository {
    */
   async getAdminStats(ctx: TenantContext): Promise<AdminStatsData> {
     return await this.db.withTransaction(ctx, async (tx) => {
-      // Run all counts in parallel within the same transaction
-      const [employeeCounts, departmentCounts, openPositionCounts, workflowCounts] =
-        await Promise.all([
-          tx<EmployeeCountsRow[]>`
-            SELECT
-              count(*)::int AS total_employees,
-              count(*) FILTER (WHERE status = 'active')::int AS active_employees
-            FROM employees
-          `,
-          tx<DepartmentCountRow[]>`
-            SELECT count(*)::int AS departments
-            FROM org_units
-            WHERE is_active = true
-              AND level = 1
-          `,
-          tx<OpenPositionsRow[]>`
-            SELECT count(*)::int AS open_positions
-            FROM requisitions
-            WHERE status = 'open'
-              AND filled < openings
-          `,
-          tx<PendingWorkflowsRow[]>`
-            SELECT
-              (SELECT count(*)::int FROM workflow_instances WHERE status IN ('pending', 'in_progress')) AS pending_workflows,
-              (SELECT count(*)::int FROM workflow_tasks WHERE status IN ('pending', 'assigned', 'in_progress')) AS pending_approvals
-          `,
-        ]);
-
-      const empRow = employeeCounts[0];
-      const deptRow = departmentCounts[0];
-      const posRow = openPositionCounts[0];
-      const wfRow = workflowCounts[0];
+      // Single query with CTEs — reduces 4 round-trips to 1
+      const [row] = await tx<AdminStatsData[]>`
+        WITH emp AS (
+          SELECT
+            count(*)::int AS total_employees,
+            count(*) FILTER (WHERE status = 'active')::int AS active_employees
+          FROM employees
+        ),
+        dept AS (
+          SELECT count(*)::int AS departments
+          FROM org_units
+          WHERE is_active = true AND level = 1
+        ),
+        pos AS (
+          SELECT count(*)::int AS open_positions
+          FROM requisitions
+          WHERE status = 'open' AND filled < openings
+        ),
+        wf AS (
+          SELECT
+            (SELECT count(*)::int FROM workflow_instances WHERE status IN ('pending', 'in_progress')) AS pending_workflows,
+            (SELECT count(*)::int FROM workflow_tasks WHERE status IN ('pending', 'assigned', 'in_progress')) AS pending_approvals
+        )
+        SELECT
+          emp.total_employees,
+          emp.active_employees,
+          dept.departments,
+          pos.open_positions,
+          wf.pending_workflows,
+          wf.pending_approvals
+        FROM emp, dept, pos, wf
+      `;
 
       return {
-        totalEmployees: empRow?.totalEmployees ?? 0,
-        activeEmployees: empRow?.activeEmployees ?? 0,
-        departments: deptRow?.departments ?? 0,
-        openPositions: posRow?.openPositions ?? 0,
-        pendingWorkflows: wfRow?.pendingWorkflows ?? 0,
-        pendingApprovals: wfRow?.pendingApprovals ?? 0,
+        totalEmployees: row?.totalEmployees ?? 0,
+        activeEmployees: row?.activeEmployees ?? 0,
+        departments: row?.departments ?? 0,
+        openPositions: row?.openPositions ?? 0,
+        pendingWorkflows: row?.pendingWorkflows ?? 0,
+        pendingApprovals: row?.pendingApprovals ?? 0,
       };
     });
   }

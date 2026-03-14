@@ -273,6 +273,105 @@ export class PortalRepository {
   }
 
   // ===========================================================================
+  // Employee Directory
+  // ===========================================================================
+
+  async searchEmployeeDirectory(
+    ctx: TenantContext,
+    filters: {
+      search?: string;
+      departmentId?: string;
+      locationId?: string;
+    },
+    pagination: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; nextCursor: string | null; hasMore: boolean }> {
+    const limit = Math.min(pagination.limit || 25, 100);
+
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            e.id,
+            e.employee_number,
+            ep.first_name,
+            ep.last_name,
+            ep.preferred_name,
+            p.title AS position_title,
+            o.id AS department_id,
+            o.name AS department_name,
+            ec.work_email,
+            ec.work_phone,
+            e.start_date,
+            e.status
+          FROM app.employees e
+          LEFT JOIN app.employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.tenant_id = e.tenant_id
+            AND ep.effective_to IS NULL
+          LEFT JOIN app.position_assignments pa
+            ON pa.employee_id = e.id
+            AND pa.tenant_id = e.tenant_id
+            AND pa.is_primary = true
+            AND pa.effective_to IS NULL
+          LEFT JOIN app.positions p ON p.id = pa.position_id
+          LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
+          LEFT JOIN app.employee_contacts ec
+            ON ec.employee_id = e.id
+            AND ec.tenant_id = e.tenant_id
+            AND ec.is_primary = true
+          WHERE e.tenant_id = ${ctx.tenantId}::uuid
+            AND e.status = 'active'
+            ${filters.search ? tx`
+              AND (
+                ep.first_name ILIKE ${"%" + filters.search + "%"}
+                OR ep.last_name ILIKE ${"%" + filters.search + "%"}
+                OR ep.preferred_name ILIKE ${"%" + filters.search + "%"}
+                OR e.employee_number ILIKE ${"%" + filters.search + "%"}
+                OR p.title ILIKE ${"%" + filters.search + "%"}
+              )
+            ` : tx``}
+            ${filters.departmentId ? tx`AND o.id = ${filters.departmentId}::uuid` : tx``}
+            ${pagination.cursor ? tx`AND e.id > ${pagination.cursor}::uuid` : tx``}
+          ORDER BY ep.last_name ASC, ep.first_name ASC, e.id ASC
+          LIMIT ${limit + 1}
+        `;
+      }
+    );
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : null;
+
+    return { items, nextCursor, hasMore };
+  }
+
+  async getDepartmentList(ctx: TenantContext): Promise<any[]> {
+    return this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT o.id, o.name, COUNT(DISTINCT pa.employee_id)::int AS employee_count
+          FROM app.org_units o
+          LEFT JOIN app.position_assignments pa
+            ON pa.org_unit_id = o.id
+            AND pa.tenant_id = o.tenant_id
+            AND pa.is_primary = true
+            AND pa.effective_to IS NULL
+          LEFT JOIN app.employees e
+            ON e.id = pa.employee_id
+            AND e.tenant_id = pa.tenant_id
+            AND e.status = 'active'
+          WHERE o.tenant_id = ${ctx.tenantId}::uuid
+            AND o.is_active = true
+          GROUP BY o.id, o.name
+          ORDER BY o.name
+        `;
+      }
+    );
+  }
+
+  // ===========================================================================
   // Portal Access
   // ===========================================================================
 

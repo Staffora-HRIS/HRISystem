@@ -13,6 +13,8 @@ import type {
   AttendanceFilters,
   LeaveFilters,
   RecruitmentFilters,
+  DiversityFilters,
+  CompensationFilters,
   HeadcountSummary,
   HeadcountByDepartment,
   HeadcountTrend,
@@ -25,6 +27,8 @@ import type {
   RecruitmentSummary,
   ExecutiveDashboard,
   ManagerDashboard,
+  DiversityDashboard,
+  CompensationDashboard,
 } from "./schemas";
 
 // =============================================================================
@@ -267,6 +271,134 @@ export class AnalyticsService {
     return {
       success: true,
       data,
+    };
+  }
+
+  // ===========================================================================
+  // Diversity Analytics
+  // ===========================================================================
+
+  async getDiversityDashboard(
+    context: TenantContext,
+    filters: DiversityFilters = {}
+  ): Promise<ServiceResult<DiversityDashboard>> {
+    const [genderRows, ageBandRows, nationalityRows, deptRows] = await Promise.all([
+      this.repository.getDiversityByGender(context, filters),
+      this.repository.getDiversityByAgeBand(context, filters),
+      this.repository.getDiversityByNationality(context, filters),
+      this.repository.getDiversityByDepartment(context, filters),
+    ]);
+
+    const totalFromGender = genderRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const totalFromAge = ageBandRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const totalFromNat = nationalityRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const total = totalFromGender || totalFromAge || totalFromNat || 0;
+
+    const byGender = genderRows.map((r: any) => ({
+      gender: r.gender,
+      count: Number(r.count),
+      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+    }));
+
+    const byAgeBand = ageBandRows.map((r: any) => ({
+      age_band: r.ageBand ?? r.age_band,
+      count: Number(r.count),
+      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+    }));
+
+    const byNationality = nationalityRows.map((r: any) => ({
+      nationality: r.nationality,
+      count: Number(r.count),
+      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+    }));
+
+    // Group department rows by org_unit
+    const deptMap = new Map<string, { org_unit_id: string; org_unit_name: string; total: number; genders: Map<string, number> }>();
+    for (const r of deptRows) {
+      const id = r.orgUnitId ?? r.org_unit_id ?? "unassigned";
+      const name = r.orgUnitName ?? r.org_unit_name ?? "Unassigned";
+      if (!deptMap.has(id)) {
+        deptMap.set(id, { org_unit_id: id, org_unit_name: name, total: 0, genders: new Map() });
+      }
+      const dept = deptMap.get(id)!;
+      const count = Number(r.count);
+      const gender = r.gender ?? "not_specified";
+      dept.total += count;
+      dept.genders.set(gender, (dept.genders.get(gender) || 0) + count);
+    }
+
+    const byDepartment = Array.from(deptMap.values()).map((dept) => ({
+      org_unit_id: dept.org_unit_id,
+      org_unit_name: dept.org_unit_name,
+      total: dept.total,
+      gender_breakdown: Array.from(dept.genders.entries()).map(([gender, count]) => ({
+        gender,
+        count,
+        percentage: dept.total > 0 ? Math.round((count / dept.total) * 1000) / 10 : 0,
+      })),
+    }));
+
+    return {
+      success: true,
+      data: {
+        total_employees: total,
+        by_gender: byGender,
+        by_age_band: byAgeBand,
+        by_nationality: byNationality,
+        by_department: byDepartment,
+        as_of_date: filters.as_of_date || new Date().toISOString().split("T")[0]!,
+      },
+    };
+  }
+
+  // ===========================================================================
+  // Compensation Analytics
+  // ===========================================================================
+
+  async getCompensationDashboard(
+    context: TenantContext,
+    filters: CompensationFilters = {}
+  ): Promise<ServiceResult<CompensationDashboard>> {
+    const [summary, bandRows, deptRows, changeRows] = await Promise.all([
+      this.repository.getCompensationSummary(context, filters),
+      this.repository.getCompensationByBand(context, filters),
+      this.repository.getCompensationByDepartment(context, filters),
+      this.repository.getRecentCompensationChanges(context, filters),
+    ]);
+
+    const totalBand = bandRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+
+    const byBand = bandRows.map((r: any) => ({
+      band: r.band,
+      count: Number(r.count),
+      percentage: totalBand > 0 ? Math.round((Number(r.count) / totalBand) * 1000) / 10 : 0,
+      avg_salary: Number(r.avg_salary ?? r.avgSalary) || 0,
+    }));
+
+    const byDepartment = deptRows.map((r: any) => ({
+      org_unit_id: r.org_unit_id ?? r.orgUnitId ?? "unassigned",
+      org_unit_name: r.org_unit_name ?? r.orgUnitName ?? "Unassigned",
+      headcount: Number(r.headcount) || 0,
+      avg_salary: Number(r.avg_salary ?? r.avgSalary) || 0,
+      min_salary: Number(r.min_salary ?? r.minSalary) || 0,
+      max_salary: Number(r.max_salary ?? r.maxSalary) || 0,
+      total_payroll: Number(r.total_payroll ?? r.totalPayroll) || 0,
+    }));
+
+    const recentChanges = changeRows.map((r: any) => ({
+      change_reason: r.change_reason ?? r.changeReason ?? "unspecified",
+      count: Number(r.count) || 0,
+      avg_change_percentage: Number(r.avg_change_percentage ?? r.avgChangePercentage) || 0,
+    }));
+
+    return {
+      success: true,
+      data: {
+        summary,
+        by_band: byBand,
+        by_department: byDepartment,
+        recent_changes: recentChanges,
+      },
     };
   }
 }

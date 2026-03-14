@@ -304,6 +304,10 @@ export async function startOutboxPolling(
   const onError = options.onError ?? ((err) => console.error("[OutboxPoller] Error:", err));
 
   let isRunning = true;
+  // Backpressure: limit concurrent Redis publishes to prevent overwhelming the server
+  const MAX_CONCURRENT = 10;
+  // Adaptive polling: back off when idle, reset when events found
+  let consecutiveEmpty = 0;
 
   const log = {
     info: (msg: string, data?: Record<string, unknown>) =>
@@ -318,6 +322,26 @@ export async function startOutboxPolling(
       }
     },
   };
+
+  /** Process a chunk of events with bounded concurrency */
+  async function processChunk(chunk: OutboxEvent[]): Promise<void> {
+    await Promise.all(
+      chunk.map(async (event) => {
+        try {
+          await processEvent(event, redis, log);
+          await db.withSystemContext(async (tx) => {
+            await tx`SELECT app.mark_outbox_event_processed(${event.id}::uuid)`;
+          });
+        } catch (error) {
+          log.error(`Failed to process event ${event.id}`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          await db.withSystemContext(async (tx) => {
+            await tx`SELECT app.mark_outbox_event_failed(${event.id}::uuid, ${errorMessage})`;
+          });
+        }
+      })
+    );
+  }
 
   async function poll(): Promise<void> {
     while (isRunning) {
@@ -345,28 +369,24 @@ export async function startOutboxPolling(
         });
 
         if (events.length > 0) {
+          consecutiveEmpty = 0;
           log.debug(`Processing ${events.length} events`);
 
-          for (const event of events) {
-            try {
-              await processEvent(event, redis, log);
-
-              await db.withSystemContext(async (tx) => {
-                await tx`SELECT app.mark_outbox_event_processed(${event.id}::uuid)`;
-              });
-            } catch (error) {
-              log.error(`Failed to process event ${event.id}`, error);
-
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              await db.withSystemContext(async (tx) => {
-                await tx`SELECT app.mark_outbox_event_failed(${event.id}::uuid, ${errorMessage})`;
-              });
-            }
+          // Process in chunks of MAX_CONCURRENT for backpressure
+          for (let i = 0; i < events.length; i += MAX_CONCURRENT) {
+            if (!isRunning) break;
+            const chunk = events.slice(i, i + MAX_CONCURRENT);
+            await processChunk(chunk);
           }
+        } else {
+          consecutiveEmpty++;
         }
 
-        // Wait before next poll
-        await sleep(pollIntervalMs);
+        // Adaptive polling: back off when idle (up to 5x base interval)
+        const adaptiveInterval = consecutiveEmpty > 3
+          ? Math.min(pollIntervalMs * Math.min(consecutiveEmpty - 2, 5), pollIntervalMs * 5)
+          : pollIntervalMs;
+        await sleep(adaptiveInterval);
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         await sleep(pollIntervalMs * 2); // Longer wait on error

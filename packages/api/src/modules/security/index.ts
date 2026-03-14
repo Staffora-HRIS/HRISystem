@@ -24,5 +24,23 @@ export type { PortalNavigationItem } from "./portal.service";
 export { ManagerService, ManagerAccessError } from "./manager.service";
 export type { TeamAbsenceEntry } from "./manager.service";
 
+// Enhanced Permission System (v2)
+export { PermissionResolutionService } from "./permission-resolution.service";
+export type {
+  ScopeType,
+  DataScope,
+  PermissionCondition,
+  SoDViolation,
+  PermissionCheckContext,
+  PermissionCheckResult,
+} from "./permission-resolution.service";
+export {
+  requirePermissionV2,
+  requireAnyPermissionV2,
+  requireSensitivityTier,
+  requireSelfOrPermission,
+} from "./permission-guard.middleware";
+export type { EnhancedPermissionOptions } from "./permission-guard.middleware";
+
 // Schemas
 export * from "./schemas";

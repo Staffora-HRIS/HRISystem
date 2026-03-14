@@ -525,6 +525,47 @@ export const reportsRoutes = new Elysia({ prefix: "/reports" })
   )
 
   // =========================================================================
+  // Export
+  // =========================================================================
+
+  .post(
+    "/:id/export/:format",
+    async (ctx) => {
+      const { reportsService, tenantContext, requestId, params, body } = ctx as unknown as ReportsRouteContext;
+      if (!tenantContext) {
+        return ctx.error(401, { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } });
+      }
+
+      const format = (params as any).format as "csv" | "xlsx" | "pdf";
+      const result = await reportsService.exportReport(
+        tenantContext,
+        params.id,
+        format,
+        body as any
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error!.code);
+        return ctx.error(status, { error: { ...result.error, requestId } });
+      }
+
+      const { content, contentType, filename } = result.data!;
+      ctx.set.status = 200;
+      return new Response(content, {
+        headers: {
+          "Content-Type": contentType,
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    },
+    {
+      beforeHandle: [requirePermission("reports:read")],
+      params: ExportFormatParamsSchema,
+      detail: { tags: ["Reports"], summary: "Export report data" },
+    }
+  )
+
+  // =========================================================================
   // Favourites (instance-level)
   // =========================================================================
 

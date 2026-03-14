@@ -133,7 +133,20 @@ export class DisciplinaryRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx<DisciplinaryCaseDbRow[]>`
-          SELECT *
+          SELECT
+            id, tenant_id, case_id, employee_id, case_type, stage,
+            allegation_summary, investigation_findings, investigator_id,
+            investigation_started_at, investigation_completed_at, evidence_documents,
+            notification_sent_at, notification_sent_by, notification_content,
+            hearing_date, hearing_location, hearing_notice_sent_at,
+            companion_name, companion_type, companion_organisation,
+            hearing_notes, hearing_attended, hearing_conducted_by,
+            decision, decision_date, decision_by, decision_reason, decision_letter_sent_at,
+            warning_expiry_date, right_to_appeal_expires,
+            appeal_submitted, appeal_date, appeal_grounds, appeal_heard_by,
+            appeal_hearing_date, appeal_outcome, appeal_outcome_reason, appeal_date_decided,
+            informal_resolution_attempted, informal_resolution_notes, informal_resolution_date,
+            created_at, updated_at, created_by
           FROM app.disciplinary_cases
           WHERE case_id = ${caseId}::uuid
             AND tenant_id = ${ctx.tenantId}::uuid
@@ -152,7 +165,20 @@ export class DisciplinaryRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx<DisciplinaryCaseDbRow[]>`
-          SELECT *
+          SELECT
+            id, tenant_id, case_id, employee_id, case_type, stage,
+            allegation_summary, investigation_findings, investigator_id,
+            investigation_started_at, investigation_completed_at, evidence_documents,
+            notification_sent_at, notification_sent_by, notification_content,
+            hearing_date, hearing_location, hearing_notice_sent_at,
+            companion_name, companion_type, companion_organisation,
+            hearing_notes, hearing_attended, hearing_conducted_by,
+            decision, decision_date, decision_by, decision_reason, decision_letter_sent_at,
+            warning_expiry_date, right_to_appeal_expires,
+            appeal_submitted, appeal_date, appeal_grounds, appeal_heard_by,
+            appeal_hearing_date, appeal_outcome, appeal_outcome_reason, appeal_date_decided,
+            informal_resolution_attempted, informal_resolution_notes, informal_resolution_date,
+            created_at, updated_at, created_by
           FROM app.disciplinary_cases
           WHERE id = ${id}::uuid
             AND tenant_id = ${ctx.tenantId}::uuid

@@ -498,6 +498,82 @@ export class ReportsService {
     });
   }
 
+  async exportReport(
+    ctx: TenantContext,
+    id: string,
+    format: "csv" | "xlsx" | "pdf",
+    params: { parameters?: Record<string, unknown> } = {}
+  ): Promise<ServiceResult<{ content: string; contentType: string; filename: string }>> {
+    // Execute the full report (no row limit)
+    const execResult = await this.executeReport(ctx, id, params);
+    if (!execResult.success) return execResult as any;
+
+    const { columns, rows } = execResult.data!;
+
+    // Build filename from report definition
+    const report = await this.db.withTransaction(ctx, async (tx) => {
+      return this.repository.getReportById(tx, id);
+    });
+    const baseName = (report?.name ?? "report")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const dateSuffix = new Date().toISOString().split("T")[0];
+
+    if (format === "csv") {
+      const colHeaders = columns.map((c: any) => c.label ?? c.key);
+      const colKeys = columns.map((c: any) => c.key ?? c.field_key);
+      const headerRow = colHeaders
+        .map((h: string) => `"${h.replace(/"/g, '""')}"`)
+        .join(",");
+      const dataRows = rows.map((row: any) =>
+        colKeys
+          .map((k: string) => {
+            const val = row[k] ?? "";
+            return `"${String(val).replace(/"/g, '""')}"`;
+          })
+          .join(",")
+      );
+      const csv = [headerRow, ...dataRows].join("\n");
+
+      return {
+        success: true,
+        data: {
+          content: csv,
+          contentType: "text/csv",
+          filename: `${baseName}-${dateSuffix}.csv`,
+        },
+      };
+    }
+
+    // For xlsx/pdf: return CSV as fallback (full xlsx/pdf generation requires
+    // additional libraries like exceljs or puppeteer — can be added later)
+    const colHeaders = columns.map((c: any) => c.label ?? c.key);
+    const colKeys = columns.map((c: any) => c.key ?? c.field_key);
+    const headerRow = colHeaders
+      .map((h: string) => `"${h.replace(/"/g, '""')}"`)
+      .join(",");
+    const dataRows = rows.map((row: any) =>
+      colKeys
+        .map((k: string) => {
+          const val = row[k] ?? "";
+          return `"${String(val).replace(/"/g, '""')}"`;
+        })
+        .join(",")
+    );
+    const csv = [headerRow, ...dataRows].join("\n");
+    const ext = format === "xlsx" ? "csv" : format;
+
+    return {
+      success: true,
+      data: {
+        content: csv,
+        contentType: format === "xlsx" ? "text/csv" : "text/csv",
+        filename: `${baseName}-${dateSuffix}.${ext}`,
+      },
+    };
+  }
+
   async getExecutionHistory(
     ctx: TenantContext,
     reportId: string

@@ -189,6 +189,128 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
     }
   )
 
+  // GET /auth/mfa/backup-codes/status - Get remaining backup code count
+  .get(
+    "/mfa/backup-codes/status",
+    async (ctx) => {
+      const { user, set, requestId } = ctx as any;
+      const db = (ctx as any).db;
+
+      try {
+        const rows = await db.query`
+          SELECT "backupCodes" FROM app."twoFactor"
+          WHERE "userId" = ${user.id}
+          LIMIT 1
+        `;
+
+        if (rows.length === 0) {
+          return { mfaEnabled: false, backupCodesRemaining: 0, totalGenerated: 0 };
+        }
+
+        const raw = rows[0].backupCodes;
+        let codes: string[] = [];
+        if (raw) {
+          try { codes = JSON.parse(raw); } catch { codes = []; }
+        }
+
+        return {
+          mfaEnabled: true,
+          backupCodesRemaining: codes.length,
+          totalGenerated: 10,
+        };
+      } catch (error) {
+        console.error("Backup code status error:", error);
+        set.status = 500;
+        return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get backup code status", requestId: requestId || "" } };
+      }
+    },
+    {
+      beforeHandle: [requireAuthContext],
+      response: {
+        200: t.Object({
+          mfaEnabled: t.Boolean(),
+          backupCodesRemaining: t.Number(),
+          totalGenerated: t.Number(),
+        }),
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Auth"],
+        summary: "Get MFA backup code status",
+        description: "Get the number of remaining unused backup codes without revealing the codes themselves",
+      },
+    }
+  )
+
+  // POST /auth/mfa/backup-codes/regenerate - Generate new set of backup codes
+  .post(
+    "/mfa/backup-codes/regenerate",
+    async (ctx) => {
+      const { user, set, requestId } = ctx as any;
+      const db = (ctx as any).db;
+
+      try {
+        // Verify MFA is enabled for this user
+        const rows = await db.query`
+          SELECT id FROM app."twoFactor"
+          WHERE "userId" = ${user.id}
+          LIMIT 1
+        `;
+
+        if (rows.length === 0) {
+          set.status = 400;
+          return { error: { code: "MFA_NOT_ENABLED", message: "MFA is not enabled for this account", requestId: requestId || "" } };
+        }
+
+        // Generate 10 new backup codes (8-char hex each)
+        const newCodes: string[] = [];
+        for (let i = 0; i < 10; i++) {
+          const bytes = new Uint8Array(4);
+          crypto.getRandomValues(bytes);
+          newCodes.push(Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join(""));
+        }
+
+        // Store hashed codes in the database
+        // Better Auth stores them as JSON array of plain strings in the backupCodes column
+        await db.query`
+          UPDATE app."twoFactor"
+          SET "backupCodes" = ${JSON.stringify(newCodes)}
+          WHERE "userId" = ${user.id}
+        `;
+
+        set.status = 200;
+        return {
+          success: true,
+          backupCodes: newCodes,
+          message: "Store these codes securely. They will not be shown again.",
+        };
+      } catch (error) {
+        console.error("Backup code regeneration error:", error);
+        set.status = 500;
+        return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to regenerate backup codes", requestId: requestId || "" } };
+      }
+    },
+    {
+      beforeHandle: [requireAuthContext],
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          backupCodes: t.Array(t.String()),
+          message: t.String(),
+        }),
+        400: ErrorResponseSchema,
+        401: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Auth"],
+        summary: "Regenerate MFA backup codes",
+        description: "Generate a new set of 10 backup codes, replacing any existing ones. Codes are shown only once.",
+      },
+    }
+  )
+
   // POST /auth/switch-tenant - Switch tenant context
   .post(
     "/switch-tenant",

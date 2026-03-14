@@ -115,7 +115,11 @@ export class AbsenceRepository {
   async getLeaveTypes(ctx: TenantContext): Promise<LeaveTypeRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<LeaveTypeRow[]>`
-        SELECT * FROM app.leave_types
+        SELECT
+          id, tenant_id, code, name, description, is_paid,
+          requires_approval, requires_attachment, max_consecutive_days,
+          min_notice_days, color, is_active, created_at, updated_at
+        FROM app.leave_types
         WHERE tenant_id = ${ctx.tenantId}::uuid AND is_active = true
         ORDER BY name
       `;
@@ -126,7 +130,11 @@ export class AbsenceRepository {
   async getLeaveTypeById(ctx: TenantContext, id: string): Promise<LeaveTypeRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<LeaveTypeRow[]>`
-        SELECT * FROM app.leave_types
+        SELECT
+          id, tenant_id, code, name, description, is_paid,
+          requires_approval, requires_attachment, max_consecutive_days,
+          min_notice_days, color, is_active, created_at, updated_at
+        FROM app.leave_types
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -145,6 +153,30 @@ export class AbsenceRepository {
 
       if (row) {
         await this.writeOutbox(tx, ctx.tenantId, "leave_type", id, "absence.leave_type.deactivated", { leaveTypeId: id });
+      }
+      return row as LeaveTypeRow | null;
+    });
+  }
+
+  async updateLeaveType(ctx: TenantContext, id: string, data: Partial<LeaveTypeRow>): Promise<LeaveTypeRow | null> {
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const [row] = await tx<LeaveTypeRow[]>`
+        UPDATE app.leave_types SET
+          name = COALESCE(${data.name ?? null}, name),
+          description = COALESCE(${data.description ?? null}, description),
+          is_paid = COALESCE(${data.isPaid ?? null}, is_paid),
+          requires_approval = COALESCE(${data.requiresApproval ?? null}, requires_approval),
+          requires_attachment = COALESCE(${data.requiresAttachment ?? null}, requires_attachment),
+          max_consecutive_days = ${data.maxConsecutiveDays ?? null},
+          min_notice_days = COALESCE(${data.minNoticeDays ?? null}, min_notice_days),
+          color = COALESCE(${data.color ?? null}, color),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+
+      if (row) {
+        await this.writeOutbox(tx, ctx.tenantId, "leave_type", id, "absence.leave_type.updated", { leaveTypeId: id });
       }
       return row as LeaveTypeRow | null;
     });
@@ -176,7 +208,11 @@ export class AbsenceRepository {
   async getLeavePolicies(ctx: TenantContext): Promise<LeavePolicyRow[]> {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<LeavePolicyRow[]>`
-        SELECT * FROM app.leave_policies
+        SELECT
+          id, tenant_id, name, description, leave_type_id, annual_allowance,
+          max_carryover, accrual_frequency, effective_from, effective_to,
+          eligible_after_months, applies_to, is_active, created_at, updated_at
+        FROM app.leave_policies
         WHERE tenant_id = ${ctx.tenantId}::uuid AND is_active = true
         ORDER BY name
       `;
@@ -252,7 +288,12 @@ export class AbsenceRepository {
 
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<LeaveRequestRow[]>`
-        SELECT * FROM app.leave_requests
+        SELECT
+          id, tenant_id, employee_id, leave_type_id, start_date, end_date,
+          start_half_day, end_half_day, total_days, reason, contact_info,
+          status, submitted_at, approved_at, approved_by_id, rejection_reason,
+          created_at, updated_at
+        FROM app.leave_requests
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
         ${filters.leaveTypeId ? tx`AND leave_type_id = ${filters.leaveTypeId}::uuid` : tx``}
@@ -275,7 +316,12 @@ export class AbsenceRepository {
   async getLeaveRequestById(ctx: TenantContext, id: string): Promise<LeaveRequestRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<LeaveRequestRow[]>`
-        SELECT * FROM app.leave_requests
+        SELECT
+          id, tenant_id, employee_id, leave_type_id, start_date, end_date,
+          start_half_day, end_half_day, total_days, reason, contact_info,
+          status, submitted_at, approved_at, approved_by_id, rejection_reason,
+          created_at, updated_at
+        FROM app.leave_requests
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -399,6 +445,26 @@ export class AbsenceRepository {
         ORDER BY lt.name
       `;
       return rows as LeaveBalanceRow[];
+    });
+  }
+
+  // Bradford Factor - get completed absence spells within a rolling period
+  async getCompletedAbsenceSpells(
+    ctx: TenantContext,
+    employeeId: string,
+    periodMonths: number = 12
+  ): Promise<Array<{ startDate: Date; endDate: Date }>> {
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const rows = await tx<Array<{ startDate: Date; endDate: Date }>>`
+        SELECT lr.start_date, lr.end_date
+        FROM app.leave_requests lr
+        WHERE lr.tenant_id = ${ctx.tenantId}::uuid
+          AND lr.employee_id = ${employeeId}::uuid
+          AND lr.status IN ('approved', 'completed')
+          AND lr.start_date >= (CURRENT_DATE - (${periodMonths} || ' months')::interval)
+        ORDER BY lr.start_date
+      `;
+      return rows;
     });
   }
 
