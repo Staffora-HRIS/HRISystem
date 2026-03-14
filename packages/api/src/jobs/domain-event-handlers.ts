@@ -10,6 +10,7 @@
 
 import type { DomainEvent } from "./outbox-processor";
 import { StreamKeys } from "./base";
+import { getCacheClient, CacheKeys, type CacheClient } from "../plugins/cache";
 
 // =============================================================================
 // Types
@@ -18,6 +19,7 @@ import { StreamKeys } from "./base";
 export interface EventHandlerContext {
   db: import("../plugins/db").DatabaseClient;
   redis: import("ioredis").default;
+  cache?: CacheClient;
   log: {
     info: (msg: string, data?: Record<string, unknown>) => void;
     warn: (msg: string, data?: Record<string, unknown>) => void;
@@ -831,6 +833,159 @@ async function handleWorkflowTaskCompleted(
 }
 
 // =============================================================================
+// Cache Invalidation Handlers
+// =============================================================================
+
+/**
+ * Resolve the cache client from context or fall back to the singleton.
+ * Returns null if cache is unavailable (cache invalidation is best-effort).
+ */
+function resolveCache(ctx: EventHandlerContext): CacheClient | null {
+  if (ctx.cache) return ctx.cache;
+  try {
+    return getCacheClient();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Invalidate employee-related caches when employee data changes.
+ *
+ * Handles: hr.employee.created, hr.employee.updated, hr.employee.transferred,
+ *          hr.employee.promoted, hr.employee.status_changed, hr.employee.terminated
+ */
+async function handleEmployeeCacheInvalidation(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const cache = resolveCache(ctx);
+  if (!cache) return;
+
+  const employeeId =
+    (event.payload.employee as { id?: string })?.id ||
+    (event.payload.employeeId as string);
+
+  if (!employeeId) {
+    ctx.log.debug("Cache invalidation skipped: no employeeId in event payload", {
+      eventType: event.eventType,
+    });
+    return;
+  }
+
+  // Invalidate the employee basic data cache
+  const empKey = CacheKeys.employeeBasic(event.tenantId, employeeId);
+  await cache.del(empKey);
+
+  ctx.log.debug("Invalidated employee cache", {
+    eventType: event.eventType,
+    employeeId,
+    cacheKey: empKey,
+  });
+
+  // On termination or status change, also invalidate the user's permissions/roles
+  // cache so access revocation takes effect immediately
+  if (
+    event.eventType === "hr.employee.terminated" ||
+    event.eventType === "hr.employee.status_changed"
+  ) {
+    // Look up the user_id for this employee so we can invalidate their permissions
+    try {
+      const users = await ctx.db.withSystemContext(async (tx) => {
+        return await tx<Array<{ userId: string }>>`
+          SELECT user_id as "userId" FROM app.employees
+          WHERE id = ${employeeId}::uuid AND user_id IS NOT NULL
+        `;
+      });
+
+      if (users.length > 0 && users[0]!.userId) {
+        const userId = users[0]!.userId;
+        await cache.del(CacheKeys.permissions(event.tenantId, userId));
+        await cache.del(CacheKeys.roles(event.tenantId, userId));
+        ctx.log.debug("Invalidated permissions cache for employee user", {
+          employeeId,
+          userId,
+        });
+      }
+    } catch (err) {
+      ctx.log.error("Failed to invalidate permissions cache for employee", err);
+    }
+  }
+
+  // Org tree cache may be stale after transfers, promotions, or terminations
+  if (
+    event.eventType === "hr.employee.transferred" ||
+    event.eventType === "hr.employee.promoted" ||
+    event.eventType === "hr.employee.terminated" ||
+    event.eventType === "hr.employee.created"
+  ) {
+    await cache.del(CacheKeys.orgTree(event.tenantId));
+    ctx.log.debug("Invalidated org tree cache", { tenantId: event.tenantId });
+  }
+}
+
+/**
+ * Invalidate permission/role caches when security settings change.
+ *
+ * Handles: security.role.updated, security.permissions.updated
+ *
+ * NOTE: These events are not yet emitted by the security module, but this
+ * handler is registered so invalidation will work as soon as the events
+ * are wired up in the security service.
+ */
+async function handleSecurityCacheInvalidation(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const cache = resolveCache(ctx);
+  if (!cache) return;
+
+  const userId = event.payload.userId as string | undefined;
+
+  if (userId) {
+    // Invalidate specific user's permissions and roles
+    await cache.del(CacheKeys.permissions(event.tenantId, userId));
+    await cache.del(CacheKeys.roles(event.tenantId, userId));
+    ctx.log.debug("Invalidated permissions cache for user", {
+      eventType: event.eventType,
+      userId,
+    });
+  } else {
+    // If no specific userId, invalidate the whole tenant's cache
+    // (e.g., a role definition changed affecting all users with that role)
+    const deleted = await cache.invalidateTenantCache(event.tenantId);
+    ctx.log.debug("Invalidated tenant-wide cache", {
+      eventType: event.eventType,
+      tenantId: event.tenantId,
+      keysDeleted: deleted,
+    });
+  }
+}
+
+/**
+ * Invalidate tenant settings cache when tenant configuration changes.
+ *
+ * Handles: tenant.settings.updated
+ *
+ * NOTE: This event is not yet emitted by the tenant module, but this
+ * handler is registered so invalidation will work once the event is
+ * wired up in the tenant service.
+ */
+async function handleTenantCacheInvalidation(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const cache = resolveCache(ctx);
+  if (!cache) return;
+
+  await cache.del(CacheKeys.tenantSettings(event.tenantId));
+  ctx.log.debug("Invalidated tenant settings cache", {
+    eventType: event.eventType,
+    tenantId: event.tenantId,
+  });
+}
+
+// =============================================================================
 // Register All Handlers
 // =============================================================================
 
@@ -853,6 +1008,17 @@ export function registerAllHandlers(): void {
   registerHandler("workflow.instance.started", handleWorkflowStarted);
   registerHandler("workflow.instance.completed", handleWorkflowCompleted);
   registerHandler("workflow.task.completed", handleWorkflowTaskCompleted);
+
+  // Cache Invalidation Handlers
+  // Employee data changes - use wildcard to catch all hr.employee.* events
+  registerHandler("hr.employee.*", handleEmployeeCacheInvalidation);
+
+  // Security/permission changes (events not yet emitted, but ready for when they are)
+  registerHandler("security.role.updated", handleSecurityCacheInvalidation);
+  registerHandler("security.permissions.updated", handleSecurityCacheInvalidation);
+
+  // Tenant settings changes (event not yet emitted, but ready for when it is)
+  registerHandler("tenant.settings.updated", handleTenantCacheInvalidation);
 }
 
 // =============================================================================
