@@ -539,19 +539,22 @@ export class TimeRepository {
       // Delete existing lines
       await tx`DELETE FROM app.timesheet_lines WHERE timesheet_id = ${timesheetId}::uuid`;
 
-      // Insert new lines
-      for (const line of lines) {
-        const lineId = crypto.randomUUID();
+      // Insert new lines (batch insert)
+      if (lines.length > 0) {
         await tx`
-          INSERT INTO app.timesheet_lines (
-            id, timesheet_id, date, regular_hours, overtime_hours,
-            break_minutes, project_id, task_code, notes
-          ) VALUES (
-            ${lineId}::uuid, ${timesheetId}::uuid, ${line.date},
-            ${line.regularHours}, ${line.overtimeHours || 0},
-            ${line.breakMinutes || 0}, ${line.projectId || null}::uuid,
-            ${line.taskCode || null}, ${line.notes || null}
-          )
+          INSERT INTO app.timesheet_lines ${tx(
+            lines.map(line => ({
+              id: crypto.randomUUID(),
+              timesheet_id: timesheetId,
+              date: line.date,
+              regular_hours: line.regularHours,
+              overtime_hours: line.overtimeHours || 0,
+              break_minutes: line.breakMinutes || 0,
+              project_id: line.projectId || null,
+              task_code: line.taskCode || null,
+              notes: line.notes || null,
+            }))
+          )}
         `;
       }
 

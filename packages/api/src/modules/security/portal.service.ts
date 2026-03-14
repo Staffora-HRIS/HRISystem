@@ -288,22 +288,21 @@ export class PortalService {
 
       const portalMap = new Map(portals.map((p) => [p.code, p.id]));
 
-      // Grant access for each portal type the user has roles for
-      for (const role of roles) {
-        if (role.portal_type && portalMap.has(role.portal_type)) {
-          await tx`
-            INSERT INTO app.user_portal_access (
-              tenant_id, user_id, portal_id, granted_by
-            )
-            VALUES (
-              ${ctx.tenantId}::uuid,
-              ${targetUserId}::uuid,
-              ${portalMap.get(role.portal_type)}::uuid,
-              ${ctx.userId}::uuid
-            )
-            ON CONFLICT (tenant_id, user_id, portal_id) DO NOTHING
-          `;
-        }
+      // Grant access for each portal type the user has roles for (batch insert)
+      const portalAccessRows = roles
+        .filter(role => role.portal_type && portalMap.has(role.portal_type))
+        .map(role => ({
+          tenant_id: ctx.tenantId,
+          user_id: targetUserId,
+          portal_id: portalMap.get(role.portal_type!)!,
+          granted_by: ctx.userId,
+        }));
+
+      if (portalAccessRows.length > 0) {
+        await tx`
+          INSERT INTO app.user_portal_access ${tx(portalAccessRows)}
+          ON CONFLICT (tenant_id, user_id, portal_id) DO NOTHING
+        `;
       }
     });
   }
