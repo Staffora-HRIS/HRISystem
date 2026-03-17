@@ -2,7 +2,10 @@
  * Client Portal Module - TypeBox Schemas
  *
  * Validation schemas for the customer-facing portal on staffora.co.uk.
- * Covers authentication, tickets, documents, news, billing, and user management.
+ * Covers tickets, documents, news, billing, and user management.
+ *
+ * Auth schemas (Login, ForgotPassword, ResetPassword) have been removed.
+ * Authentication is now handled by BetterAuth at /api/auth/*.
  */
 
 import { t } from "elysia";
@@ -36,33 +39,23 @@ export const PortalUserStatusSchema = t.Union([
 ]);
 
 // =============================================================================
-// Auth Schemas
+// Portal Me Response (replaces LoginResponseSchema)
 // =============================================================================
 
-export const LoginSchema = t.Object({
-  email: t.String({ format: "email", maxLength: 255 }),
-  password: t.String({ minLength: 1, maxLength: 128 }),
-  rememberMe: t.Optional(t.Boolean()),
-});
-
-export const ForgotPasswordSchema = t.Object({
-  email: t.String({ format: "email", maxLength: 255 }),
-});
-
-export const ResetPasswordSchema = t.Object({
-  token: t.String({ minLength: 1, maxLength: 512 }),
-  newPassword: t.String({ minLength: 8, maxLength: 128 }),
-});
-
-export const LoginResponseSchema = t.Object({
+export const PortalMeResponseSchema = t.Object({
   user: t.Object({
     id: UuidSchema,
     tenantId: UuidSchema,
+    userId: UuidSchema,
     email: t.String(),
     firstName: t.String(),
     lastName: t.String(),
-    role: PortalUserRoleSchema,
+    avatarUrl: t.Union([t.String(), t.Null()]),
+    role: t.String(),
+    isActive: t.Boolean(),
     lastLoginAt: t.Union([t.String(), t.Null()]),
+    createdAt: t.String(),
+    updatedAt: t.String(),
   }),
 });
 
@@ -500,9 +493,6 @@ export type LicenseTier = typeof LicenseTierSchema.static;
 export type LicenseStatus = typeof LicenseStatusSchema.static;
 export type InvoiceStatus = typeof InvoiceStatusSchema.static;
 
-export type LoginInput = typeof LoginSchema.static;
-export type ForgotPasswordInput = typeof ForgotPasswordSchema.static;
-export type ResetPasswordInput = typeof ResetPasswordSchema.static;
 export type CreateTicketInput = typeof CreateTicketSchema.static;
 export type UpdateTicketInput = typeof UpdateTicketSchema.static;
 export type CreateTicketMessageInput = typeof CreateTicketMessageSchema.static;
