@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS app.competencies (
 CREATE TABLE IF NOT EXISTS app.job_competencies (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES app.tenants(id) ON DELETE CASCADE,
-    job_id uuid NOT NULL REFERENCES app.jobs(id) ON DELETE CASCADE,
+    job_id uuid NOT NULL,
     competency_id uuid NOT NULL REFERENCES app.competencies(id) ON DELETE CASCADE,
 
     -- Requirements
@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS app.employee_competency_history (
     assessed_by uuid REFERENCES app.users(id),
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Add FK from job_competencies.job_id -> jobs.id.
+-- app.jobs is created by 0106_jobs.sql which runs just before this migration.
+-- The constraint is added idempotently in case this migration is re-run.
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_schema = 'app'
+          AND table_name = 'job_competencies'
+          AND constraint_name = 'job_competencies_job_id_fkey'
+    ) THEN
+        ALTER TABLE app.job_competencies
+            ADD CONSTRAINT job_competencies_job_id_fkey
+            FOREIGN KEY (job_id) REFERENCES app.jobs(id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- =============================================================================
 -- Indexes
