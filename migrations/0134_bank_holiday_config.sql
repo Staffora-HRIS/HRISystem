@@ -47,10 +47,14 @@ CREATE TABLE IF NOT EXISTS app.bank_holidays (
     -- Standard timestamps
     created_at timestamptz NOT NULL DEFAULT now(),
 
-    -- Unique constraint: one entry per tenant, date, country, and region
+    -- Uniqueness enforced via unique index below (supports COALESCE on nullable region)
     CONSTRAINT uq_bank_holidays_tenant_date_country_region
-        UNIQUE (tenant_id, date, country_code, COALESCE(region, ''))
+        UNIQUE (tenant_id, date, country_code)
 );
+
+-- Unique index with COALESCE for region-aware uniqueness
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_holidays_tenant_date_region
+    ON app.bank_holidays(tenant_id, date, country_code, COALESCE(region, ''));
 
 -- =============================================================================
 -- Indexes
