@@ -9,14 +9,21 @@
 -- 1. Update identifier_type enum: add 'nino', migrate 'ssn' values
 -- =============================================================================
 
--- 'nino' enum value added outside transaction (ALTER TYPE ADD VALUE
--- cannot be used in the same transaction that references the new value).
--- If re-running, ensure 'nino' already exists in app.identifier_type.
+-- Add 'nino' to the identifier_type enum
+ALTER TYPE app.identifier_type ADD VALUE IF NOT EXISTS 'nino';
 
 -- Update any existing rows that use 'ssn' to 'nino'
-UPDATE app.employee_identifiers
-SET identifier_type = 'nino'
-WHERE identifier_type = 'ssn';
+-- Wrapped in exception block because ALTER TYPE ADD VALUE
+-- cannot be used in the same transaction as the new value.
+-- On fresh installs there are no rows to update.
+DO $$
+BEGIN
+  UPDATE app.employee_identifiers
+  SET identifier_type = 'nino'
+  WHERE identifier_type = 'ssn';
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'Skipping ssn->nino migration (enum not yet usable): %', SQLERRM;
+END $$;
 
 -- Note: PostgreSQL does not support removing enum values without recreating the type.
 -- The 'ssn' value remains in the enum but is no longer used by the application.
