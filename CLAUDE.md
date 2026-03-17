@@ -26,14 +26,19 @@ bun run docker:up
 # Start all services (postgres, redis, api, worker, web)
 docker compose -f docker/docker-compose.yml up -d
 
-# View container logs
+# Stop all services
+bun run docker:down
+
+# View container status / logs
+bun run docker:ps
 bun run docker:logs
 
 # Run development servers
 bun run dev           # All packages
 bun run dev:api       # API only (with watch)
-bun run dev:web       # Frontend only
+bun run dev:web       # Frontend only (HRIS app)
 bun run dev:worker    # Background worker only
+bun run dev:website   # Marketing website only
 
 # Database migrations
 bun run migrate       # Run pending migrations (alias for migrate:up)
@@ -49,6 +54,10 @@ bun test --watch                   # Watch mode
 bun test path/to/file.test.ts     # Single test file
 bun test --test-name-pattern "pattern"  # Filter by test name
 
+# Test coverage
+bun run --filter @staffora/api test:coverage   # API coverage (bun test --coverage)
+bun run --filter @staffora/web test:coverage   # Web coverage (vitest --coverage)
+
 # Type checking and linting
 bun run typecheck     # All packages
 bun run lint          # All packages
@@ -57,6 +66,9 @@ bun run lint          # All packages
 bun run build         # All packages
 bun run build:api     # API only
 bun run build:web     # Frontend only
+
+# Clean all node_modules and dist
+bun run clean
 
 # Seed database (after migrations)
 bun run db:seed
@@ -79,14 +91,15 @@ Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 
 ### Monorepo Structure (Bun workspaces)
 - `packages/api` (@staffora/api): Elysia.js backend with plugins pattern
-- `packages/web` (@staffora/web): React Router v7 framework mode frontend (uses **vitest**, not bun test)
+- `packages/web` (@staffora/web): React Router v7 framework mode HRIS frontend (uses **vitest**, not bun test)
 - `packages/shared` (@staffora/shared): Shared types, schemas, error codes, state machines, utilities
+- `Website` (@staffora/website): React Router v7 marketing/landing site (staffora.co.uk public pages)
 
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point — registers plugins then mounts all module routes
 - `src/worker.ts`: Background job processor entry point
 - `src/plugins/`: Elysia plugins (see plugin registration order below)
-- `src/modules/`: Feature modules — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`
+- `src/modules/`: Feature modules (71 modules) — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`. Core modules (hr, time, absence, talent, lms, cases, onboarding, benefits, documents, succession, analytics, competencies, recruitment) plus extensive UK compliance modules (right-to-work, ssp, statutory-leave, pension, warnings, etc.) and GDPR modules (dsar, data-erasure, data-breach, consent, privacy-notices, data-retention)
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
 - `src/db/`: Database migration runner (`migrate.ts`)
@@ -127,7 +140,7 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql` (currently 121 files, numbered 0001–0115 with some duplicate numbers). All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql` (highest is 0181, ~233 files total). Numbers 0076–0079 have duplicates from parallel feature branches; this is a known quirk — new migrations should use the next available number after the highest existing one. There is also a non-numbered `fix_schema_migrations_filenames.sql`. All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
 
 Two database roles:
 - `hris` — Superuser/admin (used for migrations)
@@ -251,6 +264,13 @@ Import paths available from the shared package:
 - `@staffora/shared/errors` — Error codes and messages organized by module
 - `@staffora/shared/schemas` — Shared TypeBox/Zod schemas
 - `@staffora/shared/state-machines` — Employee lifecycle and performance cycle state machines
+
+## Known Gotchas
+
+- **TypeBox version split**: `packages/api` uses `@sinclair/typebox@^0.34` while `packages/shared` uses `@sinclair/typebox@^0.32`. When writing schemas that cross package boundaries, be aware of API differences between versions.
+- **Web tests use vitest, not bun test**: `packages/web` uses vitest (`bun run test:web`), while `packages/api` and `packages/shared` use bun's built-in test runner (`bun test`).
+- **Migration file naming**: Use 4-digit padding (`0182_`, not `182_`). Check the highest existing migration number before creating a new one.
+- **`Website/` directory uses capital W**: The marketing site workspace is `Website/` (not `website/`) in the repo root.
 
 ## Common Workflows
 

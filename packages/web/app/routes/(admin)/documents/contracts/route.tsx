@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -76,7 +77,7 @@ const NOTIFICATION_BADGE_VARIANTS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",

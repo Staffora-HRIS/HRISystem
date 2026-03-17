@@ -32,8 +32,8 @@ export interface JobRow extends Row {
   subfamily: string | null;
   jobLevel: number | null;
   jobGrade: string | null;
-  flsaStatus: string | null;
-  eeoCategory: string | null;
+  wtrStatus: string | null;
+  socCode: string | null;
   summary: string | null;
   essentialFunctions: string | null;
   qualifications: string | null;
@@ -130,7 +130,7 @@ export class JobsRepository {
       const rows = await tx<JobRow[]>`
         SELECT
           id, tenant_id, code, title, family, subfamily,
-          job_level, job_grade, flsa_status, eeo_category,
+          job_level, job_grade, wtr_status, soc_code,
           summary, essential_functions, qualifications,
           physical_requirements, working_conditions,
           salary_grade_id, min_salary, max_salary, currency,
@@ -160,7 +160,7 @@ export class JobsRepository {
       const rows = await tx<JobRow[]>`
         SELECT
           id, tenant_id, code, title, family, subfamily,
-          job_level, job_grade, flsa_status, eeo_category,
+          job_level, job_grade, wtr_status, soc_code,
           summary, essential_functions, qualifications,
           physical_requirements, working_conditions,
           salary_grade_id, min_salary, max_salary, currency,
@@ -191,7 +191,7 @@ export class JobsRepository {
     const rows = await tx<JobRow[]>`
       INSERT INTO jobs (
         tenant_id, code, title, family, subfamily,
-        job_level, job_grade, flsa_status, eeo_category,
+        job_level, job_grade, wtr_status, soc_code,
         summary, essential_functions, qualifications,
         physical_requirements, working_conditions,
         salary_grade_id, min_salary, max_salary, currency,
@@ -206,8 +206,8 @@ export class JobsRepository {
         ${data.subfamily || null},
         ${data.job_level ?? null},
         ${data.job_grade || null},
-        ${data.flsa_status || "exempt"},
-        ${data.eeo_category || null},
+        ${data.wtr_status || "subject_to_wtr"},
+        ${data.soc_code || null},
         ${data.summary || null},
         ${data.essential_functions || null},
         ${data.qualifications || null},
@@ -216,7 +216,7 @@ export class JobsRepository {
         ${data.salary_grade_id || null}::uuid,
         ${data.min_salary ?? null},
         ${data.max_salary ?? null},
-        ${data.currency || "USD"},
+        ${data.currency || "GBP"},
         ${data.status || "draft"},
         ${data.effective_date || new Date().toISOString().slice(0, 10)}::date,
         ${createdBy}::uuid,
@@ -224,7 +224,7 @@ export class JobsRepository {
       )
       RETURNING
         id, tenant_id, code, title, family, subfamily,
-        job_level, job_grade, flsa_status, eeo_category,
+        job_level, job_grade, wtr_status, soc_code,
         summary, essential_functions, qualifications,
         physical_requirements, working_conditions,
         salary_grade_id, min_salary, max_salary, currency,
@@ -267,8 +267,8 @@ export class JobsRepository {
         subfamily = COALESCE(${data.subfamily ?? null}, subfamily),
         job_level = COALESCE(${data.job_level ?? null}, job_level),
         job_grade = COALESCE(${data.job_grade ?? null}, job_grade),
-        flsa_status = COALESCE(${data.flsa_status ?? null}, flsa_status),
-        eeo_category = COALESCE(${data.eeo_category ?? null}, eeo_category),
+        wtr_status = COALESCE(${data.wtr_status ?? null}, wtr_status),
+        soc_code = COALESCE(${data.soc_code ?? null}, soc_code),
         summary = COALESCE(${data.summary ?? null}, summary),
         essential_functions = COALESCE(${data.essential_functions ?? null}, essential_functions),
         qualifications = COALESCE(${data.qualifications ?? null}, qualifications),
@@ -284,7 +284,7 @@ export class JobsRepository {
       WHERE id = ${id}::uuid
       RETURNING
         id, tenant_id, code, title, family, subfamily,
-        job_level, job_grade, flsa_status, eeo_category,
+        job_level, job_grade, wtr_status, soc_code,
         summary, essential_functions, qualifications,
         physical_requirements, working_conditions,
         salary_grade_id, min_salary, max_salary, currency,
@@ -314,7 +314,7 @@ export class JobsRepository {
       WHERE id = ${id}::uuid
       RETURNING
         id, tenant_id, code, title, family, subfamily,
-        job_level, job_grade, flsa_status, eeo_category,
+        job_level, job_grade, wtr_status, soc_code,
         summary, essential_functions, qualifications,
         physical_requirements, working_conditions,
         salary_grade_id, min_salary, max_salary, currency,

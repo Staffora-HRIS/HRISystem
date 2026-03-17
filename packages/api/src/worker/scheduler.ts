@@ -189,17 +189,70 @@ class Scheduler {
     await this.sql.end();
   }
 
-  // Simple cron parser (basic implementation)
+  // Simple cron parser — supports fixed values, wildcards (*), and step
+  // notation (*/N). Only handles minute, hour, day-of-month, and day-of-week
+  // fields (month field is ignored / always treated as *).
   private getNextRunTime(cron: string): Date {
     const [minute, hour, dayOfMonth, _month, dayOfWeek] = cron.split(" ");
     const now = new Date();
     const next = new Date(now);
 
-    // Set to the next occurrence (simplified logic)
-    next.setMinutes(parseInt(minute ?? "0"));
-    next.setHours(parseInt(hour ?? "0"));
     next.setSeconds(0);
     next.setMilliseconds(0);
+
+    // Parse a cron field value, handling */N step notation
+    const parseCronField = (
+      field: string | undefined,
+      currentValue: number,
+      defaultValue: number
+    ): { value: number; isStep: boolean; stepInterval: number } => {
+      if (!field || field === "*") {
+        return { value: currentValue, isStep: false, stepInterval: 0 };
+      }
+      if (field.startsWith("*/")) {
+        const interval = parseInt(field.slice(2));
+        if (!isNaN(interval) && interval > 0) {
+          // Find the next value >= current that is divisible by interval
+          const nextValue =
+            Math.ceil((currentValue + 1) / interval) * interval;
+          return { value: nextValue, isStep: true, stepInterval: interval };
+        }
+      }
+      const parsed = parseInt(field);
+      return {
+        value: isNaN(parsed) ? defaultValue : parsed,
+        isStep: false,
+        stepInterval: 0,
+      };
+    };
+
+    const minuteField = parseCronField(minute, now.getMinutes(), 0);
+    const hourField = parseCronField(hour, now.getHours(), 0);
+
+    // Handle step-based intervals (e.g. */15 * * * *)
+    if (minuteField.isStep && (hour === "*" || hour === undefined)) {
+      const interval = minuteField.stepInterval;
+      // Calculate next aligned minute from now
+      const totalMinutes =
+        now.getHours() * 60 + now.getMinutes();
+      const nextAligned =
+        (Math.floor(totalMinutes / interval) + 1) * interval;
+      next.setHours(Math.floor(nextAligned / 60) % 24);
+      next.setMinutes(nextAligned % 60);
+
+      // If we wrapped past midnight, move to next day
+      if (nextAligned >= 24 * 60) {
+        next.setDate(next.getDate() + 1);
+        next.setHours(0);
+        next.setMinutes(0);
+      }
+
+      return next;
+    }
+
+    // Set to the next occurrence (fixed time)
+    next.setMinutes(minuteField.value);
+    next.setHours(hourField.value);
 
     // If the time has passed today, move to next day
     if (next <= now) {
@@ -207,18 +260,23 @@ class Scheduler {
     }
 
     // Handle day of week
-    if (dayOfWeek !== "*") {
+    if (dayOfWeek !== "*" && dayOfWeek !== undefined) {
       const targetDay = parseInt(dayOfWeek ?? "0");
-      while (next.getDay() !== targetDay) {
-        next.setDate(next.getDate() + 1);
+      if (!isNaN(targetDay)) {
+        while (next.getDay() !== targetDay) {
+          next.setDate(next.getDate() + 1);
+        }
       }
     }
 
     // Handle day of month
-    if (dayOfMonth !== "*") {
-      next.setDate(parseInt(dayOfMonth ?? "1"));
-      if (next <= now) {
-        next.setMonth(next.getMonth() + 1);
+    if (dayOfMonth !== "*" && dayOfMonth !== undefined) {
+      const targetDate = parseInt(dayOfMonth ?? "1");
+      if (!isNaN(targetDate)) {
+        next.setDate(targetDate);
+        if (next <= now) {
+          next.setMonth(next.getMonth() + 1);
+        }
       }
     }
 
@@ -709,7 +767,7 @@ class Scheduler {
               2000,
               new Date().getMonth(),
               Number(day)
-            ).toLocaleDateString("en-US", {
+            ).toLocaleDateString("en-GB", {
               month: "short",
               day: "numeric",
             });
@@ -717,7 +775,7 @@ class Scheduler {
           })
           .join("\n");
 
-        const monthName = new Date().toLocaleDateString("en-US", {
+        const monthName = new Date().toLocaleDateString("en-GB", {
           month: "long",
         });
 

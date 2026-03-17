@@ -518,7 +518,7 @@ describe("HRRepository", () => {
         expect(result.tenantId).toBe(tenant1.id);
         expect(result.isActive).toBe(true);
         expect(result.headcount).toBe(1);
-        expect(result.currency).toBe("USD");
+        expect(result.currency).toBe("GBP");
       });
 
       it("should create position with salary range and headcount", async () => {

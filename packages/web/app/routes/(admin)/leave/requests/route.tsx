@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -69,7 +70,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -77,7 +78,7 @@ function formatDate(dateString: string | null): string {
 }
 
 function formatDateShort(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     month: "short",
     day: "numeric",
   });

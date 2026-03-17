@@ -348,9 +348,9 @@ function formatValue(
 
     case "currency":
       if (typeof value === "number") {
-        return value.toLocaleString("en-US", {
+        return value.toLocaleString("en-GB", {
           style: "currency",
-          currency: format || "USD",
+          currency: format || "GBP",
         });
       }
       return String(value);
@@ -542,6 +542,43 @@ async function generateExcel(
 // =============================================================================
 
 /**
+ * Allowlist of tables that can be exported.
+ * Only tables in this set can be queried by the export worker.
+ * This prevents SQL injection via job payloads that specify arbitrary table names.
+ */
+const ALLOWED_EXPORT_TABLES = new Set([
+  "employees", "employment_contracts", "position_assignments", "positions",
+  "org_units", "departments", "cost_centers", "reporting_lines",
+  "compensation_history", "leave_requests", "leave_balances", "leave_types",
+  "time_events", "timesheets", "timesheet_lines", "schedules", "shifts",
+  "shift_assignments", "cases", "case_comments",
+  "courses", "assignments", "completions", "certificates",
+  "onboarding_instances", "onboarding_task_completions",
+  "benefit_enrollments", "benefit_plans",
+  "goals", "reviews", "performance_cycles", "competencies",
+  "requisitions", "candidates", "interviews",
+  "documents", "audit_log",
+  "employee_personal", "employee_contacts", "employee_addresses",
+  "employee_warnings", "employee_bank_details", "emergency_contacts",
+  "payroll_runs", "payroll_lines", "payslips",
+  "succession_plans", "succession_candidates",
+  "training_budgets", "training_expenses", "cpd_records",
+]);
+
+/**
+ * Strict SQL identifier validator.
+ * Only allows alphanumeric characters and underscores.
+ * Prevents SQL injection via column/table names.
+ */
+const SAFE_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+function validateIdentifier(name: string, context: string): void {
+  if (!SAFE_IDENTIFIER_RE.test(name)) {
+    throw new Error(`Invalid ${context}: "${name}" — must be alphanumeric/underscore only`);
+  }
+}
+
+/**
  * Execute export query and return rows
  */
 async function executeExportQuery(
@@ -552,24 +589,39 @@ async function executeExportQuery(
 ): Promise<Array<Record<string, unknown>>> {
   const { table, columns, filters, orderBy, limit } = query;
 
-  // Build column selection
-  const columnNames = columns.map((c) => c.field);
+  // Validate table against allowlist
+  if (!ALLOWED_EXPORT_TABLES.has(table)) {
+    throw new Error(`Export table "${table}" is not in the allowed tables list`);
+  }
+  validateIdentifier(table, "table name");
+
+  // Validate and quote column names
+  const columnNames = columns.map((c) => {
+    validateIdentifier(c.field, "column name");
+    return `"${c.field}"`;
+  });
+
+  // Validate order-by fields
+  const validDirections = new Set(["ASC", "DESC", "asc", "desc"]);
 
   // Execute query with tenant context
   const rows = await db.withSystemContext(async (tx) => {
     // Set tenant context for RLS
     await tx`SELECT app.set_tenant_context(${tenantId}::uuid, NULL)`;
 
-    // Build and execute query using unsafe for dynamic SQL parts
-    // Note: table and column names are validated against allowed lists
+    // Build query with validated/quoted identifiers
     const columnsStr = columnNames.join(", ");
     const orderByStr = orderBy && orderBy.length > 0
-      ? `ORDER BY ${orderBy.map((o) => `${o.field} ${o.direction}`).join(", ")}`
+      ? `ORDER BY ${orderBy.map((o) => {
+          validateIdentifier(o.field, "order-by field");
+          const dir = validDirections.has(o.direction) ? o.direction.toUpperCase() : "ASC";
+          return `"${o.field}" ${dir}`;
+        }).join(", ")}`
       : "";
-    const limitStr = limit ? `LIMIT ${limit}` : "";
+    const limitVal = limit && Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100000) : 10000;
 
     const result = await tx.unsafe<Array<Record<string, unknown>>>(
-      `SELECT ${columnsStr} FROM ${table} WHERE tenant_id = $1::uuid ${orderByStr} ${limitStr}`,
+      `SELECT ${columnsStr} FROM app."${table}" WHERE tenant_id = $1::uuid ${orderByStr} LIMIT ${limitVal}`,
       [tenantId]
     );
 

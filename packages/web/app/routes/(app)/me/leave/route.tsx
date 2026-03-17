@@ -5,6 +5,7 @@ import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Spinner } from "~/components/ui/spinner";
 import { Button, Badge, Modal, ModalHeader, ModalBody, ModalFooter, Input, Select, toast } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
 
 type PortalMeResponse = {
   user: { id: string; email: string; firstName?: string | null; lastName?: string | null };
@@ -45,6 +46,7 @@ export default function MyLeavePage() {
     endDate: "",
     reason: "",
   });
+  const [viewingRequest, setViewingRequest] = useState<LeaveRequest | null>(null);
   const queryClient = useQueryClient();
 
   const { data: me, isLoading: meLoading, error: meError } = useQuery({
@@ -77,11 +79,34 @@ export default function MyLeavePage() {
     onSuccess: () => {
       toast.success("Leave request submitted successfully");
       queryClient.invalidateQueries({ queryKey: ["absence", "requests"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.me.leave() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leave.all() });
       setShowNewRequest(false);
       setNewRequest({ leaveType: "annual", startDate: "", endDate: "", reason: "" });
     },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : "Please try again.";
+      toast.error("Failed to submit leave request", { message });
+    },
+  });
+
+  // Cancel leave request mutation
+  const cancelMutation = useMutation({
+    mutationFn: (requestId: string) =>
+      api.post(`/absence/requests/${requestId}/submit`, { action: "cancel" }),
+    onSuccess: () => {
+      toast.success("Leave request cancelled");
+      queryClient.invalidateQueries({ queryKey: ["absence", "requests"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.me.leave() });
+      setViewingRequest(null);
+    },
     onError: () => {
-      toast.error("Failed to submit leave request");
+      toast.error("Failed to cancel leave request", {
+        message: "Please try again.",
+      });
     },
   });
 
@@ -240,12 +265,75 @@ export default function MyLeavePage() {
                       Submitted {new Date(r.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Leave request detail view will be available in a future update." })}>View</Button>
+                  <Button variant="outline" size="sm" onClick={() => setViewingRequest(r)}>View</Button>
                 </div>
               </CardBody>
             </Card>
           ))}
         </div>
+      )}
+
+      {/* View Request Detail Modal */}
+      {viewingRequest && (
+        <Modal open onClose={() => setViewingRequest(null)} size="md">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Leave Request Details</h3>
+          </ModalHeader>
+          <ModalBody className="space-y-4">
+            <div className="flex items-center gap-2">
+              {getStatusBadge(viewingRequest.status)}
+              <Badge variant="outline">
+                {viewingRequest.totalDays} day{viewingRequest.totalDays !== 1 ? "s" : ""}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-500 font-medium">Start Date</p>
+                <p className="text-gray-900">
+                  {new Date(viewingRequest.startDate).toLocaleDateString("en-GB", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 font-medium">End Date</p>
+                <p className="text-gray-900">
+                  {new Date(viewingRequest.endDate).toLocaleDateString("en-GB", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+            </div>
+            <div className="text-sm">
+              <p className="text-gray-500 font-medium">Submitted</p>
+              <p className="text-gray-900">
+                {new Date(viewingRequest.createdAt).toLocaleDateString("en-GB", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setViewingRequest(null)}>
+              Close
+            </Button>
+            {(viewingRequest.status === "pending" || viewingRequest.status === "draft") && (
+              <Button
+                variant="danger"
+                onClick={() => cancelMutation.mutate(viewingRequest.id)}
+                disabled={cancelMutation.isPending}
+              >
+                {cancelMutation.isPending ? "Cancelling..." : "Cancel Request"}
+              </Button>
+            )}
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* New Request Modal */}

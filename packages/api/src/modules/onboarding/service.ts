@@ -70,7 +70,7 @@ export class OnboardingService {
       const template = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createTemplate(ctx, data);
+          const result = await this.repository.createTemplate(ctx, data, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -120,7 +120,7 @@ export class OnboardingService {
       const template = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.updateTemplate(ctx, id, data);
+          const result = await this.repository.updateTemplate(ctx, id, data, tx);
 
           if (!result) {
             return null;
@@ -256,7 +256,7 @@ export class OnboardingService {
       const instance = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createInstance(ctx, data, template.tasks || []);
+          const result = await this.repository.createInstance(ctx, data, template.tasks || [], tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -318,7 +318,7 @@ export class OnboardingService {
       const instance = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.updateInstance(ctx, id, data);
+          const result = await this.repository.updateInstance(ctx, id, data, tx);
 
           if (!result) {
             return null;
@@ -424,7 +424,8 @@ export class OnboardingService {
             instanceId,
             taskId,
             notes,
-            formData
+            formData,
+            tx
           );
 
           if (!result) {
@@ -512,7 +513,7 @@ export class OnboardingService {
       const updatedTask = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.skipTask(ctx, instanceId, taskId, reason);
+          const result = await this.repository.skipTask(ctx, instanceId, taskId, reason, tx);
 
           if (!result) {
             return null;

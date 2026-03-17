@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   Plus,
@@ -13,8 +14,16 @@ import {
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+} from "~/components/ui/modal";
+import { Input, Select } from "~/components/ui/input";
 import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
 
 interface BenefitPlan {
   id: string;
@@ -51,18 +60,60 @@ const PLAN_TYPE_COLORS: Record<string, string> = {
   fsa: "bg-indigo-100 text-indigo-700",
 };
 
+const BENEFIT_CATEGORIES = [
+  { value: "health", label: "Health" },
+  { value: "dental", label: "Dental" },
+  { value: "vision", label: "Vision" },
+  { value: "life", label: "Life Insurance" },
+  { value: "disability", label: "Disability" },
+  { value: "retirement", label: "Retirement" },
+  { value: "hsa", label: "HSA" },
+  { value: "fsa", label: "FSA" },
+  { value: "wellness", label: "Wellness" },
+  { value: "other", label: "Other" },
+];
+
+const CONTRIBUTION_TYPES = [
+  { value: "shared", label: "Shared (Employee + Employer)" },
+  { value: "employee_only", label: "Employee Only" },
+  { value: "employer_only", label: "Employer Only" },
+  { value: "voluntary", label: "Voluntary" },
+];
+
+interface CreatePlanForm {
+  name: string;
+  category: string;
+  description: string;
+  contributionType: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  waitingPeriodDays: string;
+}
+
+const initialCreatePlanForm: CreatePlanForm = {
+  name: "",
+  category: "",
+  description: "",
+  contributionType: "shared",
+  effectiveFrom: new Date().toISOString().split("T")[0],
+  effectiveTo: "",
+  waitingPeriodDays: "0",
+};
+
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: "USD",
+    currency: "GBP",
   }).format(amount);
 }
 
 export default function BenefitsAdminPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [planTypeFilter, setPlanTypeFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState<CreatePlanForm>(initialCreatePlanForm);
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["admin-benefit-plans", planTypeFilter],
@@ -77,6 +128,50 @@ export default function BenefitsAdminPage() {
     queryKey: ["admin-benefit-stats"],
     queryFn: () => api.get<EnrollmentStats>("/benefits/stats"),
   });
+
+  // Create plan mutation
+  const createPlanMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post("/benefits/plans", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-benefit-plans"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.benefits.plans() });
+      toast.success("Benefit plan created successfully");
+      setShowCreateModal(false);
+      setCreateForm(initialCreatePlanForm);
+    },
+    onError: () => {
+      toast.error("Failed to create benefit plan", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreatePlan = () => {
+    if (!createForm.name.trim()) {
+      toast.warning("Please enter a plan name");
+      return;
+    }
+    if (!createForm.category) {
+      toast.warning("Please select a benefit category");
+      return;
+    }
+    if (!createForm.effectiveFrom) {
+      toast.warning("Please select an effective date");
+      return;
+    }
+    createPlanMutation.mutate({
+      name: createForm.name.trim(),
+      category: createForm.category,
+      description: createForm.description.trim() || undefined,
+      contribution_type: createForm.contributionType,
+      effective_from: createForm.effectiveFrom,
+      effective_to: createForm.effectiveTo || undefined,
+      waiting_period_days: createForm.waitingPeriodDays
+        ? Number(createForm.waitingPeriodDays)
+        : 0,
+    });
+  };
 
   const activePlans = plans?.items.filter((p) => p.isActive) || [];
   const inactivePlans = plans?.items.filter((p) => !p.isActive) || [];
@@ -329,38 +424,126 @@ export default function BenefitsAdminPage() {
         </>
       )}
 
-      {/* Create Modal Placeholder */}
+      {/* Create Plan Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <h3 className="font-semibold">Create Benefit Plan</h3>
-            </CardHeader>
-            <CardBody className="space-y-4">
-              <p className="text-gray-600">
-                Benefit plan creation form would go here.
-              </p>
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    toast.info("Coming Soon", { message: "Benefit plan creation will be available in a future update." });
-                    setShowCreateModal(false);
-                  }}
-                >
-                  Create
-                </Button>
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setCreateForm(initialCreatePlanForm);
+          }}
+          size="lg"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Create Benefit Plan</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Plan Name"
+                placeholder="e.g. Premium Health Plan"
+                required
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value })
+                }
+              />
+              <Select
+                label="Category"
+                required
+                value={createForm.category}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, category: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select a category" },
+                  ...BENEFIT_CATEGORIES,
+                ]}
+              />
+              <Input
+                label="Description"
+                placeholder="Describe this benefit plan..."
+                value={createForm.description}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, description: e.target.value })
+                }
+              />
+              <Select
+                label="Contribution Type"
+                required
+                value={createForm.contributionType}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    contributionType: e.target.value,
+                  })
+                }
+                options={CONTRIBUTION_TYPES}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Effective From"
+                  type="date"
+                  required
+                  value={createForm.effectiveFrom}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      effectiveFrom: e.target.value,
+                    })
+                  }
+                />
+                <Input
+                  label="Effective To (optional)"
+                  type="date"
+                  value={createForm.effectiveTo}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      effectiveTo: e.target.value,
+                    })
+                  }
+                />
               </div>
-            </CardBody>
-          </Card>
-        </div>
+              <Input
+                label="Waiting Period (days)"
+                type="number"
+                placeholder="0"
+                value={createForm.waitingPeriodDays}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    waitingPeriodDays: e.target.value,
+                  })
+                }
+                min={0}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setCreateForm(initialCreatePlanForm);
+              }}
+              disabled={createPlanMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreatePlan}
+              disabled={
+                !createForm.name.trim() ||
+                !createForm.category ||
+                !createForm.effectiveFrom ||
+                createPlanMutation.isPending
+              }
+            >
+              {createPlanMutation.isPending ? "Creating..." : "Create Plan"}
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   );

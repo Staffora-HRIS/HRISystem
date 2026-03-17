@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   Users,
@@ -9,6 +9,8 @@ import {
   Clock,
   MoreHorizontal,
   ArrowLeft,
+  Plus,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -47,6 +49,17 @@ interface OnboardingListResponse {
   hasMore: boolean;
 }
 
+interface OnboardingChecklist {
+  id: string;
+  name: string;
+}
+
+interface OnboardingFormData {
+  employeeId: string;
+  checklistId: string;
+  startDate: string;
+}
+
 const STATUS_BADGE_VARIANT: Record<string, string> = {
   not_started: "secondary",
   in_progress: "info",
@@ -63,7 +76,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -76,12 +89,21 @@ function getProgressColor(progress: number): string {
   return "bg-red-500";
 }
 
+const initialOnboardingForm: OnboardingFormData = {
+  employeeId: "",
+  checklistId: "",
+  startDate: new Date().toISOString().split("T")[0],
+};
+
 export default function ActiveOnboardingPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [formData, setFormData] = useState<OnboardingFormData>(initialOnboardingForm);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-onboarding-instances", search, statusFilter],
@@ -94,7 +116,46 @@ export default function ActiveOnboardingPage() {
     },
   });
 
+  const { data: checklistsData } = useQuery({
+    queryKey: ["onboarding-checklists"],
+    queryFn: () => api.get<{ checklists: OnboardingChecklist[]; count: number }>("/onboarding/checklists"),
+    enabled: showStartModal,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post("/onboarding/instances", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-onboarding-instances"] });
+      toast.success("Onboarding started successfully");
+      setShowStartModal(false);
+      setFormData(initialOnboardingForm);
+    },
+    onError: () => {
+      toast.error("Failed to start onboarding", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleStartOnboarding = () => {
+    if (!formData.employeeId.trim()) {
+      toast.warning("Please enter an employee ID");
+      return;
+    }
+    if (!formData.checklistId) {
+      toast.warning("Please select a checklist");
+      return;
+    }
+    createMutation.mutate({
+      employeeId: formData.employeeId.trim(),
+      checklistId: formData.checklistId,
+      startDate: formData.startDate,
+    });
+  };
+
   const instances = data?.instances ?? [];
+  const checklists = checklistsData?.checklists ?? [];
 
   const stats = useMemo(() => ({
     total: instances.length,
@@ -224,6 +285,10 @@ export default function ActiveOnboardingPage() {
           <h1 className="text-2xl font-bold text-gray-900">Active Onboarding</h1>
           <p className="text-gray-600">Track employee onboarding progress</p>
         </div>
+        <Button onClick={() => setShowStartModal(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Start Onboarding
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -326,6 +391,72 @@ export default function ActiveOnboardingPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Start Onboarding Modal */}
+      {showStartModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowStartModal(false); }}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" role="dialog" aria-modal="true" aria-label="Start Onboarding">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Start Onboarding</h3>
+              <button type="button" onClick={() => setShowStartModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="ob-employee" className="block text-sm font-medium text-gray-700 mb-1">Employee ID *</label>
+                <input
+                  id="ob-employee"
+                  type="text"
+                  value={formData.employeeId}
+                  onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Employee UUID"
+                />
+              </div>
+              <div>
+                <label htmlFor="ob-checklist" className="block text-sm font-medium text-gray-700 mb-1">Checklist *</label>
+                <select
+                  id="ob-checklist"
+                  value={formData.checklistId}
+                  onChange={(e) => setFormData({ ...formData, checklistId: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select a checklist...</option>
+                  {checklists.map((cl) => (
+                    <option key={cl.id} value={cl.id}>{cl.name}</option>
+                  ))}
+                </select>
+                {checklists.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">No checklists available. Create one first in the Onboarding settings.</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="ob-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                <input
+                  id="ob-start-date"
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 p-6 border-t">
+              <Button variant="outline" className="flex-1" onClick={() => setShowStartModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleStartOnboarding}
+                disabled={!formData.employeeId.trim() || !formData.checklistId || !formData.startDate || createMutation.isPending}
+              >
+                {createMutation.isPending ? "Starting..." : "Start Onboarding"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

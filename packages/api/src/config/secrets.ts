@@ -15,6 +15,7 @@ const INSECURE_DEFAULTS = [
   "change-me",
   "change-me-use-openssl-rand-base64-32",
   "development-secret-change-in-production",
+  "insecure-dev-only-secret-do-not-use-in-production",
   "dev_session_secret_32chars_min",
   "dev_csrf_secret_32chars_min",
   "dev_better_auth_secret_32chars",

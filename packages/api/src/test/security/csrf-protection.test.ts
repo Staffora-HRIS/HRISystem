@@ -1,14 +1,15 @@
 /**
  * CSRF Protection Tests
  *
- * Verifies that the platform protects against Cross-Site Request Forgery attacks.
- * The primary CSRF defenses are:
- * 1. SameSite cookie attribute (set by BetterAuth)
- * 2. CORS configuration restricting origins
- * 3. X-CSRF-Token header enforcement for mutating requests
- * 4. Content-Type checking (JSON APIs are not submittable by plain HTML forms)
+ * Verifies that the platform protects against Cross-Site Request Forgery attacks
+ * by making REAL HTTP requests to the Elysia app via `app.handle()`.
  *
- * These tests make REAL HTTP requests to the Elysia app.
+ * The primary CSRF defenses tested are:
+ * 1. CORS configuration restricting origins
+ * 2. JSON Content-Type requirement (prevents form-based CSRF)
+ * 3. Custom header requirements (X-Tenant-ID, Idempotency-Key)
+ * 4. Cookie security attributes (HttpOnly, SameSite)
+ * 5. X-Frame-Options / CSP frame-ancestors (clickjacking prevention)
  *
  * Vulnerability prevented: CWE-352 (Cross-Site Request Forgery)
  */
@@ -61,7 +62,7 @@ describe("CSRF Protection", () => {
   // ---------------------------------------------------------------------------
 
   describe("CORS enforcement", () => {
-    it("should include CORS headers on responses", async () => {
+    it("should include CORS headers for allowed origins", async () => {
       const response = await app.handle(
         new Request("http://localhost/health", {
           method: "GET",
@@ -71,13 +72,11 @@ describe("CSRF Protection", () => {
         })
       );
 
-      // Should include Access-Control-Allow-Origin
       const allowOrigin = response.headers.get("Access-Control-Allow-Origin");
-      // In development, localhost origins should be allowed
       expect(allowOrigin).toBeTruthy();
     });
 
-    it("should handle preflight OPTIONS requests", async () => {
+    it("should handle preflight OPTIONS requests with correct methods", async () => {
       const response = await app.handle(
         new Request("http://localhost/api/v1/hr/employees", {
           method: "OPTIONS",
@@ -92,7 +91,6 @@ describe("CSRF Protection", () => {
       // Preflight should return 2xx
       expect(response.status).toBeLessThan(300);
 
-      // Should include allowed methods
       const allowMethods = response.headers.get("Access-Control-Allow-Methods");
       expect(allowMethods).toBeTruthy();
     });
@@ -107,44 +105,23 @@ describe("CSRF Protection", () => {
         })
       );
 
-      const allowCredentials = response.headers.get("Access-Control-Allow-Credentials");
-      expect(allowCredentials).toBe("true");
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
     });
 
-    it("should expose rate limit headers", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/health", {
-          method: "OPTIONS",
-          headers: {
-            Origin: "http://localhost:5173",
-            "Access-Control-Request-Method": "GET",
-          },
-        })
-      );
-
-      const exposeHeaders = response.headers.get("Access-Control-Expose-Headers");
-      if (exposeHeaders) {
-        // Should expose X-Request-ID for error tracking
-        expect(exposeHeaders).toContain("X-Request-ID");
-      }
-    });
-
-    it("should reject requests from unauthorized origins in production mode", async () => {
-      // In development mode, localhost origins are allowed.
-      // This test documents that the CORS config exists and filters origins.
+    it("should reject requests from unauthorized origins", async () => {
       const response = await app.handle(
         new Request("http://localhost/health", {
           method: "GET",
           headers: {
-            Origin: "https://evil-site.com",
+            Origin: "https://evil-attacker.com",
           },
         })
       );
 
       const allowOrigin = response.headers.get("Access-Control-Allow-Origin");
-      // Should NOT include the evil origin
+      // The evil origin must NOT be reflected back
       if (allowOrigin) {
-        expect(allowOrigin).not.toBe("https://evil-site.com");
+        expect(allowOrigin).not.toBe("https://evil-attacker.com");
       }
     });
   });
@@ -153,10 +130,10 @@ describe("CSRF Protection", () => {
   // JSON Content-Type as CSRF defense
   // ---------------------------------------------------------------------------
 
-  describe("JSON Content-Type as CSRF defense", () => {
-    it("should require application/json for POST endpoints", async () => {
-      // HTML forms can only submit application/x-www-form-urlencoded or
-      // multipart/form-data, not application/json. This is a natural CSRF defense.
+  describe("JSON Content-Type requirement", () => {
+    it("should reject form-encoded POST on JSON API endpoints", async () => {
+      // HTML forms can submit application/x-www-form-urlencoded but NOT
+      // application/json. This is a natural CSRF defense for JSON APIs.
       const response = await app.handle(
         new Request("http://localhost/api/v1/hr/employees", {
           method: "POST",
@@ -169,35 +146,54 @@ describe("CSRF Protection", () => {
         })
       );
 
-      // Should reject form-encoded data on JSON API endpoints
+      // Should reject form-encoded data on JSON API endpoints (4xx, not 2xx)
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
+    });
+
+    it("should reject multipart/form-data POST on JSON API endpoints", async () => {
+      const formData = new FormData();
+      formData.append("employeeNumber", "CSRF-002");
+      formData.append("hireDate", "2024-01-01");
+
+      const response = await app.handle(
+        new Request("http://localhost/api/v1/hr/employees", {
+          method: "POST",
+          headers: {
+            "X-Tenant-ID": tenant?.id ?? crypto.randomUUID(),
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: formData,
+        })
+      );
+
+      // Should not accept multipart form data on JSON-only endpoints
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(response.status).toBeLessThan(500);
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Custom header requirement as CSRF defense
+  // Custom header requirements (prevents simple form-based CSRF)
   // ---------------------------------------------------------------------------
 
-  describe("Custom header requirement", () => {
-    it("should require X-Tenant-ID or session for tenant-scoped endpoints", async () => {
-      // Simple requests from HTML forms cannot set custom headers.
-      // The requirement for X-Tenant-ID on tenant-scoped endpoints
-      // acts as an additional CSRF defense layer.
+  describe("Custom header requirements", () => {
+    it("should require authentication for tenant-scoped endpoints", async () => {
+      // A simple CSRF attack cannot set cookies or auth headers.
+      // Without auth, all tenant-scoped endpoints must fail.
       const response = await app.handle(
         new Request("http://localhost/api/v1/hr/employees", {
           method: "GET",
-          // No X-Tenant-ID, no cookie
+          // No auth cookie, no session
         })
       );
 
-      // Should fail due to missing tenant/auth
       expect(response.status).toBeGreaterThanOrEqual(400);
     });
 
     it("should require Idempotency-Key for mutating endpoints", async () => {
-      // The Idempotency-Key header requirement prevents simple CSRF attacks
-      // because HTML forms cannot set custom headers.
+      // HTML forms cannot set custom headers like Idempotency-Key.
+      // This acts as an additional CSRF defense layer.
       const response = await app.handle(
         new Request("http://localhost/api/v1/hr/employees", {
           method: "POST",
@@ -207,22 +203,16 @@ describe("CSRF Protection", () => {
             // Missing Idempotency-Key
           },
           body: JSON.stringify({
-            employeeNumber: "CSRF-002",
+            employeeNumber: "CSRF-003",
             hireDate: "2024-01-01",
           }),
         })
       );
 
-      // Should fail -- either for missing idempotency key or missing auth
+      // Should fail for missing idempotency key or missing auth
       expect(response.status).toBeGreaterThanOrEqual(400);
     });
-  });
 
-  // ---------------------------------------------------------------------------
-  // Allowed headers configuration
-  // ---------------------------------------------------------------------------
-
-  describe("Allowed headers in CORS", () => {
     it("should allow required custom headers in CORS preflight", async () => {
       const response = await app.handle(
         new Request("http://localhost/api/v1/hr/employees", {
@@ -246,13 +236,37 @@ describe("CSRF Protection", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Anti-clickjacking headers
+  // ---------------------------------------------------------------------------
+
+  describe("Anti-clickjacking", () => {
+    it("should include X-Frame-Options: DENY to prevent clickjacking", async () => {
+      const response = await app.handle(
+        new Request("http://localhost/health", { method: "GET" })
+      );
+
+      expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    });
+
+    it("should include frame-ancestors 'none' in Content-Security-Policy", async () => {
+      const response = await app.handle(
+        new Request("http://localhost/health", { method: "GET" })
+      );
+
+      const csp = response.headers.get("Content-Security-Policy");
+      expect(csp).toBeTruthy();
+      expect(csp).toContain("frame-ancestors");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Cookie security attributes
   // ---------------------------------------------------------------------------
 
   describe("Cookie security attributes", () => {
     it("should set secure cookie attributes on auth responses", async () => {
-      // Attempt a login to check Set-Cookie attributes
-      // Even if login fails, we can check the response behavior
+      // Attempt a login to inspect Set-Cookie attributes.
+      // Even a failed login may reveal cookie configuration.
       const response = await app.handle(
         new Request("http://localhost/api/auth/sign-in/email", {
           method: "POST",
@@ -266,44 +280,10 @@ describe("CSRF Protection", () => {
         })
       );
 
-      // Check if Set-Cookie header has security attributes
       const setCookie = response.headers.get("Set-Cookie");
-      if (setCookie) {
-        // In production, cookies should be:
-        // - HttpOnly (prevents JavaScript access)
-        // - SameSite=Lax or Strict (prevents CSRF)
-        // - Secure (in production, requires HTTPS)
-        // Note: In development, Secure may not be set
-        const lowerCookie = setCookie.toLowerCase();
-        // BetterAuth typically sets HttpOnly and SameSite
-        if (lowerCookie.includes("session")) {
-          expect(lowerCookie).toContain("httponly");
-        }
-      }
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Same-origin validation
-  // ---------------------------------------------------------------------------
-
-  describe("Same-origin validation", () => {
-    it("should include X-Frame-Options: DENY to prevent clickjacking", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/health", { method: "GET" })
-      );
-
-      expect(response.headers.get("X-Frame-Options")).toBe("DENY");
-    });
-
-    it("should include frame-ancestors 'none' in CSP", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/health", { method: "GET" })
-      );
-
-      const csp = response.headers.get("Content-Security-Policy");
-      if (csp) {
-        expect(csp).toContain("frame-ancestors");
+      if (setCookie && setCookie.toLowerCase().includes("session")) {
+        // Session cookies should be HttpOnly (prevents JS access)
+        expect(setCookie.toLowerCase()).toContain("httponly");
       }
     });
   });

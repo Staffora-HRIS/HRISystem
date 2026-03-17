@@ -51,6 +51,7 @@ import { successionRoutes } from "./modules/succession";
 import { analyticsRoutes } from "./modules/analytics";
 import { competenciesRoutes } from "./modules/competencies";
 import { recruitmentRoutes } from "./modules/recruitment";
+import { clientPortalRoutes } from "./modules/client-portal";
 
 // UK Compliance & HR modules (Phase 11-15)
 import { agencyRoutes } from "./modules/agencies";
@@ -496,6 +497,8 @@ export const app = new Elysia()
       .use(recruitmentRoutes)
       // Portal aggregations
       .use(portalRoutes)
+      // Client Portal (customer-facing portal on staffora.co.uk)
+      .use(clientPortalRoutes)
 
       // UK Compliance modules (Employment Rights Act, GDPR, etc.)
       .use(rightToWorkRoutes)

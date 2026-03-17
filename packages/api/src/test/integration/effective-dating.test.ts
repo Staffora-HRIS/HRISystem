@@ -173,7 +173,7 @@ describe("Effective Dating", () => {
           tenant_id, employee_id, base_salary, currency, pay_frequency, effective_from, effective_to
         )
         VALUES (
-          ${tenant.id}::uuid, ${employeeId}::uuid, 50000, 'USD', 'monthly',
+          ${tenant.id}::uuid, ${employeeId}::uuid, 50000, 'GBP', 'monthly',
           '2024-01-01', '2024-06-30'
         )
         RETURNING id
@@ -194,7 +194,7 @@ describe("Effective Dating", () => {
           tenant_id, employee_id, base_salary, currency, pay_frequency, effective_from, effective_to
         )
         VALUES (
-          ${tenant.id}::uuid, ${employeeId}::uuid, 55000, 'USD', 'monthly',
+          ${tenant.id}::uuid, ${employeeId}::uuid, 55000, 'GBP', 'monthly',
           '2024-07-01', NULL
         )
         RETURNING id
@@ -301,7 +301,7 @@ describe("Effective Dating", () => {
           tenant_id, employee_id, base_salary, currency, pay_frequency, effective_from, effective_to
         )
         VALUES (
-          ${tenant.id}::uuid, ${employeeId}::uuid, 60000, 'USD', 'monthly',
+          ${tenant.id}::uuid, ${employeeId}::uuid, 60000, 'GBP', 'monthly',
           '2025-01-01', '2025-06-30'
         )
       `;

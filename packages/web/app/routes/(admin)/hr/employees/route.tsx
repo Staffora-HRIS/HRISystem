@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   Users,
@@ -25,6 +26,7 @@ import {
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { invalidationPatterns, queryKeys } from "~/lib/query-client";
 
 interface Employee {
   id: string;
@@ -67,21 +69,41 @@ const STATUS_LABELS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 }
 
+interface HireFormState {
+  firstName: string;
+  lastName: string;
+  email: string;
+  hireDate: string;
+  orgUnitId: string;
+  employmentType: string;
+}
+
+const INITIAL_HIRE_FORM: HireFormState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  hireDate: "",
+  orgUnitId: "",
+  employmentType: "full_time",
+};
+
 export default function AdminEmployeesPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [showHireModal, setShowHireModal] = useState(false);
+  const [hireForm, setHireForm] = useState<HireFormState>(INITIAL_HIRE_FORM);
 
   // Fetch employees
   const { data: employeesData, isLoading } = useQuery({
@@ -101,6 +123,65 @@ export default function AdminEmployeesPage() {
     queryKey: ["admin-org-units"],
     queryFn: () =>
       api.get<{ items: { id: string; name: string }[] }>("/hr/org-units?limit=100"),
+  });
+
+  // Fetch positions for hire form
+  const { data: positionsData } = useQuery({
+    queryKey: ["admin-positions-for-hire"],
+    queryFn: () =>
+      api.get<{ items: { id: string; title: string; orgUnitId: string | null }[] }>("/hr/positions?limit=100"),
+    enabled: showHireModal,
+  });
+
+  // Hire employee mutation
+  const hireMutation = useMutation({
+    mutationFn: (data: HireFormState) => {
+      // Find first position in the selected org unit (or first available)
+      const availablePositions = positionsData?.items ?? [];
+      const matchingPosition = data.orgUnitId
+        ? availablePositions.find((p) => p.orgUnitId === data.orgUnitId)
+        : availablePositions[0];
+
+      return api.post("/hr/employees", {
+        personal: {
+          first_name: data.firstName,
+          last_name: data.lastName,
+        },
+        contract: {
+          hire_date: data.hireDate,
+          contract_type: "permanent",
+          employment_type: data.employmentType,
+          fte: data.employmentType === "full_time" ? 1 : 0.5,
+        },
+        position: {
+          position_id: matchingPosition?.id ?? "",
+          org_unit_id: data.orgUnitId,
+          is_primary: true,
+        },
+        compensation: {
+          base_salary: 0,
+          currency: "GBP",
+          pay_frequency: "monthly",
+        },
+        contacts: data.email
+          ? [{ contact_type: "email", value: data.email, is_primary: true }]
+          : [],
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.employees.all() });
+      invalidationPatterns.employee().forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      toast.success("Employee hired successfully");
+      setShowHireModal(false);
+      setHireForm(INITIAL_HIRE_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to hire employee", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
   });
 
   // Calculate stats from data
@@ -326,7 +407,7 @@ export default function AdminEmployeesPage() {
 
       {/* Hire Modal */}
       {showHireModal && (
-        <Modal open onClose={() => setShowHireModal(false)} size="lg">
+        <Modal open onClose={() => { setShowHireModal(false); setHireForm(INITIAL_HIRE_FORM); }} size="lg">
           <ModalHeader>
             <h3 className="text-lg font-semibold">Hire New Employee</h3>
           </ModalHeader>
@@ -335,12 +416,39 @@ export default function AdminEmployeesPage() {
               Fill in the details below to hire a new employee.
             </p>
             <div className="grid grid-cols-2 gap-4">
-              <Input label="First Name" placeholder="Enter first name" required />
-              <Input label="Last Name" placeholder="Enter last name" required />
-              <Input label="Email" type="email" placeholder="Enter email" required />
-              <Input label="Hire Date" type="date" required />
+              <Input
+                label="First Name"
+                placeholder="Enter first name"
+                required
+                value={hireForm.firstName}
+                onChange={(e) => setHireForm((f) => ({ ...f, firstName: e.target.value }))}
+              />
+              <Input
+                label="Last Name"
+                placeholder="Enter last name"
+                required
+                value={hireForm.lastName}
+                onChange={(e) => setHireForm((f) => ({ ...f, lastName: e.target.value }))}
+              />
+              <Input
+                label="Email"
+                type="email"
+                placeholder="Enter email"
+                required
+                value={hireForm.email}
+                onChange={(e) => setHireForm((f) => ({ ...f, email: e.target.value }))}
+              />
+              <Input
+                label="Hire Date"
+                type="date"
+                required
+                value={hireForm.hireDate}
+                onChange={(e) => setHireForm((f) => ({ ...f, hireDate: e.target.value }))}
+              />
               <Select
                 label="Department"
+                value={hireForm.orgUnitId}
+                onChange={(e) => setHireForm((f) => ({ ...f, orgUnitId: e.target.value }))}
                 options={[
                   { value: "", label: "Select department" },
                   ...(departments?.items.map((d) => ({ value: d.id, label: d.name })) ?? []),
@@ -348,26 +456,25 @@ export default function AdminEmployeesPage() {
               />
               <Select
                 label="Employment Type"
+                value={hireForm.employmentType}
+                onChange={(e) => setHireForm((f) => ({ ...f, employmentType: e.target.value }))}
                 options={[
                   { value: "full_time", label: "Full Time" },
                   { value: "part_time", label: "Part Time" },
-                  { value: "contractor", label: "Contractor" },
-                  { value: "intern", label: "Intern" },
                 ]}
               />
             </div>
           </ModalBody>
           <ModalFooter>
-            <Button variant="outline" onClick={() => setShowHireModal(false)}>
+            <Button variant="outline" onClick={() => { setShowHireModal(false); setHireForm(INITIAL_HIRE_FORM); }} disabled={hireMutation.isPending}>
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                toast.info("Coming Soon", { message: "Employee creation via this form will be available in a future update." });
-                setShowHireModal(false);
-              }}
+              disabled={!hireForm.firstName || !hireForm.lastName || !hireForm.hireDate || !hireForm.orgUnitId || hireMutation.isPending}
+              loading={hireMutation.isPending}
+              onClick={() => hireMutation.mutate(hireForm)}
             >
-              Hire Employee
+              {hireMutation.isPending ? "Hiring..." : "Hire Employee"}
             </Button>
           </ModalFooter>
         </Modal>

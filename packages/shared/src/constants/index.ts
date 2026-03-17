@@ -177,23 +177,62 @@ export const DateFormats = {
 // =============================================================================
 
 export const SystemRoles = {
-  /** Super admin with full access */
+  /** Super admin with full platform access */
   SUPER_ADMIN: "super_admin",
 
   /** Tenant admin with tenant-level access */
   TENANT_ADMIN: "tenant_admin",
 
-  /** HR manager role */
-  HR_MANAGER: "hr_manager",
+  /** HR admin with full HR module access */
+  HR_ADMIN: "hr_admin",
 
-  /** HR staff role */
-  HR_STAFF: "hr_staff",
+  /** HR officer with day-to-day HR operations */
+  HR_OFFICER: "hr_officer",
 
-  /** Manager role with team access */
+  /** Payroll admin with payroll module access */
+  PAYROLL_ADMIN: "payroll_admin",
+
+  /** Recruitment admin with recruitment module access */
+  RECRUITMENT_ADMIN: "recruitment_admin",
+
+  /** LMS admin with learning management access */
+  LMS_ADMIN: "lms_admin",
+
+  /** Compliance officer with compliance oversight */
+  COMPLIANCE_OFFICER: "compliance_officer",
+
+  /** Health & safety officer */
+  HEALTH_SAFETY_OFFICER: "health_safety_officer",
+
+  /** Department head with department-wide access */
+  DEPARTMENT_HEAD: "department_head",
+
+  /** Line manager with direct reports access */
+  LINE_MANAGER: "line_manager",
+
+  /** Backwards-compatible alias for line_manager */
   MANAGER: "manager",
 
-  /** Employee role with self-service access */
+  /** Team leader with team-level access */
+  TEAM_LEADER: "team_leader",
+
+  /** Employee with self-service access */
   EMPLOYEE: "employee",
+
+  /** Contractor with limited access */
+  CONTRACTOR: "contractor",
+
+  /** Temporary worker with limited access */
+  TEMP_WORKER: "temp_worker",
+
+  /** Intern with limited access */
+  INTERN: "intern",
+
+  /** External auditor with read-only audit access */
+  EXTERNAL_AUDITOR: "external_auditor",
+
+  /** Board member with executive reporting access */
+  BOARD_MEMBER: "board_member",
 } as const;
 
 export type SystemRole = (typeof SystemRoles)[keyof typeof SystemRoles];

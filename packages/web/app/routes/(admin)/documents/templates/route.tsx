@@ -4,7 +4,7 @@ import {
   FileText,
   Plus,
   Search,
-  MoreHorizontal,
+  Pencil,
 } from "lucide-react";
 import {
   Card,
@@ -67,7 +67,7 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -81,6 +81,7 @@ export default function DocumentTemplatesPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
 
   // Create form state
   const [formName, setFormName] = useState("");
@@ -121,6 +122,30 @@ export default function DocumentTemplatesPage() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (data: {
+      id: string;
+      name: string;
+      description?: string;
+      category: string;
+      format: string;
+    }) => {
+      const { id, ...body } = data;
+      return api.put(`/documents/templates/${id}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin-document-templates"],
+      });
+      toast.success("Template updated successfully");
+      resetForm();
+      setEditingTemplate(null);
+    },
+    onError: () => {
+      toast.error("Failed to update template");
+    },
+  });
+
   const templates = templatesData?.items ?? [];
 
   const stats = useMemo(() => ({
@@ -150,9 +175,39 @@ export default function DocumentTemplatesPage() {
     });
   }
 
-  function handleCloseModal() {
+  function handleEdit(template: DocumentTemplate) {
+    setFormName(template.name);
+    setFormDescription(template.description || "");
+    setFormCategory(template.category);
+    setFormFormat(template.format);
+    setEditingTemplate(template);
+  }
+
+  function handleUpdate() {
+    const trimmedName = formName.trim();
+    if (!trimmedName || !editingTemplate) {
+      toast.error("Template name is required");
+      return;
+    }
+    updateMutation.mutate({
+      id: editingTemplate.id,
+      name: trimmedName,
+      description: formDescription.trim() || undefined,
+      category: formCategory,
+      format: formFormat,
+    });
+  }
+
+  function handleCloseCreateModal() {
     if (!createMutation.isPending) {
       setShowCreateModal(false);
+      resetForm();
+    }
+  }
+
+  function handleCloseEditModal() {
+    if (!updateMutation.isPending) {
+      setEditingTemplate(null);
       resetForm();
     }
   }
@@ -234,17 +289,15 @@ export default function DocumentTemplatesPage() {
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
-            toast.info("Coming Soon", {
-              message: "Template editing will be available in a future update.",
-            });
+            handleEdit(row);
           }}
-          aria-label={`Actions for ${row.name}`}
+          aria-label={`Edit ${row.name}`}
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <Pencil className="h-4 w-4" />
         </Button>
       ),
     },
-  ], [toast]);
+  ], []);
 
   return (
     <div className="space-y-6">
@@ -345,7 +398,7 @@ export default function DocumentTemplatesPage() {
       </Card>
 
       {/* Create Template Modal */}
-      <Modal open={showCreateModal} onClose={handleCloseModal} size="lg">
+      <Modal open={showCreateModal} onClose={handleCloseCreateModal} size="lg">
         <ModalHeader title="Create Document Template" />
         <ModalBody>
           <div className="space-y-4">
@@ -396,7 +449,7 @@ export default function DocumentTemplatesPage() {
         <ModalFooter>
           <Button
             variant="outline"
-            onClick={handleCloseModal}
+            onClick={handleCloseCreateModal}
             disabled={createMutation.isPending}
           >
             Cancel
@@ -407,6 +460,73 @@ export default function DocumentTemplatesPage() {
             loading={createMutation.isPending}
           >
             {createMutation.isPending ? "Creating..." : "Create Template"}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Edit Template Modal */}
+      <Modal open={editingTemplate !== null} onClose={handleCloseEditModal} size="lg">
+        <ModalHeader title="Edit Document Template" />
+        <ModalBody>
+          <div className="space-y-4">
+            <Input
+              label="Template Name"
+              placeholder="e.g. Standard Employment Contract"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              required
+              id="edit-template-name"
+            />
+            <Textarea
+              label="Description"
+              placeholder="Describe the purpose of this template..."
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              rows={3}
+              id="edit-template-description"
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Select
+                label="Category"
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+                options={[
+                  { value: "offer_letter", label: "Offer Letter" },
+                  { value: "contract", label: "Contract" },
+                  { value: "policy", label: "Policy" },
+                  { value: "certificate", label: "Certificate" },
+                  { value: "nda", label: "NDA" },
+                  { value: "custom", label: "Custom" },
+                ]}
+                id="edit-template-category"
+              />
+              <Select
+                label="Format"
+                value={formFormat}
+                onChange={(e) => setFormFormat(e.target.value)}
+                options={[
+                  { value: "pdf", label: "PDF" },
+                  { value: "docx", label: "DOCX" },
+                ]}
+                id="edit-template-format"
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={handleCloseEditModal}
+            disabled={updateMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdate}
+            disabled={!formName.trim() || updateMutation.isPending}
+            loading={updateMutation.isPending}
+          >
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         </ModalFooter>
       </Modal>

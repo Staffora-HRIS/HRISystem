@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Award,
   Target,
@@ -6,11 +7,21 @@ import {
   AlertTriangle,
   CheckCircle,
 } from "lucide-react";
-import { Card, CardHeader, CardBody } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { useToast } from "~/components/ui/toast";
+import {
+  Card,
+  CardHeader,
+  CardBody,
+  Button,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Select,
+  Textarea,
+  useToast,
+} from "~/components/ui";
 import { CompetencyCard } from "~/components/competencies";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface EmployeeCompetency {
   id: string;
@@ -37,6 +48,57 @@ interface CompetencyGap {
 
 export default function MyCompetenciesPage() {
   const toast = useToast();
+  const queryClient = useQueryClient();
+
+  // Development plan modal state
+  const [showDevPlan, setShowDevPlan] = useState(false);
+
+  // Self-assessment modal state
+  const [assessingCompetency, setAssessingCompetency] = useState<EmployeeCompetency | null>(null);
+  const [selfAssessmentLevel, setSelfAssessmentLevel] = useState("3");
+  const [assessmentNotes, setAssessmentNotes] = useState("");
+
+  // Self-assessment mutation
+  const selfAssessmentMutation = useMutation({
+    mutationFn: (data: {
+      id: string;
+      self_assessment_level: number;
+      assessment_notes?: string;
+    }) => {
+      const { id, ...body } = data;
+      return api.patch(`/competencies/employees/assessments/${id}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-competencies"] });
+      queryClient.invalidateQueries({ queryKey: ["my-competency-gaps"] });
+      toast.success("Self-assessment submitted successfully");
+      setAssessingCompetency(null);
+      setSelfAssessmentLevel("3");
+      setAssessmentNotes("");
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to submit self-assessment";
+      toast.error(message);
+    },
+  });
+
+  function handleOpenSelfAssessment(comp: EmployeeCompetency) {
+    setSelfAssessmentLevel(
+      comp.selfAssessmentLevel !== null ? String(comp.selfAssessmentLevel) : "3"
+    );
+    setAssessmentNotes(comp.assessmentNotes || "");
+    setAssessingCompetency(comp);
+  }
+
+  function handleSubmitSelfAssessment() {
+    if (!assessingCompetency) return;
+    selfAssessmentMutation.mutate({
+      id: assessingCompetency.id,
+      self_assessment_level: Number(selfAssessmentLevel),
+      assessment_notes: assessmentNotes.trim() || undefined,
+    });
+  }
 
   const { data: competencies, isLoading: isLoadingCompetencies } = useQuery({
     queryKey: ["my-competencies"],
@@ -137,7 +199,7 @@ export default function MyCompetenciesPage() {
                 <TrendingUp className="h-5 w-5 text-yellow-600" />
                 Development Priorities
               </h3>
-              <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Development plans will be available in a future update." })}>
+              <Button variant="outline" size="sm" onClick={() => setShowDevPlan(true)}>
                 View Development Plan
               </Button>
             </div>
@@ -190,9 +252,15 @@ export default function MyCompetenciesPage() {
               <Award className="h-5 w-5 text-blue-600" />
               My Assessed Competencies
             </h3>
-            <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Self-assessment requests will be available in a future update." })}>
-              Request Self-Assessment
-            </Button>
+            {competencies && competencies.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleOpenSelfAssessment(competencies[0])}
+              >
+                Start Self-Assessment
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardBody className="p-4">
@@ -207,23 +275,180 @@ export default function MyCompetenciesPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {competencies?.map((comp) => (
-                <CompetencyCard
+                <div
                   key={comp.id}
-                  competency={{
-                    id: comp.competencyId,
-                    code: "",
-                    name: comp.competencyName,
-                    category: comp.competencyCategory,
-                    currentLevel: comp.currentLevel,
-                    targetLevel: comp.targetLevel,
+                  className="cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleOpenSelfAssessment(comp)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleOpenSelfAssessment(comp);
+                    }
                   }}
-                  showAssessment
-                />
+                  aria-label={`Self-assess ${comp.competencyName}`}
+                >
+                  <CompetencyCard
+                    competency={{
+                      id: comp.competencyId,
+                      code: "",
+                      name: comp.competencyName,
+                      category: comp.competencyCategory,
+                      currentLevel: comp.currentLevel,
+                      targetLevel: comp.targetLevel,
+                    }}
+                    showAssessment
+                  />
+                </div>
               ))}
             </div>
           )}
         </CardBody>
       </Card>
+      {/* Development Plan Modal */}
+      <Modal open={showDevPlan} onClose={() => setShowDevPlan(false)} size="lg">
+        <ModalHeader title="Development Plan" />
+        <ModalBody>
+          {gaps && gaps.length > 0 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Below are your competency gaps ordered by priority. Focus on closing critical
+                gaps first to meet role requirements.
+              </p>
+              {gaps
+                .filter((g) => g.gap > 0)
+                .sort((a, b) => b.gap - a.gap)
+                .map((gap) => (
+                  <div
+                    key={gap.competencyId}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{gap.competencyName}</p>
+                      <p className="text-sm text-gray-500">
+                        {gap.competencyCategory} | Current: Level {gap.currentLevel} |
+                        Required: Level {gap.requiredLevel}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-1 rounded text-sm font-medium ${
+                          gap.gap >= 2
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        Gap: {gap.gap}
+                      </span>
+                      {gap.isRequired && (
+                        <span className="px-2 py-1 rounded text-xs bg-red-50 text-red-600">
+                          Required
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <CheckCircle className="h-12 w-12 mx-auto text-green-500 mb-2" />
+              <p>No competency gaps found. You are meeting all role requirements.</p>
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setShowDevPlan(false)}>
+            Close
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Self-Assessment Modal */}
+      <Modal
+        open={assessingCompetency !== null}
+        onClose={() => {
+          if (!selfAssessmentMutation.isPending) {
+            setAssessingCompetency(null);
+          }
+        }}
+        size="lg"
+      >
+        <ModalHeader
+          title={`Self-Assessment: ${assessingCompetency?.competencyName ?? ""}`}
+        />
+        <ModalBody>
+          {assessingCompetency && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+                <p className="text-sm">
+                  <span className="font-medium">Category:</span>{" "}
+                  {assessingCompetency.competencyCategory}
+                </p>
+                {assessingCompetency.currentLevel !== null && (
+                  <p className="text-sm">
+                    <span className="font-medium">Current Level:</span>{" "}
+                    {assessingCompetency.currentLevel}
+                  </p>
+                )}
+                {assessingCompetency.targetLevel !== null && (
+                  <p className="text-sm">
+                    <span className="font-medium">Target Level:</span>{" "}
+                    {assessingCompetency.targetLevel}
+                  </p>
+                )}
+                {assessingCompetency.managerAssessmentLevel !== null && (
+                  <p className="text-sm">
+                    <span className="font-medium">Manager Assessment:</span>{" "}
+                    Level {assessingCompetency.managerAssessmentLevel}
+                  </p>
+                )}
+              </div>
+              <Select
+                label="Your Self-Assessment Level"
+                value={selfAssessmentLevel}
+                onChange={(e) => setSelfAssessmentLevel(e.target.value)}
+                options={[
+                  { value: "1", label: "1 - Beginner" },
+                  { value: "2", label: "2 - Developing" },
+                  { value: "3", label: "3 - Competent" },
+                  { value: "4", label: "4 - Advanced" },
+                  { value: "5", label: "5 - Expert" },
+                ]}
+                id="self-assessment-level"
+              />
+              <Textarea
+                label="Assessment Notes"
+                placeholder="Describe your experience and evidence for this level..."
+                value={assessmentNotes}
+                onChange={(e) => setAssessmentNotes(e.target.value)}
+                rows={4}
+                id="assessment-notes"
+              />
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!selfAssessmentMutation.isPending) {
+                setAssessingCompetency(null);
+              }
+            }}
+            disabled={selfAssessmentMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitSelfAssessment}
+            disabled={selfAssessmentMutation.isPending}
+            loading={selfAssessmentMutation.isPending}
+          >
+            {selfAssessmentMutation.isPending ? "Submitting..." : "Submit Assessment"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

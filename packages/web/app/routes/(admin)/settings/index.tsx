@@ -8,7 +8,7 @@ import {
   Database,
   ChevronRight,
 } from "lucide-react";
-import { Card, CardBody } from "~/components/ui";
+import { Card, CardBody, useToast } from "~/components/ui";
 
 interface SettingsSection {
   id: string;
@@ -57,20 +57,28 @@ const settingsSections: SettingsSection[] = [
     name: "Appearance",
     description: "Customize branding, themes, and UI preferences",
     icon: Palette,
-    href: "/admin/settings/appearance",
-    available: false,
+    href: "/admin/settings/tenant",
+    available: true,
   },
   {
     id: "data",
     name: "Data Management",
     description: "Import, export, and data retention policies",
     icon: Database,
-    href: "/admin/settings/data",
-    available: false,
+    href: "/admin/settings/tenant",
+    available: true,
   },
 ];
 
 export default function AdminSettingsIndexPage() {
+  const toast = useToast();
+
+  const handleSectionClick = (section: SettingsSection) => {
+    if (!section.available) {
+      toast.info(`${section.name} settings are being configured through Tenant Settings.`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -84,39 +92,22 @@ export default function AdminSettingsIndexPage() {
         {settingsSections.map((section) => (
           <Card
             key={section.id}
-            className={section.available ? "hover:shadow-md transition-shadow" : "opacity-60"}
+            className="hover:shadow-md transition-shadow"
           >
-            {section.available ? (
-              <Link to={section.href}>
-                <CardBody className="flex items-start gap-4 p-5">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 flex-shrink-0">
-                    <section.icon className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">{section.name}</h3>
-                      <ChevronRight className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1">{section.description}</p>
-                  </div>
-                </CardBody>
-              </Link>
-            ) : (
+            <Link to={section.href} onClick={() => handleSectionClick(section)}>
               <CardBody className="flex items-start gap-4 p-5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 flex-shrink-0">
-                  <section.icon className="h-6 w-6 text-gray-400" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 flex-shrink-0">
+                  <section.icon className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-500">{section.name}</h3>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                      Coming Soon
-                    </span>
+                    <h3 className="font-semibold text-gray-900">{section.name}</h3>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
                   </div>
-                  <p className="text-sm text-gray-400 mt-1">{section.description}</p>
+                  <p className="text-sm text-gray-500 mt-1">{section.description}</p>
                 </div>
               </CardBody>
-            )}
+            </Link>
           </Card>
         ))}
       </div>

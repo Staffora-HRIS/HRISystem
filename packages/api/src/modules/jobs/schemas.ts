@@ -26,14 +26,17 @@ export const JobStatusSchema = t.Union([
 export type JobStatus = Static<typeof JobStatusSchema>;
 
 /**
- * FLSA status values
+ * Working Time Regulations (WTR) status values.
+ * UK equivalent of the removed US FLSA classification.
+ * - subject_to_wtr: Worker is subject to 48-hour weekly limit (default)
+ * - opted_out: Worker has signed a WTR opt-out agreement
  */
-export const FlsaStatusSchema = t.Union([
-  t.Literal("exempt"),
-  t.Literal("non_exempt"),
+export const WtrStatusSchema = t.Union([
+  t.Literal("subject_to_wtr"),
+  t.Literal("opted_out"),
 ]);
 
-export type FlsaStatus = Static<typeof FlsaStatusSchema>;
+export type WtrStatus = Static<typeof WtrStatusSchema>;
 
 // =============================================================================
 // Common Schemas
@@ -83,8 +86,8 @@ export const CreateJobSchema = t.Object({
   subfamily: t.Optional(t.String({ maxLength: 100 })),
   job_level: t.Optional(t.Number({ minimum: 0 })),
   job_grade: t.Optional(t.String({ maxLength: 20 })),
-  flsa_status: t.Optional(FlsaStatusSchema),
-  eeo_category: t.Optional(t.String({ maxLength: 50 })),
+  wtr_status: t.Optional(WtrStatusSchema),
+  soc_code: t.Optional(t.String({ maxLength: 50 })),
   summary: t.Optional(t.String({ maxLength: 10000 })),
   essential_functions: t.Optional(t.String({ maxLength: 10000 })),
   qualifications: t.Optional(t.String({ maxLength: 10000 })),
@@ -117,8 +120,8 @@ export const UpdateJobSchema = t.Partial(
     subfamily: t.Union([t.String({ maxLength: 100 }), t.Null()]),
     job_level: t.Union([t.Number({ minimum: 0 }), t.Null()]),
     job_grade: t.Union([t.String({ maxLength: 20 }), t.Null()]),
-    flsa_status: t.Union([FlsaStatusSchema, t.Null()]),
-    eeo_category: t.Union([t.String({ maxLength: 50 }), t.Null()]),
+    wtr_status: t.Union([WtrStatusSchema, t.Null()]),
+    soc_code: t.Union([t.String({ maxLength: 50 }), t.Null()]),
     summary: t.Union([t.String({ maxLength: 10000 }), t.Null()]),
     essential_functions: t.Union([t.String({ maxLength: 10000 }), t.Null()]),
     qualifications: t.Union([t.String({ maxLength: 10000 }), t.Null()]),
@@ -147,8 +150,8 @@ export const JobResponseSchema = t.Object({
   subfamily: t.Union([t.String(), t.Null()]),
   job_level: t.Union([t.Number(), t.Null()]),
   job_grade: t.Union([t.String(), t.Null()]),
-  flsa_status: t.Union([t.String(), t.Null()]),
-  eeo_category: t.Union([t.String(), t.Null()]),
+  wtr_status: t.Union([t.String(), t.Null()]),
+  soc_code: t.Union([t.String(), t.Null()]),
   summary: t.Union([t.String(), t.Null()]),
   essential_functions: t.Union([t.String(), t.Null()]),
   qualifications: t.Union([t.String(), t.Null()]),

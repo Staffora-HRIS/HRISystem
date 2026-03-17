@@ -130,7 +130,7 @@ export function ErrorBoundary() {
     }
   } else if (error instanceof Error) {
     message = error.message;
-    description = error.stack || description;
+    description = import.meta.env.DEV ? (error.stack || description) : description;
   }
 
   return (

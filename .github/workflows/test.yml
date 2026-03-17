@@ -60,10 +60,18 @@ jobs:
       - name: Build all packages
         run: bun run build
 
+      - name: Initialize database schema
+        run: |
+          # Create app schema, hris_app role, and RLS helper functions
+          # Required before migrations can run (mirrors deploy.yml)
+          PGPASSWORD=hris_dev_password psql -h localhost -U hris -d hris -f docker/postgres/init.sql
+        env:
+          PGCLIENTENCODING: UTF8
+
       - name: Run migrations
         env:
           DB_HOST: localhost
-          DB_PORT: 5432
+          DB_PORT: '5432'
           DB_NAME: hris
           DB_USER: hris
           DB_PASSWORD: hris_dev_password
@@ -72,37 +80,57 @@ jobs:
       - name: Run API tests with coverage
         env:
           TEST_DB_HOST: localhost
-          TEST_DB_PORT: 5432
+          TEST_DB_PORT: '5432'
           TEST_DB_NAME: hris
           TEST_DB_USER: hris_app
-          TEST_DB_PASSWORD: hris_dev_password
+          TEST_DB_PASSWORD: hris_app_dev_password
           TEST_DB_ADMIN_USER: hris
           TEST_DB_ADMIN_PASSWORD: hris_dev_password
           TEST_REDIS_HOST: localhost
-          TEST_REDIS_PORT: 6379
+          TEST_REDIS_PORT: '6379'
           TEST_REDIS_PASSWORD: staffora_redis_ci
           REDIS_URL: redis://:staffora_redis_ci@localhost:6379
+          BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+          SESSION_SECRET: test-session-secret-32-characters-long
+          CSRF_SECRET: test-csrf-secret-that-is-32-chars
         run: bun test packages/api/src/test --coverage --coverage-reporter=lcov --coverage-dir=packages/api/coverage
 
       - name: Run shared package tests
         run: bun test packages/shared
 
-      - name: API Coverage Summary
+      - name: API Coverage Summary & Enforcement
         if: always()
         run: |
+          MIN_COVERAGE=60  # Minimum line coverage percentage — increase as coverage improves
           echo "## API Test Coverage" >> $GITHUB_STEP_SUMMARY
+
           if [ -f packages/api/coverage/lcov.info ]; then
-            echo "Coverage report generated. See uploaded artifacts for details." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
             # Extract summary from lcov.info
             LINES_FOUND=$(grep -c "^DA:" packages/api/coverage/lcov.info 2>/dev/null || echo "0")
             LINES_HIT=$(grep "^DA:" packages/api/coverage/lcov.info 2>/dev/null | grep -v ",0$" | wc -l || echo "0")
             FN_FOUND=$(grep -c "^FN:" packages/api/coverage/lcov.info 2>/dev/null || echo "0")
             FN_HIT=$(grep -c "^FNDA:[1-9]" packages/api/coverage/lcov.info 2>/dev/null || echo "0")
-            echo "| Metric | Hit | Total |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|-----|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| Lines | $LINES_HIT | $LINES_FOUND |" >> $GITHUB_STEP_SUMMARY
-            echo "| Functions | $FN_HIT | $FN_FOUND |" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$LINES_FOUND" -gt 0 ]; then
+              COVERAGE=$(( LINES_HIT * 100 / LINES_FOUND ))
+            else
+              COVERAGE=0
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Hit | Total | % |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----|-------|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| Lines | $LINES_HIT | $LINES_FOUND | ${COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Functions | $FN_HIT | $FN_FOUND | - |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$COVERAGE" -lt "$MIN_COVERAGE" ]; then
+              echo "::error::API line coverage ${COVERAGE}% is below minimum threshold of ${MIN_COVERAGE}%"
+              echo "> **Coverage gate FAILED**: ${COVERAGE}% < ${MIN_COVERAGE}% minimum" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            else
+              echo "> **Coverage gate passed**: ${COVERAGE}% >= ${MIN_COVERAGE}% minimum" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "No coverage report found." >> $GITHUB_STEP_SUMMARY
           fi
@@ -130,21 +158,38 @@ jobs:
       - name: Run web tests with coverage
         run: bun run test:web -- --run --coverage
 
-      - name: Frontend Coverage Summary
+      - name: Frontend Coverage Summary & Enforcement
         if: always()
         run: |
+          MIN_COVERAGE=50  # Minimum line coverage percentage — increase as coverage improves
           echo "## Frontend Test Coverage" >> $GITHUB_STEP_SUMMARY
+
           if [ -f packages/web/coverage/lcov.info ]; then
-            echo "Coverage report generated. See uploaded artifacts for details." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
             LINES_FOUND=$(grep -c "^DA:" packages/web/coverage/lcov.info 2>/dev/null || echo "0")
             LINES_HIT=$(grep "^DA:" packages/web/coverage/lcov.info 2>/dev/null | grep -v ",0$" | wc -l || echo "0")
             FN_FOUND=$(grep -c "^FN:" packages/web/coverage/lcov.info 2>/dev/null || echo "0")
             FN_HIT=$(grep -c "^FNDA:[1-9]" packages/web/coverage/lcov.info 2>/dev/null || echo "0")
-            echo "| Metric | Hit | Total |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|-----|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| Lines | $LINES_HIT | $LINES_FOUND |" >> $GITHUB_STEP_SUMMARY
-            echo "| Functions | $FN_HIT | $FN_FOUND |" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$LINES_FOUND" -gt 0 ]; then
+              COVERAGE=$(( LINES_HIT * 100 / LINES_FOUND ))
+            else
+              COVERAGE=0
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Hit | Total | % |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----|-------|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| Lines | $LINES_HIT | $LINES_FOUND | ${COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Functions | $FN_HIT | $FN_FOUND | - |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$COVERAGE" -lt "$MIN_COVERAGE" ]; then
+              echo "::error::Frontend line coverage ${COVERAGE}% is below minimum threshold of ${MIN_COVERAGE}%"
+              echo "> **Coverage gate FAILED**: ${COVERAGE}% < ${MIN_COVERAGE}% minimum" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            else
+              echo "> **Coverage gate passed**: ${COVERAGE}% >= ${MIN_COVERAGE}% minimum" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "No coverage report found." >> $GITHUB_STEP_SUMMARY
           fi

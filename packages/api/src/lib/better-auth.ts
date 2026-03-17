@@ -65,15 +65,30 @@ const DEFAULT_TRUSTED_ORIGINS = [
 /**
  * Environment configuration for Better Auth
  */
-const getAuthConfig = () => ({
-  secret: process.env["BETTER_AUTH_SECRET"] || process.env["SESSION_SECRET"] || "development-secret-change-in-production",
-  baseURL: process.env["BETTER_AUTH_URL"] || process.env["API_URL"] || "http://localhost:3000",
+const getAuthConfig = () => {
+  const secret = process.env["BETTER_AUTH_SECRET"] || process.env["SESSION_SECRET"];
+  if (!secret) {
+    if (process.env["NODE_ENV"] === "production") {
+      throw new Error(
+        "FATAL: BETTER_AUTH_SECRET or SESSION_SECRET must be set in production. " +
+        "Generate a secure 32+ character secret and set it in the environment."
+      );
+    }
+    console.warn(
+      "[Auth] WARNING: No BETTER_AUTH_SECRET or SESSION_SECRET set. " +
+      "Using insecure development default. DO NOT use in production."
+    );
+  }
+  return {
+    secret: secret || "insecure-dev-only-secret-do-not-use-in-production",
+    baseURL: process.env["BETTER_AUTH_URL"] || process.env["API_URL"] || "http://localhost:3000",
   // FIX: Use comma-separated CORS_ORIGIN env var or default to all dev ports
   // This ensures Better Auth trustedOrigins match Elysia CORS config (app.ts)
   trustedOrigins: process.env["CORS_ORIGIN"]
     ? process.env["CORS_ORIGIN"].split(",").map(s => s.trim())
     : DEFAULT_TRUSTED_ORIGINS,
-});
+  };
+};
 
 /**
  * Create a pg Pool for Better Auth
@@ -271,7 +286,7 @@ export function createBetterAuth() {
       useSecureCookies: process.env["NODE_ENV"] === "production",
       defaultCookieAttributes: {
         httpOnly: true,
-        sameSite: "lax" as const,
+        sameSite: (process.env["NODE_ENV"] === "production" ? "strict" : "lax") as "strict" | "lax",
         path: "/",
         secure: process.env["NODE_ENV"] === "production",
       },

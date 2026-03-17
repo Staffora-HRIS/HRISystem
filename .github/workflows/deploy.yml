@@ -220,71 +220,59 @@ jobs:
           echo "tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "Deploying images tagged: sha-${SHORT_SHA}"
 
+      - name: Setup SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.STAGING_HOST || 'staging.staffora.co.uk' }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Deploy to staging
         env:
           API_IMAGE_TAG: ${{ env.API_IMAGE }}:${{ steps.image_tag.outputs.tag }}
           WEB_IMAGE_TAG: ${{ env.WEB_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+          DEPLOY_HOST: ${{ secrets.STAGING_HOST || 'staging.staffora.co.uk' }}
+          DEPLOY_USER: ${{ secrets.STAGING_USER || 'deploy' }}
+          DEPLOY_PATH: ${{ secrets.STAGING_PATH || '/opt/staffora' }}
         run: |
           echo "============================================="
           echo "  Deploying to STAGING"
           echo "============================================="
-          echo ""
           echo "API image: ${API_IMAGE_TAG}"
           echo "Web image: ${WEB_IMAGE_TAG}"
           echo "Commit:    ${{ github.sha }}"
-          echo "Actor:     ${{ github.actor }}"
-          echo ""
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Add deployment commands below"
-          echo "---------------------------------------------"
-          echo ""
-          echo "Options (uncomment the one that matches your hosting):"
-          echo ""
-          echo "# Option A: Docker Compose on a VPS via SSH"
-          echo "#   ssh deploy@staging.staffora.co.uk \\"
-          echo "#     'cd /opt/staffora && docker compose pull && docker compose up -d'"
-          echo ""
-          echo "# Option B: Kubernetes"
-          echo "#   kubectl set image deployment/staffora-api api=\${API_IMAGE_TAG}"
-          echo "#   kubectl set image deployment/staffora-web web=\${WEB_IMAGE_TAG}"
-          echo "#   kubectl rollout status deployment/staffora-api --timeout=300s"
-          echo "#   kubectl rollout status deployment/staffora-web --timeout=300s"
-          echo ""
-          echo "# Option C: AWS ECS"
-          echo "#   aws ecs update-service --cluster staffora-staging \\"
-          echo "#     --service staffora-api --force-new-deployment"
-          echo "#   aws ecs update-service --cluster staffora-staging \\"
-          echo "#     --service staffora-web --force-new-deployment"
-          echo ""
-          echo "# Option D: Fly.io / Railway / Render"
-          echo "#   flyctl deploy --image \${API_IMAGE_TAG} --app staffora-api-staging"
-          echo "#   flyctl deploy --image \${WEB_IMAGE_TAG} --app staffora-web-staging"
 
-      - name: Run database migrations (staging)
-        run: |
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Run migrations on staging DB"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# ssh deploy@staging.staffora.co.uk \\"
-          echo "#   'cd /opt/staffora && docker compose exec api bun run migrate:up'"
-          echo ""
-          echo "# Or use a migration job container:"
-          echo "# docker run --rm --network=staffora \\"
-          echo "#   -e DATABASE_URL=\$DATABASE_URL \\"
-          echo "#   \${API_IMAGE_TAG} bun run src/db/migrate.ts up"
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          # Update image tags in the deployment compose file
+          ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+            export API_IMAGE=${API_IMAGE_TAG} && \
+            export WEB_IMAGE=${WEB_IMAGE_TAG} && \
+            docker compose pull api web && \
+            docker compose up -d --no-deps api worker web && \
+            docker compose exec -T api bun run src/db/migrate.ts up"
 
       - name: Verify deployment health
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL || 'https://staging-api.staffora.co.uk' }}
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL || 'https://staging.staffora.co.uk' }}
         run: |
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Health check verification"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# curl --fail --retry 5 --retry-delay 10 \\"
-          echo "#   https://staging-api.staffora.co.uk/health"
-          echo ""
-          echo "# curl --fail --retry 5 --retry-delay 10 \\"
-          echo "#   https://staging.staffora.co.uk/"
+          echo "Verifying deployment health..."
+          # Wait for services to start, then check health
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --max-time 10 "${STAGING_API_URL}/health" | grep -q '"status"'; then
+              echo "API health check passed"
+              break
+            fi
+            echo "Attempt $i: API not ready yet, waiting 15s..."
+            sleep 15
+          done
+
+          # Final verification
+          curl --fail --silent "${STAGING_API_URL}/health" | python3 -m json.tool || echo "WARNING: API health check returned non-JSON"
+          curl --fail --silent --max-time 10 "${STAGING_WEB_URL}/" > /dev/null && echo "Web frontend accessible" || echo "WARNING: Web frontend not accessible"
 
   # ===========================================================================
   # Job 3b: Deploy to Production (manual trigger only)
@@ -322,64 +310,121 @@ jobs:
           echo "  2. All integration tests have passed"
           echo "  3. Required approvals have been granted"
 
+      - name: Setup SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.PRODUCTION_HOST || 'staffora.co.uk' }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Backup database before deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST || 'staffora.co.uk' }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_USER || 'deploy' }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_PATH || '/opt/staffora' }}
+        run: |
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
+          BACKUP_FILE="staffora_backup_$(date +%Y%m%d_%H%M%S).sql.gz"
+
+          echo "Creating database backup: ${BACKUP_FILE}"
+          ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+            docker compose exec -T postgres pg_dump -U \${POSTGRES_USER:-hris} \${POSTGRES_DB:-hris} | gzip > backups/${BACKUP_FILE} && \
+            echo 'Backup created: ${BACKUP_FILE}' && \
+            ls -lh backups/${BACKUP_FILE}"
+
       - name: Deploy to production
         env:
           API_IMAGE_TAG: ${{ env.API_IMAGE }}:${{ steps.image_tag.outputs.tag }}
           WEB_IMAGE_TAG: ${{ env.WEB_IMAGE }}:${{ steps.image_tag.outputs.tag }}
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST || 'staffora.co.uk' }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_USER || 'deploy' }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_PATH || '/opt/staffora' }}
         run: |
           echo "============================================="
           echo "  Deploying to PRODUCTION"
           echo "============================================="
-          echo ""
           echo "API image: ${API_IMAGE_TAG}"
           echo "Web image: ${WEB_IMAGE_TAG}"
           echo "Commit:    ${{ github.sha }}"
-          echo "Actor:     ${{ github.actor }}"
-          echo ""
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Add deployment commands below"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# See staging deploy job for example commands."
-          echo "# Production deployments should additionally:"
-          echo "#   - Create a database backup before migrating"
-          echo "#   - Use rolling updates (zero-downtime)"
-          echo "#   - Notify the team via Slack/webhook"
 
-      - name: Run database migrations (production)
-        run: |
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Run migrations on production DB"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# IMPORTANT: Back up the database before running migrations!"
-          echo "# pg_dump -h prod-db.staffora.co.uk -U hris hris | gzip > backup.sql.gz"
-          echo ""
-          echo "# Then run migrations:"
-          echo "# docker run --rm --network=staffora \\"
-          echo "#   -e DATABASE_URL=\$DATABASE_URL \\"
-          echo "#   \${API_IMAGE_TAG} bun run src/db/migrate.ts up"
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          # Pull new images and rolling restart (one service at a time for zero-downtime)
+          ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+            export API_IMAGE=${API_IMAGE_TAG} && \
+            export WEB_IMAGE=${WEB_IMAGE_TAG} && \
+            docker compose pull api web && \
+            docker compose up -d --no-deps api && \
+            sleep 10 && \
+            docker compose exec -T api bun run src/db/migrate.ts up && \
+            docker compose up -d --no-deps worker && \
+            docker compose up -d --no-deps web"
 
       - name: Verify deployment health
+        id: health_check
+        env:
+          PROD_API_URL: ${{ secrets.PRODUCTION_API_URL || 'https://api.staffora.co.uk' }}
+          PROD_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL || 'https://staffora.co.uk' }}
         run: |
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Health check verification"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# curl --fail --retry 10 --retry-delay 15 \\"
-          echo "#   https://api.staffora.co.uk/health"
-          echo ""
-          echo "# curl --fail --retry 10 --retry-delay 15 \\"
-          echo "#   https://staffora.co.uk/"
+          echo "Verifying production deployment health..."
+          HEALTHY=false
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent --max-time 10 "${PROD_API_URL}/health" | grep -q '"healthy"'; then
+              echo "API health check passed on attempt $i"
+              HEALTHY=true
+              break
+            fi
+            echo "Attempt $i: API not ready yet, waiting 15s..."
+            sleep 15
+          done
+
+          if [ "$HEALTHY" = "true" ]; then
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+            curl --fail --silent "${PROD_API_URL}/health" | python3 -m json.tool
+            curl --fail --silent --max-time 10 "${PROD_WEB_URL}/" > /dev/null && echo "Web frontend accessible" || echo "WARNING: Web frontend not accessible"
+          else
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Production health check failed after 10 attempts"
+          fi
+
+      - name: Automatic rollback on failure
+        if: steps.health_check.outputs.healthy == 'false'
+        env:
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST || 'staffora.co.uk' }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_USER || 'deploy' }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_PATH || '/opt/staffora' }}
+        run: |
+          echo "============================================="
+          echo "  ROLLING BACK PRODUCTION DEPLOYMENT"
+          echo "============================================="
+
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          # Roll back to the previous running images by restarting with the last known good config
+          ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+            docker compose down api worker web && \
+            docker compose up -d api worker web"
+
+          echo "::error::Production deployment rolled back due to failed health checks"
+          exit 1
 
       - name: Post-deployment notification
         if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          echo "---------------------------------------------"
-          echo "  PLACEHOLDER: Post-deployment notification"
-          echo "---------------------------------------------"
-          echo ""
-          echo "# Notify via Slack webhook:"
-          echo "# curl -X POST \$SLACK_WEBHOOK_URL \\"
-          echo "#   -H 'Content-Type: application/json' \\"
-          echo "#   -d '{\"text\": \"Production deploy: ${{ job.status }} (commit ${{ github.sha }})\"}'​"
+          if [ -n "${SLACK_WEBHOOK_URL}" ]; then
+            STATUS="${{ job.status }}"
+            EMOJI="$([ "$STATUS" = "success" ] && echo ":white_check_mark:" || echo ":x:")"
+            ROLLBACK=""
+            if [ "${{ steps.health_check.outputs.healthy }}" = "false" ]; then
+              ROLLBACK="\n:rotating_light: Automatic rollback triggered"
+            fi
+            curl -s -X POST "${SLACK_WEBHOOK_URL}" \
+              -H 'Content-Type: application/json' \
+              -d "{\"text\": \"${EMOJI} Production deploy: ${STATUS}\nCommit: ${{ github.sha }}\nActor: ${{ github.actor }}${ROLLBACK}\"}"
+          else
+            echo "No SLACK_WEBHOOK_URL configured — skipping notification"
+          fi

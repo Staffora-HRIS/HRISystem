@@ -128,44 +128,49 @@ export class OnboardingRepository {
 
   async createTemplate(
     ctx: TenantContext,
-    data: CreateTemplate
+    data: CreateTemplate,
+    txOverride?: any
   ): Promise<TemplateResponse> {
-    const [template] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        const [created] = await tx`
-          INSERT INTO app.onboarding_templates (
-            id, tenant_id, name, description, department_id, position_id,
-            is_default, status, created_by
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.name}, ${data.description || null},
-            ${data.departmentId || null}::uuid, ${data.positionId || null}::uuid,
-            ${data.isDefault || false}, 'active', ${ctx.userId}::uuid
-          )
-          RETURNING *
-        `;
+    const exec = async (tx: any) => {
+      const [created] = await tx`
+        INSERT INTO app.onboarding_templates (
+          id, tenant_id, name, description, department_id, position_id,
+          is_default, status, created_by
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.name}, ${data.description || null},
+          ${data.departmentId || null}::uuid, ${data.positionId || null}::uuid,
+          ${data.isDefault || false}, 'active', ${ctx.userId}::uuid
+        )
+        RETURNING *
+      `;
 
-        // Create tasks if provided
-        if (data.tasks && data.tasks.length > 0) {
-          for (let i = 0; i < data.tasks.length; i++) {
-            const task = data.tasks[i];
-            await tx`
-              INSERT INTO app.onboarding_template_tasks (
-                id, template_id, name, description, category, assignee_type,
-                days_from_start, days_to_complete, required, "order"
-              ) VALUES (
-                gen_random_uuid(), ${created.id}::uuid, ${task.name}, ${task.description || null},
-                ${task.category || null}, ${task.assigneeType || 'employee'},
-                ${task.daysFromStart || 0}, ${task.daysToComplete || null},
-                ${task.required !== false}, ${task.order || i}
-              )
-            `;
-          }
+      // Create tasks if provided
+      if (data.tasks && data.tasks.length > 0) {
+        for (let i = 0; i < data.tasks.length; i++) {
+          const task = data.tasks[i];
+          await tx`
+            INSERT INTO app.onboarding_template_tasks (
+              id, template_id, name, description, category, assignee_type,
+              days_from_start, days_to_complete, required, "order"
+            ) VALUES (
+              gen_random_uuid(), ${created.id}::uuid, ${task.name}, ${task.description || null},
+              ${task.category || null}, ${task.assigneeType || 'employee'},
+              ${task.daysFromStart || 0}, ${task.daysToComplete || null},
+              ${task.required !== false}, ${task.order || i}
+            )
+          `;
         }
-
-        return [created];
       }
-    );
+
+      return [created];
+    };
+
+    const [template] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapTemplateRow(template);
   }
@@ -173,25 +178,30 @@ export class OnboardingRepository {
   async updateTemplate(
     ctx: TenantContext,
     id: string,
-    data: UpdateTemplate
+    data: UpdateTemplate,
+    txOverride?: any
   ): Promise<TemplateResponse | null> {
-    const [template] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.onboarding_templates SET
-            name = COALESCE(${data.name}, name),
-            description = COALESCE(${data.description}, description),
-            department_id = COALESCE(${data.departmentId}::uuid, department_id),
-            position_id = COALESCE(${data.positionId}::uuid, position_id),
-            is_default = COALESCE(${data.isDefault}, is_default),
-            status = COALESCE(${data.status}, status),
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_templates SET
+          name = COALESCE(${data.name}, name),
+          description = COALESCE(${data.description}, description),
+          department_id = COALESCE(${data.departmentId}::uuid, department_id),
+          position_id = COALESCE(${data.positionId}::uuid, position_id),
+          is_default = COALESCE(${data.isDefault}, is_default),
+          status = COALESCE(${data.status}, status),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [template] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return template ? this.mapTemplateRow(template) : null;
   }
@@ -335,49 +345,54 @@ export class OnboardingRepository {
   async createInstance(
     ctx: TenantContext,
     data: CreateInstance,
-    templateTasks: TemplateTask[]
+    templateTasks: TemplateTask[],
+    txOverride?: any
   ): Promise<InstanceResponse> {
-    const [instance] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        // Create instance
-        const [created] = await tx`
-          INSERT INTO app.onboarding_instances (
-            id, tenant_id, employee_id, template_id, status, start_date,
-            buddy_id, manager_id, notes
+    const exec = async (tx: any) => {
+      // Create instance
+      const [created] = await tx`
+        INSERT INTO app.onboarding_instances (
+          id, tenant_id, employee_id, template_id, status, start_date,
+          buddy_id, manager_id, notes
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
+          ${data.templateId}::uuid, 'not_started', ${data.startDate}::date,
+          ${data.buddyId || null}::uuid, ${data.managerId || null}::uuid,
+          ${data.notes || null}
+        )
+        RETURNING *
+      `;
+
+      // Create task completions from template tasks
+      const startDate = new Date(data.startDate);
+      for (let i = 0; i < templateTasks.length; i++) {
+        const task = templateTasks[i];
+        const dueDate = new Date(startDate);
+        dueDate.setDate(dueDate.getDate() + (task.daysFromStart || 0) + (task.daysToComplete || 7));
+
+        await tx`
+          INSERT INTO app.onboarding_task_completions (
+            id, instance_id, task_id, name, description, category, assignee_type,
+            status, due_date, required, "order"
           ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
-            ${data.templateId}::uuid, 'not_started', ${data.startDate}::date,
-            ${data.buddyId || null}::uuid, ${data.managerId || null}::uuid,
-            ${data.notes || null}
+            gen_random_uuid(), ${created.id}::uuid, ${'task-' + i}, ${task.name},
+            ${task.description || null}, ${task.category || null},
+            ${task.assigneeType || 'employee'}, 'pending',
+            ${dueDate.toISOString().split('T')[0]}::date,
+            ${task.required !== false}, ${task.order || i}
           )
-          RETURNING *
         `;
-
-        // Create task completions from template tasks
-        const startDate = new Date(data.startDate);
-        for (let i = 0; i < templateTasks.length; i++) {
-          const task = templateTasks[i];
-          const dueDate = new Date(startDate);
-          dueDate.setDate(dueDate.getDate() + (task.daysFromStart || 0) + (task.daysToComplete || 7));
-
-          await tx`
-            INSERT INTO app.onboarding_task_completions (
-              id, instance_id, task_id, name, description, category, assignee_type,
-              status, due_date, required, "order"
-            ) VALUES (
-              gen_random_uuid(), ${created.id}::uuid, ${'task-' + i}, ${task.name},
-              ${task.description || null}, ${task.category || null},
-              ${task.assigneeType || 'employee'}, 'pending',
-              ${dueDate.toISOString().split('T')[0]}::date,
-              ${task.required !== false}, ${task.order || i}
-            )
-          `;
-        }
-
-        return [created];
       }
-    );
+
+      return [created];
+    };
+
+    const [instance] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapInstanceRow(instance);
   }
@@ -385,24 +400,29 @@ export class OnboardingRepository {
   async updateInstance(
     ctx: TenantContext,
     id: string,
-    data: UpdateInstance
+    data: UpdateInstance,
+    txOverride?: any
   ): Promise<InstanceResponse | null> {
-    const [instance] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.onboarding_instances SET
-            buddy_id = COALESCE(${data.buddyId}::uuid, buddy_id),
-            manager_id = COALESCE(${data.managerId}::uuid, manager_id),
-            status = COALESCE(${data.status}, status),
-            notes = COALESCE(${data.notes}, notes),
-            completed_at = CASE WHEN ${data.status} = 'completed' AND completed_at IS NULL THEN now() ELSE completed_at END,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_instances SET
+          buddy_id = COALESCE(${data.buddyId}::uuid, buddy_id),
+          manager_id = COALESCE(${data.managerId}::uuid, manager_id),
+          status = COALESCE(${data.status}, status),
+          notes = COALESCE(${data.notes}, notes),
+          completed_at = CASE WHEN ${data.status} = 'completed' AND completed_at IS NULL THEN now() ELSE completed_at END,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [instance] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return instance ? this.mapInstanceRow(instance) : null;
   }
@@ -412,29 +432,34 @@ export class OnboardingRepository {
     instanceId: string,
     taskId: string,
     notes?: string,
-    formData?: Record<string, unknown>
+    formData?: Record<string, unknown>,
+    txOverride?: any
   ): Promise<InstanceTask | null> {
-    const [task] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.onboarding_task_completions SET
-            status = 'completed',
-            completed_at = now(),
-            completed_by = ${ctx.userId}::uuid,
-            notes = COALESCE(${notes}, notes),
-            form_data = COALESCE(${formData ? JSON.stringify(formData) : null}::jsonb, form_data),
-            updated_at = now()
-          WHERE instance_id = ${instanceId}::uuid AND task_id = ${taskId}
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_task_completions SET
+          status = 'completed',
+          completed_at = now(),
+          completed_by = ${ctx.userId}::uuid,
+          notes = COALESCE(${notes}, notes),
+          form_data = COALESCE(${formData ? JSON.stringify(formData) : null}::jsonb, form_data),
+          updated_at = now()
+        WHERE instance_id = ${instanceId}::uuid AND task_id = ${taskId}
+        RETURNING *
+      `;
+    };
+
+    const [task] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     if (!task) return null;
 
     // Check if all required tasks are completed
-    await this.checkAndUpdateInstanceStatus(ctx, instanceId);
+    await this.checkAndUpdateInstanceStatus(ctx, instanceId, txOverride);
 
     return this.mapInstanceTaskRow(task);
   }
@@ -443,60 +468,71 @@ export class OnboardingRepository {
     ctx: TenantContext,
     instanceId: string,
     taskId: string,
-    reason: string
+    reason: string,
+    txOverride?: any
   ): Promise<InstanceTask | null> {
-    const [task] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.onboarding_task_completions SET
-            status = 'skipped',
-            notes = ${reason},
-            updated_at = now()
-          WHERE instance_id = ${instanceId}::uuid AND task_id = ${taskId}
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_task_completions SET
+          status = 'skipped',
+          notes = ${reason},
+          updated_at = now()
+        WHERE instance_id = ${instanceId}::uuid AND task_id = ${taskId}
+        RETURNING *
+      `;
+    };
+
+    const [task] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     if (!task) return null;
 
-    await this.checkAndUpdateInstanceStatus(ctx, instanceId);
+    await this.checkAndUpdateInstanceStatus(ctx, instanceId, txOverride);
 
     return this.mapInstanceTaskRow(task);
   }
 
-  private async checkAndUpdateInstanceStatus(ctx: TenantContext, instanceId: string) {
-    await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        // Check if all required tasks are completed
-        const [stats] = await tx`
-          SELECT
-            COUNT(*) FILTER (WHERE required = true) as required_count,
-            COUNT(*) FILTER (WHERE required = true AND status IN ('completed', 'skipped')) as completed_required_count
-          FROM app.onboarding_task_completions
-          WHERE instance_id = ${instanceId}::uuid
-        `;
+  private async checkAndUpdateInstanceStatus(ctx: TenantContext, instanceId: string, txOverride?: any) {
+    const exec = async (tx: any) => {
+      // Check if all required tasks are completed
+      const [stats] = await tx`
+        SELECT
+          COUNT(*) FILTER (WHERE required = true) as required_count,
+          COUNT(*) FILTER (WHERE required = true AND status IN ('completed', 'skipped')) as completed_required_count
+        FROM app.onboarding_task_completions
+        WHERE instance_id = ${instanceId}::uuid
+      `;
 
-        if (Number(stats.required_count) === Number(stats.completed_required_count)) {
-          await tx`
-            UPDATE app.onboarding_instances SET
-              status = 'completed',
-              completed_at = now(),
-              updated_at = now()
-            WHERE id = ${instanceId}::uuid AND status != 'completed'
-          `;
-        } else {
-          await tx`
-            UPDATE app.onboarding_instances SET
-              status = 'in_progress',
-              updated_at = now()
-            WHERE id = ${instanceId}::uuid AND status = 'not_started'
-          `;
-        }
+      if (Number(stats.required_count) === Number(stats.completed_required_count)) {
+        await tx`
+          UPDATE app.onboarding_instances SET
+            status = 'completed',
+            completed_at = now(),
+            updated_at = now()
+          WHERE id = ${instanceId}::uuid AND status != 'completed'
+        `;
+      } else {
+        await tx`
+          UPDATE app.onboarding_instances SET
+            status = 'in_progress',
+            updated_at = now()
+          WHERE id = ${instanceId}::uuid AND status = 'not_started'
+        `;
       }
-    );
+    };
+
+    if (txOverride) {
+      await exec(txOverride);
+    } else {
+      await this.db.withTransaction(
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+        exec
+      );
+    }
   }
 
   // ===========================================================================

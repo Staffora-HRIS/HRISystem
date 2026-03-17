@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Clock, CheckCircle, Play, Award } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -26,15 +26,30 @@ interface Enrollment {
 export default function MyLearningPage() {
   const [filter, setFilter] = useState<string>("all");
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-learning"],
     queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/lms/my-learning"),
   });
 
+  const startMutation = useMutation({
+    mutationFn: (enrollmentId: string) =>
+      api.post(`/lms/enrollments/${enrollmentId}/start`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-learning"] });
+      toast.success("Course started");
+    },
+    onError: () => {
+      toast.error("Failed to start course", {
+        message: "Please try again in a moment.",
+      });
+    },
+  });
+
   const enrollments = data?.enrollments || [];
-  const filtered = filter === "all" 
-    ? enrollments 
+  const filtered = filter === "all"
+    ? enrollments
     : enrollments.filter(e => e.status === filter);
 
   const stats = {
@@ -49,17 +64,6 @@ export default function MyLearningPage() {
       case "completed": return <Badge variant="success">Completed</Badge>;
       case "in_progress": return <Badge variant="warning">In Progress</Badge>;
       default: return <Badge variant="secondary">Not Started</Badge>;
-    }
-  };
-
-  const handleStart = async (enrollmentId: string) => {
-    try {
-      await api.post(`/lms/enrollments/${enrollmentId}/start`);
-      toast.success("Course started");
-    } catch {
-      toast.error("Failed to start course", {
-        message: "Please try again in a moment.",
-      });
     }
   };
 
@@ -128,7 +132,7 @@ export default function MyLearningPage() {
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">{enrollment.title}</h3>
                 <p className="text-sm text-gray-600 line-clamp-2 mb-4">{enrollment.description}</p>
-                
+
                 <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
@@ -149,8 +153,12 @@ export default function MyLearningPage() {
                 )}
 
                 {enrollment.status === "enrolled" && (
-                  <Button className="w-full" onClick={() => void handleStart(enrollment.id)}>
-                    Start Course
+                  <Button
+                    className="w-full"
+                    onClick={() => startMutation.mutate(enrollment.id)}
+                    disabled={startMutation.isPending}
+                  >
+                    {startMutation.isPending ? "Starting..." : "Start Course"}
                   </Button>
                 )}
                 {enrollment.status === "in_progress" && (

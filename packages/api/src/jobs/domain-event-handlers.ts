@@ -858,6 +858,60 @@ async function handleWorkflowTaskCompleted(
 }
 
 // =============================================================================
+// GDPR Event Handlers
+// =============================================================================
+
+/**
+ * Handle erasure certificate requested — routes to the PDF worker stream
+ * so it can generate a GDPR erasure certificate PDF asynchronously.
+ */
+async function handleErasureCertificateRequested(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const { requestId, employeeId, completedAt, tablesAnonymised } = event.payload as {
+    requestId: string;
+    employeeId: string;
+    completedAt: string;
+    tablesAnonymised: string[];
+  };
+
+  ctx.log.info("Processing erasure certificate generation request", {
+    requestId,
+    employeeId,
+  });
+
+  // Route to the PDF worker stream for async certificate generation
+  await ctx.redis.xadd(
+    StreamKeys.PDF_GENERATION,
+    "*",
+    "payload",
+    JSON.stringify({
+      id: crypto.randomUUID(),
+      type: "pdf.generate",
+      tenantId: event.tenantId,
+      data: {
+        documentType: "certificate",
+        template: "erasure_certificate",
+        notifyUserId: event.payload.actor,
+        data: {
+          requestId,
+          employeeId,
+          completedAt,
+          tablesAnonymised,
+          tenantId: event.tenantId,
+          issuedAt: new Date().toISOString(),
+          statement:
+            "Personal data has been anonymized in accordance with GDPR Article 17 (Right to Erasure).",
+        },
+      },
+    }),
+    "attempt",
+    "1"
+  );
+}
+
+// =============================================================================
 // Cache Invalidation Handlers
 // =============================================================================
 
@@ -1033,6 +1087,9 @@ export function registerAllHandlers(): void {
   registerHandler("workflow.instance.started", handleWorkflowStarted);
   registerHandler("workflow.instance.completed", handleWorkflowCompleted);
   registerHandler("workflow.task.completed", handleWorkflowTaskCompleted);
+
+  // GDPR Events
+  registerHandler("gdpr.erasure.certificate_requested", handleErasureCertificateRequested);
 
   // Cache Invalidation Handlers
   // Employee data changes - use wildcard to catch all hr.employee.* events

@@ -168,17 +168,10 @@ export class ReportsRepository {
     }
 
     // For non-calculated fields, query distinct values
+    // Table/column names come from the trusted field catalog, not user input
     if (!field.isCalculated) {
-      const table = field.sourceTable;
-      const column = field.sourceColumn;
-      // Use a safe query with known table/column from catalog (trusted data)
-      const rows = await tx`
-        SELECT DISTINCT ${tx(column)}::text AS val
-        FROM ${tx(table)}
-        WHERE ${tx(column)} IS NOT NULL
-        ORDER BY val
-        LIMIT ${limit}
-      `;
+      const sql = `SELECT DISTINCT "${field.sourceColumn}"::text AS val FROM "${field.sourceTable}" WHERE "${field.sourceColumn}" IS NOT NULL ORDER BY val LIMIT $1`;
+      const rows = await tx.unsafe(sql, [limit]) as any[];
       return rows.map((r: { val: string }) => r.val);
     }
 
@@ -301,12 +294,22 @@ export class ReportsRepository {
 
     if (Object.keys(updates).length === 0) return this.getReportById(tx, id);
 
-    const [row] = await tx`
-      UPDATE report_definitions
-      SET ${tx(updates)}, version = version + 1
-      WHERE id = ${id}
-      RETURNING *
-    ` as ReportDefinitionRow[];
+    // Build SET clause dynamically using postgres.js helper
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIdx = 1;
+
+    for (const [key, val] of Object.entries(updates)) {
+      // Convert camelCase keys to snake_case for SQL
+      const snakeKey = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+      setClauses.push(`"${snakeKey}" = $${paramIdx}`);
+      values.push(val);
+      paramIdx++;
+    }
+    values.push(id);
+
+    const sql = `UPDATE report_definitions SET ${setClauses.join(", ")}, version = version + 1 WHERE id = $${paramIdx} RETURNING *`;
+    const [row] = await tx.unsafe(sql, values as any[]) as ReportDefinitionRow[];
     return row ?? null;
   }
 

@@ -254,14 +254,27 @@ describe("Shared Constants", () => {
     test("defines all expected roles", () => {
       expect(SystemRoles.SUPER_ADMIN).toBe("super_admin");
       expect(SystemRoles.TENANT_ADMIN).toBe("tenant_admin");
-      expect(SystemRoles.HR_MANAGER).toBe("hr_manager");
-      expect(SystemRoles.HR_STAFF).toBe("hr_staff");
+      expect(SystemRoles.HR_ADMIN).toBe("hr_admin");
+      expect(SystemRoles.HR_OFFICER).toBe("hr_officer");
+      expect(SystemRoles.PAYROLL_ADMIN).toBe("payroll_admin");
+      expect(SystemRoles.RECRUITMENT_ADMIN).toBe("recruitment_admin");
+      expect(SystemRoles.LMS_ADMIN).toBe("lms_admin");
+      expect(SystemRoles.COMPLIANCE_OFFICER).toBe("compliance_officer");
+      expect(SystemRoles.HEALTH_SAFETY_OFFICER).toBe("health_safety_officer");
+      expect(SystemRoles.DEPARTMENT_HEAD).toBe("department_head");
+      expect(SystemRoles.LINE_MANAGER).toBe("line_manager");
       expect(SystemRoles.MANAGER).toBe("manager");
+      expect(SystemRoles.TEAM_LEADER).toBe("team_leader");
       expect(SystemRoles.EMPLOYEE).toBe("employee");
+      expect(SystemRoles.CONTRACTOR).toBe("contractor");
+      expect(SystemRoles.TEMP_WORKER).toBe("temp_worker");
+      expect(SystemRoles.INTERN).toBe("intern");
+      expect(SystemRoles.EXTERNAL_AUDITOR).toBe("external_auditor");
+      expect(SystemRoles.BOARD_MEMBER).toBe("board_member");
     });
 
-    test("has exactly 6 roles", () => {
-      expect(Object.keys(SystemRoles)).toHaveLength(6);
+    test("has exactly 19 role keys", () => {
+      expect(Object.keys(SystemRoles)).toHaveLength(19);
     });
 
     test("all values are unique", () => {

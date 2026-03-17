@@ -27,34 +27,47 @@ jobs:
 
       - name: Run audit
         run: |
-          bun audit --level high || true
           echo "## Dependency Audit Results" >> $GITHUB_STEP_SUMMARY
-          bun audit 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          # Capture audit output and exit code separately
+          AUDIT_OUTPUT=$(bun audit 2>&1 | head -100) || true
+          echo "$AUDIT_OUTPUT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          # Fail only on high/critical vulnerabilities
+          bun audit --level high
 
   docker-scan:
-    name: Docker Image Scan
+    name: Docker Image Scan (${{ matrix.name }})
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: packages/api/Dockerfile
+          - name: web
+            dockerfile: packages/web/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build API image
-        run: docker build -t staffora-api:scan -f packages/api/Dockerfile .
+      - name: Build ${{ matrix.name }} image
+        run: docker build -t staffora-${{ matrix.name }}:scan -f ${{ matrix.dockerfile }} .
 
-      - name: Scan API image
+      - name: Scan ${{ matrix.name }} image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'staffora-api:scan'
+          image-ref: 'staffora-${{ matrix.name }}:scan'
           format: 'sarif'
-          output: 'trivy-api.sarif'
+          output: 'trivy-${{ matrix.name }}.sarif'
           severity: 'CRITICAL,HIGH'
 
-      - name: Upload API scan results
+      - name: Upload ${{ matrix.name }} scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-api.sarif'
-          category: 'docker-api'
+          sarif_file: 'trivy-${{ matrix.name }}.sarif'
+          category: 'docker-${{ matrix.name }}'
 
   secret-scan:
     name: Secret Detection
