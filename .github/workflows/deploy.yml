@@ -330,6 +330,7 @@ jobs:
             ls -lh backups/${BACKUP_FILE}"
 
       - name: Deploy to production
+        id: deploy
         env:
           API_IMAGE_TAG: ${{ env.API_IMAGE }}:${{ steps.image_tag.outputs.tag }}
           WEB_IMAGE_TAG: ${{ env.WEB_IMAGE }}:${{ steps.image_tag.outputs.tag }}
@@ -345,6 +346,14 @@ jobs:
           echo "Commit:    ${{ github.sha }}"
 
           SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          # Capture current running image tags for rollback
+          PREV_API=$(${SSH_CMD} "cd ${DEPLOY_PATH} && docker compose images api --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | head -1" || echo "")
+          PREV_WEB=$(${SSH_CMD} "cd ${DEPLOY_PATH} && docker compose images web --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | head -1" || echo "")
+          echo "prev_api=${PREV_API}" >> "$GITHUB_OUTPUT"
+          echo "prev_web=${PREV_WEB}" >> "$GITHUB_OUTPUT"
+          echo "Previous API image: ${PREV_API:-unknown}"
+          echo "Previous Web image: ${PREV_WEB:-unknown}"
 
           # Pull new images and rolling restart (one service at a time for zero-downtime)
           ${SSH_CMD} "cd ${DEPLOY_PATH} && \
@@ -387,6 +396,8 @@ jobs:
       - name: Automatic rollback on failure
         if: steps.health_check.outputs.healthy == 'false'
         env:
+          PREV_API: ${{ steps.deploy.outputs.prev_api }}
+          PREV_WEB: ${{ steps.deploy.outputs.prev_web }}
           DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST || 'staffora.co.uk' }}
           DEPLOY_USER: ${{ secrets.PRODUCTION_USER || 'deploy' }}
           DEPLOY_PATH: ${{ secrets.PRODUCTION_PATH || '/opt/staffora' }}
@@ -394,13 +405,24 @@ jobs:
           echo "============================================="
           echo "  ROLLING BACK PRODUCTION DEPLOYMENT"
           echo "============================================="
+          echo "Rolling back to:"
+          echo "  API: ${PREV_API:-latest}"
+          echo "  Web: ${PREV_WEB:-latest}"
 
           SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new ${DEPLOY_USER}@${DEPLOY_HOST}"
 
-          # Roll back to the previous running images by restarting with the last known good config
-          ${SSH_CMD} "cd ${DEPLOY_PATH} && \
-            docker compose down api worker web && \
-            docker compose up -d api worker web"
+          # Roll back to the previous image tags captured before deploy
+          if [ -n "${PREV_API}" ] && [ -n "${PREV_WEB}" ]; then
+            ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+              export API_IMAGE=${PREV_API} && \
+              export WEB_IMAGE=${PREV_WEB} && \
+              docker compose pull api web && \
+              docker compose up -d --no-deps api worker web"
+          else
+            echo "::warning::Previous image tags not available — restarting with current compose config"
+            ${SSH_CMD} "cd ${DEPLOY_PATH} && \
+              docker compose restart api worker web"
+          fi
 
           echo "::error::Production deployment rolled back due to failed health checks"
           exit 1

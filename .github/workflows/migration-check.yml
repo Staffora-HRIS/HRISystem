@@ -77,7 +77,7 @@ jobs:
       - name: Check RLS compliance
         if: steps.migrations.outputs.has_changes == 'true'
         run: |
-          WARNINGS=0
+          ERRORS=0
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### RLS Compliance Check" >> $GITHUB_STEP_SUMMARY
 
@@ -97,36 +97,37 @@ jobs:
 
                 # Skip known system tables that don't need RLS
                 case "$TABLE_NAME" in
-                  schema_migrations|domain_outbox) continue ;;
+                  schema_migrations|domain_outbox|settings|feature_flags) continue ;;
                 esac
 
                 # Check for tenant_id column
                 if ! echo "$CONTENT" | grep -qi "tenant_id"; then
-                  echo "::warning file=${file}::Table ${TABLE} may be missing tenant_id column"
-                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing \`tenant_id\`" >> $GITHUB_STEP_SUMMARY
-                  WARNINGS=$((WARNINGS + 1))
+                  echo "::error file=${file}::Table ${TABLE} is MISSING tenant_id column — all tenant tables MUST have tenant_id for RLS"
+                  echo "- :x: **${BASENAME}**: Table \`${TABLE}\` is missing \`tenant_id\`" >> $GITHUB_STEP_SUMMARY
+                  ERRORS=$((ERRORS + 1))
                 fi
 
                 # Check for RLS enable
                 if ! echo "$CONTENT" | grep -qiE "ENABLE\s+ROW\s+LEVEL\s+SECURITY"; then
-                  echo "::warning file=${file}::Table ${TABLE} may be missing ENABLE ROW LEVEL SECURITY"
-                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing RLS" >> $GITHUB_STEP_SUMMARY
-                  WARNINGS=$((WARNINGS + 1))
+                  echo "::error file=${file}::Table ${TABLE} is MISSING ENABLE ROW LEVEL SECURITY"
+                  echo "- :x: **${BASENAME}**: Table \`${TABLE}\` is missing RLS" >> $GITHUB_STEP_SUMMARY
+                  ERRORS=$((ERRORS + 1))
                 fi
 
                 # Check for tenant isolation policy
                 if ! echo "$CONTENT" | grep -qi "tenant_isolation"; then
-                  echo "::warning file=${file}::Table ${TABLE} may be missing tenant_isolation policy"
-                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing tenant isolation policy" >> $GITHUB_STEP_SUMMARY
-                  WARNINGS=$((WARNINGS + 1))
+                  echo "::error file=${file}::Table ${TABLE} is MISSING tenant_isolation policy"
+                  echo "- :x: **${BASENAME}**: Table \`${TABLE}\` is missing tenant isolation policy" >> $GITHUB_STEP_SUMMARY
+                  ERRORS=$((ERRORS + 1))
                 fi
               done
             fi
           done <<< "${{ steps.migrations.outputs.changed }}"
 
-          if [ $WARNINGS -eq 0 ]; then
+          if [ $ERRORS -eq 0 ]; then
             echo "- :white_check_mark: All tables have proper RLS configuration" >> $GITHUB_STEP_SUMMARY
           else
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "> **${WARNINGS} warning(s)** — Review RLS compliance for new tables" >> $GITHUB_STEP_SUMMARY
+            echo "> :x: **${ERRORS} RLS violation(s) found** — All tenant tables MUST have tenant_id, RLS enabled, and tenant_isolation policy" >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
