@@ -115,7 +115,7 @@ export function initTelemetry(
   const otlpExporter = new OTLPTraceExporter({
     url: `${cfg.endpoint}/v1/traces`,
   });
-  processors.push(new BatchSpanProcessor(otlpExporter));
+  processors.push(new BatchSpanProcessor(otlpExporter as any));
 
   // Console exporter for local debugging (not in tests)
   if (cfg.consoleExporter && !process.env["NODE_ENV"]?.includes("test")) {
