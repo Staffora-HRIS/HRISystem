@@ -106,7 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_probation_reviews_reviewer
 -- Updated_at trigger
 CREATE TRIGGER trg_probation_reviews_updated_at
   BEFORE UPDATE ON app.probation_reviews
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.probation_reviews IS 'Tracks probation review records for employees including outcome, extension, and meeting notes';

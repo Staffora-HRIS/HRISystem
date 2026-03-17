@@ -59,7 +59,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_payslip_templates_tenant_name
 -- Updated_at trigger
 CREATE TRIGGER trg_payslip_templates_updated_at
   BEFORE UPDATE ON app.payslip_templates
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.payslip_templates IS 'Payslip layout templates for PDF generation';
@@ -138,7 +138,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_payslips_employee_period
 -- Updated_at trigger
 CREATE TRIGGER trg_payslips_updated_at
   BEFORE UPDATE ON app.payslips
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.payslips IS 'Generated payslips containing the full pay breakdown for each employee per pay period';

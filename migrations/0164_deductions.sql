@@ -82,7 +82,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_deduction_types_tenant_code
 -- Updated_at trigger
 CREATE TRIGGER trg_deduction_types_updated_at
   BEFORE UPDATE ON app.deduction_types
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.deduction_types IS 'Catalogue of deduction types available for payroll processing';
@@ -165,7 +165,7 @@ ALTER TABLE app.employee_deductions
 -- Updated_at trigger
 CREATE TRIGGER trg_employee_deductions_updated_at
   BEFORE UPDATE ON app.employee_deductions
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.employee_deductions IS 'Effective-dated payroll deductions assigned to individual employees';

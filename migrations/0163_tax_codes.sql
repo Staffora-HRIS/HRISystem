@@ -90,7 +90,7 @@ ALTER TABLE app.employee_tax_codes
 -- Updated_at trigger
 CREATE TRIGGER trg_employee_tax_codes_updated_at
   BEFORE UPDATE ON app.employee_tax_codes
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.employee_tax_codes IS 'Effective-dated HMRC tax code tracking per employee for UK payroll';
