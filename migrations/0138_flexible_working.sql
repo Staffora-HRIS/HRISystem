@@ -195,9 +195,7 @@ CREATE TRIGGER update_flexible_working_requests_updated_at
 -- =============================================================================
 
 COMMENT ON TABLE app.flexible_working_requests IS
-    'Flexible working requests under the Employment Relations (Flexible Working) Act 2023. '
-    || 'Day-one right from April 2024. Employees may make up to 2 requests per 12-month period. '
-    || 'Employers must respond within 2 months and must consult before refusing.';
+    'Flexible working requests under the Employment Relations (Flexible Working) Act 2023.  Day-one right from April 2024. Employees may make up to 2 requests per 12-month period.  Employers must respond within 2 months and must consult before refusing.';
 
 COMMENT ON COLUMN app.flexible_working_requests.id IS 'Primary UUID identifier';
 COMMENT ON COLUMN app.flexible_working_requests.tenant_id IS 'Tenant that owns this record';

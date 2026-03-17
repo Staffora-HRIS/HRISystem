@@ -135,8 +135,7 @@ CREATE TRIGGER update_return_to_work_interviews_updated_at
 -- =============================================================================
 
 COMMENT ON TABLE app.return_to_work_interviews IS
-    'Return-to-work interview records conducted after employee absence periods. '
-    || 'Tracks fit-for-work status, required adjustments, and occupational health referrals.';
+    'Return-to-work interview records conducted after employee absence periods.  Tracks fit-for-work status, required adjustments, and occupational health referrals.';
 COMMENT ON COLUMN app.return_to_work_interviews.id IS 'Primary UUID identifier';
 COMMENT ON COLUMN app.return_to_work_interviews.tenant_id IS 'Tenant that owns this record';
 COMMENT ON COLUMN app.return_to_work_interviews.employee_id IS 'Employee returning from absence';
