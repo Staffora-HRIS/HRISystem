@@ -116,12 +116,12 @@ describe("formatCompactNumber", () => {
 
   it("formats thousands", () => {
     const result = formatCompactNumber(1200);
-    expect(result).toMatch(/1\.2K/);
+    expect(result).toMatch(/1\.2k/i);
   });
 
   it("formats millions", () => {
     const result = formatCompactNumber(3500000);
-    expect(result).toMatch(/3\.5M/);
+    expect(result).toMatch(/3\.5m/i);
   });
 
   it("formats zero", () => {

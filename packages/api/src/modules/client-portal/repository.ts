@@ -216,7 +216,8 @@ export class ClientPortalRepository {
         LIMIT 1
       `;
     });
-    return rows.length > 0 ? (rows[0] as PortalUser) : null;
+    if (rows.length === 0) return null;
+    return this.mapUserRow(rows[0]);
   }
 
   async createSession(
@@ -268,29 +269,29 @@ export class ClientPortalRepository {
 
     const r = rows[0] as any;
     return {
-      id: r.sessionId,
-      userId: r.userId,
-      tenantId: r.tenantId,
-      tokenHash: r.tokenHash,
-      ipAddress: r.ipAddress,
-      userAgent: r.userAgent,
-      expiresAt: r.expiresAt,
-      lastActivityAt: r.lastActivityAt,
-      createdAt: r.sessionCreatedAt,
+      id: r.sessionId ?? r.session_id,
+      userId: r.userId ?? r.user_id,
+      tenantId: r.tenantId ?? r.tenant_id,
+      tokenHash: r.tokenHash ?? r.token_hash,
+      ipAddress: r.ipAddress ?? r.ip_address,
+      userAgent: r.userAgent ?? r.user_agent,
+      expiresAt: r.expiresAt ?? r.expires_at,
+      lastActivityAt: r.lastActivityAt ?? r.last_activity_at,
+      createdAt: r.sessionCreatedAt ?? r.session_created_at,
       user: {
-        id: r.userId,
-        tenantId: r.tenantId,
+        id: r.userId ?? r.user_id,
+        tenantId: r.tenantId ?? r.tenant_id,
         email: r.email,
-        firstName: r.firstName,
-        lastName: r.lastName,
+        firstName: r.firstName ?? r.first_name,
+        lastName: r.lastName ?? r.last_name,
         role: r.role,
-        passwordHash: r.passwordHash,
-        isActive: r.isActive,
-        failedLoginAttempts: r.failedLoginAttempts,
-        lockedUntil: r.lockedUntil,
-        lastLoginAt: r.lastLoginAt,
-        createdAt: r.userCreatedAt,
-        updatedAt: r.userUpdatedAt,
+        passwordHash: r.passwordHash ?? r.password_hash,
+        isActive: r.isActive ?? r.is_active ?? false,
+        failedLoginAttempts: r.failedLoginAttempts ?? r.failed_login_attempts ?? 0,
+        lockedUntil: r.lockedUntil ?? r.locked_until ?? null,
+        lastLoginAt: r.lastLoginAt ?? r.last_login_at ?? null,
+        createdAt: r.userCreatedAt ?? r.user_created_at,
+        updatedAt: r.userUpdatedAt ?? r.user_updated_at,
       },
     };
   }
@@ -1631,18 +1632,18 @@ export class ClientPortalRepository {
   private mapUserRow(row: any): PortalUser {
     return {
       id: row.id,
-      tenantId: row.tenantId,
+      tenantId: row.tenantId ?? row.tenant_id,
       email: row.email,
-      firstName: row.firstName,
-      lastName: row.lastName,
+      firstName: row.firstName ?? row.first_name,
+      lastName: row.lastName ?? row.last_name,
       role: row.role,
-      passwordHash: row.passwordHash ?? "",
-      isActive: row.isActive,
-      failedLoginAttempts: Number(row.failedLoginAttempts ?? 0),
-      lockedUntil: row.lockedUntil ?? null,
-      lastLoginAt: row.lastLoginAt ?? null,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      passwordHash: row.passwordHash ?? row.password_hash ?? "",
+      isActive: row.isActive ?? row.is_active ?? false,
+      failedLoginAttempts: Number(row.failedLoginAttempts ?? row.failed_login_attempts ?? 0),
+      lockedUntil: row.lockedUntil ?? row.locked_until ?? null,
+      lastLoginAt: row.lastLoginAt ?? row.last_login_at ?? null,
+      createdAt: row.createdAt ?? row.created_at,
+      updatedAt: row.updatedAt ?? row.updated_at,
     };
   }
 }
