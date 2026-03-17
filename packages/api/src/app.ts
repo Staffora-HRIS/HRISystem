@@ -353,7 +353,7 @@ export const app = new Elysia()
         <div class="muted small">This page calls <code>POST /api/v1/auth/login</code> and stores the session cookie automatically.</div>
 
         <label for="email">Email</label>
-        <input id="email" type="email" autocomplete="username" placeholder="root@staffora.co.uk" />
+        <input id="email" type="email" autocomplete="username" placeholder="you@company.com" />
 
         <label for="password">Password</label>
         <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
@@ -443,7 +443,6 @@ export const app = new Elysia()
         print(result);
       });
 
-      emailEl.value = 'root@staffora.co.uk';
       print('Enter email + password, then click Login.');
     </script>
   </body>

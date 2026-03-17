@@ -8,6 +8,27 @@ import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
 import { calculateBradfordFactor, getBradfordLevelDescription, type AbsenceSpell } from "@staffora/shared";
 
+/** UK statutory minimum leave entitlement (Working Time Regulations 1998) */
+export const UK_STATUTORY = {
+  FULL_TIME_DAYS_PER_WEEK: 5,
+  FULL_TIME_DAYS: 5,
+  FULL_TIME_HOURS: 40,
+  STATUTORY_MINIMUM_DAYS: 28,
+  FULL_TIME_MIN_DAYS: 28,
+  WEEKS_ENTITLEMENT: 5.6,
+} as const;
+
+/**
+ * Calculate UK statutory minimum annual leave entitlement.
+ * Full-time (5 days/week) = 28 days. Part-time is pro-rated and rounded up.
+ * Capped at 28 days (the statutory maximum).
+ */
+export function calculateMinimumEntitlement(daysPerWeek: number, fullTimeDays?: number): number {
+  const ftDays = fullTimeDays ?? UK_STATUTORY.FULL_TIME_DAYS_PER_WEEK;
+  const raw = (daysPerWeek / ftDays) * UK_STATUTORY.STATUTORY_MINIMUM_DAYS;
+  return Math.min(Math.ceil(raw), UK_STATUTORY.STATUTORY_MINIMUM_DAYS);
+}
+
 export const AbsenceErrorCodes = {
   LEAVE_TYPE_NOT_FOUND: "LEAVE_TYPE_NOT_FOUND",
   LEAVE_POLICY_NOT_FOUND: "LEAVE_POLICY_NOT_FOUND",
@@ -16,6 +37,7 @@ export const AbsenceErrorCodes = {
   BLACKOUT_PERIOD: "BLACKOUT_PERIOD",
   REQUEST_NOT_PENDING: "REQUEST_NOT_PENDING",
   REQUEST_ALREADY_PROCESSED: "REQUEST_ALREADY_PROCESSED",
+  BELOW_STATUTORY_MINIMUM: "BELOW_STATUTORY_MINIMUM",
 } as const;
 
 export class AbsenceService {
@@ -103,6 +125,45 @@ export class AbsenceService {
   // Leave Policies
   async createLeavePolicy(ctx: TenantContext, input: CreateLeavePolicy): Promise<ServiceResult<unknown>> {
     try {
+      // Look up leave type to determine category for statutory validation
+      const leaveType = await this.repo.getLeaveTypeById(ctx, input.leaveTypeId);
+      if (!leaveType) {
+        return {
+          success: false,
+          error: { code: AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND, message: "Leave type not found" },
+        };
+      }
+
+      // Enforce UK statutory minimum for annual leave policies
+      const category = (leaveType as unknown as Record<string, unknown>).category as string | undefined;
+      if (category === "annual") {
+        const daysPerWeek = (input as Record<string, unknown>).daysPerWeek as number | undefined;
+        const effectiveDaysPerWeek = daysPerWeek ?? UK_STATUTORY.FULL_TIME_DAYS_PER_WEEK;
+        const minimumEntitlement = calculateMinimumEntitlement(effectiveDaysPerWeek);
+
+        if (input.annualAllowance < minimumEntitlement) {
+          const isFullTime = effectiveDaysPerWeek === UK_STATUTORY.FULL_TIME_DAYS_PER_WEEK;
+          const description = isFullTime
+            ? `Annual leave policy entitlement of ${input.annualAllowance} days is below the UK statutory minimum of ${minimumEntitlement} days for full-time workers.`
+            : `Annual leave policy entitlement of ${input.annualAllowance} days is below the UK pro-rata statutory minimum of ${minimumEntitlement} days for a ${effectiveDaysPerWeek}-day working week.`;
+
+          return {
+            success: false,
+            error: {
+              code: AbsenceErrorCodes.BELOW_STATUTORY_MINIMUM,
+              message: description,
+              details: {
+                entitlementDays: input.annualAllowance,
+                minimumEntitlementDays: minimumEntitlement,
+                daysPerWeek: effectiveDaysPerWeek,
+                fullTimeMinimumDays: UK_STATUTORY.STATUTORY_MINIMUM_DAYS,
+                weeksEntitlement: UK_STATUTORY.WEEKS_ENTITLEMENT,
+              },
+            },
+          };
+        }
+      }
+
       const policy = await this.repo.createLeavePolicy(ctx, {
         name: input.name,
         description: input.description,

@@ -94,12 +94,12 @@ export class AbsenceRepository {
       const id = crypto.randomUUID();
       const [row] = await tx<LeaveTypeRow[]>`
         INSERT INTO app.leave_types (
-          id, tenant_id, code, name, description, is_paid,
+          id, tenant_id, code, name, category, description, is_paid,
           requires_approval, requires_attachment, max_consecutive_days,
           min_notice_days, color, is_active
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.code}, ${data.name},
-          ${data.description || null}, ${data.isPaid ?? true},
+          ${(data as Record<string, unknown>).category || "other"}, ${data.description || null}, ${data.isPaid ?? true},
           ${data.requiresApproval ?? true}, ${data.requiresAttachment ?? false},
           ${data.maxConsecutiveDays || null}, ${data.minNoticeDays ?? 0},
           ${data.color || null}, true

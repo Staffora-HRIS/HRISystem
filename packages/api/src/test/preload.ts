@@ -23,6 +23,9 @@ setEnvIfMissing("TEST_DB_NAME", "hris");
 // App database URL — use hris_app (NOBYPASSRLS) so RLS policies are enforced in route tests
 setEnvIfMissing("DATABASE_APP_URL", "postgres://hris_app:hris_app_dev_password@localhost:5432/hris");
 
+// DATABASE_URL fallback — some code paths (e.g. getDatabaseUrl()) require this
+setEnvIfMissing("DATABASE_URL", "postgres://hris_app:hris_app_dev_password@localhost:5432/hris");
+
 // Redis URL with password
 setEnvIfMissing("REDIS_URL", "redis://:staffora_redis_dev@localhost:6379");
 setEnvIfMissing("REDIS_PASSWORD", "staffora_redis_dev");

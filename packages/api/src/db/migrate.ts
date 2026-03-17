@@ -77,7 +77,20 @@ async function applyMigrations(sql: postgres.Sql, migrationsDir: string): Promis
 
     console.log(`[migrate] applying ${file}`);
 
+    // PostgreSQL does not allow ALTER TYPE ... ADD VALUE inside a transaction.
+    // Detect such migrations and run them outside a transaction block.
+    const hasEnumAddValue = /ALTER\s+TYPE\s+.*ADD\s+VALUE/i.test(migrationSql);
+
     try {
+      if (hasEnumAddValue) {
+        // Run outside transaction for ALTER TYPE ADD VALUE compatibility
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (sql as any).unsafe(migrationSql);
+        await sql`
+          INSERT INTO public.schema_migrations (filename)
+          VALUES (${file})
+        `;
+      } else {
       await sql.begin(async (tx) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const anyTx = tx as any;
@@ -93,6 +106,7 @@ async function applyMigrations(sql: postgres.Sql, migrationsDir: string): Promis
           VALUES (${file})
         `;
       });
+      }
     } catch (error) {
       if (isDuplicateObjectError(error)) {
         const message = (error as any)?.message;
