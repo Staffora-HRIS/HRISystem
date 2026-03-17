@@ -16,9 +16,6 @@ import { mapErrorToStatus } from "../../lib/route-helpers";
 import { ClientPortalRepository } from "./repository";
 import { ClientPortalService } from "./service";
 import {
-  LoginSchema,
-  ForgotPasswordSchema,
-  ResetPasswordSchema,
   CreateTicketSchema,
   CreateTicketMessageSchema,
   UpdateTicketSchema,
@@ -242,7 +239,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
       return { user: result.data!.user };
     },
     {
-      body: LoginSchema,
+      body: t.Object({ email: t.String(), password: t.String() }),
       detail: {
         tags: ["Client Portal"],
         summary: "Portal login",
@@ -261,7 +258,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
       };
     },
     {
-      body: ForgotPasswordSchema,
+      body: t.Object({ email: t.String() }),
       detail: {
         tags: ["Client Portal"],
         summary: "Request password reset",
@@ -287,7 +284,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
       return { message: "Password has been reset successfully." };
     },
     {
-      body: ResetPasswordSchema,
+      body: t.Object({ token: t.String(), newPassword: t.String() }),
       detail: {
         tags: ["Client Portal"],
         summary: "Reset password with token",
