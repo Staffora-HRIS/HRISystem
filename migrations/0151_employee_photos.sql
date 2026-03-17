@@ -77,7 +77,7 @@ CREATE POLICY system_bypass_insert ON app.employee_photos
 CREATE OR REPLACE TRIGGER trg_employee_photos_updated_at
   BEFORE UPDATE ON app.employee_photos
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DOWN Migration

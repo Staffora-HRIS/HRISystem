@@ -94,7 +94,7 @@ CREATE POLICY system_bypass_insert ON app.employee_bank_details
 CREATE OR REPLACE TRIGGER trg_employee_bank_details_updated_at
   BEFORE UPDATE ON app.employee_bank_details
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DOWN Migration
