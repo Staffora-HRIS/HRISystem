@@ -645,7 +645,7 @@ export class ClientPortalService {
             ticketId,
             ctx.userId!,
             "assigned",
-            ticket.assigneeId ?? undefined,
+            ticket.assignedTo ?? undefined,
             assigneeId,
             tx
           );
@@ -656,7 +656,7 @@ export class ClientPortalService {
             eventType: "client-portal.ticket.assigned",
             payload: {
               ticketId,
-              previousAssigneeId: ticket.assigneeId,
+              previousAssignedTo: ticket.assignedTo,
               assigneeId,
               actor: ctx.userId,
             },
@@ -784,14 +784,14 @@ export class ClientPortalService {
           }
           if (
             data.assigneeId !== undefined &&
-            data.assigneeId !== ticket.assigneeId
+            data.assigneeId !== ticket.assignedTo
           ) {
             await this.repository.logTicketActivity(
               ctx,
               ticketId,
               ctx.userId!,
               "assigned",
-              ticket.assigneeId ?? undefined,
+              ticket.assignedTo ?? undefined,
               data.assigneeId ?? undefined,
               tx
             );
@@ -1276,12 +1276,11 @@ export class ClientPortalService {
         license: {
           id: license.id,
           tenantId: license.tenantId,
-          tier: license.tier,
+          planTier: license.planTier,
           status: license.status,
-          seatCount: license.seatCount,
-          seatsUsed: license.seatsUsed,
-          monthlyPriceGbp: license.monthlyPriceGbp,
-          billingCycleDay: license.billingCycleDay,
+          employeeLimit: license.employeeLimit,
+          storageLimitGb: license.storageLimitGb,
+          adminLimit: license.adminLimit,
           currentPeriodStart:
             license.currentPeriodStart?.toISOString?.() ??
             license.currentPeriodStart,
@@ -1290,8 +1289,7 @@ export class ClientPortalService {
             license.currentPeriodEnd,
           trialEndsAt:
             license.trialEndsAt?.toISOString?.() ?? null,
-          cancelledAt:
-            license.cancelledAt?.toISOString?.() ?? null,
+          autoRenew: license.autoRenew,
           modules,
           createdAt:
             license.createdAt?.toISOString?.() ?? license.createdAt,
@@ -1302,10 +1300,13 @@ export class ClientPortalService {
           ? {
               id: paymentMethod.id,
               type: paymentMethod.type,
-              last4: paymentMethod.last4,
-              expiryMonth: paymentMethod.expiryMonth,
-              expiryYear: paymentMethod.expiryYear,
-              brand: paymentMethod.brand,
+              cardLastFour: paymentMethod.cardLastFour,
+              cardBrand: paymentMethod.cardBrand,
+              cardExpMonth: paymentMethod.cardExpMonth,
+              cardExpYear: paymentMethod.cardExpYear,
+              bankName: paymentMethod.bankName,
+              accountLastFour: paymentMethod.accountLastFour,
+              billingEmail: paymentMethod.billingEmail,
               isDefault: paymentMethod.isDefault,
             }
           : null,
@@ -1332,14 +1333,21 @@ export class ClientPortalService {
           id: inv.id,
           tenantId: inv.tenantId,
           invoiceNumber: inv.invoiceNumber,
-          status: inv.status,
-          issuedAt: inv.issuedAt?.toISOString?.() ?? inv.issuedAt,
-          dueAt: inv.dueAt?.toISOString?.() ?? inv.dueAt,
-          paidAt: inv.paidAt?.toISOString?.() ?? null,
-          subtotalGbp: inv.subtotalGbp,
-          vatGbp: inv.vatGbp,
-          totalGbp: inv.totalGbp,
+          licenseId: inv.licenseId,
+          periodStart: inv.periodStart?.toISOString?.() ?? inv.periodStart ?? null,
+          periodEnd: inv.periodEnd?.toISOString?.() ?? inv.periodEnd ?? null,
+          subtotal: inv.subtotal,
+          taxRate: inv.taxRate,
+          taxAmount: inv.taxAmount,
+          total: inv.total,
           currency: inv.currency,
+          status: inv.status,
+          dueDate: inv.dueDate?.toISOString?.() ?? inv.dueDate,
+          paidAt: inv.paidAt?.toISOString?.() ?? null,
+          paymentMethod: inv.paymentMethod,
+          paymentReference: inv.paymentReference,
+          pdfUrl: inv.pdfUrl,
+          notes: inv.notes,
           lines,
           createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,
         };
@@ -1380,14 +1388,21 @@ export class ClientPortalService {
         id: invoice.id,
         tenantId: invoice.tenantId,
         invoiceNumber: invoice.invoiceNumber,
-        status: invoice.status,
-        issuedAt: invoice.issuedAt?.toISOString?.() ?? invoice.issuedAt,
-        dueAt: invoice.dueAt?.toISOString?.() ?? invoice.dueAt,
-        paidAt: invoice.paidAt?.toISOString?.() ?? null,
-        subtotalGbp: invoice.subtotalGbp,
-        vatGbp: invoice.vatGbp,
-        totalGbp: invoice.totalGbp,
+        licenseId: invoice.licenseId,
+        periodStart: invoice.periodStart?.toISOString?.() ?? invoice.periodStart ?? null,
+        periodEnd: invoice.periodEnd?.toISOString?.() ?? invoice.periodEnd ?? null,
+        subtotal: invoice.subtotal,
+        taxRate: invoice.taxRate,
+        taxAmount: invoice.taxAmount,
+        total: invoice.total,
         currency: invoice.currency,
+        status: invoice.status,
+        dueDate: invoice.dueDate?.toISOString?.() ?? invoice.dueDate,
+        paidAt: invoice.paidAt?.toISOString?.() ?? null,
+        paymentMethod: invoice.paymentMethod,
+        paymentReference: invoice.paymentReference,
+        pdfUrl: invoice.pdfUrl,
+        notes: invoice.notes,
         lines,
         createdAt: invoice.createdAt?.toISOString?.() ?? invoice.createdAt,
       },
@@ -1611,10 +1626,11 @@ export class ClientPortalService {
         unacknowledgedDocuments: stats.unacknowledgedDocuments,
         license: license
           ? {
-              tier: license.tier,
+              planTier: license.planTier,
               status: license.status,
-              seatsUsed: license.seatsUsed,
-              seatCount: license.seatCount,
+              employeeLimit: license.employeeLimit,
+              storageLimitGb: license.storageLimitGb,
+              adminLimit: license.adminLimit,
               currentPeriodEnd:
                 license.currentPeriodEnd?.toISOString?.() ??
                 license.currentPeriodEnd,
@@ -1689,17 +1705,13 @@ export class ClientPortalService {
       category: ticket.category,
       priority: ticket.priority,
       status: ticket.status,
-      createdById: ticket.createdById,
+      createdBy: ticket.createdBy,
       createdByName: ticket.createdByName ?? undefined,
-      assigneeId: ticket.assigneeId,
-      assigneeName: ticket.assigneeName ?? null,
-      slaResponseDueAt:
-        ticket.slaResponseDueAt?.toISOString?.() ??
-        ticket.slaResponseDueAt ??
-        null,
-      slaResolutionDueAt:
-        ticket.slaResolutionDueAt?.toISOString?.() ??
-        ticket.slaResolutionDueAt ??
+      assignedTo: ticket.assignedTo ?? null,
+      assignedToName: ticket.assignedToName ?? null,
+      slaDueAt:
+        ticket.slaDueAt?.toISOString?.() ??
+        ticket.slaDueAt ??
         null,
       firstResponseAt:
         ticket.firstResponseAt?.toISOString?.() ??
@@ -1716,16 +1728,17 @@ export class ClientPortalService {
     };
   }
 
-  private formatMessage(message: any): Record<string, unknown> {
+  private formatMessage(msg: any): Record<string, unknown> {
     return {
-      id: message.id,
-      ticketId: message.ticketId,
-      authorId: message.authorId,
-      authorName: message.authorName ?? undefined,
-      content: message.content,
-      isInternalNote: message.isInternalNote,
+      id: msg.id,
+      ticketId: msg.ticketId,
+      authorId: msg.authorId,
+      authorName: msg.authorName ?? undefined,
+      message: msg.message,
+      isInternalNote: msg.isInternalNote,
+      attachments: msg.attachments ?? [],
       createdAt:
-        message.createdAt?.toISOString?.() ?? message.createdAt,
+        msg.createdAt?.toISOString?.() ?? msg.createdAt,
     };
   }
 
@@ -1735,15 +1748,21 @@ export class ClientPortalService {
       tenantId: doc.tenantId,
       title: doc.title,
       description: doc.description,
-      documentType: doc.documentType,
+      category: doc.category,
       fileName: doc.fileName,
       fileSize: doc.fileSize,
       mimeType: doc.mimeType,
-      storageUrl: doc.storageUrl,
+      storagePath: doc.storagePath,
       version: doc.version,
-      requiresAcknowledgement: doc.requiresAcknowledgement,
+      previousVersionId: doc.previousVersionId ?? null,
+      isPublished: doc.isPublished,
       publishedAt:
         doc.publishedAt?.toISOString?.() ?? doc.publishedAt ?? null,
+      publishedBy: doc.publishedBy ?? null,
+      visibility: doc.visibility,
+      downloadCount: doc.downloadCount,
+      requiresAcknowledgement: doc.requiresAcknowledgement,
+      createdBy: doc.createdBy ?? null,
       createdAt: doc.createdAt?.toISOString?.() ?? doc.createdAt,
       updatedAt: doc.updatedAt?.toISOString?.() ?? doc.updatedAt,
     };
@@ -1757,13 +1776,20 @@ export class ClientPortalService {
       slug: article.slug,
       summary: article.summary,
       content: article.content,
-      authorId: article.authorId,
-      authorName: article.authorName ?? undefined,
-      status: article.status,
+      category: article.category ?? null,
+      severity: article.severity ?? null,
+      isPinned: article.isPinned,
+      isPublished: article.isPublished,
       publishedAt:
         article.publishedAt?.toISOString?.() ??
         article.publishedAt ??
         null,
+      publishedBy: article.publishedBy ?? null,
+      coverImageUrl: article.coverImageUrl ?? null,
+      tags: article.tags ?? [],
+      viewCount: article.viewCount,
+      createdBy: article.createdBy,
+      createdByName: article.createdByName ?? undefined,
       createdAt:
         article.createdAt?.toISOString?.() ?? article.createdAt,
       updatedAt:
