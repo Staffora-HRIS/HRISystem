@@ -89,8 +89,8 @@ ENV PORT=5173
 EXPOSE 5173
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:5173/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget -q --spider http://localhost:5173/healthz || exit 1
 
 # Build metadata
 ARG BUILD_DATE=unknown

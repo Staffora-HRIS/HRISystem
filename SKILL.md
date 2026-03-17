@@ -1,41 +1,42 @@
 ---
 name: staffora-hris-patterns
 description: Coding patterns extracted from Staffora HRIS repository
-version: 1.0.0
+version: 2.0.0
 source: local-git-analysis
-analyzed_commits: 48
+analyzed_commits: 200
 ---
 
 # Staffora HRIS Patterns
 
 ## Commit Conventions
 
-This project uses **conventional commits** with these prefixes (by frequency):
+This project uses **conventional commits** with these prefixes (by frequency across 200 commits):
 
-| Prefix | Usage | Count |
+| Prefix | Usage | Share |
 |--------|-------|-------|
-| `perf:` | Performance optimizations | 29% |
-| `Merge:` | Merge commits (squash-merge PRs) | 27% |
-| `refactor:` | Code restructuring | 13% |
-| `docs:` | Documentation updates | 13% |
-| `feat:` | New features | 6% |
-| `fix:` | Bug fixes | 4% |
+| `fix:` | Bug fixes, migration fixes, typecheck fixes | 33% |
+| `perf:` | Performance optimizations | 14% |
+| `Merge:` | Squash-merge PRs | 13% |
+| `build(deps):` | Dependency bumps (Dependabot) | 8% |
+| `refactor:` | Code restructuring | 6% |
+| `docs:` | Documentation updates | 6% |
+| `feat:` | New features | 5% |
 
-**Message style**: Lowercase after prefix, descriptive but concise.
-- Good: `perf: add composite indexes for common query patterns`
-- Good: `refactor: apply beforeHandle auth guards to remaining route modules`
-- Avoid: generic messages like "Main Commit" or "Git"
+**Message style**: Lowercase after prefix, descriptive and specific.
+- Good: `fix: correct update_updated_at trigger function name in 13 migrations`
+- Good: `feat: enterprise CI/CD pipelines, UK compliance, permissions, client portal`
+- Good: `perf: push analytics aggregation into SQL and add incremental computation`
+- Avoid: generic messages like "Main Commit" or "update"
 
 ## Code Architecture
 
 ### Monorepo Structure (Bun Workspaces)
 ```
 packages/
-├── api/          # @staffora/api — Elysia.js backend (71 modules)
+├── api/          # @staffora/api — Elysia.js backend (72 modules)
 ├── web/          # @staffora/web — React Router v7 frontend
 ├── shared/       # @staffora/shared — Types, schemas, state machines
-Website/          # @staffora/website — Marketing site
-migrations/       # 232 numbered SQL files (NNNN_description.sql)
+migrations/       # 228 numbered SQL files (NNNN_description.sql)
 docker/           # Docker Compose, postgres/redis config
 ```
 
@@ -51,27 +52,28 @@ Every module in `packages/api/src/modules/{name}/` follows this structure:
 └── index.ts        # Barrel export
 ```
 
-Some modules have sub-domain files (e.g., `cases/disciplinary.{repository,routes,schemas,service}.ts`).
+All 72 modules follow this convention — `routes.ts` (72), `service.ts` (72), `repository.ts` (70), `schemas.ts` (70), `index.ts` (72).
 
-**Most changed files** (hotspots):
-- `routes.ts` (141 changes) — Most actively iterated
-- `repository.ts` (121 changes) — Queries evolve with schema
-- `service.ts` (107 changes) — Business logic refinement
-- `schemas.ts` (74 changes) — Validation schemas
+**Most changed files** (hotspots from recent history):
+- `packages/api/src/app.ts` (11 changes) — Plugin/route registration
+- `packages/api/src/modules/hr/service.ts` (11 changes) — Core HR logic
+- `packages/api/src/modules/time/repository.ts` (9 changes) — Time queries
+- `packages/api/src/plugins/auth-better.ts` (8 changes) — Auth middleware
+- `packages/api/src/plugins/errors.ts` (8 changes) — Error codes
 
 ### Frontend Route Groups
 ```
 app/routes/
-├── (auth)/       # Login, register, forgot-password
-├── (admin)/      # Admin panel (20 route modules)
+├── (auth)/       # Login, MFA, forgot-password, reset-password
+├── (admin)/      # Admin panel (21 route modules)
 │   ├── hr/       # Core HR (employees, positions, org)
 │   ├── talent/   # Recruitment, performance, goals
 │   ├── absence/  # Leave management
 │   ├── time/     # Time & attendance
 │   ├── cases/    # Case management
 │   ├── lms/      # Learning management
-│   └── ...       # benefits, documents, analytics, etc.
-└── (app)/        # Employee self-service portal
+│   └── ...       # benefits, documents, analytics, payroll, etc.
+└── (app)/        # Employee self-service (dashboard, manager, me)
 ```
 
 ### Frontend Libraries
@@ -79,8 +81,21 @@ app/routes/
 app/
 ├── components/   # Reusable (ui/, layouts/, analytics/, auth/, etc.)
 ├── hooks/        # use-permissions, use-tenant, use-manager, use-portal
-└── lib/          # api-client, auth-client, query-client, theme, utils
+└── lib/          # api-client, auth-client, better-auth, query-client, theme, utils
 ```
+
+## Authentication
+
+**All auth uses Better Auth (https://better-auth.com/)** — no custom auth systems.
+
+- Backend: `betterAuth()` in `packages/api/src/lib/better-auth.ts`
+- Frontend: `createAuthClient` from `better-auth/react` in `packages/web/app/lib/better-auth.ts`
+- Tables: `app."user"`, `app."session"`, `app."account"`, `app."verification"`, `app."twoFactor"`
+- Legacy sync: `app.users` kept in sync via `databaseHooks` (gradual migration)
+- Plugins: `twoFactor`, `organization`, `dash`
+- Sessions: httpOnly cookies, 7-day expiry, `staffora` prefix
+
+**Key rule**: When creating users outside Better Auth's API (e.g., bootstrap scripts), you MUST create records in BOTH `app.users` AND `app."user"` + `app."account"` atomically.
 
 ## Workflows
 
@@ -101,16 +116,17 @@ app/
 
 ### Database Migration Workflow
 1. Find next available number after highest in `migrations/`
-2. Create `migrations/NNNN_description.sql`
+2. Create `migrations/NNNN_description.sql` (4-digit padded)
 3. Include RLS policies for all tenant-scoped tables
 4. Run `bun run migrate:up`
-5. Note: Numbers 0076-0079 and 0165/0174 have duplicates from parallel branches
+5. Note: Some numbers have duplicates from parallel branches (known quirk)
 
-### Refactoring Pattern (from git history)
-Recent refactoring focus areas:
-1. **Auth guards** → Move from inline auth checks to `beforeHandle` guards
-2. **Service extraction** → Extract service/repository layers from route handlers
-3. **Performance** → React.memo, useMemo, batch INSERTs, composite indexes
+### Common Fix Patterns (from git history)
+Recent fix categories (33% of all commits):
+1. **Migration SQL fixes** — Trigger names, enum ordering, FK references, syntax
+2. **TypeScript typecheck fixes** — Import paths, missing types, error codes
+3. **CI pipeline fixes** — Redis auth, permissions, audit formatting
+4. **Dependency fixes** — Lockfile sync, missing packages
 
 ## Testing Patterns
 
@@ -118,12 +134,13 @@ Recent refactoring focus areas:
 ```
 packages/api/src/test/
 ├── integration/        # RLS, idempotency, outbox, effective-dating
-│   ├── routes/         # Module-specific route tests
-│   └── multi-tenant/   # Cross-tenant attack tests
-├── unit/               # Service, plugin, job unit tests
-├── e2e/                # Full flows (employee lifecycle, auth, cases)
+│   ├── routes/         # Module-specific route tests (10 files)
+│   ├── multi-tenant/   # Cross-tenant attack tests
+│   └── workflows/      # Multi-step workflow tests
+├── unit/               # Service, plugin, job, lib, repository unit tests
+├── e2e/                # Full flows (employee lifecycle, auth, cases, leave, onboarding)
 ├── security/           # Injection attacks, authentication
-├── chaos/              # Database failure scenarios
+├── chaos/              # Database/connection failure scenarios
 └── performance/        # Query benchmarks
 ```
 
@@ -139,25 +156,23 @@ packages/api/src/test/
 - Outbox written atomically with business writes
 - State machine transitions enforced
 
-## Performance Patterns (Recent Focus)
-
-The repo had a significant performance optimization sprint (14 perf commits in one session):
+## Performance Patterns
 
 | Area | Pattern |
 |------|---------|
-| **Frontend** | React.memo on 20+ components, useMemo for column defs/stats |
+| **Frontend** | React.memo on card/list components, useMemo for column defs/stats |
 | **Backend** | Batch INSERT instead of loops, composite indexes |
 | **Database** | PostgreSQL tuning config, SQL-based analytics aggregation |
-| **Caching** | Cache invalidation hooks, increased Redis maxmemory (750MB) |
-| **Infrastructure** | Docker image optimization (Alpine, trimmed workspace) |
+| **Caching** | Cache invalidation hooks for employee/security/tenant events |
+| **Infrastructure** | Alpine Docker images, trimmed Bun workspace installs |
 | **React Query** | Disabled refetchOnWindowFocus/refetchOnReconnect |
-| **Redis Streams** | Stream trimming, consumer group start position fix |
+| **Redis Streams** | Stream trimming, consumer group start position fixes |
 
 ## Key Conventions
 
 1. **All tables in `app` schema** — not `public`
 2. **postgres.js tagged templates** — not Drizzle ORM
-3. **snake_case DB ↔ camelCase TS** — auto-transformed by postgres.js
+3. **snake_case DB / camelCase TS** — auto-transformed by postgres.js
 4. **Cursor-based pagination** — not offset
 5. **TypeBox for validation** — not Zod (except shared package)
 6. **beforeHandle guards** — not inline auth checks in routes
@@ -165,3 +180,5 @@ The repo had a significant performance optimization sprint (14 perf commits in o
 8. **RLS on every tenant table** — `tenant_id` + isolation policy
 9. **Effective dating** — `effective_from`/`effective_to` for time-varying HR data
 10. **Bun** as package manager and test runner (API), **Vitest** for web tests
+11. **Better Auth** for all authentication — no custom auth systems
+12. **UK-only HRIS** — GBP currency, UK compliance modules, no US defaults

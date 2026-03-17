@@ -57,8 +57,8 @@ function loadDbConfig(): DbConfig {
       database: url.pathname.replace(/^\//, "") || "hris",
       username: decodeURIComponent(url.username || "hris"),
       password: decodeURIComponent(url.password || ""),
-      maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || 20,
-      idleTimeout: Number(process.env["DB_IDLE_TIMEOUT"]) || 30,
+      maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || 10,
+      idleTimeout: Number(process.env["DB_IDLE_TIMEOUT"]) || 20,
       connectTimeout: Number(process.env["DB_CONNECT_TIMEOUT"]) || 10,
       ssl,
     };
@@ -398,15 +398,26 @@ export function dbPlugin() {
 // =============================================================================
 
 /**
- * Generate a hash of the request body for idempotency
+ * Generate a hash of the request body for idempotency.
+ * Uses Bun.hash for speed when available, falls back to Web Crypto.
  */
 export async function hashRequestBody(body: unknown): Promise<string> {
   const bodyStr = JSON.stringify(body || {});
-  const encoder = new TextEncoder();
-  const data = encoder.encode(bodyStr);
+
+  // Bun.hash is ~10x faster than Web Crypto for small payloads
+  if (typeof Bun !== "undefined" && Bun.hash) {
+    return Bun.hash(bodyStr).toString(16);
+  }
+
+  const data = new TextEncoder().encode(bodyStr);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  const bytes = new Uint8Array(hashBuffer);
+  // Avoid Array.from + map allocations — build hex string directly
+  let hex = "";
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i]!.toString(16).padStart(2, "0");
+  }
+  return hex;
 }
 
 // =============================================================================

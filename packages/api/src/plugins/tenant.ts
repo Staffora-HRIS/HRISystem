@@ -47,6 +47,9 @@ export type TenantSource = "header" | "session" | "subdomain";
 // Errors
 // =============================================================================
 
+/** Pre-compiled UUID regex for tenant ID validation (avoids re-compiling per request) */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Tenant-related error codes
  */
@@ -153,9 +156,8 @@ export class TenantService {
    * Validate and get tenant, throwing appropriate errors
    */
   async validateTenant(tenantId: string): Promise<Tenant> {
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(tenantId)) {
+    // Validate UUID format (uses pre-compiled regex)
+    if (!UUID_REGEX.test(tenantId)) {
       throw new TenantError(
         "INVALID_TENANT",
         "Invalid tenant ID format",
