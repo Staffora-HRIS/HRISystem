@@ -539,11 +539,11 @@ export class TimeRepository {
     return this.db.withTransaction(ctx, async (tx) => {
       const rows = await tx<TimesheetLineRow[]>`
         SELECT
-          id, timesheet_id, date, regular_hours, overtime_hours,
-          break_minutes, project_id, task_code, notes
+          id, timesheet_id, work_date as date, regular_hours, overtime_hours,
+          break_minutes, notes
         FROM app.timesheet_lines
         WHERE timesheet_id = ${timesheetId}::uuid
-        ORDER BY date
+        ORDER BY work_date
       `;
       return rows as TimesheetLineRow[];
     });
@@ -572,13 +572,12 @@ export class TimeRepository {
           INSERT INTO app.timesheet_lines ${(tx as any)(
             lines.map(line => ({
               id: crypto.randomUUID(),
+              tenant_id: ctx.tenantId,
               timesheet_id: timesheetId,
-              date: line.date,
+              work_date: line.date,
               regular_hours: line.regularHours,
               overtime_hours: line.overtimeHours || 0,
               break_minutes: line.breakMinutes || 0,
-              project_id: line.projectId || null,
-              task_code: line.taskCode || null,
               notes: line.notes || null,
             }))
           )}

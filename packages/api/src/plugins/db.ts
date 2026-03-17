@@ -272,6 +272,8 @@ export class DatabaseClient {
     callback: (tx: TransactionSql<Record<string, unknown>>) => Promise<T>
   ): Promise<T> {
     return (await this.sql.begin(async (tx) => {
+      // Set a valid nil UUID to prevent RLS policy cast errors on empty string
+      await tx`SELECT set_config('app.current_tenant', '00000000-0000-0000-0000-000000000000', true)`;
       // Enable system context to bypass RLS
       await tx`SELECT app.enable_system_context()`;
 

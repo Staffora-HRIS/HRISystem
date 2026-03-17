@@ -343,3 +343,96 @@ export function assertPaginated<T>(
     throw new Error("Expected paginated response with hasMore boolean");
   }
 }
+
+/**
+ * Assert that the response indicates success (2xx status).
+ * Throws if status is not in the 200-299 range.
+ */
+export function expectSuccess(
+  response: { status: number; [key: string]: unknown }
+): void {
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(
+      `Expected success (2xx) but got ${response.status}`
+    );
+  }
+}
+
+/**
+ * Assert that the response is an error with the expected code and optional status.
+ * Returns the error body for further assertions.
+ */
+export function expectError(
+  response: { status: number; body?: Record<string, unknown>; [key: string]: unknown },
+  expectedCode: string,
+  expectedStatus?: number
+): { error: { code: string; message: string } } {
+  const body = (response as Record<string, unknown>).body as Record<string, unknown> | undefined;
+  const error = body?.error as { code: string; message: string } | undefined;
+
+  if (expectedStatus !== undefined && response.status !== expectedStatus) {
+    throw new Error(
+      `Expected status ${expectedStatus} but got ${response.status}`
+    );
+  }
+
+  if (!error || error.code !== expectedCode) {
+    throw new Error(
+      `Expected error code ${expectedCode} but got ${error?.code ?? "undefined"}`
+    );
+  }
+
+  return { error };
+}
+
+/**
+ * Assert that the response is a paginated list (200 status with items array).
+ * Returns the paginated data for further assertions.
+ */
+export function expectPaginated(
+  response: { status: number; body?: Record<string, unknown>; [key: string]: unknown }
+): { items: unknown[]; hasMore: boolean; nextCursor: string | null } {
+  if (response.status !== 200) {
+    throw new Error(`Expected 200 but got ${response.status}`);
+  }
+
+  const body = (response as Record<string, unknown>).body as Record<string, unknown>;
+  return {
+    items: body.items as unknown[],
+    hasMore: body.hasMore as boolean,
+    nextCursor: (body.nextCursor as string) ?? null,
+  };
+}
+
+/**
+ * Assert that the response has a specific status code.
+ * Throws a descriptive error if it doesn't match.
+ */
+export function expectStatus(
+  response: { status: number; [key: string]: unknown },
+  expected: number
+): void {
+  if (response.status !== expected) {
+    throw new Error(
+      `Expected status ${expected} but got ${response.status}`
+    );
+  }
+}
+
+/**
+ * Assert that the response body contains the expected key-value pairs.
+ * Throws a descriptive error if any field does not match.
+ */
+export function expectBodyContains(
+  response: { status: number; body?: Record<string, unknown>; [key: string]: unknown },
+  expected: Record<string, unknown>
+): void {
+  const body = (response as Record<string, unknown>).body as Record<string, unknown> | undefined;
+  for (const [key, value] of Object.entries(expected)) {
+    if (body?.[key] !== value) {
+      throw new Error(
+        `Expected body.${key} to be ${JSON.stringify(value)} but got ${JSON.stringify(body?.[key])}`
+      );
+    }
+  }
+}
