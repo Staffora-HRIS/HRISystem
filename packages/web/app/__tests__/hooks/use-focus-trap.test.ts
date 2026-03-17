@@ -108,7 +108,7 @@ describe("useFocusTrap", () => {
 
     it("should move to previous element on Shift+Tab in the middle", () => {
       const elements = ["first", "second", "third"];
-      const activeIndex = 1;
+      const activeIndex: number = 1;
       const shiftKey = true;
 
       let nextFocusIndex: number;
