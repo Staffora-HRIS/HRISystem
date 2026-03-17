@@ -3,7 +3,7 @@
  *
  * Converts ServiceResult error codes to HTTP status codes and structured
  * error responses. This is the single source of truth for error-code-to-HTTP-
- * status mapping across all route modules (TODO-069).
+ * status mapping across all route modules.
  *
  * Two usage patterns are supported:
  *

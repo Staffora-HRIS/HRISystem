@@ -16,7 +16,6 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
-COPY Website/package.json ./Website/
 
 # Install all dependencies (dev deps needed for build step)
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -64,7 +63,6 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
-COPY Website/package.json ./Website/
 
 RUN bun install --frozen-lockfile --ignore-scripts --production && \
     rm -rf /tmp/* ~/.bun/install/cache
@@ -93,6 +91,18 @@ EXPOSE 5173
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget -q --spider http://localhost:5173/ || exit 1
+
+# Build metadata
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+ARG VERSION=unknown
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/Staffora-HRIS/HRISystem" \
+      org.opencontainers.image.vendor="Staffora" \
+      org.opencontainers.image.title="staffora-web" \
+      org.opencontainers.image.description="Staffora HRIS Platform Web"
 
 # Start the SSR server via react-router-serve
 CMD ["bun", "run", "start"]

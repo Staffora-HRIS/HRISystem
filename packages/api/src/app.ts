@@ -226,6 +226,22 @@ export const app = new Elysia()
 
   // Core infrastructure plugins (order matters!)
   .use(errorsPlugin())
+
+  // Request body size limit (default 10MB, configurable via MAX_BODY_SIZE env var)
+  .onBeforeHandle({ as: "global" }, ({ request, set }) => {
+    const contentLength = request.headers.get("content-length");
+    const maxBodySize = Number(process.env["MAX_BODY_SIZE"]) || 10 * 1024 * 1024; // 10MB default
+    if (contentLength && Number(contentLength) > maxBodySize) {
+      set.status = 413;
+      return {
+        error: {
+          code: "PAYLOAD_TOO_LARGE",
+          message: `Request body exceeds maximum size of ${Math.floor(maxBodySize / 1024 / 1024)}MB`,
+        },
+      };
+    }
+  })
+
   .use(dbPlugin())
   .use(cachePlugin())
 

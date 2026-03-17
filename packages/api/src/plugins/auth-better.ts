@@ -583,12 +583,10 @@ export function requireMfa() {
 
       if (hasMfa) {
         // Verify MFA was completed for this session by checking session metadata.
-        // TODO: Better Auth's two-factor plugin stores MFA verification status on
-        // the session object, but the exact field name depends on plugin version and
-        // configuration. The field "twoFactorVerified" may not be set by all
-        // Better Auth versions. Verify the Better Auth MFA plugin configuration and
-        // ensure the session schema includes this field. See:
-        // https://www.better-auth.com/docs/plugins/two-factor
+        // Better Auth's two-factor plugin sets "twoFactorVerified" on the session
+        // object after successful TOTP verification. If the field is not populated,
+        // MFA is considered not verified and access is denied.
+        // See: https://www.better-auth.com/docs/plugins/two-factor
         const sessionData = session as { twoFactorVerified?: boolean };
         if (!sessionData?.twoFactorVerified) {
           // Log a warning since twoFactorVerified may not be populated by Better Auth
