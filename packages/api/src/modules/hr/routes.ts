@@ -65,6 +65,11 @@ import {
   AddressTypeSchema,
   RehireEmployeeSchema,
   RehireResponseSchema,
+  // Position assignment (concurrent employment) schemas
+  AssignEmployeePositionSchema,
+  EmployeePositionAssignmentResponseSchema,
+  EmployeePositionsListResponseSchema,
+  EmployeePositionParamsSchema,
   type HistoryDimension,
 } from "./schemas";
 
@@ -92,6 +97,7 @@ const hrErrorStatusMap: Record<string, number> = {
   INVALID_TERMINATION_DATE: 400,
   INVALID_REHIRE_DATE: 400,
   INVALID_DIMENSION: 400,
+  FTE_LIMIT_EXCEEDED: 400,
 };
 
 /**

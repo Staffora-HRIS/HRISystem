@@ -187,6 +187,70 @@ function createMockAnalyticsRepository() {
         { change_reason: "market", count: 5, avg_change_percentage: 5.0 },
       ])
     ),
+    // Workforce Planning Analytics
+    getActiveHeadcount: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve(130)
+    ),
+    getMonthlyHeadcountHistory: mock((_ctx: unknown, _lookback: number, _filters: unknown) =>
+      Promise.resolve([
+        { period: "2025-01-01", hires: 5, terminations: 2, endHeadcount: 120 },
+        { period: "2025-02-01", hires: 6, terminations: 3, endHeadcount: 123 },
+        { period: "2025-03-01", hires: 4, terminations: 1, endHeadcount: 126 },
+        { period: "2025-04-01", hires: 7, terminations: 2, endHeadcount: 131 },
+        { period: "2025-05-01", hires: 3, terminations: 2, endHeadcount: 132 },
+        { period: "2025-06-01", hires: 5, terminations: 3, endHeadcount: 134 },
+        { period: "2025-07-01", hires: 4, terminations: 1, endHeadcount: 137 },
+        { period: "2025-08-01", hires: 6, terminations: 2, endHeadcount: 141 },
+        { period: "2025-09-01", hires: 3, terminations: 3, endHeadcount: 141 },
+        { period: "2025-10-01", hires: 5, terminations: 2, endHeadcount: 144 },
+        { period: "2025-11-01", hires: 4, terminations: 1, endHeadcount: 147 },
+        { period: "2025-12-01", hires: 6, terminations: 3, endHeadcount: 150 },
+        // Current (partial) month
+        { period: "2026-01-01", hires: 2, terminations: 0, endHeadcount: 152 },
+      ])
+    ),
+    getRetirementProjectionData: mock((_ctx: unknown, _horizonYears: number, _filters: unknown) =>
+      Promise.resolve([
+        { employeeId: "e1", dateOfBirth: "1960-05-15", yearsToRetirement: 1.5, orgUnitId: "ou1", orgUnitName: "Engineering" },
+        { employeeId: "e2", dateOfBirth: "1961-08-20", yearsToRetirement: 3.2, orgUnitId: "ou1", orgUnitName: "Engineering" },
+        { employeeId: "e3", dateOfBirth: "1963-01-10", yearsToRetirement: 5.8, orgUnitId: "ou2", orgUnitName: "Sales" },
+        { employeeId: "e4", dateOfBirth: "1959-11-30", yearsToRetirement: 0.5, orgUnitId: "ou2", orgUnitName: "Sales" },
+      ])
+    ),
+    getEmployeesWithDobCount: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve(110)
+    ),
+    getSkillsGapData: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve({
+        totalEmployeesWithAssessments: 85,
+        gaps: [
+          {
+            competencyId: "c1",
+            competencyName: "Leadership",
+            competencyCategory: "leadership",
+            employeesAssessed: 40,
+            employeesRequired: 50,
+            avgCurrentLevel: 2.8,
+            avgRequiredLevel: 3.5,
+            avgGap: 0.7,
+            employeesBelowRequired: 15,
+            coverageRate: 70.0,
+          },
+          {
+            competencyId: "c2",
+            competencyName: "Data Analysis",
+            competencyCategory: "technical",
+            employeesAssessed: 25,
+            employeesRequired: 35,
+            avgCurrentLevel: 2.2,
+            avgRequiredLevel: 3.0,
+            avgGap: 0.8,
+            employeesBelowRequired: 20,
+            coverageRate: 57.1,
+          },
+        ],
+      })
+    ),
   };
 }
 
