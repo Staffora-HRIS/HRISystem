@@ -459,15 +459,18 @@ export class DataArchivalRepository {
       }
 
       // No status filter - just age-based
+      // Dynamic table/column identifiers via postgres.js helper — typed as Helper<string>
+      const table = tx(rule.sourceTable);
+      const dateCol = tx(rule.dateColumn);
       return await tx<Array<{ id: string }>>`
         SELECT t.id::text as id
-        FROM ${tx(rule.sourceTable)} t
+        FROM ${table} t
         LEFT JOIN archived_records ar
           ON ar.source_table = ${rule.sourceTable}
           AND ar.source_id = t.id
           AND ar.status = 'archived'
         WHERE ar.id IS NULL
-          AND t.${tx(rule.dateColumn)} < ${cutoffDate}
+          AND t.${dateCol} < ${cutoffDate}
         LIMIT ${batchLimit}
       `;
     } catch {
