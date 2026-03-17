@@ -403,7 +403,7 @@ export class ManagerService {
 
     await this.db.withTransaction(ctx, async (tx) => {
       switch (type) {
-        case "leave_request":
+        case "leave_request": {
           // Verify the request is for a subordinate
           const verification = await tx<{ employee_id: string }[]>`
             SELECT lr.employee_id
@@ -456,6 +456,7 @@ export class ManagerService {
             )
           `;
           break;
+        }
 
         default:
           throw new ManagerAccessError(`Unsupported approval type: ${type}`);
@@ -479,7 +480,7 @@ export class ManagerService {
 
     await this.db.withTransaction(ctx, async (tx) => {
       switch (type) {
-        case "leave_request":
+        case "leave_request": {
           // Verify the request is for a subordinate
           const verification = await tx<{ employee_id: string }[]>`
             SELECT lr.employee_id
@@ -533,6 +534,7 @@ export class ManagerService {
             )
           `;
           break;
+        }
 
         default:
           throw new ManagerAccessError(`Unsupported approval type: ${type}`);

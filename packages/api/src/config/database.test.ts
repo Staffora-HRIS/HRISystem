@@ -53,6 +53,7 @@ describe("Database Configuration Constants", () => {
 
   it("should NOT export DEFAULT_DB_PASSWORD (hardcoded passwords removed)", () => {
     // Ensure no password constant is exported
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const exports = require("./database");
     expect(exports.DEFAULT_DB_PASSWORD).toBeUndefined();
     expect(exports.DEFAULT_APP_DB_PASSWORD).toBeUndefined();

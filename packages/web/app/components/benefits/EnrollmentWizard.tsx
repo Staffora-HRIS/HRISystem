@@ -172,7 +172,7 @@ export function EnrollmentWizard({
         return dependents.every(
           (d) => d.firstName && d.lastName && d.relationship && d.dateOfBirth
         );
-      case "beneficiaries":
+      case "beneficiaries": {
         if (beneficiaries.length === 0) return true;
         const totalPercentage = beneficiaries.reduce(
           (sum, b) => sum + b.percentage,
@@ -182,6 +182,7 @@ export function EnrollmentWizard({
           beneficiaries.every((b) => b.name && b.percentage > 0) &&
           totalPercentage === 100
         );
+      }
       case "review":
         return true;
       case "confirm":

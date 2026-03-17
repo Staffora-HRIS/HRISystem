@@ -1,4 +1,5 @@
-// @ts-nocheck
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck - sentry.ts: @sentry/node is an optional dependency not yet installed
 /**
  * Sentry Error Tracking Integration
  *
@@ -46,7 +47,7 @@ const NI_NUMBER_REGEX = /\b[A-Za-z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-Da-d]\b/g;
 /**
  * Email address pattern — intentionally broad to catch most formats.
  */
-const EMAIL_REGEX = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
+const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 /**
  * Keys in request/event data that should always be fully redacted.
