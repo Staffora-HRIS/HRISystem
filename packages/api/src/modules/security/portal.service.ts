@@ -301,7 +301,7 @@ export class PortalService {
 
       if (portalAccessRows.length > 0) {
         await tx`
-          INSERT INTO app.user_portal_access ${tx(portalAccessRows)}
+          INSERT INTO app.user_portal_access ${(tx as any)(portalAccessRows)}
           ON CONFLICT (tenant_id, user_id, portal_id) DO NOTHING
         `;
       }

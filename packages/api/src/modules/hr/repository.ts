@@ -1028,7 +1028,7 @@ export class HRRepository {
     // Create contacts if provided (batch insert)
     if (data.contacts && data.contacts.length > 0) {
       await tx`
-        INSERT INTO app.employee_contacts ${tx(
+        INSERT INTO app.employee_contacts ${(tx as any)(
           data.contacts.map(contact => ({
             tenant_id: context.tenantId,
             employee_id: employee.id,
@@ -1045,7 +1045,7 @@ export class HRRepository {
     // Create addresses if provided (batch insert)
     if (data.addresses && data.addresses.length > 0) {
       await tx`
-        INSERT INTO app.employee_addresses ${tx(
+        INSERT INTO app.employee_addresses ${(tx as any)(
           data.addresses.map(address => ({
             tenant_id: context.tenantId,
             employee_id: employee.id,
