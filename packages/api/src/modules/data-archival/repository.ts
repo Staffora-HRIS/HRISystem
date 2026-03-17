@@ -70,6 +70,23 @@ export interface CategoryStats extends Row {
 export class DataArchivalRepository {
   constructor(private db: DatabaseClient) {}
 
+  /**
+   * Escape a SQL identifier (table or column name) to prevent SQL injection.
+   * Wraps the identifier in double quotes after stripping any existing quotes.
+   * Only alphanumeric characters, underscores, and dots are allowed.
+   */
+  private escapeIdentifier(name: string): string {
+    // Validate: only allow alphanumeric, underscores, and dots (for schema.table)
+    if (!/^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(name)) {
+      throw new Error(`Invalid SQL identifier: ${name}`);
+    }
+    // Split on dots to handle schema.table notation
+    return name
+      .split(".")
+      .map((part) => `"${part}"`)
+      .join(".");
+  }
+
   // ===========================================================================
   // Archived Records
   // ===========================================================================
@@ -232,22 +249,21 @@ export class DataArchivalRepository {
   /**
    * Fetch source record data for archival.
    * Reads the full row from the source table as JSONB.
+   *
+   * Uses tx.unsafe() because the table name is dynamic.
+   * The source_table is validated against the archival_rules whitelist
+   * before reaching this method, preventing SQL injection.
    */
   async fetchSourceRecord(
     tx: TransactionSql,
     sourceTable: string,
     sourceId: string
   ): Promise<unknown | null> {
-    // We use a safe approach: query the row_to_json of the source table.
-    // The source_table is validated against the archival_rules whitelist
-    // before reaching this method, preventing SQL injection.
     try {
-      const rows = await tx<{ data: unknown }[]>`
-        SELECT row_to_json(t.*) as data
-        FROM ${tx(sourceTable)} t
-        WHERE t.id = ${sourceId}::uuid
-        LIMIT 1
-      `;
+      const rows = await tx.unsafe<{ data: unknown }[]>(
+        `SELECT row_to_json(t.*) as data FROM ${this.escapeIdentifier(sourceTable)} t WHERE t.id = $1::uuid LIMIT 1`,
+        [sourceId]
+      );
       return rows[0]?.data || null;
     } catch {
       return null;
@@ -264,10 +280,10 @@ export class DataArchivalRepository {
     sourceId: string
   ): Promise<boolean> {
     try {
-      const result = await tx`
-        DELETE FROM ${tx(sourceTable)}
-        WHERE id = ${sourceId}::uuid
-      `;
+      const result = await tx.unsafe(
+        `DELETE FROM ${this.escapeIdentifier(sourceTable)} WHERE id = $1::uuid`,
+        [sourceId]
+      );
       return result.count > 0;
     } catch {
       return false;
@@ -284,17 +300,11 @@ export class DataArchivalRepository {
     archivedData: Record<string, unknown>
   ): Promise<boolean> {
     try {
-      // Convert camelCase keys back to snake_case for insertion
-      // The archived_data is stored as the original row from the DB,
-      // which postgres.js would have transformed to camelCase.
-      // We use a raw insert with the jsonb_populate_record function.
-      await tx`
-        INSERT INTO ${tx(sourceTable)}
-        SELECT * FROM jsonb_populate_record(
-          null::${tx(sourceTable)},
-          ${JSON.stringify(archivedData)}::jsonb
-        )
-      `;
+      const ident = this.escapeIdentifier(sourceTable);
+      await tx.unsafe(
+        `INSERT INTO ${ident} SELECT * FROM jsonb_populate_record(null::${ident}, $1::jsonb)`,
+        [JSON.stringify(archivedData)]
+      );
       return true;
     } catch {
       return false;
@@ -442,37 +452,40 @@ export class DataArchivalRepository {
     batchLimit: number = 500
   ): Promise<Array<{ id: string }>> {
     try {
+      const table = this.escapeIdentifier(rule.sourceTable);
+      const dateCol = this.escapeIdentifier(rule.dateColumn);
+
       if (rule.statusColumn && rule.statusValue) {
+        const statusCol = this.escapeIdentifier(rule.statusColumn);
         // Records must have the specified status AND be older than cutoff
-        return await tx<Array<{ id: string }>>`
-          SELECT t.id::text as id
-          FROM ${tx(rule.sourceTable)} t
-          LEFT JOIN archived_records ar
-            ON ar.source_table = ${rule.sourceTable}
-            AND ar.source_id = t.id
-            AND ar.status = 'archived'
-          WHERE ar.id IS NULL
-            AND t.${tx(rule.statusColumn)} = ${rule.statusValue}
-            AND t.${tx(rule.dateColumn)} < ${cutoffDate}
-          LIMIT ${batchLimit}
-        `;
+        return await tx.unsafe<Array<{ id: string }>>(
+          `SELECT t.id::text as id
+           FROM ${table} t
+           LEFT JOIN archived_records ar
+             ON ar.source_table = $1
+             AND ar.source_id = t.id
+             AND ar.status = 'archived'
+           WHERE ar.id IS NULL
+             AND t.${statusCol} = $2
+             AND t.${dateCol} < $3
+           LIMIT $4`,
+          [rule.sourceTable, rule.statusValue, cutoffDate, batchLimit]
+        );
       }
 
       // No status filter - just age-based
-      // Dynamic table/column identifiers via postgres.js helper — typed as Helper<string>
-      const table = tx(rule.sourceTable);
-      const dateCol = tx(rule.dateColumn);
-      return await tx<Array<{ id: string }>>`
-        SELECT t.id::text as id
-        FROM ${table} t
-        LEFT JOIN archived_records ar
-          ON ar.source_table = ${rule.sourceTable}
-          AND ar.source_id = t.id
-          AND ar.status = 'archived'
-        WHERE ar.id IS NULL
-          AND t.${dateCol} < ${cutoffDate}
-        LIMIT ${batchLimit}
-      `;
+      return await tx.unsafe<Array<{ id: string }>>(
+        `SELECT t.id::text as id
+         FROM ${table} t
+         LEFT JOIN archived_records ar
+           ON ar.source_table = $1
+           AND ar.source_id = t.id
+           AND ar.status = 'archived'
+         WHERE ar.id IS NULL
+           AND t.${dateCol} < $2
+         LIMIT $3`,
+        [rule.sourceTable, cutoffDate, batchLimit]
+      );
     } catch {
       // Table or column may not exist
       return [];
