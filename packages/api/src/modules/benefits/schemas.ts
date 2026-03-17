@@ -1,3 +1,4 @@
+/* eslint-disable no-redeclare */
 /**
  * Benefits Module - TypeBox Schemas
  *
