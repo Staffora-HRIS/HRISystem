@@ -16,7 +16,7 @@
  * The configuration is stored so that a SAML flow can be added later.
  */
 
-import { createHash, createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import {
@@ -229,7 +229,6 @@ export class SsoService {
       if (providedHmac.length !== expectedHmac.length) return null;
       const a = Buffer.from(providedHmac, "utf-8");
       const b = Buffer.from(expectedHmac, "utf-8");
-      const { timingSafeEqual } = require("crypto");
       if (!timingSafeEqual(a, b)) return null;
 
       return configId;

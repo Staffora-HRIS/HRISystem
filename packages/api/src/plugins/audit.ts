@@ -111,6 +111,7 @@ export const AuditActions = {
   EMPLOYEE_UPDATED: "hr.employee.updated",
   EMPLOYEE_DELETED: "hr.employee.deleted",
   EMPLOYEE_TERMINATED: "hr.employee.terminated",
+  EMPLOYEE_REHIRED: "hr.employee.rehired",
   EMPLOYEE_VIEWED: "hr.employee.viewed",
 
   // Organization

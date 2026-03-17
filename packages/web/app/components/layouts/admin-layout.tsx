@@ -8,7 +8,7 @@
  * - Responsive design
  */
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode, type KeyboardEvent } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import {
   BarChart3,
@@ -380,15 +380,66 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { resolvedTheme, toggleTheme } = useTheme();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Close user menu on Escape key
+  // Refs for focus restoration
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const closeUserMenu = useCallback(() => {
+    setUserMenuOpen(false);
+    requestAnimationFrame(() => userMenuTriggerRef.current?.focus());
+  }, []);
+
+  // Close user menu on Escape key (restores focus)
   useEffect(() => {
     if (!userMenuOpen) return;
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setUserMenuOpen(false);
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") closeUserMenu();
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
+  }, [userMenuOpen, closeUserMenu]);
+
+  // Auto-focus first menu item when dropdown opens
+  useEffect(() => {
+    if (userMenuOpen && userMenuRef.current) {
+      const firstItem = userMenuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
+      firstItem?.focus();
+    }
   }, [userMenuOpen]);
+
+  // Arrow key navigation within dropdown menus
+  const handleMenuKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    const menu = e.currentTarget;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault();
+        const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[next].focus();
+        break;
+      }
+      case "ArrowUp": {
+        e.preventDefault();
+        const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[prev].focus();
+        break;
+      }
+      case "Home": {
+        e.preventDefault();
+        items[0].focus();
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        items[items.length - 1].focus();
+        break;
+      }
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
