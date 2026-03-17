@@ -54,7 +54,7 @@ CREATE POLICY case_appeals_tenant_isolation ON app.case_appeals
 
 -- Allow app role full access within tenant
 CREATE POLICY case_appeals_app_role ON app.case_appeals
-  FOR ALL TO staffora_app
+  FOR ALL TO hris_app
   USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
   WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
