@@ -30,6 +30,7 @@ import type {
   TenantContext,
 } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { EmployeeStates } from "../../lib/shared";
 import {
   SSP_CONSTANTS,
   type CreateSSPRecord,
