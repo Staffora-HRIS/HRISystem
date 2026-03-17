@@ -1690,7 +1690,10 @@ export class HRService {
     // Fetch updated employee and employment records
     const employeeResponse = await this.getEmployee(context, employeeId);
     if (!employeeResponse.success) {
-      return employeeResponse as ServiceResult<{ employee: EmployeeResponse; employment_records: EmploymentRecordResponse[] }>;
+      return {
+        success: false,
+        error: employeeResponse.error,
+      };
     }
 
     const employmentRecords = await this.repository.getEmploymentRecords(context, employeeId);

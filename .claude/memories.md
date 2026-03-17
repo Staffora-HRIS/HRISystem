@@ -201,3 +201,24 @@ Core Knowledge:
 - **Documentation**: Full scaling guide at `docker/SCALING.md`.
 
 Reason: Agents working on infrastructure, deployment, or performance must know that horizontal scaling is supported and how it works.
+
+### Core Memory Entry
+
+Date: 2026-03-17
+Agent: Claude Code (TODO-140 SSO integration)
+
+Topic: SSO module added for enterprise SAML/OIDC authentication
+
+Context: Enterprise customers require SSO integration. The SSO module was added following the 5-file module pattern.
+
+Core Knowledge:
+- **Module path:** `packages/api/src/modules/sso/` (schemas, repository, service, routes, index)
+- **Migration:** `migrations/0200_sso_configurations.sql` creates `sso_configurations` and `sso_login_attempts` tables with RLS
+- **Client secret encryption:** Uses pgcrypto `pgp_sym_encrypt`/`pgp_sym_decrypt` with `SSO_ENCRYPTION_KEY` env var (falls back to `BETTER_AUTH_SECRET`)
+- **Two route groups:** `ssoAdminRoutes` (authenticated CRUD at `/sso/configs`) and `ssoPublicRoutes` (unauthenticated at `/auth/sso/:tenantSlug/...`)
+- **OIDC flow implemented:** Authorization code flow with state CSRF protection, token exchange, id_token decoding, domain restriction, JIT user provisioning
+- **SAML stored but not yet executed:** SAML configuration can be stored; the actual SAML protocol flow requires a SAML library (e.g. saml2-js) to be added later
+- **JIT provisioning:** When `auto_provision` is true, SSO creates entries in app."user", app.users, app."account" (providerId='sso'), app.user_tenants, and optionally role_assignments
+- **Permissions:** sso:read, sso:write, sso:delete (admin endpoints only)
+
+Reason: Agents working on authentication, tenant configuration, or the login flow need to know SSO exists and how it interacts with Better Auth.
