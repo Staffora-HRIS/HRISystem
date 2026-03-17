@@ -145,7 +145,7 @@ BEGIN
             app.substitute_if_weekend(make_date(p_year, 1, 1)),
             'GB', NULL)
     ON CONFLICT (tenant_id, date, country_code, COALESCE(region, '')) DO NOTHING;
-    GET DIAGNOSTICS v_count = v_count + ROW_COUNT;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
 
     -- Good Friday
     INSERT INTO app.bank_holidays (tenant_id, name, date, country_code, region)
