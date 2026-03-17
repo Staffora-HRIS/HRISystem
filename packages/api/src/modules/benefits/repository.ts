@@ -401,7 +401,7 @@ export class BenefitsRepository {
     // Insert plan costs if provided (batch insert)
     if (data.costs && data.costs.length > 0) {
       await tx`
-        INSERT INTO app.benefit_plan_costs ${tx(
+        INSERT INTO app.benefit_plan_costs ${(tx as any)(
           data.costs.map(cost => ({
             tenant_id: context.tenantId,
             plan_id: plan.id,
