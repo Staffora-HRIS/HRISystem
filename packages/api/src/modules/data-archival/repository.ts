@@ -179,39 +179,16 @@ export class DataArchivalRepository {
     const cursor = pagination.cursor;
 
     return await this.db.withTransaction(ctx, async (tx) => {
-      // Build dynamic conditions using postgres.js tagged template fragments
-      const conditions: ReturnType<TransactionSql["fragment"]>[] = [];
-
-      if (filters.sourceTable) {
-        conditions.push(
-          tx`source_table = ${filters.sourceTable}`
-        );
-      }
-      if (filters.sourceCategory) {
-        conditions.push(
-          tx`source_category = ${filters.sourceCategory}::app.archival_source_category`
-        );
-      }
-      if (filters.status) {
-        conditions.push(
-          tx`status = ${filters.status}::app.archival_status`
-        );
-      }
-      if (cursor) {
-        conditions.push(
-          tx`archived_at < (SELECT archived_at FROM archived_records WHERE id = ${cursor}::uuid)`
-        );
-      }
-
-      const whereClause =
-        conditions.length > 0
-          ? tx`WHERE ${conditions.reduce((acc, cond, i) => (i === 0 ? cond : tx`${acc} AND ${cond}`))}`
-          : tx``;
-
+      // Build WHERE conditions dynamically using postgres.js tagged template composition
+      // Each filter is conditionally applied via nested ternaries
       const rows = await tx<ArchivedRecordRow[]>`
         SELECT *
         FROM archived_records
-        ${whereClause}
+        WHERE 1=1
+          ${filters.sourceTable ? tx`AND source_table = ${filters.sourceTable}` : tx``}
+          ${filters.sourceCategory ? tx`AND source_category = ${filters.sourceCategory}::app.archival_source_category` : tx``}
+          ${filters.status ? tx`AND status = ${filters.status}::app.archival_status` : tx``}
+          ${cursor ? tx`AND archived_at < (SELECT archived_at FROM archived_records WHERE id = ${cursor}::uuid)` : tx``}
         ORDER BY archived_at DESC
         LIMIT ${limit + 1}
       `;
