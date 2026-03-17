@@ -179,9 +179,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.flexible_working_consultations TO hr
 
 -- Comments
 COMMENT ON TABLE app.flexible_working_consultations IS
-    'Records of mandatory consultation meetings for flexible working requests. '
-    || 'Under the Employment Relations (Flexible Working) Act 2023, employers must '
-    || 'consult with the employee before refusing a request.';
+    'Records of mandatory consultation meetings for flexible working requests.  Under the Employment Relations (Flexible Working) Act 2023, employers must  consult with the employee before refusing a request.';
 
 -- -----------------------------------------------------------------------------
 -- 5. Request history table (immutable audit trail)
@@ -236,8 +234,7 @@ GRANT SELECT, INSERT ON app.flexible_working_request_history TO hris_app;
 
 -- Comments
 COMMENT ON TABLE app.flexible_working_request_history IS
-    'Immutable audit trail for flexible working request status transitions. '
-    || 'Every state change is recorded with who made it and why.';
+    'Immutable audit trail for flexible working request status transitions.  Every state change is recorded with who made it and why.';
 
 -- -----------------------------------------------------------------------------
 -- 6. Update constraints on flexible_working_requests
