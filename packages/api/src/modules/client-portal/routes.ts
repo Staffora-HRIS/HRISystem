@@ -106,7 +106,7 @@ async function requirePortalAuth(ctx: any) {
     };
   }
 
-  if (!session.user.isActive) {
+  if (!(session.user.isActive ?? session.user.is_active)) {
     set.status = 403;
     return {
       error: {
@@ -199,12 +199,9 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
   // =========================================================================
 
   .post(
-    "/signin",
+    "/auth/login",
     async (ctx) => {
       const { portalService, body, set, cookie } = ctx as any;
-
-      // TEMP DEBUG: Return immediately to test if handler runs
-      return { debug: true, bodyEmail: body.email, timestamp: Date.now() };
 
       const ipAddress =
         ctx.request?.headers?.get("x-forwarded-for") ??

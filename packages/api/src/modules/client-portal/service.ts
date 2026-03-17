@@ -83,7 +83,6 @@ export class ClientPortalService {
     userAgent: string | null
   ): Promise<ServiceResult<{ token: string; user: Record<string, unknown> }>> {
     const user = await this.repository.findUserByEmail(email);
-    process.stderr.write("[PORTAL DEBUG] user=" + JSON.stringify(user) + "\n");
 
     if (!user) {
       return {
