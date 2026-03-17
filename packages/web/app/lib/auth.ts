@@ -287,6 +287,10 @@ export function useMfa() {
     mutationFn: twoFactor.verifyTotp,
   });
 
+  const verifyBackupCodeMutation = useMutation({
+    mutationFn: twoFactor.verifyBackupCode,
+  });
+
   const disableMfaMutation = useMutation({
     mutationFn: twoFactor.disable,
     onSuccess: () => {
@@ -297,12 +301,15 @@ export function useMfa() {
   return {
     enableMfa: enableMfaMutation.mutateAsync,
     verifyMfa: verifyMfaMutation.mutateAsync,
+    verifyBackupCode: verifyBackupCodeMutation.mutateAsync,
     disableMfa: disableMfaMutation.mutateAsync,
     isEnabling: enableMfaMutation.isPending,
     isVerifying: verifyMfaMutation.isPending,
+    isVerifyingBackupCode: verifyBackupCodeMutation.isPending,
     isDisabling: disableMfaMutation.isPending,
     enableError: enableMfaMutation.error,
     verifyError: verifyMfaMutation.error,
+    backupCodeError: verifyBackupCodeMutation.error,
     disableError: disableMfaMutation.error,
   };
 }

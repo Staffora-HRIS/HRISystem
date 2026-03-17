@@ -1,0 +1,20 @@
+# =============================================================================
+# Grafana Dashboard Provisioning
+# =============================================================================
+# Auto-loads dashboard JSON files from /var/lib/grafana/dashboards on boot.
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: "Staffora Dashboards"
+    orgId: 1
+    folder: "Staffora"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

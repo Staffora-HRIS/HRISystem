@@ -7,6 +7,8 @@
  * - Employee Tax Details (effective-dated HMRC tax code & NI storage)
  * - Payslip Data (individual employee payslip retrieval)
  * - Export (CSV/JSON for external payroll provider integration)
+ * - Payroll Period Locks (lock/unlock periods to control data modifications)
+ * - Journal Entries (double-entry accounting integration from payroll runs)
  *
  * Usage:
  * ```typescript
@@ -32,6 +34,8 @@ export {
   type PayrollLineRow,
   type TaxDetailsRow,
   type ActiveEmployeeRow,
+  type PeriodLockRow,
+  type JournalEntryRow,
 } from "./repository";
 
 // Export schemas
@@ -64,6 +68,16 @@ export {
   TaxDetailsResponseSchema,
   // Export
   ExportPayrollSchema,
+  // Period Locks
+  LockPayrollPeriodSchema,
+  UnlockPayrollPeriodSchema,
+  PeriodLockStatusQuerySchema,
+  PeriodLockResponseSchema,
+  // Journal Entries
+  JournalEntryResponseSchema,
+  GenerateJournalEntriesSchema,
+  JournalEntriesQuerySchema,
+  JournalEntriesListResponseSchema,
   // Types
   type PayrollRunStatus,
   type PayrollRunType,
@@ -83,4 +97,11 @@ export {
   type UpsertTaxDetails,
   type TaxDetailsResponse,
   type ExportPayroll,
+  type LockPayrollPeriod,
+  type UnlockPayrollPeriod,
+  type PeriodLockStatusQuery,
+  type PeriodLockResponse,
+  type JournalEntryResponse,
+  type GenerateJournalEntries,
+  type JournalEntriesQuery,
 } from "./schemas";

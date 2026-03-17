@@ -10,7 +10,7 @@ import type {
   PortalType,
   Portal,
   UserPortalAccess,
-} from "./schemas";
+} from "./portal.schemas";
 
 // =============================================================================
 // Types

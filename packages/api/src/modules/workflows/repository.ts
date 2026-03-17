@@ -8,6 +8,7 @@
 import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
 import type { TenantContext } from "../../types/service-result";
+import { resolveNextStepIndex, evaluateConditionRules, type StepDefinition, type ConditionRules } from "./condition-evaluator";
 
 export type { TenantContext } from "../../types/service-result";
 
@@ -69,6 +70,8 @@ export interface StepInstanceRow {
   completionAction: string | null;
   completionComment: string | null;
   context: Record<string, unknown>;
+  conditionRules: Record<string, unknown> | null;
+  conditionResult: boolean | null;
   createdAt: Date;
 }
 
@@ -262,19 +265,72 @@ export class WorkflowRepository {
         RETURNING *
       `;
 
-      // Create first step as a workflow_task
+      // Create first step as a workflow_task, evaluating conditions to find
+      // the first eligible step (may skip initial steps if conditions fail)
       if (steps && steps.length > 0) {
-        const firstStep = steps[0];
-        await tx`
-          INSERT INTO app.workflow_tasks (
-            id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
-            context
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${id}::uuid,
-            0, ${firstStep.name || 'Step 1'}, 'in_progress', ${createdBy}::uuid,
-            ${JSON.stringify({ step_key: firstStep.stepKey, step_type: firstStep.type || firstStep.stepType })}::jsonb
-          )
-        `;
+        const typedSteps = steps as StepDefinition[];
+        let firstEligibleIndex = -1;
+
+        // Find the first step whose conditions pass (or that has no conditions)
+        for (let i = 0; i < typedSteps.length; i++) {
+          const candidateStep = typedSteps[i];
+          const evalResult = evaluateConditionRules(candidateStep.conditionRules as ConditionRules | null | undefined, instanceContext);
+
+          if (evalResult.passed) {
+            firstEligibleIndex = i;
+            break;
+          }
+
+          // Mark skipped steps for audit
+          await tx`
+            INSERT INTO app.workflow_tasks (
+              id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+              context, condition_rules, condition_result
+            ) VALUES (
+              gen_random_uuid(), ${ctx.tenantId}::uuid, ${id}::uuid,
+              ${i}, ${candidateStep.name || `Step ${i + 1}`}, 'skipped', ${createdBy}::uuid,
+              ${JSON.stringify({ step_key: candidateStep.stepKey, step_type: candidateStep.type || candidateStep.stepType })}::jsonb,
+              ${candidateStep.conditionRules ? JSON.stringify(candidateStep.conditionRules) : null}::jsonb,
+              false
+            )
+          `;
+        }
+
+        if (firstEligibleIndex >= 0) {
+          const firstStep = typedSteps[firstEligibleIndex];
+          const firstStepConditionRules = firstStep.conditionRules || null;
+          await tx`
+            INSERT INTO app.workflow_tasks (
+              id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+              context, condition_rules, condition_result
+            ) VALUES (
+              gen_random_uuid(), ${ctx.tenantId}::uuid, ${id}::uuid,
+              ${firstEligibleIndex}, ${firstStep.name || `Step ${firstEligibleIndex + 1}`}, 'in_progress', ${createdBy}::uuid,
+              ${JSON.stringify({ step_key: firstStep.stepKey, step_type: firstStep.type || firstStep.stepType })}::jsonb,
+              ${firstStepConditionRules ? JSON.stringify(firstStepConditionRules) : null}::jsonb,
+              ${firstStepConditionRules ? true : null}
+            )
+          `;
+
+          // Update current_step_index if we skipped steps
+          if (firstEligibleIndex > 0) {
+            await tx`
+              UPDATE app.workflow_instances SET current_step_index = ${firstEligibleIndex}
+              WHERE id = ${id}::uuid
+            `;
+          }
+        } else {
+          // All steps' conditions failed - workflow completes immediately
+          await tx`
+            UPDATE app.workflow_instances SET status = 'completed', completed_at = now()
+            WHERE id = ${id}::uuid
+          `;
+          await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", id, "workflows.instance.completed", {
+            instanceId: id,
+            entityType: data.entityType,
+            entityId: data.entityId,
+          });
+        }
       }
 
       await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", id, "workflows.instance.started", {
@@ -397,37 +453,69 @@ export class WorkflowRepository {
         `;
 
         if (instance) {
-          const steps = instance.steps as any[];
+          const steps = (instance.steps || []) as StepDefinition[];
           const currentStepIndex = step.stepIndex;
+          const instanceContext = (instance.context || {}) as Record<string, unknown>;
 
-          if (data.decision === 'approved' && currentStepIndex < steps.length - 1) {
-            // Move to next step
-            const nextStep = steps[currentStepIndex + 1];
-            await tx`
-              INSERT INTO app.workflow_tasks (
-                id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
-                context
-              ) VALUES (
-                gen_random_uuid(), ${ctx.tenantId}::uuid, ${instance.id}::uuid,
-                ${currentStepIndex + 1}, ${nextStep.name || `Step ${currentStepIndex + 2}`}, 'in_progress', ${data.processedBy}::uuid,
-                ${JSON.stringify({ step_key: nextStep.stepKey, step_type: nextStep.type || nextStep.stepType })}::jsonb
-              )
-            `;
-            await tx`
-              UPDATE app.workflow_instances SET current_step_index = ${currentStepIndex + 1}
-              WHERE id = ${instance.id}::uuid
-            `;
-          } else if (data.decision === 'approved') {
-            // Workflow completed
-            await tx`
-              UPDATE app.workflow_instances SET status = 'completed', completed_at = now()
-              WHERE id = ${instance.id}::uuid
-            `;
-            await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", instance.id, "workflows.instance.completed", {
-              instanceId: instance.id,
-              entityType: (instance.context as any)?.entity?.type,
-              entityId: (instance.context as any)?.entity?.id,
-            });
+          if (data.decision === 'approved') {
+            // Use conditional branching to determine the next step
+            const { nextStepIndex, skippedSteps } = resolveNextStepIndex(
+              steps,
+              currentStepIndex,
+              instanceContext
+            );
+
+            // Mark skipped steps as 'skipped' tasks for audit trail
+            for (const skippedIdx of skippedSteps) {
+              const skippedStep = steps[skippedIdx];
+              if (skippedStep) {
+                await tx`
+                  INSERT INTO app.workflow_tasks (
+                    id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+                    context, condition_rules, condition_result
+                  ) VALUES (
+                    gen_random_uuid(), ${ctx.tenantId}::uuid, ${instance.id}::uuid,
+                    ${skippedIdx}, ${skippedStep.name || `Step ${skippedIdx + 1}`}, 'skipped', ${data.processedBy}::uuid,
+                    ${JSON.stringify({ step_key: skippedStep.stepKey, step_type: skippedStep.type || skippedStep.stepType })}::jsonb,
+                    ${skippedStep.conditionRules ? JSON.stringify(skippedStep.conditionRules) : null}::jsonb,
+                    false
+                  )
+                `;
+              }
+            }
+
+            if (nextStepIndex >= 0 && nextStepIndex < steps.length) {
+              // Move to the conditionally-resolved next step
+              const nextStep = steps[nextStepIndex];
+              const nextStepConditionRules = nextStep.conditionRules || null;
+              await tx`
+                INSERT INTO app.workflow_tasks (
+                  id, tenant_id, instance_id, step_index, step_name, status, assigned_to,
+                  context, condition_rules, condition_result
+                ) VALUES (
+                  gen_random_uuid(), ${ctx.tenantId}::uuid, ${instance.id}::uuid,
+                  ${nextStepIndex}, ${nextStep.name || `Step ${nextStepIndex + 1}`}, 'in_progress', ${data.processedBy}::uuid,
+                  ${JSON.stringify({ step_key: nextStep.stepKey, step_type: nextStep.type || nextStep.stepType })}::jsonb,
+                  ${nextStepConditionRules ? JSON.stringify(nextStepConditionRules) : null}::jsonb,
+                  ${nextStepConditionRules ? true : null}
+                )
+              `;
+              await tx`
+                UPDATE app.workflow_instances SET current_step_index = ${nextStepIndex}
+                WHERE id = ${instance.id}::uuid
+              `;
+            } else {
+              // No next step found (end of workflow or all conditions failed) - complete
+              await tx`
+                UPDATE app.workflow_instances SET status = 'completed', completed_at = now()
+                WHERE id = ${instance.id}::uuid
+              `;
+              await this.writeOutbox(tx, ctx.tenantId, "workflow_instance", instance.id, "workflows.instance.completed", {
+                instanceId: instance.id,
+                entityType: (instance.context as any)?.entity?.type,
+                entityId: (instance.context as any)?.entity?.id,
+              });
+            }
           } else if (data.decision === 'rejected') {
             // Workflow rejected — cancel it
             await tx`

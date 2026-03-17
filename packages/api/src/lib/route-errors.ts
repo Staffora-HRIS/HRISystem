@@ -172,6 +172,12 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   [ErrorCodes.LIFE_EVENT_ALREADY_REVIEWED]: 409,
   [ErrorCodes.ASSIGNMENT_ALREADY_COMPLETED]: 409,
 
+  // Payroll domain codes
+  INVALID_TAX_CODE_FORMAT: 400,
+  NO_CURRENT_TAX_CODE: 404,
+  INVALID_PAYROLL_TRANSITION: 409,
+  PAYROLL_PERIOD_LOCKED: 423,
+
   // Domain-specific CONFLICT codes used in service layers
   DUPLICATE_CODE: 409,
   INVALID_TRANSITION: 409,

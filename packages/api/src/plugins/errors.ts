@@ -14,6 +14,7 @@ import { AuthError } from "./auth-better";
 import { IdempotencyError } from "./idempotency";
 import { TenantError } from "./tenant";
 import { RbacError } from "./rbac";
+import { ErrorCodes as SharedErrorCodes } from "@staffora/shared/errors";
 
 // =============================================================================
 // Types
@@ -32,98 +33,67 @@ export interface ErrorResponse {
 }
 
 /**
- * Error codes used across the application
+ * Error codes used across the application.
+ *
+ * Inherits all shared error codes from @staffora/shared/errors and extends
+ * them with API-specific codes (transport, idempotency, portal, etc.).
+ * Consumers should continue to import ErrorCodes from this module — the
+ * shared codes are available automatically via the spread.
  */
 export const ErrorCodes = {
-  // Generic errors
-  INTERNAL_ERROR: "INTERNAL_ERROR",
-  VALIDATION_ERROR: "VALIDATION_ERROR",
-  NOT_FOUND: "NOT_FOUND",
+  // ---- Shared error codes (from @staffora/shared/errors) --------------------
+  ...SharedErrorCodes,
+
+  // ---- API-specific codes (not in the shared package) -----------------------
+
+  // Generic transport errors
   BAD_REQUEST: "BAD_REQUEST",
-  CONFLICT: "CONFLICT",
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   TOO_MANY_REQUESTS: "TOO_MANY_REQUESTS",
-  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 
-  // Authentication errors
-  UNAUTHORIZED: "UNAUTHORIZED",
-  INVALID_CREDENTIALS: "INVALID_CREDENTIALS",
-  SESSION_EXPIRED: "SESSION_EXPIRED",
+  // Authentication (API-only extensions)
   SESSION_INVALID: "SESSION_INVALID",
-  MFA_REQUIRED: "MFA_REQUIRED",
-  MFA_INVALID: "MFA_INVALID",
-  ACCOUNT_SUSPENDED: "ACCOUNT_SUSPENDED",
   ACCOUNT_NOT_VERIFIED: "ACCOUNT_NOT_VERIFIED",
   CSRF_INVALID: "CSRF_INVALID",
 
-  // Tenant errors
+  // Tenant (API-only extensions)
   MISSING_TENANT: "MISSING_TENANT",
   INVALID_TENANT: "INVALID_TENANT",
-  TENANT_NOT_FOUND: "TENANT_NOT_FOUND",
-  TENANT_SUSPENDED: "TENANT_SUSPENDED",
   TENANT_DELETED: "TENANT_DELETED",
 
-  // Authorization errors
-  FORBIDDEN: "FORBIDDEN",
+  // Authorization (API-only extensions)
   PERMISSION_DENIED: "PERMISSION_DENIED",
   MFA_REQUIRED_FOR_ACTION: "MFA_REQUIRED_FOR_ACTION",
   CONSTRAINT_VIOLATION: "CONSTRAINT_VIOLATION",
 
-  // Business logic errors
+  // Business logic (API-only extensions)
   STATE_MACHINE_VIOLATION: "STATE_MACHINE_VIOLATION",
-  EFFECTIVE_DATE_OVERLAP: "EFFECTIVE_DATE_OVERLAP",
-  INVALID_LIFECYCLE_TRANSITION: "INVALID_LIFECYCLE_TRANSITION",
   RESOURCE_IN_USE: "RESOURCE_IN_USE",
   LIMIT_EXCEEDED: "LIMIT_EXCEEDED",
-
-  // Time module errors
-  CLOCK_EVENT_OUT_OF_SEQUENCE: "CLOCK_EVENT_OUT_OF_SEQUENCE",
-  INVALID_TIME_ENTRY: "INVALID_TIME_ENTRY",
-
-  // Absence module errors
-  INSUFFICIENT_LEAVE_BALANCE: "INSUFFICIENT_LEAVE_BALANCE",
-  BLACKOUT_PERIOD_VIOLATION: "BLACKOUT_PERIOD_VIOLATION",
 
   // Analytics errors
   INVALID_DATE_RANGE: "INVALID_DATE_RANGE",
 
   // Portal errors
   PORTAL_ACCESS_DENIED: "PORTAL_ACCESS_DENIED",
-  RESTRICTED_ACCESS: "RESTRICTED_ACCESS",
 
-  // Domain-specific NOT_FOUND codes
-  EMPLOYEE_NOT_FOUND: "EMPLOYEE_NOT_FOUND",
-  COURSE_NOT_FOUND: "COURSE_NOT_FOUND",
-  POLICY_NOT_FOUND: "POLICY_NOT_FOUND",
-  WORKFLOW_NOT_FOUND: "WORKFLOW_NOT_FOUND",
+  // Domain-specific NOT_FOUND codes (API-only)
   SUCCESSION_PLAN_NOT_FOUND: "SUCCESSION_PLAN_NOT_FOUND",
   NO_EMPLOYEE_RECORD: "NO_EMPLOYEE_RECORD",
 
-  // Conflict/state errors
-  POSITION_ALREADY_FILLED: "POSITION_ALREADY_FILLED",
-  CANDIDATE_ALREADY_EXISTS: "CANDIDATE_ALREADY_EXISTS",
+  // Conflict/state errors (API-only extensions)
   CANDIDATE_ALREADY_IN_PLAN: "CANDIDATE_ALREADY_IN_PLAN",
   COMPETENCY_ALREADY_ASSIGNED: "COMPETENCY_ALREADY_ASSIGNED",
   DUPLICATE_APPLICATION: "DUPLICATE_APPLICATION",
-  LEAVE_REQUEST_OVERLAP: "LEAVE_REQUEST_OVERLAP",
-  SCHEDULE_CONFLICT: "SCHEDULE_CONFLICT",
-  TIMESHEET_ALREADY_APPROVED: "TIMESHEET_ALREADY_APPROVED",
-  TASK_ALREADY_COMPLETED: "TASK_ALREADY_COMPLETED",
   LIFE_EVENT_ALREADY_REVIEWED: "LIFE_EVENT_ALREADY_REVIEWED",
-  ASSIGNMENT_ALREADY_COMPLETED: "ASSIGNMENT_ALREADY_COMPLETED",
-  REQUISITION_CLOSED: "REQUISITION_CLOSED",
   REQUISITION_NOT_OPEN: "REQUISITION_NOT_OPEN",
   INVALID_STAGE_TRANSITION: "INVALID_STAGE_TRANSITION",
-  INVALID_WORKFLOW_TRANSITION: "INVALID_WORKFLOW_TRANSITION",
   PLAN_INACTIVE: "PLAN_INACTIVE",
-  CASE_CLOSED: "CASE_CLOSED",
   TEMPLATE_INACTIVE: "TEMPLATE_INACTIVE",
   ALREADY_ONBOARDING: "ALREADY_ONBOARDING",
   INSTANCE_CLOSED: "INSTANCE_CLOSED",
   CANNOT_SKIP_REQUIRED: "CANNOT_SKIP_REQUIRED",
-
-  // Account lock
-  ACCOUNT_LOCKED: "ACCOUNT_LOCKED",
+  COMPLIANCE_CHECKS_OUTSTANDING: "COMPLIANCE_CHECKS_OUTSTANDING",
 
   // Idempotency errors
   IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
@@ -132,29 +102,50 @@ export const ErrorCodes = {
 
   // Report errors
   REPORT_GENERATION_FAILED: "REPORT_GENERATION_FAILED",
+
+  // Document errors
+  VIRUS_DETECTED: "VIRUS_DETECTED",
 } as const;
 
 export type ErrorCode = keyof typeof ErrorCodes;
 
 /**
- * Map error codes to HTTP status codes
+ * Map error codes to HTTP status codes.
+ *
+ * Uses Record<string, number> rather than Record<ErrorCode, number> so that
+ * the map doesn't need to be updated every time a new shared error code is
+ * added. The lookup in AppError falls back to 500 for unknown codes.
  */
-const ERROR_STATUS_MAP: Record<ErrorCode, number> = {
+const ERROR_STATUS_MAP: Record<string, number> = {
+  // ---------------------------------------------------------------------------
   // 400 Bad Request
+  // ---------------------------------------------------------------------------
   VALIDATION_ERROR: 400,
   BAD_REQUEST: 400,
   MISSING_TENANT: 400,
   INVALID_TENANT: 400,
   IDEMPOTENCY_HASH_MISMATCH: 400,
+  CLOCK_EVENT_OUT_OF_SEQUENCE: 400,
+  INVALID_TIME_ENTRY: 400,
+  INSUFFICIENT_LEAVE_BALANCE: 400,
+  BLACKOUT_PERIOD_VIOLATION: 400,
+  INVALID_DATE_RANGE: 400,
+  TERMINATION_DATE_BEFORE_HIRE: 400,
+  CIRCULAR_REPORTING_LINE: 400,
+  PREREQUISITE_NOT_MET: 400,
 
+  // ---------------------------------------------------------------------------
   // 401 Unauthorized
+  // ---------------------------------------------------------------------------
   UNAUTHORIZED: 401,
   INVALID_CREDENTIALS: 401,
   SESSION_EXPIRED: 401,
   SESSION_INVALID: 401,
   ACCOUNT_NOT_VERIFIED: 401,
 
+  // ---------------------------------------------------------------------------
   // 403 Forbidden
+  // ---------------------------------------------------------------------------
   FORBIDDEN: 403,
   PERMISSION_DENIED: 403,
   MFA_REQUIRED: 403,
@@ -164,27 +155,16 @@ const ERROR_STATUS_MAP: Record<ErrorCode, number> = {
   CSRF_INVALID: 403,
   CONSTRAINT_VIOLATION: 403,
   TENANT_SUSPENDED: 403,
-
-  // 404 Not Found
-  NOT_FOUND: 404,
-  TENANT_NOT_FOUND: 404,
-  TENANT_DELETED: 404,
-
-  // 405 Method Not Allowed
-  METHOD_NOT_ALLOWED: 405,
-
-  // 400 Bad Request (domain-specific)
-  CLOCK_EVENT_OUT_OF_SEQUENCE: 400,
-  INVALID_TIME_ENTRY: 400,
-  INSUFFICIENT_LEAVE_BALANCE: 400,
-  BLACKOUT_PERIOD_VIOLATION: 400,
-  INVALID_DATE_RANGE: 400,
-
-  // 403 Forbidden (domain-specific)
+  TENANT_ACCESS_DENIED: 403,
   PORTAL_ACCESS_DENIED: 403,
   RESTRICTED_ACCESS: 403,
 
-  // 404 Not Found (domain-specific)
+  // ---------------------------------------------------------------------------
+  // 404 Not Found
+  // ---------------------------------------------------------------------------
+  NOT_FOUND: 404,
+  TENANT_NOT_FOUND: 404,
+  TENANT_DELETED: 404,
   EMPLOYEE_NOT_FOUND: 404,
   COURSE_NOT_FOUND: 404,
   POLICY_NOT_FOUND: 404,
@@ -192,7 +172,14 @@ const ERROR_STATUS_MAP: Record<ErrorCode, number> = {
   SUCCESSION_PLAN_NOT_FOUND: 404,
   NO_EMPLOYEE_RECORD: 404,
 
+  // ---------------------------------------------------------------------------
+  // 405 Method Not Allowed
+  // ---------------------------------------------------------------------------
+  METHOD_NOT_ALLOWED: 405,
+
+  // ---------------------------------------------------------------------------
   // 409 Conflict
+  // ---------------------------------------------------------------------------
   CONFLICT: 409,
   STATE_MACHINE_VIOLATION: 409,
   EFFECTIVE_DATE_OVERLAP: 409,
@@ -221,19 +208,39 @@ const ERROR_STATUS_MAP: Record<ErrorCode, number> = {
   ALREADY_ONBOARDING: 409,
   INSTANCE_CLOSED: 409,
   CANNOT_SKIP_REQUIRED: 409,
+  COMPLIANCE_CHECKS_OUTSTANDING: 409,
+  ORG_UNIT_HAS_CHILDREN: 409,
 
+  // ---------------------------------------------------------------------------
+  // 410 Gone (from shared)
+  // ---------------------------------------------------------------------------
+  OFFER_EXPIRED: 410,
+
+  // ---------------------------------------------------------------------------
   // 423 Locked
+  // ---------------------------------------------------------------------------
   ACCOUNT_LOCKED: 423,
 
+  // ---------------------------------------------------------------------------
   // 429 Too Many Requests
+  // ---------------------------------------------------------------------------
   TOO_MANY_REQUESTS: 429,
   LIMIT_EXCEEDED: 429,
 
+  // ---------------------------------------------------------------------------
+  // 422 Unprocessable Entity (file is well-formed but rejected)
+  // ---------------------------------------------------------------------------
+  VIRUS_DETECTED: 422,
+
+  // ---------------------------------------------------------------------------
   // 500 Internal Server Error
+  // ---------------------------------------------------------------------------
   INTERNAL_ERROR: 500,
   REPORT_GENERATION_FAILED: 500,
 
+  // ---------------------------------------------------------------------------
   // 503 Service Unavailable
+  // ---------------------------------------------------------------------------
   SERVICE_UNAVAILABLE: 503,
 };
 

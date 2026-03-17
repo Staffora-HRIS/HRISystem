@@ -36,9 +36,21 @@ export interface TaxCodeRow extends Row {
   effectiveFrom: Date;
   effectiveTo: Date | null;
   source: TaxCodeSource;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+// =============================================================================
+// Column List (shared across queries to avoid repetition)
+// =============================================================================
+
+const COLUMNS = `
+  id, tenant_id, employee_id, tax_code,
+  is_cumulative, week1_month1,
+  effective_from, effective_to,
+  source, notes, created_at, updated_at
+`;
 
 // =============================================================================
 // Repository
@@ -64,7 +76,8 @@ export class TaxCodeRepository {
         week1_month1,
         effective_from,
         effective_to,
-        source
+        source,
+        notes
       ) VALUES (
         ${ctx.tenantId}::uuid,
         ${data.employee_id}::uuid,
@@ -73,13 +86,10 @@ export class TaxCodeRepository {
         ${data.week1_month1 ?? false},
         ${data.effective_from}::date,
         ${data.effective_to ?? null}::date,
-        ${data.source ?? "manual"}::app.tax_code_source
+        ${data.source ?? "manual"}::app.tax_code_source,
+        ${data.notes ?? null}
       )
-      RETURNING
-        id, tenant_id, employee_id, tax_code,
-        is_cumulative, week1_month1,
-        effective_from, effective_to,
-        source, created_at, updated_at
+      RETURNING ${tx.unsafe(COLUMNS)}
     `;
     return row as unknown as TaxCodeRow;
   }
@@ -93,11 +103,7 @@ export class TaxCodeRepository {
   ): Promise<TaxCodeRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return await tx`
-        SELECT
-          id, tenant_id, employee_id, tax_code,
-          is_cumulative, week1_month1,
-          effective_from, effective_to,
-          source, created_at, updated_at
+        SELECT ${tx.unsafe(COLUMNS)}
         FROM employee_tax_codes
         WHERE id = ${id}::uuid
       `;
@@ -116,17 +122,39 @@ export class TaxCodeRepository {
   ): Promise<TaxCodeRow[]> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return await tx`
-        SELECT
-          id, tenant_id, employee_id, tax_code,
-          is_cumulative, week1_month1,
-          effective_from, effective_to,
-          source, created_at, updated_at
+        SELECT ${tx.unsafe(COLUMNS)}
         FROM employee_tax_codes
         WHERE employee_id = ${employeeId}::uuid
         ORDER BY effective_from DESC
       `;
     });
     return rows as unknown as TaxCodeRow[];
+  }
+
+  /**
+   * Find the current (effective today) tax code for an employee.
+   * Returns null if no tax code is effective for the current date.
+   */
+  async findCurrentByEmployee(
+    ctx: TenantContext,
+    employeeId: string,
+    asOfDate?: string
+  ): Promise<TaxCodeRow | null> {
+    const refDate = asOfDate ?? new Date().toISOString().split("T")[0];
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT ${tx.unsafe(COLUMNS)}
+        FROM employee_tax_codes
+        WHERE employee_id = ${employeeId}::uuid
+          AND effective_from <= ${refDate}::date
+          AND (effective_to IS NULL OR effective_to >= ${refDate}::date)
+        ORDER BY effective_from DESC
+        LIMIT 1
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as TaxCodeRow;
   }
 
   /**
@@ -156,13 +184,13 @@ export class TaxCodeRepository {
           ELSE effective_to
         END,
         source = COALESCE(${data.source ?? null}::app.tax_code_source, source),
+        notes = CASE
+          WHEN ${data.notes !== undefined} THEN ${data.notes ?? null}
+          ELSE notes
+        END,
         updated_at = now()
       WHERE id = ${id}::uuid
-      RETURNING
-        id, tenant_id, employee_id, tax_code,
-        is_cumulative, week1_month1,
-        effective_from, effective_to,
-        source, created_at, updated_at
+      RETURNING ${tx.unsafe(COLUMNS)}
     `;
 
     if (!row) return null;
@@ -170,7 +198,8 @@ export class TaxCodeRepository {
   }
 
   /**
-   * Check for overlapping tax code records for an employee
+   * Check for overlapping tax code records for an employee.
+   * Optionally excludes a record by ID (used during updates).
    */
   async hasOverlappingTaxCode(
     ctx: TenantContext,

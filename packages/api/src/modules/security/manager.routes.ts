@@ -9,7 +9,7 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
 import { ManagerService } from "./manager.service";
-import { ApprovalTypeSchema, ApprovalActionSchema } from "./schemas";
+import { ApprovalTypeSchema, ApprovalActionSchema } from "./manager.schemas";
 
 export const managerRoutes = new Elysia({ prefix: "/manager" })
   // Get team overview/dashboard

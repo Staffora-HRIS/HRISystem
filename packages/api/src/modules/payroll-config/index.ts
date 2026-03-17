@@ -54,9 +54,12 @@ export {
   PayScheduleResponseSchema,
   // Pay Assignment
   CreatePayAssignmentSchema,
+  UpdatePayAssignmentSchema,
+  AssignmentIdParamsSchema,
   PayAssignmentResponseSchema,
   // NI Category
   CreateNiCategorySchema,
+  UpdateNiCategorySchema,
   NiCategoryResponseSchema,
   // Types
   type PayFrequency,
@@ -69,7 +72,10 @@ export {
   type UpdatePaySchedule,
   type PayScheduleResponse,
   type CreatePayAssignment,
+  type UpdatePayAssignment,
+  type AssignmentIdParams,
   type PayAssignmentResponse,
   type CreateNiCategory,
+  type UpdateNiCategory,
   type NiCategoryResponse,
 } from "./schemas";

@@ -181,6 +181,22 @@ In production, migrations should be:
 3. Run during a maintenance window for breaking changes
 4. Backed up before execution
 
+## Migration Renumbering History
+
+During development, parallel feature branches caused duplicate migration numbers in the 0076-0079 range. A one-time renumbering event resolved the conflicts by shifting affected migrations to new sequence numbers (e.g., 0076-0079 became 0081-0084, and subsequent files were shifted accordingly).
+
+The script `fix_schema_migrations_filenames.sql` was executed once against the `schema_migrations` tracking table to update the recorded filenames. **Do not run this script again.** It is kept in the migrations directory for historical reference only.
+
+### Known duplicate ranges
+
+Some migration numbers (0076-0079 and 0187) may have duplicate entries from parallel feature branches. If you encounter conflicts when creating a new migration, check the highest existing migration number with:
+
+```bash
+ls migrations/*.sql | sort | tail -5
+```
+
+Then use the next available number with 4-digit zero-padding (e.g., `0190_description.sql`).
+
 ## Best Practices
 
 1. **One concern per migration**: Each migration should do one thing.

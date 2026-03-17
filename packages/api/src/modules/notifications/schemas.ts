@@ -2,7 +2,7 @@
  * Notifications Module - TypeBox Schemas
  *
  * Defines validation schemas for all Notification API endpoints.
- * Tables: notifications, notification_deliveries, push_tokens
+ * Tables: notifications, notification_deliveries, push_tokens, push_subscriptions
  */
 
 import { t, type Static } from "elysia";
@@ -151,6 +151,69 @@ export const PushTokenResponseSchema = t.Object({
 });
 
 export type PushTokenResponse = Static<typeof PushTokenResponseSchema>;
+
+// =============================================================================
+// Web Push Subscription Schemas (VAPID / W3C Push API)
+// =============================================================================
+
+export const WebPushDeviceTypeSchema = t.Union([
+  t.Literal("web"),
+  t.Literal("mobile_web"),
+  t.Literal("pwa"),
+]);
+export type WebPushDeviceType = Static<typeof WebPushDeviceTypeSchema>;
+
+/**
+ * Subscribe to Web Push notifications request body.
+ * Maps to the W3C PushSubscription object from the browser Push API.
+ */
+export const WebPushSubscribeSchema = t.Object({
+  /** Push service endpoint URL (PushSubscription.endpoint) */
+  endpoint: t.String({ minLength: 1, maxLength: 2048 }),
+  /** Base64url-encoded auth secret (PushSubscription.getKey('auth')) */
+  auth_key: t.String({ minLength: 1, maxLength: 512 }),
+  /** Base64url-encoded ECDH public key (PushSubscription.getKey('p256dh')) */
+  p256dh_key: t.String({ minLength: 1, maxLength: 512 }),
+  /** Device type */
+  device_type: t.Optional(WebPushDeviceTypeSchema),
+  /** Optional user agent string */
+  user_agent: t.Optional(t.String({ maxLength: 512 })),
+});
+
+export type WebPushSubscribe = Static<typeof WebPushSubscribeSchema>;
+
+/**
+ * Unsubscribe from Web Push notifications request body.
+ */
+export const WebPushUnsubscribeSchema = t.Object({
+  /** Push service endpoint URL to remove */
+  endpoint: t.String({ minLength: 1, maxLength: 2048 }),
+});
+
+export type WebPushUnsubscribe = Static<typeof WebPushUnsubscribeSchema>;
+
+/**
+ * Web Push subscription response
+ */
+export const WebPushSubscriptionResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  user_id: UuidSchema,
+  endpoint: t.String(),
+  device_type: t.String(),
+  created_at: t.String(),
+});
+
+export type WebPushSubscriptionResponse = Static<typeof WebPushSubscriptionResponseSchema>;
+
+/**
+ * VAPID public key response (returned to clients for subscription creation)
+ */
+export const VapidPublicKeyResponseSchema = t.Object({
+  public_key: t.String(),
+});
+
+export type VapidPublicKeyResponse = Static<typeof VapidPublicKeyResponseSchema>;
 
 // =============================================================================
 // API Route Parameter Schemas

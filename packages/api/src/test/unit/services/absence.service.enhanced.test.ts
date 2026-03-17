@@ -248,6 +248,84 @@ describe("AbsenceService (Enhanced)", () => {
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe(AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND);
     });
+
+    it("should update a leave type and return the updated record", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeaveType(ctx(), {
+        code: `SVCUPD${Date.now()}`,
+        name: "Update Test Original",
+        isPaid: true,
+        requiresApproval: true,
+        requiresAttachment: false,
+        maxConsecutiveDays: 10,
+        minNoticeDays: 3,
+        color: "#3B82F6",
+      });
+      expect(createResult.success).toBe(true);
+      const created = createResult.data as Record<string, unknown>;
+
+      const updatedCode = `SVCUPD2${Date.now()}`;
+      const result = await service.updateLeaveType(ctx(), created.id as string, {
+        code: updatedCode,
+        name: "Update Test Modified",
+        isPaid: false,
+        requiresApproval: false,
+        requiresAttachment: true,
+        maxConsecutiveDays: 20,
+        minNoticeDays: 7,
+        color: "#EF4444",
+      });
+
+      expect(result.success).toBe(true);
+      const updated = result.data as Record<string, unknown>;
+      expect(updated.id).toBe(created.id);
+      expect(updated.code).toBe(updatedCode);
+      expect(updated.name).toBe("Update Test Modified");
+      expect(updated.isPaid).toBe(false);
+      expect(updated.requiresApproval).toBe(false);
+      expect(updated.requiresAttachment).toBe(true);
+      expect(updated.maxConsecutiveDays).toBe(20);
+      expect(updated.minNoticeDays).toBe(7);
+      expect(updated.color).toBe("#EF4444");
+      expect(updated.isActive).toBe(true);
+    });
+
+    it("should return LEAVE_TYPE_NOT_FOUND when updating a non-existent leave type", async () => {
+      if (skip) return;
+
+      const result = await service.updateLeaveType(ctx(), crypto.randomUUID(), {
+        name: "Should Not Exist",
+        code: "NOPE",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND);
+    });
+
+    it("should write an outbox event when updating a leave type", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeaveType(ctx(), {
+        code: `SVCUOB${Date.now()}`,
+        name: "Update Outbox Test",
+      });
+      const created = createResult.data as Record<string, unknown>;
+
+      await service.updateLeaveType(ctx(), created.id as string, {
+        name: "Updated Name",
+        code: `SVCUOB2${Date.now()}`,
+      });
+
+      await setTenantContext(db, tenant.id, user.id);
+      const outbox = await db<Record<string, unknown>[]>`
+        SELECT event_type FROM app.domain_outbox
+        WHERE aggregate_type = 'leave_type' AND aggregate_id = ${created.id}::uuid
+        ORDER BY created_at
+      `;
+      const eventTypes = outbox.map((e: Record<string, unknown>) => e.event_type);
+      expect(eventTypes).toContain("absence.leave_type.created");
+      expect(eventTypes).toContain("absence.leave_type.updated");
+    });
   });
 
   // ==========================================================================
@@ -328,6 +406,105 @@ describe("AbsenceService (Enhanced)", () => {
       const result = await service.deleteLeavePolicy(ctx(), crypto.randomUUID());
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe("LEAVE_POLICY_NOT_FOUND");
+    });
+
+    it("should update a leave policy name and return success", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeavePolicy(ctx(), {
+        name: `Update Policy ${Date.now()}`,
+        leaveTypeId,
+        annualAllowance: 28,
+        effectiveFrom: "2024-01-01",
+      });
+      const created = createResult.data as Record<string, unknown>;
+
+      const result = await service.updateLeavePolicy(ctx(), created.id as string, {
+        name: "Updated Policy Name",
+      });
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.name).toBe("Updated Policy Name");
+    });
+
+    it("should update leave policy annual allowance", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeavePolicy(ctx(), {
+        name: `Allowance Policy ${Date.now()}`,
+        leaveTypeId,
+        annualAllowance: 28,
+        effectiveFrom: "2024-01-01",
+      });
+      const created = createResult.data as Record<string, unknown>;
+
+      const result = await service.updateLeavePolicy(ctx(), created.id as string, {
+        annualAllowance: 30,
+        leaveTypeId,
+      });
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(Number(data.annualAllowance)).toBe(30);
+    });
+
+    it("should return LEAVE_POLICY_NOT_FOUND when updating non-existent policy", async () => {
+      if (skip) return;
+
+      const result = await service.updateLeavePolicy(ctx(), crypto.randomUUID(), {
+        name: "Ghost Policy",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(AbsenceErrorCodes.LEAVE_POLICY_NOT_FOUND);
+    });
+
+    it("should return LEAVE_POLICY_NOT_FOUND when updating a deactivated policy", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeavePolicy(ctx(), {
+        name: `Deact Update ${Date.now()}`,
+        leaveTypeId,
+        annualAllowance: 28,
+        effectiveFrom: "2024-01-01",
+      });
+      const created = createResult.data as Record<string, unknown>;
+
+      await service.deleteLeavePolicy(ctx(), created.id as string);
+
+      const result = await service.updateLeavePolicy(ctx(), created.id as string, {
+        name: "Should Fail",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(AbsenceErrorCodes.LEAVE_POLICY_NOT_FOUND);
+    });
+
+    it("should write outbox event when updating a leave policy", async () => {
+      if (skip) return;
+
+      const createResult = await service.createLeavePolicy(ctx(), {
+        name: `Outbox Update ${Date.now()}`,
+        leaveTypeId,
+        annualAllowance: 28,
+        effectiveFrom: "2024-01-01",
+      });
+      const created = createResult.data as Record<string, unknown>;
+      const policyId = created.id as string;
+
+      await service.updateLeavePolicy(ctx(), policyId, {
+        name: "Outbox Updated",
+      });
+
+      await setTenantContext(db, tenant.id, user.id);
+      const outbox = await db<Record<string, unknown>[]>`
+        SELECT event_type FROM app.domain_outbox
+        WHERE aggregate_type = 'leave_policy' AND aggregate_id = ${policyId}::uuid
+        ORDER BY created_at
+      `;
+
+      const eventTypes = outbox.map((e: Record<string, unknown>) => e.event_type);
+      expect(eventTypes).toContain("absence.leave_policy.created");
+      expect(eventTypes).toContain("absence.leave_policy.updated");
     });
   });
 

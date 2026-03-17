@@ -522,6 +522,38 @@ export class ReportsRepository {
     return result.count > 0;
   }
 
+  async recordScheduleHistory(
+    tx: TransactionSql,
+    data: {
+      tenantId: string;
+      reportId: string;
+      action: "created" | "updated" | "removed";
+      frequency?: string;
+      cron?: string;
+      time?: string;
+      dayOfWeek?: number;
+      dayOfMonth?: number;
+      recipients?: unknown[];
+      exportFormat?: string;
+      changedBy: string;
+    }
+  ): Promise<void> {
+    await tx`
+      INSERT INTO report_schedule_history (
+        tenant_id, report_id, action, frequency, cron_expression,
+        schedule_time, day_of_week, day_of_month, recipients,
+        export_format, changed_by
+      ) VALUES (
+        ${data.tenantId}, ${data.reportId}, ${data.action},
+        ${data.frequency ?? null}, ${data.cron ?? null},
+        ${data.time ?? null}, ${data.dayOfWeek ?? null},
+        ${data.dayOfMonth ?? null},
+        ${JSON.stringify(data.recipients ?? [])}::jsonb,
+        ${data.exportFormat ?? null}, ${data.changedBy}
+      )
+    `;
+  }
+
   async getScheduledReportsDue(tx: TransactionSql): Promise<ReportDefinitionRow[]> {
     return await tx`
       SELECT

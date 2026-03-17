@@ -16,42 +16,7 @@ import {
   type TestTenant,
   type TestUser,
 } from "../setup";
-
-function splitCombinedSetCookieHeader(value: string): string[] {
-  const out: string[] = [];
-  let start = 0;
-
-  for (let i = 0; i < value.length; i++) {
-    if (value[i] !== "," || value[i + 1] !== " ") continue;
-
-    const rest = value.slice(i + 2);
-    const boundary = /^[A-Za-z0-9!#$%&'*+.^_`|~.-]+=/.test(rest);
-    if (!boundary) continue;
-
-    out.push(value.slice(start, i));
-    start = i + 2;
-  }
-
-  out.push(value.slice(start));
-  return out.map((s) => s.trim()).filter(Boolean);
-}
-
-function buildCookieHeader(response: Response): string {
-  const anyHeaders = response.headers as any;
-  let setCookies: string[];
-
-  if (typeof anyHeaders.getSetCookie === "function") {
-    setCookies = anyHeaders.getSetCookie() as string[];
-  } else {
-    const raw = response.headers.get("Set-Cookie") ?? "";
-    setCookies = raw ? splitCombinedSetCookieHeader(raw) : [];
-  }
-
-  return setCookies
-    .map((cookie) => cookie.split(";")[0] ?? cookie)
-    .filter(Boolean)
-    .join("; ");
-}
+import { buildCookieHeader } from "../helpers/cookies";
 
 describe("Idempotency (end-to-end)", () => {
   let db: ReturnType<typeof getTestDb> | null = null;

@@ -3,16 +3,19 @@
  *
  * Processes domain events from the outbox table and dispatches them
  * to appropriate handlers (webhooks, notifications, integrations).
+ *
+ * Connection pool strategy:
+ * - When launched via worker/index.ts, receives the shared postgres.js
+ *   singleton pool and Redis instance (no extra connections created).
+ * - When run as a standalone script (bottom of this file), creates its
+ *   own postgres.js pool with max=5 connections.
+ * See packages/api/src/plugins/db.ts for the full connection budget.
  */
 
 import postgres from "postgres";
 import Redis from "ioredis";
 import { getDatabaseUrl, getRedisUrl } from "../config/database";
 
-// FIX: Using centralized configuration to prevent password mismatch issues
-// All database defaults are now managed in src/config/database.ts
-const DB_URL = getDatabaseUrl();
-const REDIS_URL = getRedisUrl();
 const BATCH_SIZE = 100;
 const BASE_POLL_INTERVAL_MS = 5000;
 const MAX_POLL_INTERVAL_MS = 30000;
@@ -47,8 +50,12 @@ class OutboxProcessor {
   constructor(injectedSql?: postgres.Sql, injectedRedis?: Redis) {
     // Reuse injected connections if provided; otherwise create our own
     this.ownsConnections = !injectedSql || !injectedRedis;
-    this.sql = injectedSql ?? postgres(DB_URL, { transform: postgres.toCamel });
-    this.redis = injectedRedis ?? new Redis(REDIS_URL);
+    this.sql = injectedSql ?? postgres(getDatabaseUrl(), {
+      max: 5,
+      transform: postgres.toCamel,
+      connection: { search_path: "app,public" },
+    });
+    this.redis = injectedRedis ?? new Redis(getRedisUrl());
     this.registerDefaultHandlers();
   }
 

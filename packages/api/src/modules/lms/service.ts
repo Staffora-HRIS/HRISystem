@@ -594,6 +594,163 @@ export class LMSService {
   }
 
   // ===========================================================================
+  // Compliance Report Operations
+  // ===========================================================================
+
+  /**
+   * Generate a mandatory training compliance report.
+   *
+   * Returns:
+   * - Summary totals across all mandatory courses
+   * - Per-course compliance breakdown
+   * - Per-department (org unit) compliance breakdown
+   *
+   * Filters:
+   * - courseId: narrow to a specific mandatory course
+   * - orgUnitId: narrow to a specific department
+   * - includeArchived: include archived courses in the report
+   */
+  async getComplianceReport(
+    ctx: TenantContext,
+    filters: {
+      courseId?: string;
+      orgUnitId?: string;
+      includeArchived?: boolean;
+    } = {}
+  ): Promise<ServiceResult<{
+    generatedAt: string;
+    summary: {
+      totalMandatoryCourses: number;
+      totalAssignments: number;
+      totalCompleted: number;
+      totalInProgress: number;
+      totalNotStarted: number;
+      totalOverdue: number;
+      overallCompletionRate: number;
+    };
+    courses: Array<{
+      courseId: string;
+      courseName: string;
+      category: string | null;
+      isMandatory: boolean;
+      mandatoryDueDays: number | null;
+      totalAssigned: number;
+      completedCount: number;
+      inProgressCount: number;
+      notStartedCount: number;
+      overdueCount: number;
+      completionRate: number;
+    }>;
+    departments: Array<{
+      orgUnitId: string;
+      orgUnitName: string;
+      totalAssigned: number;
+      completedCount: number;
+      inProgressCount: number;
+      notStartedCount: number;
+      overdueCount: number;
+      completionRate: number;
+    }>;
+  }>> {
+    try {
+      // Fetch per-course compliance data
+      const courseRows = await this.repository.getMandatoryCourseCompliance(ctx, {
+        courseId: filters.courseId,
+        includeArchived: filters.includeArchived,
+      });
+
+      const courses = courseRows.map((row: any) => {
+        const totalAssigned = Number(row.totalAssigned) || 0;
+        const completedCount = Number(row.completedCount) || 0;
+        return {
+          courseId: row.courseId,
+          courseName: row.courseName,
+          category: row.category || null,
+          isMandatory: row.isMandatory,
+          mandatoryDueDays: row.mandatoryDueDays ? Number(row.mandatoryDueDays) : null,
+          totalAssigned,
+          completedCount,
+          inProgressCount: Number(row.inProgressCount) || 0,
+          notStartedCount: Number(row.notStartedCount) || 0,
+          overdueCount: Number(row.overdueCount) || 0,
+          completionRate: totalAssigned > 0
+            ? Math.round((completedCount / totalAssigned) * 10000) / 100
+            : 0,
+        };
+      });
+
+      // Fetch per-department compliance data
+      const deptRows = await this.repository.getDepartmentCompliance(ctx, {
+        courseId: filters.courseId,
+        orgUnitId: filters.orgUnitId,
+        includeArchived: filters.includeArchived,
+      });
+
+      const departments = deptRows.map((row: any) => {
+        const totalAssigned = Number(row.totalAssigned) || 0;
+        const completedCount = Number(row.completedCount) || 0;
+        return {
+          orgUnitId: row.orgUnitId,
+          orgUnitName: row.orgUnitName,
+          totalAssigned,
+          completedCount,
+          inProgressCount: Number(row.inProgressCount) || 0,
+          notStartedCount: Number(row.notStartedCount) || 0,
+          overdueCount: Number(row.overdueCount) || 0,
+          completionRate: totalAssigned > 0
+            ? Math.round((completedCount / totalAssigned) * 10000) / 100
+            : 0,
+        };
+      });
+
+      // Compute summary totals from the per-course data
+      const summary = courses.reduce(
+        (acc, c) => ({
+          totalMandatoryCourses: acc.totalMandatoryCourses + 1,
+          totalAssignments: acc.totalAssignments + c.totalAssigned,
+          totalCompleted: acc.totalCompleted + c.completedCount,
+          totalInProgress: acc.totalInProgress + c.inProgressCount,
+          totalNotStarted: acc.totalNotStarted + c.notStartedCount,
+          totalOverdue: acc.totalOverdue + c.overdueCount,
+          overallCompletionRate: 0, // computed after reduce
+        }),
+        {
+          totalMandatoryCourses: 0,
+          totalAssignments: 0,
+          totalCompleted: 0,
+          totalInProgress: 0,
+          totalNotStarted: 0,
+          totalOverdue: 0,
+          overallCompletionRate: 0,
+        }
+      );
+
+      summary.overallCompletionRate =
+        summary.totalAssignments > 0
+          ? Math.round((summary.totalCompleted / summary.totalAssignments) * 10000) / 100
+          : 0;
+
+      return {
+        success: true,
+        data: {
+          generatedAt: new Date().toISOString(),
+          summary,
+          courses,
+          departments,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: error.message || "Failed to generate compliance report",
+        },
+      };
+    }
+  }
+
+  // ===========================================================================
   // Helper Methods
   // ===========================================================================
 

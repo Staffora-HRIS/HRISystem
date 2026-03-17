@@ -6,11 +6,18 @@
  */
 
 import { Elysia } from "elysia";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { isValidUUID } from "@staffora/shared/utils";
 import { getBetterAuth } from "../lib/better-auth";
 import type { DatabaseClient } from "./db";
 import type { CacheClient } from "./cache";
+
+// =============================================================================
+// API Key Constants
+// =============================================================================
+
+/** Prefix for all Staffora API keys */
+const API_KEY_PREFIX = "sfra_";
 
 /**
  * User interface matching Better Auth user
@@ -427,6 +434,210 @@ function shouldSkipAuth(pathname: string): boolean {
 }
 
 /**
+ * In-memory session cache to avoid redundant Better Auth lookups on every
+ * request. Keyed by session token (extracted from the cookie header).
+ *
+ * TTL: 30 seconds — short enough to reflect session revocations promptly,
+ * long enough to absorb rapid-fire requests from the same browser tab.
+ *
+ * Max entries: 2000 — prevents unbounded memory growth under load.
+ */
+interface CachedSession {
+  user: User;
+  session: Session;
+  expiresAt: number;
+}
+
+class SessionCache {
+  private cache = new Map<string, CachedSession>();
+  private readonly maxSize: number;
+  private readonly ttlMs: number;
+
+  constructor(maxSize: number = 2000, ttlSeconds: number = 30) {
+    this.maxSize = maxSize;
+    this.ttlMs = ttlSeconds * 1000;
+  }
+
+  get(token: string): CachedSession | null {
+    const entry = this.cache.get(token);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(token);
+      return null;
+    }
+    return entry;
+  }
+
+  set(token: string, user: User, session: Session): void {
+    // Evict oldest entry if at capacity (FIFO)
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) this.cache.delete(firstKey);
+    }
+    this.cache.set(token, {
+      user,
+      session,
+      expiresAt: Date.now() + this.ttlMs,
+    });
+  }
+
+  invalidate(token: string): void {
+    this.cache.delete(token);
+  }
+}
+
+/**
+ * Extract the session token from the request cookie header.
+ * Better Auth uses "better-auth.session_token" (or URL-encoded variant).
+ */
+function extractSessionToken(request: Request): string | null {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return null;
+
+  // Match the Better Auth session cookie name
+  const cookieNames = ["better-auth.session_token", "better-auth.session_token"];
+  for (const name of cookieNames) {
+    const regex = new RegExp(`(?:^|;\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=([^;]+)`);
+    const match = cookieHeader.match(regex);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+
+  // Fallback: try URL-encoded cookie name (better-auth%2Esession_token)
+  const encodedName = "better-auth%2Esession_token";
+  const encodedRegex = new RegExp(`(?:^|;\\s*)${encodedName}=([^;]+)`);
+  const encodedMatch = cookieHeader.match(encodedRegex);
+  if (encodedMatch && encodedMatch[1]) {
+    return decodeURIComponent(encodedMatch[1]);
+  }
+
+  return null;
+}
+
+// =============================================================================
+// API Key Resolution
+// =============================================================================
+
+/**
+ * Resolve an API key to a synthetic user/session context.
+ *
+ * Looks up the key hash in the api_keys table (system context, bypasses RLS).
+ * Returns a synthetic User and Session object so downstream middleware
+ * (tenant, rbac) can operate without modification.
+ *
+ * Updates last_used_at as a fire-and-forget side effect.
+ */
+async function resolveApiKey(
+  db: DatabaseClient,
+  rawKey: string
+): Promise<{
+  user: User;
+  session: Session;
+  scopes: string[];
+} | null> {
+  try {
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+
+    const rows = await db.withSystemContext(async (tx) => {
+      return tx<Array<{
+        id: string;
+        tenantId: string;
+        name: string;
+        scopes: string[];
+        createdBy: string;
+        revokedAt: Date | null;
+        expiresAt: Date | null;
+      }>>`
+        SELECT
+          ak.id, ak.tenant_id, ak.name, ak.scopes,
+          ak.created_by, ak.revoked_at, ak.expires_at
+        FROM api_keys ak
+        WHERE ak.key_hash = ${keyHash}
+          AND ak.revoked_at IS NULL
+          AND (ak.expires_at IS NULL OR ak.expires_at > now())
+        LIMIT 1
+      `;
+    });
+
+    if (rows.length === 0) return null;
+
+    const apiKey = rows[0];
+
+    // Fire-and-forget: update last_used_at
+    db.withSystemContext(async (tx) => {
+      await tx`UPDATE api_keys SET last_used_at = now() WHERE id = ${apiKey.id}`;
+    }).catch(() => {});
+
+    // Look up the user who created this key to populate the user context
+    const userRows = await db.withSystemContext(async (tx) => {
+      return tx<Array<{
+        id: string;
+        email: string;
+        emailVerified: boolean;
+        name: string | null;
+        image: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        status: string;
+        mfaEnabled: boolean;
+      }>>`
+        SELECT
+          u.id::text,
+          u.email,
+          u."emailVerified" as email_verified,
+          u.name,
+          u.image,
+          u."createdAt" as created_at,
+          u."updatedAt" as updated_at,
+          COALESCE(u.status, 'active') as status,
+          COALESCE(u."mfaEnabled", false) as mfa_enabled
+        FROM app."user" u
+        WHERE u.id = ${apiKey.createdBy}::text
+        LIMIT 1
+      `;
+    });
+
+    if (userRows.length === 0) return null;
+
+    const userRow = userRows[0];
+
+    // Build a synthetic User object from the key's creator
+    const syntheticUser: User = {
+      id: userRow.id,
+      email: userRow.email,
+      emailVerified: userRow.emailVerified,
+      name: userRow.name,
+      image: userRow.image,
+      createdAt: userRow.createdAt,
+      updatedAt: userRow.updatedAt,
+      status: userRow.status,
+      mfaEnabled: userRow.mfaEnabled,
+    };
+
+    // Build a synthetic Session object so downstream middleware can read tenantId
+    const syntheticSession: Session = {
+      id: `apikey_${apiKey.id}`,
+      userId: userRow.id,
+      token: "",
+      expiresAt: apiKey.expiresAt ?? new Date(Date.now() + 86400000), // 24h if no expiry
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      currentTenantId: apiKey.tenantId,
+    };
+
+    return {
+      user: syntheticUser,
+      session: syntheticSession,
+      scopes: Array.isArray(apiKey.scopes) ? apiKey.scopes : [],
+    };
+  } catch (error) {
+    console.error("[Auth] API key resolution error:", error);
+    return null;
+  }
+}
+
+/**
  * Main auth plugin using Better Auth
  */
 export function authPlugin(options: AuthPluginOptions = {}) {
@@ -434,6 +645,9 @@ export function authPlugin(options: AuthPluginOptions = {}) {
 
   // Singleton: created once when plugin is initialized, reused across all requests
   let authServiceSingleton: AuthService | null = null;
+
+  // In-memory session cache (TTL 30s, max 2000 entries)
+  const sessionCache = new SessionCache(2000, 30);
 
   // Throttle verifySyncOnLogin: run at most once per user per 5 minutes
   const syncCheckedUsers = new Map<string, number>();
@@ -461,6 +675,58 @@ export function authPlugin(options: AuthPluginOptions = {}) {
       }
 
       try {
+        // -------------------------------------------------------------------
+        // API Key Authentication
+        // Check if the Authorization header carries a Staffora API key
+        // (Bearer sfra_...) before attempting session-based auth.
+        // -------------------------------------------------------------------
+        const authHeader = request.headers.get("authorization");
+        if (authHeader) {
+          const bearerToken = authHeader.startsWith("Bearer ")
+            ? authHeader.slice(7).trim()
+            : null;
+
+          if (bearerToken && bearerToken.startsWith(API_KEY_PREFIX)) {
+            const apiKeyResult = await resolveApiKey(db, bearerToken);
+            if (apiKeyResult) {
+              return {
+                user: apiKeyResult.user,
+                session: apiKeyResult.session,
+                isAuthenticated: true as const,
+                authService: authServiceSingleton,
+                apiKeyAuth: true as const,
+                apiKeyScopes: apiKeyResult.scopes,
+              };
+            }
+            // Invalid API key — fall through to return unauthenticated
+            return {
+              user: null,
+              session: null,
+              isAuthenticated: false as const,
+              authService: authServiceSingleton,
+            };
+          }
+        }
+
+        // -------------------------------------------------------------------
+        // Session-based Authentication (cookies)
+        // -------------------------------------------------------------------
+
+        // Check in-memory session cache first to avoid redundant
+        // Better Auth lookups for rapid-fire requests from the same client.
+        const sessionToken = extractSessionToken(request);
+        if (sessionToken) {
+          const cached = sessionCache.get(sessionToken);
+          if (cached) {
+            return {
+              user: cached.user,
+              session: cached.session,
+              isAuthenticated: true as const,
+              authService: authServiceSingleton,
+            };
+          }
+        }
+
         // Resolve session directly via Better Auth API — avoids creating a
         // fake Request, running it through the HTTP handler, and parsing
         // the JSON Response (~2-5ms saved per authenticated request).
@@ -478,6 +744,11 @@ export function authPlugin(options: AuthPluginOptions = {}) {
         }
 
         const { session, user } = sessionData;
+
+        // Cache the resolved session for subsequent requests within TTL window
+        if (sessionToken) {
+          sessionCache.set(sessionToken, user as User, session as Session);
+        }
 
         // Fire-and-forget user table sync verification to catch drift
         // between Better Auth "user" table and app.users.

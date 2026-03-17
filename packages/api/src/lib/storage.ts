@@ -58,6 +58,15 @@ export interface StorageService {
    * @param fileKey - Object key / path within the storage bucket
    */
   delete(fileKey: string): Promise<void>;
+
+  /**
+   * Retrieve a file's content as a Buffer.
+   * Used for server-side operations like virus scanning.
+   *
+   * @param fileKey - Object key / path within the storage bucket
+   * @returns File content as a Buffer, or null if the file does not exist
+   */
+  getFile(fileKey: string): Promise<Buffer | null>;
 }
 
 // =============================================================================
@@ -138,6 +147,20 @@ export class LocalStorageService implements StorageService {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
+    }
+  }
+
+  async getFile(fileKey: string): Promise<Buffer | null> {
+    const fs = await import("fs/promises");
+
+    const filePath = await this.safePath(fileKey);
+    try {
+      return await fs.readFile(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return null;
+      }
+      throw error;
     }
   }
 }
@@ -235,6 +258,36 @@ export class S3StorageService implements StorageService {
         Key: fileKey,
       })
     );
+  }
+
+  async getFile(fileKey: string): Promise<Buffer | null> {
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+
+    const client = await this.getClient();
+    try {
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: fileKey,
+        })
+      );
+
+      if (!response.Body) {
+        return null;
+      }
+
+      // Convert the stream to a Buffer
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      return Buffer.concat(chunks);
+    } catch (error: any) {
+      if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 }
 

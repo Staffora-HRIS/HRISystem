@@ -147,6 +147,28 @@ async function rejectRequest(
   return api.post(`/manager/approvals/${id}/reject`, { type, comment });
 }
 
+// =============================================================================
+// Bulk Approval Types & API
+// =============================================================================
+
+export interface BulkApprovalItem {
+  type: "leave_request" | "timesheet";
+  id: string;
+  action: "approve" | "reject";
+  notes?: string;
+}
+
+export interface BulkApprovalResult {
+  approved: string[];
+  failed: Array<{ id: string; reason: string }>;
+}
+
+async function bulkApproveRequests(
+  items: BulkApprovalItem[]
+): Promise<BulkApprovalResult> {
+  return api.post<BulkApprovalResult>("/manager/approvals/bulk", { items });
+}
+
 async function fetchTeamAbsenceCalendar(
   startDate: string,
   endDate: string
@@ -344,6 +366,30 @@ export function useApprovalActions() {
     isRejecting: rejectMutation.isPending,
     approveError: approveMutation.error,
     rejectError: rejectMutation.error,
+  };
+}
+
+/**
+ * Bulk approve or reject multiple requests at once
+ */
+export function useBulkApprovalActions() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (items: BulkApprovalItem[]) => bulkApproveRequests(items),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.manager.pendingApprovals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.manager.approvals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.manager.overview() });
+    },
+  });
+
+  return {
+    bulkAction: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
+    data: mutation.data,
+    reset: mutation.reset,
   };
 }
 

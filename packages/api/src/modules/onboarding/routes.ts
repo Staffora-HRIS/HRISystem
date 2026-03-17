@@ -23,8 +23,13 @@ const ONBOARDING_ERROR_CODES: Record<string, number> = {
   TASK_NOT_FOUND: 404,
   ALREADY_COMPLETED: 409,
   CANNOT_SKIP_REQUIRED: 409,
+  DEPENDENCY_NOT_MET: 409,
+  CIRCULAR_DEPENDENCY: 409,
+  COMPLIANCE_CHECKS_OUTSTANDING: 409,
+  STATE_MACHINE_VIOLATION: 409,
   CREATE_FAILED: 500,
   UPDATE_FAILED: 500,
+  DELETE_FAILED: 500,
   START_FAILED: 500,
   COMPLETE_FAILED: 500,
   SKIP_FAILED: 500,
@@ -242,6 +247,181 @@ export const onboardingRoutes = new Elysia({ prefix: "/onboarding" })
   }, {
     beforeHandle: [requirePermission("onboarding", "read")],
     detail: { tags: ["Onboarding"], summary: "Get my onboarding" }
+  })
+
+  // =========================================================================
+  // Compliance Checks
+  // =========================================================================
+
+  // List all compliance checks for an onboarding instance
+  .get("/instances/:id/compliance-checks", async (ctx) => {
+    const { onboardingService, tenantContext, params, set } = ctx as any;
+
+    const result = await onboardingService.listComplianceChecks(tenantContext, params.id);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("onboarding", "read")],
+    detail: { tags: ["Onboarding"], summary: "List compliance checks for an onboarding instance" }
+  })
+
+  // Create a compliance check for an onboarding instance
+  .post("/instances/:id/compliance-checks", async (ctx) => {
+    const { onboardingService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await onboardingService.createComplianceCheck(tenantContext, params.id, {
+      checkType: body.checkType,
+      required: body.required,
+      dueDate: body.dueDate,
+      notes: body.notes,
+    });
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    set.status = 201;
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: t.Object({
+      checkType: t.Union([
+        t.Literal("right_to_work"),
+        t.Literal("dbs"),
+        t.Literal("references"),
+        t.Literal("medical"),
+        t.Literal("qualifications"),
+      ]),
+      required: t.Optional(t.Boolean()),
+      dueDate: t.Optional(t.String({ format: "date" })),
+      notes: t.Optional(t.String({ maxLength: 2000 })),
+    }),
+    beforeHandle: [requirePermission("onboarding", "write")],
+    detail: { tags: ["Onboarding"], summary: "Create a compliance check for an onboarding instance" }
+  })
+
+  // Update a compliance check (change status, add notes, waive, etc.)
+  .patch("/instances/:id/compliance-checks/:checkId", async (ctx) => {
+    const { onboardingService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await onboardingService.updateComplianceCheck(
+      tenantContext,
+      params.id,
+      params.checkId,
+      body
+    );
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema, checkId: UuidSchema }),
+    body: t.Object({
+      status: t.Optional(t.Union([
+        t.Literal("pending"),
+        t.Literal("in_progress"),
+        t.Literal("passed"),
+        t.Literal("failed"),
+        t.Literal("waived"),
+      ])),
+      dueDate: t.Optional(t.String({ format: "date" })),
+      notes: t.Optional(t.String({ maxLength: 2000 })),
+      referenceNumber: t.Optional(t.String({ maxLength: 200 })),
+      expiresAt: t.Optional(t.String({ format: "date" })),
+      waiverReason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
+    }),
+    beforeHandle: [requirePermission("onboarding", "write")],
+    detail: { tags: ["Onboarding"], summary: "Update a compliance check" }
+  })
+
+  // Task Dependencies (Template-Level)
+  .get("/templates/:templateId/dependencies", async (ctx) => {
+    const { onboardingService, tenantContext, params, set } = ctx as any;
+
+    const result = await onboardingService.listTemplateDependencies(tenantContext, params.templateId);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ templateId: UuidSchema }),
+    beforeHandle: [requirePermission("onboarding", "read")],
+    detail: { tags: ["Onboarding"], summary: "List all task dependencies for a template" }
+  })
+
+  .get("/tasks/:taskId/dependencies", async (ctx) => {
+    const { onboardingService, tenantContext, params, set } = ctx as any;
+
+    const result = await onboardingService.listTaskDependencies(tenantContext, params.taskId);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ taskId: UuidSchema }),
+    beforeHandle: [requirePermission("onboarding", "read")],
+    detail: { tags: ["Onboarding"], summary: "List dependencies for a specific task" }
+  })
+
+  .post("/tasks/dependencies", async (ctx) => {
+    const { onboardingService, tenantContext, body, set } = ctx as any;
+
+    const result = await onboardingService.addTaskDependency(tenantContext, {
+      taskId: body.taskId,
+      dependsOnTaskId: body.dependsOnTaskId,
+    });
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    set.status = 201;
+    return result.data;
+  }, {
+    body: t.Object({
+      taskId: UuidSchema,
+      dependsOnTaskId: UuidSchema,
+    }),
+    beforeHandle: [requirePermission("onboarding", "write")],
+    detail: { tags: ["Onboarding"], summary: "Add a dependency between two template tasks" }
+  })
+
+  .delete("/tasks/:taskId/dependencies/:dependsOnTaskId", async (ctx) => {
+    const { onboardingService, tenantContext, params, set } = ctx as any;
+
+    const result = await onboardingService.removeTaskDependency(
+      tenantContext,
+      params.taskId,
+      params.dependsOnTaskId
+    );
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, ONBOARDING_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return { success: true, message: "Dependency removed" };
+  }, {
+    params: t.Object({ taskId: UuidSchema, dependsOnTaskId: UuidSchema }),
+    beforeHandle: [requirePermission("onboarding", "write")],
+    detail: { tags: ["Onboarding"], summary: "Remove a dependency between two template tasks" }
   });
 
 export type OnboardingRoutes = typeof onboardingRoutes;

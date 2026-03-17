@@ -21,6 +21,11 @@ import type {
   TaxDetailsRow,
   PayScheduleRow,
   PayAssignmentRow,
+  FpsEmployeeDataRow,
+  YtdTotalsRow,
+  RtiSubmissionRow,
+  PeriodLockRow,
+  JournalEntryRow,
 } from "./repository";
 import type {
   ServiceResult,
@@ -38,6 +43,11 @@ import type {
   UpsertTaxDetails,
   ExportFormat,
   PayrollRunStatus,
+  LockPayrollPeriod,
+  UnlockPayrollPeriod,
+  PeriodLockResponse,
+  JournalEntryResponse,
+  JournalEntriesQuery,
 } from "./schemas";
 import { PAYROLL_STATUS_TRANSITIONS } from "./schemas";
 
@@ -52,7 +62,10 @@ type PayrollEventType =
   | "payroll.run.submitted"
   | "payroll.run.status_changed"
   | "payroll.run.exported"
-  | "payroll.tax_details.updated";
+  | "payroll.tax_details.updated"
+  | "payroll.period.locked"
+  | "payroll.period.unlocked"
+  | "payroll.journal_entries.generated";
 
 // =============================================================================
 // UK Tax/NI Calculation Helpers (simplified)
@@ -1173,6 +1186,646 @@ export class PayrollService {
       effectiveFrom: row.effectiveFrom instanceof Date ? row.effectiveFrom.toISOString().split("T")[0] : row.effectiveFrom,
       effectiveTo: row.effectiveTo instanceof Date ? row.effectiveTo.toISOString().split("T")[0] : row.effectiveTo,
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    };
+  }
+
+  // =========================================================================
+  // Payroll Period Locks
+  // =========================================================================
+
+  private mapPeriodLockToResponse(row: PeriodLockRow): PeriodLockResponse {
+    return {
+      id: row.id,
+      tenant_id: row.tenantId,
+      period_start: row.periodStart instanceof Date
+        ? row.periodStart.toISOString().split("T")[0]
+        : String(row.periodStart),
+      period_end: row.periodEnd instanceof Date
+        ? row.periodEnd.toISOString().split("T")[0]
+        : String(row.periodEnd),
+      locked_at: row.lockedAt instanceof Date
+        ? row.lockedAt.toISOString()
+        : String(row.lockedAt),
+      locked_by: row.lockedBy,
+      unlock_reason: row.unlockReason,
+      unlocked_at: row.unlockedAt
+        ? row.unlockedAt instanceof Date
+          ? row.unlockedAt.toISOString()
+          : String(row.unlockedAt)
+        : null,
+      unlocked_by: row.unlockedBy,
+      created_at: row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : String(row.createdAt),
+      is_locked: row.unlockedAt === null,
+    };
+  }
+
+  /**
+   * Lock a payroll period.
+   *
+   * Validates:
+   * - period_end >= period_start
+   * - No existing active lock overlaps with the given date range
+   *   (handled by the DB exclusion constraint, but we check here for a
+   *    clear error message)
+   * - User ID is present (required as locked_by)
+   */
+  async lockPayrollPeriod(
+    context: TenantContext,
+    data: LockPayrollPeriod,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<PeriodLockResponse>> {
+    if (data.period_end < data.period_start) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: "period_end must be on or after period_start",
+          details: {
+            period_start: data.period_start,
+            period_end: data.period_end,
+          },
+        },
+      };
+    }
+
+    if (!context.userId) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.UNAUTHORIZED,
+          message: "User identity is required to lock a payroll period",
+        },
+      };
+    }
+
+    // Check for existing active locks that overlap
+    const existingLocks = await this.repository.findActiveLocksForPeriod(
+      context,
+      data.period_start,
+      data.period_end
+    );
+
+    if (existingLocks.length > 0) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.CONFLICT,
+          message: "An active payroll period lock already exists that overlaps with the given date range",
+          details: {
+            period_start: data.period_start,
+            period_end: data.period_end,
+            existing_locks: existingLocks.map((l) => ({
+              id: l.id,
+              period_start: l.periodStart instanceof Date
+                ? l.periodStart.toISOString().split("T")[0]
+                : String(l.periodStart),
+              period_end: l.periodEnd instanceof Date
+                ? l.periodEnd.toISOString().split("T")[0]
+                : String(l.periodEnd),
+            })),
+          },
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      const row = await this.repository.createPeriodLock(context, data, tx);
+
+      await this.emitEvent(
+        tx,
+        context,
+        "payroll_period_lock",
+        row.id,
+        "payroll.period.locked",
+        {
+          lock: this.mapPeriodLockToResponse(row),
+          period_start: data.period_start,
+          period_end: data.period_end,
+        }
+      );
+
+      return {
+        success: true,
+        data: this.mapPeriodLockToResponse(row),
+      };
+    });
+  }
+
+  /**
+   * Unlock a payroll period.
+   *
+   * Validates:
+   * - Lock exists
+   * - Lock is currently active (not already unlocked)
+   * - User ID is present (required as unlocked_by)
+   * - Unlock reason is provided
+   */
+  async unlockPayrollPeriod(
+    context: TenantContext,
+    lockId: string,
+    data: UnlockPayrollPeriod,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<PeriodLockResponse>> {
+    if (!context.userId) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.UNAUTHORIZED,
+          message: "User identity is required to unlock a payroll period",
+        },
+      };
+    }
+
+    const existing = await this.repository.findPeriodLockById(context, lockId);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Payroll period lock ${lockId} not found`,
+        },
+      };
+    }
+
+    if (existing.unlockedAt !== null) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.CONFLICT,
+          message: "This payroll period is already unlocked",
+          details: {
+            lock_id: lockId,
+            unlocked_at: existing.unlockedAt instanceof Date
+              ? existing.unlockedAt.toISOString()
+              : String(existing.unlockedAt),
+            unlocked_by: existing.unlockedBy,
+          },
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      const row = await this.repository.unlockPeriodLock(
+        context,
+        lockId,
+        data.unlock_reason,
+        tx
+      );
+
+      if (!row) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.CONFLICT,
+            message: "Failed to unlock period. It may have already been unlocked by another user.",
+          },
+        };
+      }
+
+      await this.emitEvent(
+        tx,
+        context,
+        "payroll_period_lock",
+        row.id,
+        "payroll.period.unlocked",
+        {
+          lock: this.mapPeriodLockToResponse(row),
+          unlock_reason: data.unlock_reason,
+        }
+      );
+
+      return {
+        success: true,
+        data: this.mapPeriodLockToResponse(row),
+      };
+    });
+  }
+
+  /**
+   * Get the lock status for a payroll period.
+   *
+   * Returns all locks (active and historical) that overlap with the
+   * given date range, or all locks if no date range is provided.
+   */
+  async getPeriodLockStatus(
+    context: TenantContext,
+    filters: {
+      periodStart?: string;
+      periodEnd?: string;
+      activeOnly?: boolean;
+    } = {}
+  ): Promise<ServiceResult<PeriodLockResponse[]>> {
+    const rows = await this.repository.listPeriodLocks(context, filters);
+
+    return {
+      success: true,
+      data: rows.map((r) => this.mapPeriodLockToResponse(r)),
+    };
+  }
+
+  /**
+   * Get a single period lock by ID.
+   */
+  async getPeriodLockById(
+    context: TenantContext,
+    lockId: string
+  ): Promise<ServiceResult<PeriodLockResponse>> {
+    const row = await this.repository.findPeriodLockById(context, lockId);
+    if (!row) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Payroll period lock ${lockId} not found`,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.mapPeriodLockToResponse(row),
+    };
+  }
+
+  // =========================================================================
+  // Journal Entries (TODO-233)
+  // =========================================================================
+
+  private mapJournalEntryToResponse(row: JournalEntryRow): JournalEntryResponse {
+    return {
+      id: row.id,
+      tenant_id: row.tenantId,
+      payroll_run_id: row.payrollRunId,
+      entry_date: row.entryDate instanceof Date
+        ? row.entryDate.toISOString().split("T")[0]
+        : String(row.entryDate),
+      account_code: row.accountCode,
+      description: row.description,
+      debit: String(row.debit),
+      credit: String(row.credit),
+      cost_centre_id: row.costCentreId,
+      created_at: row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : String(row.createdAt),
+    };
+  }
+
+  /**
+   * Generate journal entries from an approved/submitted/paid payroll run.
+   *
+   * Produces double-entry accounting lines for:
+   * - Gross pay (debit to salary expense)
+   * - Employer NI (debit to employer NI expense)
+   * - Employer pension (debit to employer pension expense)
+   * - PAYE tax (credit to HMRC PAYE liability)
+   * - Employee NI (credit to HMRC NI liability)
+   * - Employee pension (credit to pension liability)
+   * - Student loan (credit to SLC liability)
+   * - Net pay (credit to wages payable / bank)
+   * - Employer NI (credit to HMRC employer NI liability)
+   * - Employer pension (credit to pension liability - employer)
+   *
+   * Validates:
+   * - Payroll run exists
+   * - Payroll run is in an approved, submitted, or paid status
+   * - Journal entries have not already been generated for this run
+   */
+  async generateJournalEntries(
+    context: TenantContext,
+    runId: string,
+    costCentreId: string | null = null,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<JournalEntryResponse[]>> {
+    const run = await this.repository.findPayrollRunById(context, runId);
+    if (!run) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Payroll run ${runId} not found`,
+        },
+      };
+    }
+
+    // Only allow journal generation from approved, submitted, or paid runs
+    const allowedStatuses: PayrollRunStatus[] = ["approved", "submitted", "paid"];
+    if (!allowedStatuses.includes(run.status)) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.STATE_MACHINE_VIOLATION,
+          message: `Cannot generate journal entries for a payroll run in "${run.status}" status. Run must be approved, submitted, or paid.`,
+          details: {
+            currentStatus: run.status,
+            allowedStatuses,
+          },
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      // Prevent duplicate journal generation
+      const alreadyGenerated = await this.repository.hasJournalEntriesForRun(
+        context,
+        runId,
+        tx
+      );
+
+      if (alreadyGenerated) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.CONFLICT,
+            message: `Journal entries have already been generated for payroll run ${runId}`,
+            details: { payroll_run_id: runId },
+          },
+        };
+      }
+
+      // Get all payroll lines for aggregation
+      const lines = await this.repository.findPayrollLinesByRunId(context, runId);
+
+      if (lines.length === 0) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.VALIDATION_ERROR,
+            message: "Payroll run has no calculated lines. Cannot generate journal entries.",
+          },
+        };
+      }
+
+      // Determine entry date from the payroll run pay date
+      const entryDate = run.payDate instanceof Date
+        ? run.payDate.toISOString().split("T")[0]
+        : String(run.payDate);
+
+      // Aggregate totals across all lines
+      let totalGross = 0;
+      let totalTax = 0;
+      let totalNiEmployee = 0;
+      let totalNiEmployer = 0;
+      let totalPensionEmployee = 0;
+      let totalPensionEmployer = 0;
+      let totalStudentLoan = 0;
+      let totalNetPay = 0;
+
+      for (const line of lines) {
+        totalGross += parseFloat(String(line.totalGross) || "0");
+        totalTax += parseFloat(String(line.taxDeduction) || "0");
+        totalNiEmployee += parseFloat(String(line.niEmployee) || "0");
+        totalNiEmployer += parseFloat(String(line.niEmployer) || "0");
+        totalPensionEmployee += parseFloat(String(line.pensionEmployee) || "0");
+        totalPensionEmployer += parseFloat(String(line.pensionEmployer) || "0");
+        totalStudentLoan += parseFloat(String(line.studentLoan) || "0");
+        totalNetPay += parseFloat(String(line.netPay) || "0");
+      }
+
+      // Build journal entry lines (double-entry: debits = credits)
+      // Standard UK payroll nominal codes pattern:
+      //   7000 - Gross Salary Expense
+      //   7002 - Employer NI Expense
+      //   7004 - Employer Pension Expense
+      //   2210 - PAYE Tax Liability (HMRC)
+      //   2211 - Employee NI Liability (HMRC)
+      //   2212 - Employer NI Liability (HMRC)
+      //   2220 - Pension Liability - Employee
+      //   2221 - Pension Liability - Employer
+      //   2230 - Student Loan Liability (SLC)
+      //   2250 - Net Wages Payable
+
+      const journalLines: Array<{
+        payrollRunId: string;
+        entryDate: string;
+        accountCode: string;
+        description: string;
+        debit: string;
+        credit: string;
+        costCentreId: string | null;
+      }> = [];
+
+      const periodStart = run.payPeriodStart instanceof Date
+        ? run.payPeriodStart.toISOString().split("T")[0]
+        : String(run.payPeriodStart);
+      const periodEnd = run.payPeriodEnd instanceof Date
+        ? run.payPeriodEnd.toISOString().split("T")[0]
+        : String(run.payPeriodEnd);
+      const periodDesc = `Payroll ${periodStart} to ${periodEnd}`;
+
+      // DEBIT entries (expenses)
+      if (totalGross > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "7000",
+          description: `Gross salaries - ${periodDesc}`,
+          debit: totalGross.toFixed(2),
+          credit: "0.00",
+          costCentreId,
+        });
+      }
+
+      if (totalNiEmployer > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "7002",
+          description: `Employer NI contributions - ${periodDesc}`,
+          debit: totalNiEmployer.toFixed(2),
+          credit: "0.00",
+          costCentreId,
+        });
+      }
+
+      if (totalPensionEmployer > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "7004",
+          description: `Employer pension contributions - ${periodDesc}`,
+          debit: totalPensionEmployer.toFixed(2),
+          credit: "0.00",
+          costCentreId,
+        });
+      }
+
+      // CREDIT entries (liabilities)
+      if (totalTax > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2210",
+          description: `PAYE tax liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalTax.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalNiEmployee > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2211",
+          description: `Employee NI liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalNiEmployee.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalNiEmployer > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2212",
+          description: `Employer NI liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalNiEmployer.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalPensionEmployee > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2220",
+          description: `Employee pension contributions liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalPensionEmployee.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalPensionEmployer > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2221",
+          description: `Employer pension contributions liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalPensionEmployer.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalStudentLoan > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2230",
+          description: `Student loan repayments liability - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalStudentLoan.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      if (totalNetPay > 0) {
+        journalLines.push({
+          payrollRunId: runId,
+          entryDate,
+          accountCode: "2250",
+          description: `Net wages payable - ${periodDesc}`,
+          debit: "0.00",
+          credit: totalNetPay.toFixed(2),
+          costCentreId,
+        });
+      }
+
+      // Insert all journal entries in the same transaction
+      const rows = await this.repository.insertJournalEntries(
+        context,
+        journalLines,
+        tx
+      );
+
+      // Emit domain event in the same transaction
+      await this.emitEvent(
+        tx,
+        context,
+        "payroll_run",
+        runId,
+        "payroll.journal_entries.generated",
+        {
+          payrollRunId: runId,
+          entryCount: rows.length,
+          entryDate,
+          costCentreId,
+        }
+      );
+
+      return {
+        success: true,
+        data: rows.map((r) => this.mapJournalEntryToResponse(r)),
+      };
+    });
+  }
+
+  /**
+   * Get journal entries for a specific payroll run.
+   */
+  async getJournalEntriesByRunId(
+    context: TenantContext,
+    runId: string
+  ): Promise<ServiceResult<JournalEntryResponse[]>> {
+    // Verify run exists
+    const run = await this.repository.findPayrollRunById(context, runId);
+    if (!run) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Payroll run ${runId} not found`,
+        },
+      };
+    }
+
+    const rows = await this.repository.findJournalEntriesByRunId(context, runId);
+    return {
+      success: true,
+      data: rows.map((r) => this.mapJournalEntryToResponse(r)),
+    };
+  }
+
+  /**
+   * List journal entries with optional filters and cursor-based pagination.
+   * Returns entries plus a debit/credit summary for the matching set.
+   */
+  async listJournalEntries(
+    context: TenantContext,
+    filters: JournalEntriesQuery
+  ): Promise<ServiceResult<{
+    items: JournalEntryResponse[];
+    summary: { total_debits: string; total_credits: string; is_balanced: boolean };
+    nextCursor: string | null;
+    hasMore: boolean;
+  }>> {
+    const [result, totals] = await Promise.all([
+      this.repository.listJournalEntries(context, filters),
+      this.repository.getJournalEntriesTotals(context, filters),
+    ]);
+
+    const totalDebits = parseFloat(totals.totalDebits);
+    const totalCredits = parseFloat(totals.totalCredits);
+    // Balanced if debits equal credits (within rounding tolerance)
+    const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
+
+    return {
+      success: true,
+      data: {
+        items: result.items.map((r) => this.mapJournalEntryToResponse(r)),
+        summary: {
+          total_debits: totalDebits.toFixed(2),
+          total_credits: totalCredits.toFixed(2),
+          is_balanced: isBalanced,
+        },
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      },
     };
   }
 }

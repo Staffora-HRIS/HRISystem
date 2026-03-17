@@ -273,6 +273,56 @@ export const EnrollmentListResponseSchema = t.Object({
   hasMore: t.Boolean(),
 });
 
+// =============================================================================
+// Compliance Report Schemas
+// =============================================================================
+
+export const MandatoryCourseComplianceSchema = t.Object({
+  courseId: UuidSchema,
+  courseName: t.String(),
+  category: t.Union([t.String(), t.Null()]),
+  isMandatory: t.Boolean(),
+  mandatoryDueDays: t.Union([t.Number(), t.Null()]),
+  totalAssigned: t.Number(),
+  completedCount: t.Number(),
+  inProgressCount: t.Number(),
+  notStartedCount: t.Number(),
+  overdueCount: t.Number(),
+  completionRate: t.Number(),
+});
+
+export const DepartmentComplianceSchema = t.Object({
+  orgUnitId: UuidSchema,
+  orgUnitName: t.String(),
+  totalAssigned: t.Number(),
+  completedCount: t.Number(),
+  inProgressCount: t.Number(),
+  notStartedCount: t.Number(),
+  overdueCount: t.Number(),
+  completionRate: t.Number(),
+});
+
+export const ComplianceReportResponseSchema = t.Object({
+  generatedAt: t.String(),
+  summary: t.Object({
+    totalMandatoryCourses: t.Number(),
+    totalAssignments: t.Number(),
+    totalCompleted: t.Number(),
+    totalInProgress: t.Number(),
+    totalNotStarted: t.Number(),
+    totalOverdue: t.Number(),
+    overallCompletionRate: t.Number(),
+  }),
+  courses: t.Array(MandatoryCourseComplianceSchema),
+  departments: t.Array(DepartmentComplianceSchema),
+});
+
+export const ComplianceReportQuerySchema = t.Object({
+  courseId: t.Optional(UuidSchema),
+  orgUnitId: t.Optional(UuidSchema),
+  includeArchived: t.Optional(t.String()),
+});
+
 // Export types
 export type CreateCourse = typeof CreateCourseSchema.static;
 export type UpdateCourse = typeof UpdateCourseSchema.static;
@@ -282,3 +332,6 @@ export type UpdateEnrollment = typeof UpdateEnrollmentSchema.static;
 export type EnrollmentResponse = typeof EnrollmentResponseSchema.static;
 export type CreateLearningPath = typeof CreateLearningPathSchema.static;
 export type LearningPathResponse = typeof LearningPathResponseSchema.static;
+export type ComplianceReport = typeof ComplianceReportResponseSchema.static;
+export type MandatoryCourseCompliance = typeof MandatoryCourseComplianceSchema.static;
+export type DepartmentCompliance = typeof DepartmentComplianceSchema.static;

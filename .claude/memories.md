@@ -180,3 +180,24 @@ Core Knowledge:
 - 15 of 20 modules have zero route test coverage
 
 Reason: Agents should not assume test coverage exists. When fixing bugs or adding features, agents must write REAL tests using the existing helpers, not follow the hollow test pattern.
+
+### Core Memory Entry
+
+Date: 2026-03-17
+Agent: Claude Code (TODO-179 horizontal scaling)
+
+Topic: API horizontal scaling is enabled — no session affinity needed
+
+Context: The API service in docker-compose.yml supports horizontal scaling via `--scale api=N` or the `docker-compose.scale.yml` override file.
+
+Core Knowledge:
+- **API is stateless**: Sessions in PostgreSQL (Better Auth), cache/idempotency in Redis, domain events in outbox table. No in-process state.
+- **container_name removed from api service**: Required for `--scale` to work (Docker can't assign duplicate names).
+- **INTERNAL_API_URL changed**: Web service uses `http://api:3000` (Docker service DNS) instead of `http://staffora-api:3000` (container name).
+- **Nginx load balancer**: Uses `least_conn` strategy with Docker DNS resolver (127.0.0.11). Production profile required (`--profile production`).
+- **docker-compose.scale.yml**: Override file that sets `replicas: 3`, removes host port binding via `!reset`, and adds rolling update config. Requires Docker Compose v2.24+.
+- **Prometheus**: Uses `dns_sd_configs` to auto-discover all API instances for metrics scraping.
+- **Connection budget**: PgBouncer default 200 client connections supports ~8 API instances at 25 connections each.
+- **Documentation**: Full scaling guide at `docker/SCALING.md`.
+
+Reason: Agents working on infrastructure, deployment, or performance must know that horizontal scaling is supported and how it works.

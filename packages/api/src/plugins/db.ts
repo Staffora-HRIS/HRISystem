@@ -7,6 +7,47 @@
  * - Transaction wrapper with tenant context setting
  * - Query logging in development
  * - Type-safe query interface
+ *
+ * ==========================================================================
+ * CONNECTION BUDGET
+ * ==========================================================================
+ * With PgBouncer (production / Docker):
+ *   App pools connect to PgBouncer (port 6432) which multiplexes onto a
+ *   smaller number of PostgreSQL backend connections (default_pool_size=25).
+ *   PgBouncer accepts up to max_client_conn=200 client connections.
+ *
+ *   Pool                          | max | Driver      | Notes
+ *   ------------------------------|-----|-------------|-------------------------
+ *   postgres.js (API + workers)   |  10 | postgres.js | Per-process pool via getDbClient()
+ *   Better Auth + lockout handler |   5 | pg (Pool)   | Required by better-auth library
+ *   ------------------------------|-----|-------------|-------------------------
+ *   TOTAL per process             |  15 |             | PgBouncer handles multiplexing
+ *
+ * Without PgBouncer (local development / tests):
+ *   Direct connection to PostgreSQL (max_connections = 100).
+ *
+ *   Pool                          | max | Driver      | Notes
+ *   ------------------------------|-----|-------------|-------------------------
+ *   postgres.js (API + workers)   |  20 | postgres.js | Shared singleton via getDbClient()
+ *   Better Auth + lockout handler |   5 | pg (Pool)   | Required by better-auth library
+ *   ------------------------------|-----|-------------|-------------------------
+ *   TOTAL                         |  25 |             | Leaves 75 for superuser/migrations
+ * ==========================================================================
+ *
+ * PGBOUNCER COMPATIBILITY:
+ * When DATABASE_APP_URL points to PgBouncer (port 6432), prepared statements
+ * are automatically disabled (prepare: false) because PgBouncer in transaction
+ * mode reassigns server connections between transactions, making server-side
+ * prepared statements invalid. This is detected by checking the port number
+ * or the PGBOUNCER_ENABLED=true env var.
+ *
+ * The Scheduler and OutboxProcessor reuse the postgres.js singleton pool
+ * (via getDbClient()) when launched through the worker entry points. Only
+ * when run as standalone scripts do they create their own postgres.js pool.
+ *
+ * Better Auth requires the 'pg' driver (Pool) and cannot use postgres.js
+ * directly. Its pool is capped at 5 connections and shared with the
+ * account lockout handler in better-auth-handler.ts.
  */
 
 import { Elysia } from "elysia";
@@ -29,6 +70,24 @@ export interface DbConfig {
   idleTimeout: number;
   connectTimeout: number;
   ssl: boolean | "require" | "prefer";
+  /** Disable prepared statements for PgBouncer transaction-mode compatibility */
+  prepare: boolean;
+}
+
+/**
+ * Detect whether the connection URL points to PgBouncer.
+ *
+ * Heuristics (in priority order):
+ * 1. PGBOUNCER_ENABLED env var explicitly set to "true"
+ * 2. Connection port is 6432 (PgBouncer conventional port)
+ *
+ * When PgBouncer is detected:
+ * - Prepared statements must be disabled (prepare: false)
+ * - Pool sizes can be smaller (PgBouncer handles multiplexing)
+ */
+function isPgBouncerConnection(port: number): boolean {
+  if (process.env["PGBOUNCER_ENABLED"] === "true") return true;
+  return port === 6432;
 }
 
 /**
@@ -43,6 +102,8 @@ function loadDbConfig(): DbConfig {
   const databaseUrl = process.env["DATABASE_APP_URL"] || process.env["DATABASE_URL"];
   if (databaseUrl) {
     const url = new URL(databaseUrl);
+    const port = Number(url.port) || 5432;
+    const viaPgBouncer = isPgBouncerConnection(port);
 
     const sslMode = url.searchParams.get("sslmode");
     const ssl: DbConfig["ssl"] = sslMode === "require" || sslMode === "prefer"
@@ -53,14 +114,17 @@ function loadDbConfig(): DbConfig {
 
     return {
       host: url.hostname,
-      port: Number(url.port) || 5432,
+      port,
       database: url.pathname.replace(/^\//, "") || "hris",
       username: decodeURIComponent(url.username || "hris"),
       password: decodeURIComponent(url.password || ""),
-      maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || 10,
+      // Smaller pool when behind PgBouncer (it handles multiplexing)
+      maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || (viaPgBouncer ? 10 : 20),
       idleTimeout: Number(process.env["DB_IDLE_TIMEOUT"]) || 20,
       connectTimeout: Number(process.env["DB_CONNECT_TIMEOUT"]) || 10,
       ssl,
+      // PgBouncer transaction mode does not support server-side prepared statements
+      prepare: !viaPgBouncer,
     };
   }
 
@@ -72,16 +136,20 @@ function loadDbConfig(): DbConfig {
     );
   }
 
+  const port = Number(process.env["DB_PORT"]) || 5432;
+  const viaPgBouncer = isPgBouncerConnection(port);
+
   return {
     host: process.env["DB_HOST"] || "localhost",
-    port: Number(process.env["DB_PORT"]) || 5432,
+    port,
     database: process.env["DB_NAME"] || "hris",
     username: process.env["DB_USER"] || "hris",
     password: dbPassword,
-    maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || 20,
+    maxConnections: Number(process.env["DB_MAX_CONNECTIONS"]) || (viaPgBouncer ? 10 : 20),
     idleTimeout: Number(process.env["DB_IDLE_TIMEOUT"]) || 30,
     connectTimeout: Number(process.env["DB_CONNECT_TIMEOUT"]) || 10,
     ssl: process.env["DB_SSL"] === "true" ? "require" : false,
+    prepare: !viaPgBouncer,
   };
 }
 
@@ -129,6 +197,11 @@ export class DatabaseClient {
   constructor(config: DbConfig) {
     this.connectionUser = config.username;
     const debugEnabled = process.env["DB_DEBUG"] === "true";
+    const viaPgBouncer = !config.prepare;
+
+    if (viaPgBouncer) {
+      console.log(`[DB] PgBouncer detected (port=${config.port}) — prepared statements disabled`);
+    }
 
     this.sql = postgres({
       host: config.host,
@@ -140,6 +213,10 @@ export class DatabaseClient {
       idle_timeout: config.idleTimeout,
       connect_timeout: config.connectTimeout,
       ssl: config.ssl,
+      // Disable prepared statements when connecting through PgBouncer.
+      // PgBouncer in transaction mode reassigns server connections between
+      // transactions, so server-side prepared statements become invalid.
+      prepare: config.prepare,
       // Use the app schema by default
       connection: {
         search_path: "app,public",

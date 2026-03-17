@@ -436,3 +436,25 @@ Solution: Created migration 0189_portal_betterauth_cleanup.sql to drop portal_se
 Prevention: Any code that creates or modifies user/session/account data must update BOTH app.users (legacy) and app."user"/app."account" (Better Auth) tables atomically. Prefer using Better Auth's API (auth.api.signUpEmail) when possible.
 
 Affected Files: migrations/0189_portal_betterauth_cleanup.sql (new), packages/api/src/scripts/bootstrap-root.ts, packages/api/src/lib/better-auth.ts
+
+---
+
+### Learning Entry
+
+Date: 2026-03-17
+Agent: Claude Code (TODO-180 Distributed Lock)
+Category: Architecture
+
+Context: Implementing Redlock-style distributed locking to replace unsafe simple SET NX EX.
+
+Problem: The existing distributed lock in `lib/distributed-lock.ts` and cache plugin used simple `SET NX EX` which has known safety issues: (1) No fencing tokens, so delayed operations from expired lock holders could corrupt data. (2) No auto-renewal, so long-running operations under GC pause or I/O delay could lose their lock mid-operation. (3) No clock drift compensation, so the lock's effective validity was longer than safe on Redis instances with clock skew. (4) Lock value used `Math.random()` which has weaker uniqueness guarantees than `crypto.randomUUID()`. (5) Used second-precision EX instead of millisecond-precision PX. (6) Cache plugin had its own separate lock implementation that duplicated the Lua release script.
+
+Root Cause: The initial implementation was a minimal viable lock suitable for low-contention scenarios but insufficient for production use with Redis Sentinel/Cluster or under process pause conditions (GC, I/O, network partitions).
+
+Solution: Rewrote `lib/distributed-lock.ts` with Redlock algorithm safety properties: (1) Fencing tokens via atomic Redis INCR counter, passed to callbacks and returned in LockHandle. (2) Auto-renewal heartbeat using setInterval + Lua PEXPIRE CAS script to safely extend TTL. (3) Clock drift compensation: `validityMs = ttlMs - acquireElapsedMs - (ttlMs * 0.01 + 2)`. (4) Upgraded lock value to use crypto.randomUUID(). (5) Changed from EX (seconds) to PX (milliseconds) for finer-grained TTL. (6) Added retry jitter to prevent thundering herd. (7) Cache plugin now delegates to distributed-lock module instead of duplicating logic. (8) Added `acquireLockHandle()` to cache plugin for callers needing fencing tokens.
+
+Prevention: All distributed locking should go through `lib/distributed-lock.ts`. Never use raw `SET NX EX` for locking. Always pass fencing tokens to downstream writes when lock-protected operations modify external state. Enable auto-renewal for any operation that might take longer than the lock TTL.
+
+Affected Files: `packages/api/src/lib/distributed-lock.ts`, `packages/api/src/plugins/cache.ts`, `packages/api/src/test/unit/lib/distributed-lock.test.ts`
+
+Notes: The `withLock` callback signature changed to receive a fencing token parameter: `fn: (fencingToken: number) => Promise<T>`. The return type also includes `fencingToken` in the success case. Auto-renewal defaults to enabled with 50% renewal fraction. Existing callers of `cache.acquireLock()` and `cache.withLock()` continue to work unchanged (backward compatible). Tests cannot run locally on Windows due to known Bun 1.3.10 ioredis segfault (runs in CI on Linux).

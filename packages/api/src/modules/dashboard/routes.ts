@@ -1,44 +1,28 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { DashboardRepository } from "./repository";
+import { DashboardService } from "./service";
 
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
+  .derive((ctx) => {
+    const { db, cache } = ctx as any;
+    const repository = new DashboardRepository(db);
+    const service = new DashboardService(repository, cache ?? null);
+    return { dashboardService: service };
+  })
   .get(
     "/admin/stats",
     async (ctx) => {
-      const { tenant, user, db } = ctx as any;
+      const { dashboardService, tenant, user } = ctx as any;
+      const tenantContext = { tenantId: tenant.id, userId: user.id };
 
-      const [row] = await db.withTransaction(
-        { tenantId: tenant.id, userId: user.id },
-        async (tx: any) => {
-          return await tx<
-            Array<{
-              totalEmployees: number;
-              activeEmployees: number;
-              departments: number;
-              openPositions: number;
-              pendingWorkflows: number;
-              pendingApprovals: number;
-            }>
-          >`
-            SELECT
-              (SELECT count(*)::int FROM app.employees) AS total_employees,
-              (SELECT count(*)::int FROM app.employees WHERE status = 'active') AS active_employees,
-              (SELECT count(*)::int FROM app.org_units WHERE is_active = true AND level = 1) AS departments,
-              (SELECT count(*)::int FROM app.requisitions WHERE status = 'open' AND filled < openings) AS open_positions,
-              (SELECT count(*)::int FROM app.workflow_instances WHERE status IN ('pending', 'in_progress')) AS pending_workflows,
-              (SELECT count(*)::int FROM app.workflow_tasks WHERE status IN ('pending', 'assigned', 'in_progress')) AS pending_approvals
-          `;
-        }
-      );
+      const result = await dashboardService.getAdminStats(tenantContext);
 
-      return {
-        totalEmployees: row?.totalEmployees ?? 0,
-        activeEmployees: row?.activeEmployees ?? 0,
-        departments: row?.departments ?? 0,
-        openPositions: row?.openPositions ?? 0,
-        pendingWorkflows: row?.pendingWorkflows ?? 0,
-        pendingApprovals: row?.pendingApprovals ?? 0,
-      };
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch dashboard stats");
+      }
+
+      return result.data;
     },
     {
       beforeHandle: [requirePermission("dashboards", "read")],
@@ -54,7 +38,33 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       },
       detail: {
         tags: ["Dashboard"],
-        summary: "Admin dashboard stats",
+        summary: "Admin dashboard stats (cached, 60s TTL)",
+      },
+    }
+  )
+  .get(
+    "/admin/activity",
+    async (ctx) => {
+      const { dashboardService, tenant, user, query } = ctx as any;
+      const tenantContext = { tenantId: tenant.id, userId: user.id };
+      const limit = query.limit ? parseInt(query.limit, 10) : 10;
+
+      const result = await dashboardService.getRecentActivity(tenantContext, limit);
+
+      if (!result.success) {
+        throw new Error(result.error?.message || "Failed to fetch recent activity");
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("dashboards", "read")],
+      query: t.Object({
+        limit: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ["Dashboard"],
+        summary: "Recent admin activity (cached, 60s TTL)",
       },
     }
   );

@@ -445,7 +445,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4 sidebar-scroll">
           {adminNavGroups.map((group) => (
             <div key={group.name} className="mb-4">
-              <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
                 {group.name}
               </h3>
               <div className="space-y-1">
@@ -515,7 +515,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[10px] font-bold text-white">
+              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-600 text-[10px] font-bold text-white">
                 3
               </span>
             </button>

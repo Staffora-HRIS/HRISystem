@@ -107,6 +107,23 @@ export type ReportType =
 export type ReportStatus = "draft" | "published" | "archived";
 
 // Report definition from the API
+export type ScheduleFrequency =
+  | "daily"
+  | "weekly"
+  | "fortnightly"
+  | "monthly"
+  | "quarterly"
+  | "annually"
+  | "custom_cron";
+
+export interface ScheduleRecipient {
+  userId?: string;
+  email: string;
+  deliveryMethod?: "email" | "in_app" | "both";
+}
+
+export type ScheduleExportFormat = "csv" | "xlsx" | "pdf";
+
 export interface ReportDefinition {
   id: string;
   name: string;
@@ -119,6 +136,15 @@ export interface ReportDefinition {
   chartType: string | null;
   chartConfig: unknown;
   isScheduled: boolean;
+  scheduleFrequency: ScheduleFrequency | null;
+  scheduleCron: string | null;
+  scheduleTime: string | null;
+  scheduleDayOfWeek: number | null;
+  scheduleDayOfMonth: number | null;
+  scheduleRecipients: ScheduleRecipient[];
+  scheduleExportFormat: ScheduleExportFormat | null;
+  lastScheduledRun: string | null;
+  nextScheduledRun: string | null;
   isPublic: boolean;
   isSystem: boolean;
   createdBy: string;

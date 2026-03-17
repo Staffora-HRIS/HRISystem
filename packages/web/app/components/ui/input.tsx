@@ -69,7 +69,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             {label}
-            {props.required && <span className="ml-1 text-error-500">*</span>}
+            {props.required && <span className="ml-1 text-error-600">*</span>}
           </label>
         )}
 
@@ -200,7 +200,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             {label}
-            {props.required && <span className="ml-1 text-error-500">*</span>}
+            {props.required && <span className="ml-1 text-error-600">*</span>}
           </label>
         )}
 
@@ -298,7 +298,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             {label}
-            {props.required && <span className="ml-1 text-error-500">*</span>}
+            {props.required && <span className="ml-1 text-error-600">*</span>}
           </label>
         )}
 

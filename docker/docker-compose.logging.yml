@@ -1,0 +1,184 @@
+# =============================================================================
+# Staffora Platform Logging Stack
+# =============================================================================
+#
+# Usage:
+#   # Logging only (extends main compose):
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.logging.yml up -d
+#
+#   # Full observability (monitoring + logging):
+#   docker compose -f docker/docker-compose.yml \
+#     -f docker/docker-compose.monitoring.yml \
+#     -f docker/docker-compose.logging.yml up -d
+#
+# This adds Loki (log storage) and Promtail (log collector) to the platform.
+# Grafana is extended with the Loki datasource for log exploration.
+#
+# Ports:
+#   - Loki:     3101 (HTTP API, internal)
+#   - Promtail: 9080 (HTTP status, internal)
+#   - Grafana:  3100 (already defined in monitoring stack)
+#
+# Architecture:
+#   Docker containers --> json-file driver --> /var/lib/docker/containers/
+#   Promtail (tails log files via Docker socket) --> Loki (stores + indexes)
+#   Grafana (queries Loki via LogQL)
+#
+# Log Rotation:
+#   All containers in docker-compose.yml are configured with json-file driver:
+#     max-size: 50m (api, worker, postgres, nginx) or 20m (redis, web, grafana, prometheus)
+#     max-file: 5 (api, worker, postgres, nginx) or 3 (redis, web, grafana, prometheus)
+#   Promtail reads these rotated files seamlessly via the Docker socket.
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Loki -- Log aggregation and storage
+  # ---------------------------------------------------------------------------
+  # Loki receives logs from Promtail, indexes labels (not full text), and
+  # serves LogQL queries to Grafana. Uses local filesystem storage.
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: staffora-loki
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/loki/loki-config.yml"
+      - "-config.expand-env=true"
+    ports:
+      - "${LOKI_PORT:-3101}:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    environment:
+      # Retention period override (default: 720h = 30 days)
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-720h}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Promtail -- Log collection agent
+  # ---------------------------------------------------------------------------
+  # Promtail discovers Docker containers via the Docker socket, tails their
+  # log files, parses structured JSON logs, extracts labels, and pushes
+  # log entries to Loki.
+  #
+  # Requires Docker socket mount for container discovery.
+  # Also mounts /var/lib/docker/containers for reading log files.
+  # ---------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: staffora-promtail
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/promtail/promtail-config.yml"
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Docker socket for container discovery
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker container log files (json-file driver output)
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9080/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Grafana override -- add Loki datasource provisioning
+  # ---------------------------------------------------------------------------
+  # When running with the monitoring stack, this extends the existing Grafana
+  # service to also provision the Loki datasource and log dashboards.
+  # When running without the monitoring stack, this creates a standalone
+  # Grafana instance with Loki as the only datasource.
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: staffora-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-staffora}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
+      GF_SERVER_HTTP_PORT: "3100"
+      # Enable Explore for ad-hoc log queries
+      GF_EXPLORE_ENABLED: "true"
+    ports:
+      - "${GRAFANA_PORT:-3100}:3100"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  loki_data:
+    driver: local
+  grafana_data:
+    driver: local

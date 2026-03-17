@@ -1,32 +1,19 @@
 /**
- * ChartRenderer — Renders actual charts using Recharts based on ChartConfig and data.
+ * ChartRenderer — Renders charts using the reusable Staffora chart components
+ * based on ChartConfig and report data.
+ *
+ * This component acts as a bridge between the report module's ChartConfig type
+ * and the generic chart components in ~/components/charts/.
  */
 
 import { useMemo } from "react";
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+  StafforaBarChart,
+  StafforaLineChart,
+  StafforaAreaChart,
+  StafforaPieChart,
+} from "~/components/charts";
 import type { ChartConfig } from "./ChartBuilder";
-
-const COLORS = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
-  "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
-  "#84cc16", "#14b8a6", "#e11d48", "#7c3aed",
-];
 
 interface ChartRendererProps {
   config: ChartConfig;
@@ -35,11 +22,19 @@ interface ChartRendererProps {
 }
 
 export function ChartRenderer({ config, data, columnLabels }: ChartRendererProps) {
-  const { chartType, xAxis, yAxis, showLegend, showGrid, showLabels, title } = config;
+  const { chartType, xAxis, yAxis, showLegend, showGrid, showLabels, title, palette } = config;
 
-  const getLabel = (key: string) => columnLabels.get(key) ?? key;
+  // Build seriesLabels from the columnLabels map
+  const seriesLabels = useMemo(() => {
+    if (!yAxis) return undefined;
+    const labels: Record<string, string> = {};
+    for (const key of yAxis) {
+      labels[key] = columnLabels.get(key) ?? key;
+    }
+    return labels;
+  }, [yAxis, columnLabels]);
 
-  // Transform data for pie/donut charts
+  // Transform data for pie/donut charts — aggregate by segment field
   const pieData = useMemo(() => {
     if ((chartType !== "pie" && chartType !== "donut") || !xAxis || !yAxis?.length) return [];
     const yField = yAxis[0];
@@ -52,10 +47,11 @@ export function ChartRenderer({ config, data, columnLabels }: ChartRendererProps
     return Array.from(grouped.entries()).map(([name, value]) => ({ name, value }));
   }, [data, xAxis, yAxis, chartType]);
 
+  // Empty / unconfigured state
   if (!xAxis || !yAxis?.length || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-        <p className="text-sm text-gray-400">
+      <div className="flex items-center justify-center h-64 rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50">
+        <p className="text-sm text-gray-400 dark:text-gray-400">
           {data.length === 0
             ? "Run the report to see chart data"
             : "Configure X and Y axes to render chart"}
@@ -64,137 +60,84 @@ export function ChartRenderer({ config, data, columnLabels }: ChartRendererProps
     );
   }
 
-  // Bar Chart
+  // Bar / Stacked Bar
   if (chartType === "bar" || chartType === "stacked_bar") {
     return (
-      <div className="space-y-2">
-        {title && <h4 className="text-sm font-medium text-gray-700 text-center">{title}</h4>}
-        <ResponsiveContainer width="100%" height={360}>
-          <BarChart data={data} margin={{ top: 5, right: 20, bottom: 20, left: 20 }}>
-            {showGrid !== false && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis
-              dataKey={xAxis}
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-            />
-            <YAxis tick={{ fontSize: 11 }} tickLine={false} />
-            <Tooltip
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
-            />
-            {showLegend !== false && <Legend wrapperStyle={{ fontSize: 12 }} />}
-            {yAxis.map((yKey, i) => (
-              <Bar
-                key={yKey}
-                dataKey={yKey}
-                name={getLabel(yKey)}
-                fill={COLORS[i % COLORS.length]}
-                radius={[4, 4, 0, 0]}
-                label={showLabels ? { position: "top", fontSize: 10 } : undefined}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <StafforaBarChart
+        data={data}
+        xAxisKey={xAxis}
+        yAxisKeys={yAxis}
+        seriesLabels={seriesLabels}
+        showGrid={showGrid !== false}
+        showLegend={showLegend !== false}
+        showLabels={showLabels}
+        title={title}
+        palette={palette}
+        stacked={chartType === "stacked_bar"}
+        ariaLabel={title ?? "Report bar chart"}
+      />
     );
   }
 
-  // Line Chart
+  // Line
   if (chartType === "line") {
     return (
-      <div className="space-y-2">
-        {title && <h4 className="text-sm font-medium text-gray-700 text-center">{title}</h4>}
-        <ResponsiveContainer width="100%" height={360}>
-          <LineChart data={data} margin={{ top: 5, right: 20, bottom: 20, left: 20 }}>
-            {showGrid !== false && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis dataKey={xAxis} tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} tickLine={false} />
-            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
-            {showLegend !== false && <Legend wrapperStyle={{ fontSize: 12 }} />}
-            {yAxis.map((yKey, i) => (
-              <Line
-                key={yKey}
-                type="monotone"
-                dataKey={yKey}
-                name={getLabel(yKey)}
-                stroke={COLORS[i % COLORS.length]}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      <StafforaLineChart
+        data={data}
+        xAxisKey={xAxis}
+        yAxisKeys={yAxis}
+        seriesLabels={seriesLabels}
+        showGrid={showGrid !== false}
+        showLegend={showLegend !== false}
+        showLabels={showLabels}
+        title={title}
+        palette={palette}
+        ariaLabel={title ?? "Report line chart"}
+      />
     );
   }
 
-  // Area Chart
+  // Area
   if (chartType === "area") {
     return (
-      <div className="space-y-2">
-        {title && <h4 className="text-sm font-medium text-gray-700 text-center">{title}</h4>}
-        <ResponsiveContainer width="100%" height={360}>
-          <AreaChart data={data} margin={{ top: 5, right: 20, bottom: 20, left: 20 }}>
-            {showGrid !== false && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis dataKey={xAxis} tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} tickLine={false} />
-            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
-            {showLegend !== false && <Legend wrapperStyle={{ fontSize: 12 }} />}
-            {yAxis.map((yKey, i) => (
-              <Area
-                key={yKey}
-                type="monotone"
-                dataKey={yKey}
-                name={getLabel(yKey)}
-                stroke={COLORS[i % COLORS.length]}
-                fill={COLORS[i % COLORS.length]}
-                fillOpacity={0.15}
-                strokeWidth={2}
-              />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      <StafforaAreaChart
+        data={data}
+        xAxisKey={xAxis}
+        yAxisKeys={yAxis}
+        seriesLabels={seriesLabels}
+        showGrid={showGrid !== false}
+        showLegend={showLegend !== false}
+        showLabels={showLabels}
+        title={title}
+        palette={palette}
+        ariaLabel={title ?? "Report area chart"}
+      />
     );
   }
 
   // Pie / Donut
   if (chartType === "pie" || chartType === "donut") {
-    const innerRadius = chartType === "donut" ? 60 : 0;
     return (
-      <div className="space-y-2">
-        {title && <h4 className="text-sm font-medium text-gray-700 text-center">{title}</h4>}
-        <ResponsiveContainer width="100%" height={360}>
-          <PieChart>
-            <Pie
-              data={pieData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={120}
-              innerRadius={innerRadius}
-              label={showLabels !== false ? ({ name, percent }: any) =>
-                `${name} (${(percent * 100).toFixed(0)}%)` : undefined
-              }
-              labelLine={showLabels !== false}
-            >
-              {pieData.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
-            {showLegend !== false && <Legend wrapperStyle={{ fontSize: 12 }} />}
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+      <StafforaPieChart
+        data={pieData}
+        nameKey="name"
+        valueKey="value"
+        innerRadius={chartType === "donut" ? 60 : 0}
+        showLegend={showLegend !== false}
+        showLabels={showLabels !== false}
+        title={title}
+        palette={palette}
+        ariaLabel={title ?? `Report ${chartType} chart`}
+      />
     );
   }
 
-  // Fallback
+  // Unsupported chart type fallback
   return (
-    <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-      <p className="text-sm text-gray-400">Chart type &quot;{chartType}&quot; is not yet supported</p>
+    <div className="flex items-center justify-center h-64 rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50">
+      <p className="text-sm text-gray-400 dark:text-gray-400">
+        Chart type &quot;{chartType}&quot; is not yet supported
+      </p>
     </div>
   );
 }

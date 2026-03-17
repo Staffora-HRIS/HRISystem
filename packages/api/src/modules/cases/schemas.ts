@@ -170,21 +170,56 @@ export const CloseCaseSchema = t.Object({
   satisfactionRating: t.Optional(t.Number({ minimum: 1, maximum: 5 })),
 });
 
+export const AppealStatusSchema = t.Union([
+  t.Literal("pending"),
+  t.Literal("upheld"),
+  t.Literal("overturned"),
+  t.Literal("partially_upheld"),
+]);
+
+/**
+ * File a case appeal.
+ *
+ * ACAS Code para 26: employee has the right to appeal.
+ * The appeal must be heard by a different person (para 27).
+ */
 export const AppealCaseSchema = t.Object({
-  reason: t.String({ minLength: 1, maxLength: 5000 }),
-  appealReviewerId: t.Optional(UuidSchema),
+  reason: t.String({ minLength: 1, maxLength: 5000, description: "Why the employee is appealing" }),
+  appealGrounds: t.Optional(t.String({ maxLength: 10000, description: "Detailed grounds for the appeal" })),
+  hearingOfficerId: t.Optional(UuidSchema),
+  hearingDate: t.Optional(t.String({ format: "date-time", description: "Scheduled appeal hearing date" })),
+});
+
+/**
+ * Decide (PATCH) an appeal outcome.
+ *
+ * ACAS Code para 27: appeal heard by different, ideally more senior, manager.
+ * The hearingOfficerId MUST be different from the original decision maker.
+ */
+export const DecideAppealSchema = t.Object({
+  decision: AppealStatusSchema,
+  outcomeNotes: t.String({ minLength: 1, maxLength: 5000, description: "Written reasoning for the decision" }),
+  hearingOfficerId: t.Optional(UuidSchema),
 });
 
 export const AppealResponseSchema = t.Object({
   id: UuidSchema,
   caseId: UuidSchema,
   appealedBy: UuidSchema,
+  appellantEmployeeId: t.Union([UuidSchema, t.Null()]),
   reason: t.String(),
+  appealGrounds: t.Union([t.String(), t.Null()]),
   reviewerId: t.Union([UuidSchema, t.Null()]),
-  status: t.Union([t.Literal("pending"), t.Literal("upheld"), t.Literal("overturned"), t.Literal("partially_upheld")]),
+  hearingOfficerId: t.Union([UuidSchema, t.Null()]),
+  originalDecisionMakerId: t.Union([UuidSchema, t.Null()]),
+  hearingDate: t.Union([t.String(), t.Null()]),
+  status: AppealStatusSchema,
   outcome: t.Union([t.String(), t.Null()]),
+  outcomeNotes: t.Union([t.String(), t.Null()]),
   decidedAt: t.Union([t.String(), t.Null()]),
+  appealDate: t.Union([t.String(), t.Null()]),
   createdAt: t.String(),
+  updatedAt: t.String(),
 });
 
 // =============================================================================
@@ -260,8 +295,12 @@ export const CommentListResponseSchema = t.Object({
 // Export types
 export type CaseStatus = typeof CaseStatusSchema.static;
 export type CasePriority = typeof CasePrioritySchema.static;
+export type AppealStatus = typeof AppealStatusSchema.static;
 export type CreateCase = typeof CreateCaseSchema.static;
 export type UpdateCase = typeof UpdateCaseSchema.static;
 export type CaseResponse = typeof CaseResponseSchema.static;
 export type CreateComment = typeof CreateCommentSchema.static;
 export type CommentResponse = typeof CommentResponseSchema.static;
+export type AppealCase = typeof AppealCaseSchema.static;
+export type DecideAppeal = typeof DecideAppealSchema.static;
+export type AppealResponse = typeof AppealResponseSchema.static;

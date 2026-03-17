@@ -133,7 +133,7 @@ export function SecureField({
           <span className="block text-sm font-medium text-gray-500 dark:text-gray-400">
             {label}
           </span>
-          <span className="block text-sm text-gray-400 dark:text-gray-500 italic">
+          <span className="block text-sm text-gray-400 dark:text-gray-400 italic">
             {hiddenPlaceholder}
           </span>
         </div>
@@ -389,7 +389,7 @@ export function SecureValue({
   }
 
   if (!canView(entity, name)) {
-    return <span className={cn("text-gray-400 dark:text-gray-500 italic", className)}>{hiddenPlaceholder}</span>;
+    return <span className={cn("text-gray-400 dark:text-gray-400 italic", className)}>{hiddenPlaceholder}</span>;
   }
 
   const meta = getFieldMeta(name);

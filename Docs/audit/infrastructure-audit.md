@@ -47,7 +47,7 @@ Staffora is a multi-tenant HRIS platform deployed as a set of Docker containers:
 2. **[Medium] No `hris_app` role creation in init or migrations** -- The `NOBYPASSRLS` application role (`hris_app`) documented in CLAUDE.md is only created dynamically by the test setup (`setup.ts`). Neither `docker/postgres/init.sql` nor any migration creates it. In production, the API connects as the `hris` superuser, which **bypasses RLS entirely** -- this is a critical security gap. The two-role model (admin `hris` for migrations, restricted `hris_app` for runtime) exists only in test code.
 3. **[Low] Redis health check does not include auth** -- `redis-cli ping` will fail when `requirepass` is set. Should be `redis-cli -a $REDIS_PASSWORD ping` or use the `--no-auth-warning` flag.
 4. **[Low] Nginx SSL directory does not exist** -- `docker/nginx/ssl/` referenced in the compose file is absent. Production nginx will fail to start without SSL certificates.
-5. **[Low] Backup container uses shell-based scheduler** -- The `db-backup` service runs an inline bash loop with `sleep`. A more reliable approach would use cron or a lightweight scheduler image.
+5. ~~**[Low] Backup container uses shell-based scheduler**~~ -- [RESOLVED] Replaced sleep loop with proper cron scheduling via `backup-entrypoint.sh`. Uses `/etc/cron.d/` with configurable `BACKUP_SCHEDULE` env var.
 
 **Note:** An upstream `website_backend` reference in the nginx config (`docker/nginx/nginx.conf`) is now obsolete. The marketing site (`Website/`) has been moved to a separate repository. The nginx config reference should be cleaned up.
 
@@ -442,7 +442,7 @@ The Docker composition, build system, and environment management are solid for a
 
 18. **Add Grafana + Prometheus stack** -- Docker compose profile for monitoring
 19. **Implement secret rotation tooling** -- Scripts or documentation for rotating database/auth secrets
-20. **Replace backup sidecar bash loop with cron** -- More reliable scheduling
+20. ~~**Replace backup sidecar bash loop with cron**~~ -- [DONE] Replaced with cron-based `backup-entrypoint.sh`
 21. **Add database connection pooler (PgBouncer)** -- For production scale
 22. **Document disaster recovery plan** -- Define RTO/RPO targets, runbook for various failure scenarios
 23. **Add log aggregation** -- ELK stack or Grafana Loki for centralized log search

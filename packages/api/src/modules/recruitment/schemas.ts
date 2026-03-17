@@ -179,3 +179,136 @@ export const CandidateFiltersSchema = t.Object({
   source: t.Optional(CandidateSourceSchema),
   search: t.Optional(t.String()),
 });
+
+// =============================================================================
+// Recruitment Cost Schemas
+// =============================================================================
+
+export const RecruitmentCostCategorySchema = t.Union([
+  t.Literal("agency_fee"),
+  t.Literal("job_board"),
+  t.Literal("advertising"),
+  t.Literal("relocation"),
+  t.Literal("assessment"),
+  t.Literal("background_check"),
+  t.Literal("travel"),
+  t.Literal("signing_bonus"),
+  t.Literal("referral_bonus"),
+  t.Literal("other"),
+]);
+
+export const CreateRecruitmentCostSchema = t.Object({
+  requisitionId: UuidSchema,
+  category: RecruitmentCostCategorySchema,
+  description: t.Optional(t.String({ maxLength: 1000 })),
+  amount: t.Number({ minimum: 0.01 }),
+  currency: t.Optional(t.String({ minLength: 3, maxLength: 3, default: "GBP" })),
+  incurredDate: t.Optional(t.String({ format: "date" })),
+  externalReference: t.Optional(t.String({ maxLength: 255 })),
+});
+
+export const UpdateRecruitmentCostSchema = t.Partial(
+  t.Object({
+    category: RecruitmentCostCategorySchema,
+    description: t.Union([t.String({ maxLength: 1000 }), t.Null()]),
+    amount: t.Number({ minimum: 0.01 }),
+    currency: t.String({ minLength: 3, maxLength: 3 }),
+    incurredDate: t.String({ format: "date" }),
+    externalReference: t.Union([t.String({ maxLength: 255 }), t.Null()]),
+  })
+);
+
+// =============================================================================
+// Recruitment Analytics Schemas
+// =============================================================================
+
+export const RecruitmentAnalyticsQuerySchema = t.Object({
+  startDate: t.Optional(t.String({ format: "date", description: "Start of date range (default: 90 days ago)" })),
+  endDate: t.Optional(t.String({ format: "date", description: "End of date range (default: today)" })),
+  orgUnitId: t.Optional(UuidSchema),
+  requisitionId: t.Optional(UuidSchema),
+});
+
+// --- Time-to-Fill ---
+
+export const TimeToFillItemSchema = t.Object({
+  requisition_id: t.String(),
+  requisition_code: t.String(),
+  requisition_title: t.String(),
+  status: t.String(),
+  opened_at: t.Union([t.String(), t.Null()]),
+  filled_at: t.Union([t.String(), t.Null()]),
+  days_to_fill: t.Union([t.Number(), t.Null()]),
+});
+
+export const TimeToFillSummarySchema = t.Object({
+  items: t.Array(TimeToFillItemSchema),
+  average_days_to_fill: t.Number(),
+  median_days_to_fill: t.Number(),
+  min_days_to_fill: t.Union([t.Number(), t.Null()]),
+  max_days_to_fill: t.Union([t.Number(), t.Null()]),
+  total_filled: t.Number(),
+});
+
+// --- Cost-per-Hire ---
+
+export const CostPerHireSummarySchema = t.Object({
+  total_costs: t.Number(),
+  total_hires: t.Number(),
+  cost_per_hire: t.Number(),
+  currency: t.String(),
+  costs_by_category: t.Array(
+    t.Object({
+      category: t.String(),
+      total_amount: t.Number(),
+      percentage: t.Number(),
+    })
+  ),
+});
+
+// --- Source Effectiveness ---
+
+export const SourceEffectivenessItemSchema = t.Object({
+  source: t.String(),
+  total_candidates: t.Number(),
+  hired_count: t.Number(),
+  rejected_count: t.Number(),
+  in_pipeline_count: t.Number(),
+  conversion_rate: t.Number(),
+  avg_days_to_hire: t.Union([t.Number(), t.Null()]),
+});
+
+export const SourceEffectivenessSummarySchema = t.Object({
+  items: t.Array(SourceEffectivenessItemSchema),
+  total_candidates: t.Number(),
+  total_hired: t.Number(),
+  overall_conversion_rate: t.Number(),
+});
+
+// --- Pipeline Conversion ---
+
+export const PipelineConversionStageSchema = t.Object({
+  stage: t.String(),
+  entered_count: t.Number(),
+  progressed_count: t.Number(),
+  conversion_rate: t.Number(),
+  avg_days_in_stage: t.Union([t.Number(), t.Null()]),
+});
+
+export const PipelineConversionSummarySchema = t.Object({
+  stages: t.Array(PipelineConversionStageSchema),
+  overall_hire_rate: t.Number(),
+});
+
+// --- Full Analytics Response ---
+
+export const RecruitmentAnalyticsResponseSchema = t.Object({
+  time_to_fill: TimeToFillSummarySchema,
+  cost_per_hire: CostPerHireSummarySchema,
+  source_effectiveness: SourceEffectivenessSummarySchema,
+  pipeline_conversion: PipelineConversionSummarySchema,
+  period: t.Object({
+    start_date: t.String(),
+    end_date: t.String(),
+  }),
+});

@@ -6,7 +6,7 @@
 
 import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
-import { RecruitmentRepository, type TenantContext, type Requisition, type Candidate } from "./repository";
+import { RecruitmentRepository, type TenantContext, type Requisition, type Candidate, type RecruitmentCost } from "./repository";
 
 // =============================================================================
 // Service
@@ -270,6 +270,130 @@ export class RecruitmentService {
 
   async getCandidateStats(ctx: TenantContext) {
     return this.repository.getCandidateStats(ctx);
+  }
+
+  // ===========================================================================
+  // Recruitment Cost Methods
+  // ===========================================================================
+
+  async createRecruitmentCost(
+    ctx: TenantContext,
+    data: {
+      requisitionId: string;
+      category: string;
+      description?: string;
+      amount: number;
+      currency?: string;
+      incurredDate?: string;
+      externalReference?: string;
+    }
+  ): Promise<RecruitmentCost> {
+    // Verify requisition exists
+    const requisition = await this.repository.getRequisitionById(ctx, data.requisitionId);
+    if (!requisition) {
+      throw new Error("Requisition not found");
+    }
+
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const cost = await this.repository.createRecruitmentCost(ctx, data);
+
+      await this.emitDomainEvent(tx, ctx, "recruitment.cost.created", "recruitment_cost", cost.id, {
+        cost,
+        requisitionId: data.requisitionId,
+      });
+
+      return cost;
+    });
+  }
+
+  async listRecruitmentCosts(
+    ctx: TenantContext,
+    options: {
+      requisitionId?: string;
+      category?: string;
+      cursor?: string;
+      limit?: number;
+    } = {}
+  ) {
+    return this.repository.listRecruitmentCosts(ctx, options);
+  }
+
+  async updateRecruitmentCost(
+    ctx: TenantContext,
+    id: string,
+    data: Partial<{
+      category: string;
+      description: string | null;
+      amount: number;
+      currency: string;
+      incurredDate: string;
+      externalReference: string | null;
+    }>
+  ): Promise<RecruitmentCost | null> {
+    return this.repository.updateRecruitmentCost(ctx, id, data);
+  }
+
+  async deleteRecruitmentCost(ctx: TenantContext, id: string): Promise<boolean> {
+    return this.repository.deleteRecruitmentCost(ctx, id);
+  }
+
+  // ===========================================================================
+  // Recruitment Analytics
+  // ===========================================================================
+
+  /**
+   * Get comprehensive recruitment analytics including:
+   * - Time-to-fill per vacancy
+   * - Cost-per-hire
+   * - Source effectiveness
+   * - Pipeline conversion rates
+   */
+  async getRecruitmentAnalytics(
+    ctx: TenantContext,
+    options: {
+      startDate?: string;
+      endDate?: string;
+      orgUnitId?: string;
+      requisitionId?: string;
+    } = {}
+  ) {
+    const today = new Date().toISOString().split("T")[0]!;
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0]!;
+
+    const startDate = options.startDate || ninetyDaysAgo;
+    const endDate = options.endDate || today;
+
+    // Validate date range
+    if (new Date(startDate) > new Date(endDate)) {
+      throw new Error("startDate must be before or equal to endDate");
+    }
+
+    const analyticsOptions = {
+      startDate,
+      endDate,
+      orgUnitId: options.orgUnitId,
+      requisitionId: options.requisitionId,
+    };
+
+    const [timeToFill, costPerHire, sourceEffectiveness, pipelineConversion] = await Promise.all([
+      this.repository.getTimeToFill(ctx, analyticsOptions),
+      this.repository.getCostPerHire(ctx, { startDate, endDate, orgUnitId: options.orgUnitId }),
+      this.repository.getSourceEffectiveness(ctx, { startDate, endDate, orgUnitId: options.orgUnitId }),
+      this.repository.getPipelineConversion(ctx, analyticsOptions),
+    ]);
+
+    return {
+      time_to_fill: timeToFill,
+      cost_per_hire: costPerHire,
+      source_effectiveness: sourceEffectiveness,
+      pipeline_conversion: pipelineConversion,
+      period: {
+        start_date: startDate,
+        end_date: endDate,
+      },
+    };
   }
 
   // ===========================================================================

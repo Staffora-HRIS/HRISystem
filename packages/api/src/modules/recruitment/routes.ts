@@ -24,6 +24,11 @@ import {
   CandidateFiltersSchema,
   CandidateStageSchema,
   CandidateSourceSchema,
+  CreateRecruitmentCostSchema,
+  UpdateRecruitmentCostSchema,
+  RecruitmentCostCategorySchema,
+  RecruitmentAnalyticsQuerySchema,
+  RecruitmentAnalyticsResponseSchema,
 } from "./schemas";
 
 // =============================================================================
@@ -711,6 +716,235 @@ export const recruitmentRoutes = new Elysia({ prefix: "/recruitment", name: "rec
         tags: ["Recruitment - Candidates"],
         summary: "Advance candidate stage",
         description: "Move a candidate to a new stage in the pipeline",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Recruitment Analytics Routes
+  // ===========================================================================
+
+  // GET /analytics - Comprehensive recruitment analytics
+  .get(
+    "/analytics",
+    async (ctx) => {
+      const { recruitmentService, query, tenant, error } = ctx as any;
+      const tenantContext = { tenantId: tenant?.id, userId: (ctx as any).user?.id };
+
+      try {
+        const analytics = await recruitmentService.getRecruitmentAnalytics(tenantContext, {
+          startDate: query.startDate,
+          endDate: query.endDate,
+          orgUnitId: query.orgUnitId,
+          requisitionId: query.requisitionId,
+        });
+
+        return analytics;
+      } catch (err: any) {
+        if (err.message.includes("startDate must be before")) {
+          return error(400, {
+            error: { code: ErrorCodes.VALIDATION_ERROR, message: err.message },
+          });
+        }
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("recruitment", "read")],
+      query: t.Partial(RecruitmentAnalyticsQuerySchema),
+      response: {
+        200: RecruitmentAnalyticsResponseSchema,
+        400: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Recruitment - Analytics"],
+        summary: "Get recruitment analytics",
+        description:
+          "Get comprehensive recruitment analytics including time-to-fill, cost-per-hire, source effectiveness, and pipeline conversion rates. " +
+          "Default date range is last 90 days if not specified.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Recruitment Cost Routes
+  // ===========================================================================
+
+  // GET /costs - List recruitment costs
+  .get(
+    "/costs",
+    async (ctx) => {
+      const { recruitmentService, query, tenant, error } = ctx as any;
+      const tenantContext = { tenantId: tenant?.id, userId: (ctx as any).user?.id };
+
+      try {
+        const result = await recruitmentService.listRecruitmentCosts(tenantContext, {
+          requisitionId: query.requisitionId,
+          category: query.category,
+          cursor: query.cursor,
+          limit: query.limit,
+        });
+
+        return {
+          costs: result.items,
+          count: result.items.length,
+          ...result,
+        };
+      } catch (err: any) {
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("recruitment", "read")],
+      query: t.Composite([
+        t.Partial(
+          t.Object({
+            requisitionId: UuidSchema,
+            category: RecruitmentCostCategorySchema,
+          })
+        ),
+        t.Partial(PaginationQuerySchema),
+      ]),
+      detail: {
+        tags: ["Recruitment - Costs"],
+        summary: "List recruitment costs",
+        description: "List recruitment costs with optional filters and pagination",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /costs - Create recruitment cost
+  .post(
+    "/costs",
+    async (ctx) => {
+      const { recruitmentService, body, tenant, audit, error } = ctx as any;
+      const tenantContext = { tenantId: tenant?.id, userId: (ctx as any).user?.id };
+
+      try {
+        const cost = await recruitmentService.createRecruitmentCost(tenantContext, body);
+
+        if (audit) {
+          await audit.log({
+            action: "recruitment.cost.created",
+            resourceType: "recruitment_cost",
+            resourceId: cost.id,
+            newValues: cost,
+          });
+        }
+
+        return cost;
+      } catch (err: any) {
+        if (err.message.includes("not found")) {
+          return error(400, {
+            error: { code: ErrorCodes.VALIDATION_ERROR, message: err.message },
+          });
+        }
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("recruitment", "write")],
+      body: CreateRecruitmentCostSchema,
+      detail: {
+        tags: ["Recruitment - Costs"],
+        summary: "Create recruitment cost",
+        description: "Record a recruitment cost against a requisition",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // PATCH /costs/:id - Update recruitment cost
+  .patch(
+    "/costs/:id",
+    async (ctx) => {
+      const { recruitmentService, params, body, tenant, audit, error } = ctx as any;
+      const tenantContext = { tenantId: tenant?.id, userId: (ctx as any).user?.id };
+
+      try {
+        const cost = await recruitmentService.updateRecruitmentCost(tenantContext, params.id, body);
+        if (!cost) {
+          return error(404, {
+            error: { code: ErrorCodes.NOT_FOUND, message: "Recruitment cost not found" },
+          });
+        }
+
+        if (audit) {
+          await audit.log({
+            action: "recruitment.cost.updated",
+            resourceType: "recruitment_cost",
+            resourceId: cost.id,
+            newValues: cost,
+          });
+        }
+
+        return cost;
+      } catch (err: any) {
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("recruitment", "write")],
+      params: IdParamsSchema,
+      body: UpdateRecruitmentCostSchema,
+      detail: {
+        tags: ["Recruitment - Costs"],
+        summary: "Update recruitment cost",
+        description: "Update an existing recruitment cost record",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // DELETE /costs/:id - Delete recruitment cost
+  .delete(
+    "/costs/:id",
+    async (ctx) => {
+      const { recruitmentService, params, tenant, audit, error } = ctx as any;
+      const tenantContext = { tenantId: tenant?.id, userId: (ctx as any).user?.id };
+
+      try {
+        const deleted = await recruitmentService.deleteRecruitmentCost(tenantContext, params.id);
+        if (!deleted) {
+          return error(404, {
+            error: { code: ErrorCodes.NOT_FOUND, message: "Recruitment cost not found" },
+          });
+        }
+
+        if (audit) {
+          await audit.log({
+            action: "recruitment.cost.deleted",
+            resourceType: "recruitment_cost",
+            resourceId: params.id,
+          });
+        }
+
+        return { success: true, message: "Recruitment cost deleted" };
+      } catch (err: any) {
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: err.message },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("recruitment", "write")],
+      params: IdParamsSchema,
+      detail: {
+        tags: ["Recruitment - Costs"],
+        summary: "Delete recruitment cost",
+        description: "Delete a recruitment cost record",
         security: [{ bearerAuth: [] }],
       },
     }

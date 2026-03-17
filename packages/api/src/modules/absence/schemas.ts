@@ -83,6 +83,25 @@ export const CreateLeavePolicySchema = t.Object({
 });
 export type CreateLeavePolicy = Static<typeof CreateLeavePolicySchema>;
 
+export const UpdateLeavePolicySchema = t.Partial(t.Object({
+  name: t.String({ minLength: 1, maxLength: 100 }),
+  description: t.Optional(t.String({ maxLength: 500 })),
+  leaveTypeId: UuidSchema,
+  annualAllowance: t.Number({ minimum: 0, maximum: 365 }),
+  maxCarryover: t.Number({ minimum: 0, maximum: 365 }),
+  accrualFrequency: AccrualFrequencySchema,
+  effectiveFrom: DateSchema,
+  effectiveTo: t.Optional(DateSchema),
+  eligibleAfterMonths: t.Number({ minimum: 0, maximum: 24 }),
+  appliesTo: t.Object({
+    orgUnitIds: t.Optional(t.Array(UuidSchema)),
+    contractTypes: t.Optional(t.Array(t.String())),
+    countries: t.Optional(t.Array(t.String())),
+  }),
+  daysPerWeek: t.Number({ minimum: 0.5, maximum: 7 }),
+}));
+export type UpdateLeavePolicy = Static<typeof UpdateLeavePolicySchema>;
+
 export const LeavePolicyResponseSchema = t.Object({
   id: UuidSchema,
   tenantId: UuidSchema,

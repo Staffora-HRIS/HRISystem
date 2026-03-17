@@ -3,12 +3,18 @@
 # =============================================================================
 #
 # Usage:
-#   Development: docker compose up -d
-#   Production:  docker compose --profile production up -d
+#   Development:    docker compose up -d
+#   Production:     docker compose --profile production up -d
+#   Scaled (3 API): docker compose --profile production up -d --scale api=3
 #
 # Profiles:
 #   - default: All services for development
-#   - production: Production-optimized configuration with stricter limits
+#   - production: Production-optimized configuration with nginx load balancer
+#
+# Horizontal Scaling:
+#   The API service is stateless and can be scaled to multiple instances.
+#   Use --scale api=N or the docker-compose.scale.yml override file.
+#   See docker/SCALING.md for full documentation.
 # =============================================================================
 
 services:
@@ -29,6 +35,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - postgres_wal_archive:/wal-archive
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
@@ -52,6 +59,60 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # PgBouncer Connection Pooler
+  # ---------------------------------------------------------------------------
+  # Sits between the application and PostgreSQL to multiplex connections.
+  # Transaction-mode pooling: connections returned to pool after each TX.
+  # This is safe because RLS context is set per-transaction via
+  # app.set_tenant_context().
+  #
+  # Architecture:
+  #   API/Worker --[max_client_conn=200]--> PgBouncer --[pool_size=25]--> PostgreSQL
+  #
+  # Direct PostgreSQL access (bypassing PgBouncer) is preserved for:
+  #   - Migrations (DATABASE_URL still points to postgres:5432)
+  #   - Backup sidecar
+  #   - Admin/superuser connections
+  # ---------------------------------------------------------------------------
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    container_name: staffora-pgbouncer
+    restart: unless-stopped
+    environment:
+      # These env vars are NOT used by the config file (pgbouncer.ini is
+      # mounted directly), but are documented here for reference.
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:6432"
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_APP_USER:-hris_app} -d hris || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ---------------------------------------------------------------------------
   # Redis Cache & Queue
@@ -89,7 +150,19 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # API Server
+  # API Server (Horizontally Scalable)
+  # ---------------------------------------------------------------------------
+  # The API is fully stateless — sessions are in PostgreSQL (Better Auth),
+  # cache and idempotency keys are in Redis. No session affinity required.
+  #
+  # Scale with:
+  #   docker compose up -d --scale api=3
+  #   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d
+  #
+  # NOTE: container_name is intentionally omitted to allow multiple replicas.
+  #       Docker generates unique names (e.g., docker-api-1, docker-api-2).
+  # NOTE: Host port binding uses a range so multiple instances don't conflict.
+  #       Access the API via nginx reverse proxy (port 80/443) in production.
   # ---------------------------------------------------------------------------
   api:
     build:
@@ -97,14 +170,15 @@ services:
       dockerfile: packages/api/Dockerfile
       args:
         NODE_ENV: ${NODE_ENV:-development}
-    container_name: staffora-api
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
-      # DATABASE_APP_URL uses hris_app (NOBYPASSRLS) — RLS enforced at runtime
-      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
-      # DATABASE_URL with superuser for migrations only (fallback)
+      # DATABASE_APP_URL routes through PgBouncer (port 6432) for connection pooling.
+      # Uses hris_app (NOBYPASSRLS) — RLS enforced at runtime.
+      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@pgbouncer:6432/${POSTGRES_DB:-hris}
+      # DATABASE_URL connects directly to PostgreSQL (bypasses PgBouncer).
+      # Used for migrations and superuser operations only.
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
       REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       SESSION_SECRET: ${SESSION_SECRET:-dev_session_secret_32chars_min}
@@ -116,10 +190,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60000}
+      # ClamAV virus scanning (optional, requires 'scanning' profile)
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-false}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30000}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -159,7 +238,9 @@ services:
     command: ["bun", "run", "src/worker.ts"]
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
+      # DATABASE_APP_URL routes through PgBouncer for connection pooling.
+      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@pgbouncer:6432/${POSTGRES_DB:-hris}
+      # DATABASE_URL connects directly to PostgreSQL for migrations/superuser ops.
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
       REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       WORKER_TYPE: all
@@ -178,8 +259,13 @@ services:
       S3_REGION: ${S3_REGION:-}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      # ClamAV virus scanning (optional, requires 'scanning' profile)
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-false}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30000}
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -222,7 +308,10 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
-      INTERNAL_API_URL: http://staffora-api:3000
+      # Use Docker service name (not container_name) for internal routing.
+      # Docker DNS resolves "api" to any healthy container, enabling load balancing
+      # when the API service is scaled to multiple replicas.
+      INTERNAL_API_URL: http://api:3000
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
@@ -244,6 +333,118 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Database Backup Sidecar
+  # ---------------------------------------------------------------------------
+  # Runs pg_dump on a schedule and optionally uploads to S3.
+  # Set S3_BACKUP_BUCKET to enable offsite backups.
+  #
+  # Manual backup:      docker exec staffora-backup /scripts/backup-db.sh
+  # List S3 backups:    docker exec staffora-backup /scripts/restore-from-s3.sh --list
+  # Verify latest:      ./docker/scripts/verify-backup.sh --latest  (from host)
+  # Verify (in-sidecar) requires Docker socket mount — see backup-verification.md
+  # ---------------------------------------------------------------------------
+  backup:
+    image: postgres:16
+    container_name: staffora-backup
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/scripts/backup-entrypoint.sh"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hris}
+      POSTGRES_USER: ${POSTGRES_USER:-hris}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-hris_dev_password}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      # Cron expression for backup schedule (default: daily at 02:00)
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}
+      # Set to "true" to run a backup immediately on container start
+      BACKUP_ON_START: ${BACKUP_ON_START:-false}
+      # S3 offsite backup configuration (all optional -- omit to use local-only backups)
+      S3_BACKUP_BUCKET: ${S3_BACKUP_BUCKET:-}
+      S3_BACKUP_PREFIX: ${S3_BACKUP_PREFIX:-backups/staffora/}
+      S3_BACKUP_STORAGE_CLASS: ${S3_BACKUP_STORAGE_CLASS:-STANDARD_IA}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # S3 retention policy
+      S3_DAILY_RETENTION: ${S3_DAILY_RETENTION:-30}
+      S3_WEEKLY_RETENTION: ${S3_WEEKLY_RETENTION:-90}
+      S3_MONTHLY_RETENTION: ${S3_MONTHLY_RETENTION:-365}
+      # Backup verification (false=off, true/always=every backup, weekly=once per week)
+      VERIFY_BACKUP: ${VERIFY_BACKUP:-weekly}
+      # Day of week to run weekly verification (1=Monday ... 7=Sunday)
+      VERIFY_BACKUP_DAY: ${VERIFY_BACKUP_DAY:-7}
+    volumes:
+      - backup_data:/backups
+      - postgres_wal_archive:/wal-archive:ro
+      - ./scripts/backup-entrypoint.sh:/scripts/backup-entrypoint.sh:ro
+      - ./scripts/backup-db.sh:/scripts/backup-db.sh:ro
+      - ./scripts/backup-s3-cleanup.sh:/scripts/backup-s3-cleanup.sh:ro
+      - ./scripts/restore-from-s3.sh:/scripts/restore-from-s3.sh:ro
+      - ./scripts/verify-backup.sh:/scripts/verify-backup.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # ClamAV Virus Scanner (Optional)
+  # ---------------------------------------------------------------------------
+  # Provides on-demand virus scanning for uploaded documents.
+  # Enable by setting CLAMAV_ENABLED=true in your .env file.
+  #
+  # Usage:
+  #   docker compose --profile scanning up -d
+  #   # Or include in default profile by uncommenting the profiles section below
+  #
+  # First startup downloads virus definitions (~300MB) and may take several
+  # minutes before the service becomes healthy.
+  # ---------------------------------------------------------------------------
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: staffora-clamav
+    restart: unless-stopped
+    profiles:
+      - scanning
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc localhost 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     logging:
       driver: json-file
       options:
@@ -289,9 +490,15 @@ services:
 volumes:
   postgres_data:
     driver: local
+  postgres_wal_archive:
+    driver: local
   redis_data:
     driver: local
   worker_uploads:
+    driver: local
+  backup_data:
+    driver: local
+  clamav_data:
     driver: local
 
 # =============================================================================

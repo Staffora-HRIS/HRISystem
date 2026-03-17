@@ -24,6 +24,7 @@ import {
   betterAuthPlugin,
 } from "./plugins";
 import { ErrorCodes } from "./plugins/errors";
+import { metricsPlugin } from "./plugins/metrics";
 
 // Import modules
 import { hrRoutes } from "./modules/hr";
@@ -33,6 +34,8 @@ import { authRoutes } from "./modules/auth";
 import { portalRoutes } from "./modules/portal";
 import { workflowRoutes } from "./modules/workflows";
 import { talentRoutes } from "./modules/talent";
+import { talentPoolRoutes } from "./modules/talent-pools";
+import { feedback360Routes } from "./modules/feedback-360";
 import { lmsRoutes } from "./modules/lms";
 import { casesRoutes } from "./modules/cases";
 import { onboardingRoutes } from "./modules/onboarding";
@@ -51,7 +54,13 @@ import { successionRoutes } from "./modules/succession";
 import { analyticsRoutes } from "./modules/analytics";
 import { competenciesRoutes } from "./modules/competencies";
 import { recruitmentRoutes } from "./modules/recruitment";
+import { jobBoardRoutes } from "./modules/job-boards";
 import { clientPortalRoutes } from "./modules/client-portal";
+import { apiKeyRoutes } from "./modules/api-keys";
+import { bulkOperationsRoutes } from "./modules/bulk-operations";
+import { changeRequestPortalRoutes, changeRequestAdminRoutes } from "./modules/employee-change-requests";
+import { bulkDocumentGenerationRoutes } from "./modules/bulk-document-generation";
+import { costCentreAssignmentRoutes } from "./modules/cost-centre-assignments";
 
 // UK Compliance & HR modules (Phase 11-15)
 import { agencyRoutes } from "./modules/agencies";
@@ -69,6 +78,7 @@ import { dataBreachRoutes } from "./modules/data-breach";
 import { dataErasureRoutes } from "./modules/data-erasure";
 import { dataRetentionRoutes } from "./modules/data-retention";
 import { dbsCheckRoutes } from "./modules/dbs-checks";
+import { backgroundCheckRoutes } from "./modules/background-checks";
 import { deductionRoutes } from "./modules/deductions";
 import { delegationRoutes } from "./modules/delegations";
 import { diversityRoutes } from "./modules/diversity";
@@ -105,7 +115,23 @@ import { taxCodeRoutes } from "./modules/tax-codes";
 import { trainingBudgetRoutes } from "./modules/training-budgets";
 import { warningsRoutes } from "./modules/warnings";
 import { wtrRoutes } from "./modules/wtr";
+import { integrationsRoutes } from "./modules/integrations";
+import { emailTrackingRoutes } from "./modules/email-tracking";
+import { policyDistributionRoutes } from "./modules/policy-distribution";
+import { overtimeRequestRoutes } from "./modules/overtime-requests";
+import { usageStatsRoutes } from "./modules/usage-stats";
+import { salarySacrificeRoutes } from "./modules/salary-sacrifice";
+import { lookupValuesRoutes } from "./modules/lookup-values";
+import { incomeProtectionRoutes } from "./modules/income-protection";
+import { tribunalRoutes } from "./modules/tribunal";
+import { globalMobilityRoutes } from "./modules/global-mobility";
 
+import { beneficiaryNominationRoutes } from "./modules/beneficiary-nominations";
+import { benefitsExchangeRoutes } from "./modules/benefits-exchange";
+import { dataImportRoutes } from "./modules/data-import";
+import { calendarSyncRoutes } from "./modules/calendar-sync";
+import { dataArchivalRoutes } from "./modules/data-archival";
+import { ssoAdminRoutes, ssoPublicRoutes } from "./modules/sso";
 /**
  * Environment configuration with validation
  */
@@ -221,6 +247,7 @@ export const app = new Elysia()
           { name: "Portal", description: "Self-service portal endpoints" },
           { name: "Reports", description: "Reporting & Analytics endpoints" },
           { name: "Security", description: "Security & RBAC endpoints" },
+          { name: "Data Import", description: "CSV/Excel bulk data import endpoints" },
         ],
       },
       path: "/docs",
@@ -230,6 +257,9 @@ export const app = new Elysia()
 
   // Core infrastructure plugins (order matters!)
   .use(errorsPlugin())
+
+  // Prometheus metrics (GET /metrics — no auth required for scraping)
+  .use(metricsPlugin())
 
   // Request body size limit (pre-computed at startup, not per-request)
   .onBeforeHandle({ as: "global" }, ({ request, set }) => {
@@ -489,12 +519,16 @@ export const app = new Elysia()
       // Dashboard + System
       .use(dashboardRoutes)
       .use(systemRoutes)
+      .use(usageStatsRoutes)
       // Core modules
       .use(hrRoutes)
+      .use(costCentreAssignmentRoutes)
       .use(timeRoutes)
       .use(absenceRoutes)
       // Talent & Learning
       .use(talentRoutes)
+      .use(talentPoolRoutes)
+      .use(feedback360Routes)
       .use(lmsRoutes)
       // Workflows & Cases
       .use(workflowRoutes)
@@ -503,8 +537,15 @@ export const app = new Elysia()
       .use(onboardingRoutes)
       // Benefits Administration
       .use(benefitsRoutes)
+      .use(beneficiaryNominationRoutes)
+      // Benefits Provider Data Exchange
+      .use(benefitsExchangeRoutes)
+      // Income Protection Insurance
+      .use(incomeProtectionRoutes)
       // Documents
       .use(documentsRoutes)
+      // Bulk Document Generation
+      .use(bulkDocumentGenerationRoutes)
       // Succession Planning
       .use(successionRoutes)
       // Analytics
@@ -513,10 +554,19 @@ export const app = new Elysia()
       .use(competenciesRoutes)
       // Recruitment
       .use(recruitmentRoutes)
+      // Job Board Integration (recruitment)
+      .use(jobBoardRoutes)
       // Portal aggregations
       .use(portalRoutes)
       // Client Portal (customer-facing portal on staffora.co.uk)
       .use(clientPortalRoutes)
+      // Bulk Operations (cross-module batch endpoints)
+      .use(bulkOperationsRoutes)
+      // Data Import (CSV bulk data loading)
+      .use(dataImportRoutes)
+      // Employee Change Requests (self-service + HR review)
+      .use(changeRequestPortalRoutes)
+      .use(changeRequestAdminRoutes)
 
       // UK Compliance modules (Employment Rights Act, GDPR, etc.)
       .use(rightToWorkRoutes)
@@ -546,12 +596,15 @@ export const app = new Elysia()
       .use(dataRetentionRoutes)
       .use(consentRoutes)
       .use(privacyNoticeRoutes)
+      .use(dataArchivalRoutes)
 
       // Employee data modules
       .use(bankDetailRoutes)
       .use(emergencyContactRoutes)
       .use(employeePhotoRoutes)
       .use(diversityRoutes)
+      // Global Mobility (international assignments)
+      .use(globalMobilityRoutes)
       .use(reasonableAdjustmentsRoutes)
       .use(secondmentRoutes)
 
@@ -560,6 +613,7 @@ export const app = new Elysia()
       .use(payrollConfigRoutes)
       .use(payslipRoutes)
       .use(taxCodeRoutes)
+      .use(salarySacrificeRoutes)
       .use(deductionRoutes)
 
       // Talent & Learning additional modules
@@ -568,6 +622,7 @@ export const app = new Elysia()
       .use(courseRatingRoutes)
       .use(assessmentRoutes)
       .use(dbsCheckRoutes)
+      .use(backgroundCheckRoutes)
       .use(referenceCheckRoutes)
       .use(agencyRoutes)
 
@@ -580,6 +635,20 @@ export const app = new Elysia()
       .use(notificationsRoutes)
       .use(delegationRoutes)
       .use(reportsRoutes)
+      // Integrations
+      .use(integrationsRoutes)
+      // Policy Distribution (read receipts)
+      // Lookup Values (tenant-configurable dropdowns)
+      .use(lookupValuesRoutes)
+      .use(policyDistributionRoutes)
+      // Email Delivery Monitoring
+      .use(emailTrackingRoutes)
+      // Overtime Requests (authorisation workflow)
+      .use(overtimeRequestRoutes)
+      // Employment Tribunal Preparation
+      .use(tribunalRoutes)
+      // Calendar Sync (iCal feed generation)
+      .use(calendarSyncRoutes)
   )
 
   // 404 handler (must be last)

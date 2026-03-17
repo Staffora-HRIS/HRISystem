@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "react-router dev",
     "build": "react-router build",
+    "build:analyze": "VITE_BUNDLE_ANALYZE=true react-router build",
+    "build:budget": "node scripts/check-bundle-size.mjs",
     "start": "react-router-serve ./build/server/index.js",
     "preview": "vite preview",
     "lint": "eslint --config ../../eslint.config.js app --ext .ts,.tsx",
     "typecheck": "react-router typegen && tsc --noEmit",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@better-auth/infra": "^0.1.8",
@@ -45,9 +49,13 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
+    "rollup-plugin-visualizer": "^5.14.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.6",
+    "@storybook/react": "^8.5.0",
+    "@storybook/react-vite": "^8.5.0",
+    "storybook": "^8.5.0",
     "@vitest/coverage-v8": "^2.1.8",
     "vitest": "^2.1.8"
   },

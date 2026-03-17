@@ -247,6 +247,18 @@ export const DiversityByNationalitySchema = t.Object({
   percentage: t.Number(),
 });
 
+export const DiversityByEthnicitySchema = t.Object({
+  ethnicity: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+});
+
+export const DiversityByDisabilitySchema = t.Object({
+  disability_status: t.String(),
+  count: t.Number(),
+  percentage: t.Number(),
+});
+
 export const DiversityByDepartmentSchema = t.Object({
   org_unit_id: t.String(),
   org_unit_name: t.String(),
@@ -258,12 +270,40 @@ export const DiversityByDepartmentSchema = t.Object({
   })),
 });
 
+export const DiversityTrendPointSchema = t.Object({
+  period: t.String(),
+  characteristic: t.String(),
+  value: t.String(),
+  hires: t.Number(),
+  leavers: t.Number(),
+});
+
+export const DiversityCompletionSchema = t.Object({
+  total_employees: t.Number(),
+  total_submissions: t.Number(),
+  completion_rate: t.Number(),
+});
+
+export const GenderPayGapSummarySchema = t.Object({
+  mean_gap_percentage: t.Union([t.Number(), t.Null()]),
+  median_gap_percentage: t.Union([t.Number(), t.Null()]),
+  male_count: t.Number(),
+  female_count: t.Number(),
+});
+
 export const DiversityDashboardSchema = t.Object({
   total_employees: t.Number(),
   by_gender: t.Array(DiversityByGenderSchema),
   by_age_band: t.Array(DiversityByAgeBandSchema),
   by_nationality: t.Array(DiversityByNationalitySchema),
+  by_ethnicity: t.Array(DiversityByEthnicitySchema),
+  by_disability: t.Array(DiversityByDisabilitySchema),
   by_department: t.Array(DiversityByDepartmentSchema),
+  hiring_trends: t.Array(DiversityTrendPointSchema),
+  leaving_trends: t.Array(DiversityTrendPointSchema),
+  diversity_completion: DiversityCompletionSchema,
+  gender_pay_gap_summary: GenderPayGapSummarySchema,
+  minimum_threshold: t.Number(),
   as_of_date: t.String(),
 });
 
@@ -273,6 +313,7 @@ export const DiversityDashboardSchema = t.Object({
 
 export const CompensationFiltersSchema = t.Object({
   org_unit_id: t.Optional(t.String({ format: "uuid" })),
+  job_grade: t.Optional(t.String()),
   currency: t.Optional(t.String()),
 });
 
@@ -286,6 +327,9 @@ export const CompensationSummarySchema = t.Object({
   median_salary: t.Number(),
   min_salary: t.Number(),
   max_salary: t.Number(),
+  p25_salary: t.Number(),
+  p75_salary: t.Number(),
+  p90_salary: t.Number(),
   total_payroll: t.Number(),
   currency: t.String(),
 });
@@ -302,6 +346,7 @@ export const CompensationByDepartmentSchema = t.Object({
   org_unit_name: t.String(),
   headcount: t.Number(),
   avg_salary: t.Number(),
+  median_salary: t.Number(),
   min_salary: t.Number(),
   max_salary: t.Number(),
   total_payroll: t.Number(),
@@ -313,11 +358,69 @@ export const CompensationChangeSchema = t.Object({
   avg_change_percentage: t.Number(),
 });
 
+// =============================================================================
+// Response Schemas - Compa-Ratio
+// =============================================================================
+
+export const CompaRatioByGradeSchema = t.Object({
+  job_grade: t.String(),
+  headcount: t.Number(),
+  range_min: t.Number(),
+  range_max: t.Number(),
+  range_midpoint: t.Number(),
+  avg_salary: t.Number(),
+  avg_compa_ratio: t.Number(),
+  below_range_count: t.Number(),
+  within_range_count: t.Number(),
+  above_range_count: t.Number(),
+});
+
+export const CompaRatioSummarySchema = t.Object({
+  overall_avg_compa_ratio: t.Number(),
+  total_employees_with_range: t.Number(),
+  total_below_range: t.Number(),
+  total_within_range: t.Number(),
+  total_above_range: t.Number(),
+  by_grade: t.Array(CompaRatioByGradeSchema),
+});
+
+// =============================================================================
+// Response Schemas - Pay Equity
+// =============================================================================
+
+export const PayEquityByLevelSchema = t.Object({
+  job_grade: t.String(),
+  male_count: t.Number(),
+  female_count: t.Number(),
+  male_avg_salary: t.Number(),
+  female_avg_salary: t.Number(),
+  pay_gap_percentage: t.Union([t.Number(), t.Null()]),
+  male_median_salary: t.Number(),
+  female_median_salary: t.Number(),
+  median_pay_gap_percentage: t.Union([t.Number(), t.Null()]),
+});
+
+export const PayEquitySummarySchema = t.Object({
+  total_male: t.Number(),
+  total_female: t.Number(),
+  overall_male_avg_salary: t.Number(),
+  overall_female_avg_salary: t.Number(),
+  overall_mean_pay_gap_percentage: t.Union([t.Number(), t.Null()]),
+  overall_median_pay_gap_percentage: t.Union([t.Number(), t.Null()]),
+  by_level: t.Array(PayEquityByLevelSchema),
+});
+
+// =============================================================================
+// Full Compensation Analytics Dashboard
+// =============================================================================
+
 export const CompensationDashboardSchema = t.Object({
   summary: CompensationSummarySchema,
   by_band: t.Array(CompensationByBandSchema),
   by_department: t.Array(CompensationByDepartmentSchema),
   recent_changes: t.Array(CompensationChangeSchema),
+  compa_ratio: CompaRatioSummarySchema,
+  pay_equity: PayEquitySummarySchema,
 });
 
 // =============================================================================
@@ -394,7 +497,12 @@ export type DiversityFilters = Static<typeof DiversityFiltersSchema>;
 export type DiversityByGender = Static<typeof DiversityByGenderSchema>;
 export type DiversityByAgeBand = Static<typeof DiversityByAgeBandSchema>;
 export type DiversityByNationality = Static<typeof DiversityByNationalitySchema>;
+export type DiversityByEthnicity = Static<typeof DiversityByEthnicitySchema>;
+export type DiversityByDisability = Static<typeof DiversityByDisabilitySchema>;
 export type DiversityByDepartment = Static<typeof DiversityByDepartmentSchema>;
+export type DiversityTrendPoint = Static<typeof DiversityTrendPointSchema>;
+export type DiversityCompletion = Static<typeof DiversityCompletionSchema>;
+export type GenderPayGapSummary = Static<typeof GenderPayGapSummarySchema>;
 export type DiversityDashboard = Static<typeof DiversityDashboardSchema>;
 
 export type CompensationFilters = Static<typeof CompensationFiltersSchema>;
@@ -403,3 +511,146 @@ export type CompensationByBand = Static<typeof CompensationByBandSchema>;
 export type CompensationByDepartment = Static<typeof CompensationByDepartmentSchema>;
 export type CompensationChange = Static<typeof CompensationChangeSchema>;
 export type CompensationDashboard = Static<typeof CompensationDashboardSchema>;
+export type CompaRatioByGrade = Static<typeof CompaRatioByGradeSchema>;
+export type CompaRatioSummary = Static<typeof CompaRatioSummarySchema>;
+export type PayEquityByLevel = Static<typeof PayEquityByLevelSchema>;
+export type PayEquitySummary = Static<typeof PayEquitySummarySchema>;
+
+// =============================================================================
+// Filter Schemas - Workforce Planning
+// =============================================================================
+
+export const WorkforcePlanningFiltersSchema = t.Object({
+  horizon: t.Optional(
+    t.String({
+      description:
+        "Planning horizon expressed as Nm or Ny, e.g. 12m, 24m, 3y. Defaults to 12m.",
+      pattern: "^\\d+(m|y)$",
+    })
+  ),
+  org_unit_id: t.Optional(t.String({ format: "uuid" })),
+});
+
+// =============================================================================
+// Response Schemas - Workforce Planning: Headcount Projection
+// =============================================================================
+
+export const HeadcountProjectionPointSchema = t.Object({
+  period: t.String({ description: "ISO date string for beginning of period (YYYY-MM-DD)" }),
+  projected_headcount: t.Number({ description: "Projected total headcount at this point" }),
+  projected_hires: t.Number({ description: "Projected new hires in this period" }),
+  projected_terminations: t.Number({ description: "Projected terminations in this period" }),
+  net_change: t.Number({ description: "Net change in headcount for this period" }),
+});
+
+export const HeadcountProjectionSchema = t.Object({
+  current_headcount: t.Number(),
+  monthly_growth_rate: t.Number({ description: "Observed monthly growth rate as a decimal (e.g. 0.02 = 2%)" }),
+  observation_months: t.Number({ description: "Number of months of historical data used" }),
+  projections: t.Array(HeadcountProjectionPointSchema),
+});
+
+// =============================================================================
+// Response Schemas - Workforce Planning: Retirement Projection
+// =============================================================================
+
+export const RetirementRiskBandSchema = t.Object({
+  years_to_retirement: t.String({ description: "Band label, e.g. '0-2 years', '3-5 years'" }),
+  employee_count: t.Number(),
+  percentage: t.Number({ description: "Percentage of active workforce" }),
+  departments: t.Array(
+    t.Object({
+      org_unit_id: t.String(),
+      org_unit_name: t.String(),
+      count: t.Number(),
+    })
+  ),
+});
+
+export const RetirementProjectionSchema = t.Object({
+  total_active_employees: t.Number(),
+  employees_with_dob: t.Number({ description: "Employees who have a date of birth on file" }),
+  state_pension_age_note: t.String({
+    description: "Explanation of UK state pension age used (66-68)",
+  }),
+  risk_bands: t.Array(RetirementRiskBandSchema),
+});
+
+// =============================================================================
+// Response Schemas - Workforce Planning: Attrition Forecast
+// =============================================================================
+
+export const AttritionHistoryPointSchema = t.Object({
+  period: t.String({ description: "Period label (YYYY-MM)" }),
+  terminations: t.Number(),
+  avg_headcount: t.Number(),
+  turnover_rate: t.Number({ description: "Annualised turnover rate for this month" }),
+});
+
+export const AttritionForecastPointSchema = t.Object({
+  period: t.String({ description: "Projected period (YYYY-MM)" }),
+  projected_turnover_rate: t.Number({ description: "Projected annualised turnover rate" }),
+  projected_terminations: t.Number({ description: "Projected terminations in this period" }),
+});
+
+export const AttritionForecastSchema = t.Object({
+  trailing_12m_turnover_rate: t.Number({ description: "Trailing 12-month annualised turnover rate" }),
+  avg_monthly_terminations: t.Number(),
+  observation_months: t.Number(),
+  history: t.Array(AttritionHistoryPointSchema),
+  forecast: t.Array(AttritionForecastPointSchema),
+});
+
+// =============================================================================
+// Response Schemas - Workforce Planning: Skills Gap Analysis
+// =============================================================================
+
+export const SkillGapItemSchema = t.Object({
+  competency_id: t.String(),
+  competency_name: t.String(),
+  competency_category: t.String(),
+  employees_assessed: t.Number({ description: "Number of employees assessed on this competency" }),
+  employees_required: t.Number({ description: "Number of positions requiring this competency" }),
+  avg_current_level: t.Number({ description: "Average current proficiency across assessed employees" }),
+  avg_required_level: t.Number({ description: "Average required proficiency across positions" }),
+  avg_gap: t.Number({ description: "Average gap (required - current). Positive means deficiency." }),
+  employees_below_required: t.Number({ description: "Number of employees below required level" }),
+  coverage_rate: t.Number({
+    description: "Percentage of required positions that have at least one employee meeting the requirement",
+  }),
+});
+
+export const SkillsGapAnalysisSchema = t.Object({
+  total_competencies_analysed: t.Number(),
+  total_employees_with_assessments: t.Number(),
+  gaps: t.Array(SkillGapItemSchema),
+});
+
+// =============================================================================
+// Full Workforce Planning Dashboard
+// =============================================================================
+
+export const WorkforcePlanningDashboardSchema = t.Object({
+  headcount_projection: HeadcountProjectionSchema,
+  retirement_projection: RetirementProjectionSchema,
+  attrition_forecast: AttritionForecastSchema,
+  skills_gap_analysis: SkillsGapAnalysisSchema,
+  generated_at: t.String({ description: "ISO timestamp when this report was generated" }),
+  horizon_months: t.Number({ description: "Planning horizon in months" }),
+});
+
+// =============================================================================
+// Type Exports - Workforce Planning
+// =============================================================================
+
+export type WorkforcePlanningFilters = Static<typeof WorkforcePlanningFiltersSchema>;
+export type HeadcountProjectionPoint = Static<typeof HeadcountProjectionPointSchema>;
+export type HeadcountProjection = Static<typeof HeadcountProjectionSchema>;
+export type RetirementRiskBand = Static<typeof RetirementRiskBandSchema>;
+export type RetirementProjection = Static<typeof RetirementProjectionSchema>;
+export type AttritionHistoryPoint = Static<typeof AttritionHistoryPointSchema>;
+export type AttritionForecastPoint = Static<typeof AttritionForecastPointSchema>;
+export type AttritionForecast = Static<typeof AttritionForecastSchema>;
+export type SkillGapItem = Static<typeof SkillGapItemSchema>;
+export type SkillsGapAnalysis = Static<typeof SkillsGapAnalysisSchema>;
+export type WorkforcePlanningDashboard = Static<typeof WorkforcePlanningDashboardSchema>;

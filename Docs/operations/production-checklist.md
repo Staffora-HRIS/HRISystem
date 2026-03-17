@@ -37,11 +37,12 @@
 - [x] Two database roles (hris superuser, hris_app NOBYPASSRLS)
 - [x] 1,067+ indexes across all tables
 - [x] Connection pooling (max 20)
-- [ ] **P0** — Automated daily backups (pg_dump or WAL archiving)
-- [ ] **P0** — Backup restore procedure documented and tested
-- [ ] **P1** — Point-in-time recovery (PITR) with WAL-G or pgBackRest
+- [x] Automated daily backups (pg_dump via backup sidecar)
+- [x] Backup restore procedure documented and tested — see [point-in-time-recovery.md](point-in-time-recovery.md)
+- [x] Backup verification with automated restore test and SHA256 checksums — see [backup-verification.md](backup-verification.md)
+- [x] Point-in-time recovery (PITR) via WAL archiving — see [point-in-time-recovery.md](point-in-time-recovery.md)
 - [ ] **P1** — Read replica for reporting queries
-- [ ] **P2** — PgBouncer connection pooling (external pooler)
+- [x] PgBouncer connection pooling (transaction mode, max_client_conn=200, pool_size=25) — see [pgbouncer-guide.md](pgbouncer-guide.md)
 - [ ] **P2** — Automated VACUUM/ANALYZE scheduling
 - [ ] **P3** — Data archival strategy for old audit logs / events
 
@@ -104,7 +105,7 @@
 - [ ] **P0** — Pre-flight validation: fail startup if required secrets are empty
 - [ ] **P0** — Remove hardcoded fallback passwords from code (`hris_dev_password`)
 - [ ] **P1** — Secrets manager integration (AWS Secrets Manager / Vault)
-- [ ] **P1** — Secret rotation procedure documented
+- [x] **P1** — Secret rotation procedure documented (see [secret-rotation.md](secret-rotation.md))
 - [ ] **P2** — Automated secret rotation
 
 ### Vulnerability Management
@@ -123,10 +124,10 @@
 - [x] Request logging with response times
 - [x] Request ID tracking across responses
 - [x] Container-level JSON logging
-- [ ] **P0** — Centralized log aggregation (ELK / Loki / CloudWatch / Datadog)
+- [x] **P0** — Centralized log aggregation (Loki + Promtail + Grafana) — see [log-aggregation.md](log-aggregation.md)
 - [ ] **P0** — Structured logging with log levels (info/warn/error)
 - [ ] **P1** — Sensitive data masking in logs (passwords, tokens, PII)
-- [ ] **P1** — Log retention policy (30/60/90 days)
+- [x] **P1** — Log retention policy (30 days default, configurable via LOKI_RETENTION_PERIOD)
 
 ### Error Tracking
 - [ ] **P0** — Error tracking service (Sentry) — backend

@@ -103,6 +103,7 @@ export class AbsenceService {
   async updateLeaveType(ctx: TenantContext, id: string, input: Partial<CreateLeaveType>): Promise<ServiceResult<unknown>> {
     try {
       const updated = await this.repo.updateLeaveType(ctx, id, {
+        code: input.code,
         name: input.name,
         description: input.description,
         isPaid: input.isPaid,
@@ -190,6 +191,71 @@ export class AbsenceService {
     } catch (error) {
       console.error("Error fetching leave policies:", error);
       return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch leave policies" } };
+    }
+  }
+
+  async updateLeavePolicy(ctx: TenantContext, id: string, input: Partial<CreateLeavePolicy>): Promise<ServiceResult<unknown>> {
+    try {
+      // If leaveTypeId is being updated, validate it and enforce statutory minimum
+      const leaveTypeId = input.leaveTypeId;
+      if (leaveTypeId && input.annualAllowance !== undefined) {
+        const leaveType = await this.repo.getLeaveTypeById(ctx, leaveTypeId);
+        if (!leaveType) {
+          return {
+            success: false,
+            error: { code: AbsenceErrorCodes.LEAVE_TYPE_NOT_FOUND, message: "Leave type not found" },
+          };
+        }
+
+        const category = (leaveType as unknown as Record<string, unknown>).category as string | undefined;
+        if (category === "annual") {
+          const daysPerWeek = (input as Record<string, unknown>).daysPerWeek as number | undefined;
+          const effectiveDaysPerWeek = daysPerWeek ?? UK_STATUTORY.FULL_TIME_DAYS_PER_WEEK;
+          const minimumEntitlement = calculateMinimumEntitlement(effectiveDaysPerWeek);
+
+          if (input.annualAllowance < minimumEntitlement) {
+            const isFullTime = effectiveDaysPerWeek === UK_STATUTORY.FULL_TIME_DAYS_PER_WEEK;
+            const description = isFullTime
+              ? `Annual leave policy entitlement of ${input.annualAllowance} days is below the UK statutory minimum of ${minimumEntitlement} days for full-time workers.`
+              : `Annual leave policy entitlement of ${input.annualAllowance} days is below the UK pro-rata statutory minimum of ${minimumEntitlement} days for a ${effectiveDaysPerWeek}-day working week.`;
+
+            return {
+              success: false,
+              error: {
+                code: AbsenceErrorCodes.BELOW_STATUTORY_MINIMUM,
+                message: description,
+                details: {
+                  entitlementDays: input.annualAllowance,
+                  minimumEntitlementDays: minimumEntitlement,
+                  daysPerWeek: effectiveDaysPerWeek,
+                  fullTimeMinimumDays: UK_STATUTORY.STATUTORY_MINIMUM_DAYS,
+                  weeksEntitlement: UK_STATUTORY.WEEKS_ENTITLEMENT,
+                },
+              },
+            };
+          }
+        }
+      }
+
+      const updated = await this.repo.updateLeavePolicy(ctx, id, {
+        name: input.name,
+        description: input.description,
+        leaveTypeId: input.leaveTypeId,
+        annualAllowance: input.annualAllowance,
+        maxCarryover: input.maxCarryover,
+        accrualFrequency: input.accrualFrequency,
+        effectiveFrom: input.effectiveFrom ? new Date(input.effectiveFrom) : undefined,
+        effectiveTo: input.effectiveTo ? new Date(input.effectiveTo) : null,
+        eligibleAfterMonths: input.eligibleAfterMonths,
+        appliesTo: input.appliesTo,
+      } as any);
+      if (!updated) {
+        return { success: false, error: { code: AbsenceErrorCodes.LEAVE_POLICY_NOT_FOUND, message: "Leave policy not found" } };
+      }
+      return { success: true, data: this.formatLeavePolicy(updated) };
+    } catch (error) {
+      console.error("Error updating leave policy:", error);
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update leave policy" } };
     }
   }
 

@@ -31,12 +31,23 @@ function getDbConnection() {
     return postgres(process.env["DATABASE_URL"]);
   }
 
+  const nodeEnv = process.env["NODE_ENV"] || "development";
+  const dbPassword = process.env["DB_PASSWORD"]
+    || (nodeEnv === "development" || nodeEnv === "test" ? "hris_dev_password" : undefined);
+
+  if (!dbPassword) {
+    throw new Error(
+      "DB_PASSWORD or DATABASE_URL environment variable is required. " +
+      "Hardcoded fallback is only available when NODE_ENV is 'development' or 'test'."
+    );
+  }
+
   return postgres({
     host: process.env["DB_HOST"] || "localhost",
     port: Number(process.env["DB_PORT"]) || 5432,
     database: process.env["DB_NAME"] || "hris",
     username: process.env["DB_USER"] || "hris",
-    password: process.env["DB_PASSWORD"] || "hris_dev_password",
+    password: dbPassword,
     max: Number(process.env["DB_MAX_CONNECTIONS"]) || 5,
     idle_timeout: 20,
     connect_timeout: 10,

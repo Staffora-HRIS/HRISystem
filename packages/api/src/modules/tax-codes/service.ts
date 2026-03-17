@@ -6,6 +6,7 @@
  * - is_cumulative and week1_month1 are mutually exclusive
  * - Effective date ranges do not overlap per employee
  * - effective_to >= effective_from (if provided)
+ * - Tax code format matches UK HMRC patterns
  * - All writes emit domain events in the same transaction
  */
 
@@ -25,6 +26,7 @@ import type {
   UpdateTaxCode,
   TaxCodeResponse,
 } from "./schemas";
+import { UK_TAX_CODE_REGEX } from "./schemas";
 
 // =============================================================================
 // Domain Event Types
@@ -33,6 +35,27 @@ import type {
 type DomainEventType =
   | "payroll.tax_code.created"
   | "payroll.tax_code.updated";
+
+// =============================================================================
+// Tax Code Format Validation
+// =============================================================================
+
+/**
+ * Compiled regex for UK HMRC tax code format validation.
+ * Used for service-level validation (in addition to TypeBox schema validation).
+ */
+const TAX_CODE_FORMAT_RE = new RegExp(UK_TAX_CODE_REGEX);
+
+/**
+ * Validate that a tax code string matches UK HMRC format.
+ * Returns null if valid, or an error message if invalid.
+ */
+function validateTaxCodeFormat(taxCode: string): string | null {
+  if (!TAX_CODE_FORMAT_RE.test(taxCode)) {
+    return `Invalid UK tax code format: "${taxCode}". Expected patterns: 1257L, BR, D0, D1, NT, S1257L, C1257L, K100, 0T`;
+  }
+  return null;
+}
 
 // =============================================================================
 // Service
@@ -94,6 +117,7 @@ export class TaxCodeService {
           : String(row.effectiveTo)
         : null,
       source: row.source,
+      notes: row.notes ?? null,
       created_at: row.createdAt instanceof Date
         ? row.createdAt.toISOString()
         : String(row.createdAt),
@@ -126,6 +150,19 @@ export class TaxCodeService {
     data: CreateTaxCode,
     _idempotencyKey?: string
   ): Promise<ServiceResult<TaxCodeResponse>> {
+    // Validate tax code format
+    const formatError = validateTaxCodeFormat(data.tax_code);
+    if (formatError) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_TAX_CODE_FORMAT",
+          message: formatError,
+          details: { tax_code: data.tax_code },
+        },
+      };
+    }
+
     // Validate cumulative consistency
     const validationError = this.validateCumulativeConsistency(
       data.is_cumulative,
@@ -239,6 +276,42 @@ export class TaxCodeService {
     };
   }
 
+  /**
+   * Get the current (effective today) tax code for an employee.
+   * This is used by payroll processing to determine the employee's
+   * tax code at the time of calculation.
+   *
+   * @param asOfDate - Optional date to check against (defaults to today).
+   *                   Useful for payroll runs that calculate for a specific pay period.
+   */
+  async getCurrentTaxCode(
+    context: TenantContext,
+    employeeId: string,
+    asOfDate?: string
+  ): Promise<ServiceResult<TaxCodeResponse>> {
+    const row = await this.repository.findCurrentByEmployee(
+      context,
+      employeeId,
+      asOfDate
+    );
+
+    if (!row) {
+      return {
+        success: false,
+        error: {
+          code: "NO_CURRENT_TAX_CODE",
+          message: `No current tax code found for employee ${employeeId}${asOfDate ? ` as of ${asOfDate}` : ""}`,
+          details: { employee_id: employeeId, as_of_date: asOfDate ?? null },
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.mapToResponse(row),
+    };
+  }
+
   // ===========================================================================
   // Update
   // ===========================================================================
@@ -249,6 +322,21 @@ export class TaxCodeService {
     data: UpdateTaxCode,
     _idempotencyKey?: string
   ): Promise<ServiceResult<TaxCodeResponse>> {
+    // Validate tax code format if provided
+    if (data.tax_code) {
+      const formatError = validateTaxCodeFormat(data.tax_code);
+      if (formatError) {
+        return {
+          success: false,
+          error: {
+            code: "INVALID_TAX_CODE_FORMAT",
+            message: formatError,
+            details: { tax_code: data.tax_code },
+          },
+        };
+      }
+    }
+
     // Fetch existing record
     const existing = await this.repository.findById(context, id);
     if (!existing) {
@@ -308,6 +396,34 @@ export class TaxCodeService {
     }
 
     return await this.db.withTransaction(context, async (tx) => {
+      // Check for overlapping tax codes when dates change, excluding the current record
+      if (data.effective_from !== undefined || data.effective_to !== undefined) {
+        const hasOverlap = await this.repository.hasOverlappingTaxCode(
+          context,
+          existing.employeeId,
+          effectiveFrom,
+          effectiveTo,
+          tx,
+          id
+        );
+
+        if (hasOverlap) {
+          return {
+            success: false,
+            error: {
+              code: "EFFECTIVE_DATE_OVERLAP",
+              message:
+                "Updated date range overlaps with another tax code record for this employee",
+              details: {
+                employee_id: existing.employeeId,
+                effective_from: effectiveFrom,
+                effective_to: effectiveTo,
+              },
+            },
+          };
+        }
+      }
+
       const row = await this.repository.updateTaxCode(context, id, data, tx);
 
       if (!row) {

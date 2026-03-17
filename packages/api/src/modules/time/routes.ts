@@ -19,6 +19,9 @@ import {
   UpdateTimesheetSchema,
   TimesheetFiltersSchema,
   TimesheetApprovalSchema,
+  SubmitTimesheetWithChainSchema,
+  ApprovalChainDecisionSchema,
+  PendingApprovalsFiltersSchema,
   IdParamsSchema,
   IdempotencyHeaderSchema,
 } from "./schemas";
@@ -457,6 +460,141 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       headers: IdempotencyHeaderSchema,
       beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: { tags: ["Time"], summary: "Approve or reject timesheet" },
+    }
+  )
+
+  // ===========================================================================
+  // Approval Chains
+  // ===========================================================================
+
+  .post(
+    "/timesheets/:id/submit-with-chain",
+    async (ctx) => {
+      const { timeService, tenant, user, params, body, set } = ctx as any;
+
+      const result = await timeService.submitTimesheetWithChain(
+        { tenantId: tenant.id, userId: user.id },
+        params.id,
+        body as any
+      );
+
+      if (!result.success) {
+        const code = result.error?.code;
+        if (code === "TIMESHEET_NOT_FOUND") set.status = 404;
+        else if (
+          code === "TIMESHEET_ALREADY_SUBMITTED" ||
+          code === "APPROVAL_CHAIN_EMPTY"
+        )
+          set.status = 400;
+        else set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      set.status = 200;
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      body: SubmitTimesheetWithChainSchema,
+      headers: IdempotencyHeaderSchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Submit timesheet with multi-level approval chain",
+      },
+    }
+  )
+
+  .get(
+    "/timesheets/:id/approval-chain",
+    async (ctx) => {
+      const { timeService, tenant, user, params, set } = ctx as any;
+
+      const result = await timeService.getApprovalChain(
+        { tenantId: tenant.id, userId: user.id },
+        params.id
+      );
+
+      if (!result.success) {
+        set.status = result.error?.code === "TIMESHEET_NOT_FOUND" ? 404 : 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      beforeHandle: [requirePermission("time:timesheets", "read")],
+      detail: {
+        tags: ["Time"],
+        summary: "Get approval chain for a timesheet",
+      },
+    }
+  )
+
+  .post(
+    "/timesheets/:id/approval-chain/decide",
+    async (ctx) => {
+      const { timeService, tenant, user, params, body, set } = ctx as any;
+
+      const result = await timeService.processApprovalChainDecision(
+        { tenantId: tenant.id, userId: user.id },
+        params.id,
+        user.id,
+        body as any
+      );
+
+      if (!result.success) {
+        const code = result.error?.code;
+        if (code === "TIMESHEET_NOT_FOUND") set.status = 404;
+        else if (
+          code === "TIMESHEET_NOT_SUBMITTED" ||
+          code === "NOT_AUTHORIZED_APPROVER"
+        )
+          set.status = 400;
+        else set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      body: ApprovalChainDecisionSchema,
+      headers: IdempotencyHeaderSchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Approve or reject at your level in the approval chain",
+      },
+    }
+  )
+
+  .get(
+    "/approval-chain/pending",
+    async (ctx) => {
+      const { timeService, tenant, user, query, set } = ctx as any;
+
+      const result = await timeService.getPendingApprovals(
+        { tenantId: tenant.id, userId: user.id },
+        user.id,
+        query || {}
+      );
+
+      if (!result.success) {
+        set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      query: PendingApprovalsFiltersSchema,
+      beforeHandle: [requirePermission("time:timesheets", "read")],
+      detail: {
+        tags: ["Time"],
+        summary: "List timesheets pending your approval",
+      },
     }
   )
 

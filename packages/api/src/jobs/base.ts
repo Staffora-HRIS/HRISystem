@@ -744,6 +744,7 @@ export const JobTypes = {
   PDF_CERTIFICATE: "pdf.certificate",
   PDF_EMPLOYMENT_LETTER: "pdf.employment_letter",
   PDF_CASE_BUNDLE: "pdf.case_bundle",
+  PDF_BULK_DOCUMENT_ITEM: "pdf.bulk_document_item",
 
   // Analytics
   ANALYTICS_AGGREGATE: "analytics.aggregate",

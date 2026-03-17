@@ -18,6 +18,7 @@ import {
   RecruitmentFiltersSchema,
   DiversityFiltersSchema,
   CompensationFiltersSchema,
+  WorkforcePlanningFiltersSchema,
   HeadcountSummarySchema,
   HeadcountByDepartmentSchema,
   HeadcountTrendSchema,
@@ -30,6 +31,7 @@ import {
   RecruitmentSummarySchema,
   DiversityDashboardSchema,
   CompensationDashboardSchema,
+  WorkforcePlanningDashboardSchema,
   ExecutiveDashboardSchema,
   ManagerDashboardSchema,
   PeriodSchema,
@@ -575,6 +577,49 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Workforce Planning Analytics
+  // ===========================================================================
+
+  // GET /analytics/workforce-planning - Workforce planning dashboard
+  .get(
+    "/workforce-planning",
+    async (ctx) => {
+      const { analyticsService, query, tenantContext, error } = ctx as any;
+      const result = await analyticsService.getWorkforcePlanning(tenantContext, query || {});
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          ANALYTICS_ERROR_CODES
+        );
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("analytics", "read")],
+      query: t.Partial(WorkforcePlanningFiltersSchema),
+      response: {
+        200: WorkforcePlanningDashboardSchema,
+        400: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Analytics"],
+        summary: "Get workforce planning analytics",
+        description:
+          "Get comprehensive workforce planning analytics including headcount projections " +
+          "(based on historical growth rate), retirement projections (employees approaching UK " +
+          "state pension age 66-68), attrition forecast (based on historical turnover), and " +
+          "skills gap analysis (required vs available competencies). " +
+          "The horizon parameter controls the projection period (e.g. 12m, 24m, 3y). Defaults to 12m.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 // ===========================================================================
@@ -656,8 +701,8 @@ analyticsRoutes.get(
     },
     detail: {
       tags: ["Analytics"],
-      summary: "Get compensation dashboard",
-      description: "Get compensation analytics including salary summary, salary band distribution, department breakdown, and recent compensation changes.",
+      summary: "Get compensation analytics dashboard",
+      description: "Get comprehensive compensation analytics including salary distribution (with percentiles), salary band breakdown, department costs, recent changes, compa-ratio analysis by job grade, and gender pay equity analysis. Supports filtering by department (org_unit_id), job grade, and currency.",
       security: [{ bearerAuth: [] }],
     },
   }

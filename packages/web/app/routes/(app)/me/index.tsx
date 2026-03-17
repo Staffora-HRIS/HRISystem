@@ -93,6 +93,12 @@ export default function MeIndexPage() {
             <Link className="text-primary-600 hover:underline" to="/me/cases">
               Help & Support
             </Link>
+            <Link className="text-primary-600 hover:underline" to="/me/org-chart">
+              Organisation Chart
+            </Link>
+            <Link className="text-primary-600 hover:underline" to="/me/directory">
+              Employee Directory
+            </Link>
           </div>
         </CardBody>
       </Card>

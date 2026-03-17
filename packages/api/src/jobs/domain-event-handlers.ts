@@ -912,6 +912,73 @@ async function handleErasureCertificateRequested(
 }
 
 // =============================================================================
+// Bulk Document Generation Event Handlers
+// =============================================================================
+
+/**
+ * Handle bulk document generation item queued event.
+ *
+ * When a bulk generation batch is created, each employee item emits a
+ * 'documents.bulk_generation.item_queued' event. This handler routes the
+ * item to the PDF generation stream for async processing by the pdf-worker.
+ */
+async function handleBulkDocGenItemQueued(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const {
+    batchId,
+    batchItemId,
+    templateId,
+    templateName,
+    employeeId,
+    variables,
+    actor,
+  } = event.payload as {
+    batchId: string;
+    batchItemId: string;
+    templateId: string;
+    templateName: string;
+    employeeId: string;
+    variables: Record<string, string>;
+    actor: string;
+  };
+
+  ctx.log.info("Processing bulk document generation item", {
+    batchId,
+    batchItemId,
+    employeeId,
+  });
+
+  // Route to the PDF generation stream for the pdf-worker to pick up
+  await ctx.redis.xadd(
+    StreamKeys.PDF_GENERATION,
+    "*",
+    "payload",
+    JSON.stringify({
+      id: crypto.randomUUID(),
+      type: "pdf.bulk_document_item",
+      tenantId: event.tenantId,
+      userId: actor,
+      data: {
+        batchId,
+        batchItemId,
+        templateId,
+        templateName,
+        employeeId,
+        variables: variables || {},
+      },
+      metadata: {
+        createdAt: new Date().toISOString(),
+        correlationId: batchId,
+      },
+    }),
+    "attempt",
+    "1"
+  );
+}
+
+// =============================================================================
 // Cache Invalidation Handlers
 // =============================================================================
 
@@ -1090,6 +1157,9 @@ export function registerAllHandlers(): void {
 
   // GDPR Events
   registerHandler("gdpr.erasure.certificate_requested", handleErasureCertificateRequested);
+
+  // Bulk Document Generation Events
+  registerHandler("documents.bulk_generation.item_queued", handleBulkDocGenItemQueued);
 
   // Cache Invalidation Handlers
   // Employee data changes - use wildcard to catch all hr.employee.* events

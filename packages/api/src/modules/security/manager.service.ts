@@ -11,7 +11,7 @@ import type {
   TeamOverview,
   PendingApproval,
   ApprovalType,
-} from "./schemas";
+} from "./manager.schemas";
 
 // =============================================================================
 // Types

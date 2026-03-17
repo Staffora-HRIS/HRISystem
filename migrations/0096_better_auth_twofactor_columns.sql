@@ -16,9 +16,10 @@ COMMENT ON COLUMN app."user"."twoFactorSecret" IS 'TOTP secret for two-factor au
 COMMENT ON COLUMN app."user"."twoFactorBackupCodes" IS 'Encrypted backup codes for account recovery';
 
 -- =============================================================================
--- DOWN Migration (commented out — run manually to rollback)
+-- DOWN Migration (run manually to rollback)
 -- =============================================================================
 
+-- To rollback, uncomment and execute:
 -- DROP INDEX IF EXISTS app.idx_user_two_factor_enabled;
 -- ALTER TABLE app."user" DROP COLUMN IF EXISTS "twoFactorBackupCodes";
 -- ALTER TABLE app."user" DROP COLUMN IF EXISTS "twoFactorSecret";

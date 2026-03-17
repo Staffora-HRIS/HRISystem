@@ -19,7 +19,7 @@ export default {
           900: "#312e81",
           950: "#1e1b4b",
         },
-        // Success colors
+        // Success colors (600/700 darkened for WCAG AA contrast with white text)
         success: {
           50: "#f0fdf4",
           100: "#dcfce7",
@@ -27,8 +27,8 @@ export default {
           300: "#86efac",
           400: "#4ade80",
           500: "#22c55e",
-          600: "#16a34a",
-          700: "#15803d",
+          600: "#15803d",
+          700: "#116b31",
           800: "#166534",
           900: "#14532d",
         },

@@ -4,6 +4,7 @@
 
 import { WorkflowRepository, type TenantContext, type WorkflowDefinitionRow, type WorkflowInstanceRow, type StepInstanceRow } from "./repository";
 import type { CreateWorkflowDefinition, UpdateWorkflowDefinition, CreateWorkflowInstance, ProcessStepAction, ReassignStep, WorkflowInstanceFilters } from "./schemas";
+import { validateConditionRules } from "./condition-evaluator";
 
 export class WorkflowService {
   constructor(private repository: WorkflowRepository) {}
@@ -17,13 +18,29 @@ export class WorkflowService {
       throw new Error("VALIDATION_ERROR: Step keys must be unique");
     }
 
-    // Validate step references
+    // Validate step references and condition rules
     for (const step of data.steps) {
       if (step.nextSteps) {
         for (const next of step.nextSteps) {
           if (!stepKeys.includes(next.stepKey)) {
             throw new Error(`VALIDATION_ERROR: Invalid next step reference: ${next.stepKey}`);
           }
+
+          // Validate conditionRules on nextSteps transitions
+          if (next.conditionRules) {
+            const transitionError = validateConditionRules(next.conditionRules);
+            if (transitionError) {
+              throw new Error(`VALIDATION_ERROR: Invalid condition rules on transition to '${next.stepKey}': ${transitionError}`);
+            }
+          }
+        }
+      }
+
+      // Validate conditionRules on the step itself
+      if (step.conditionRules) {
+        const stepError = validateConditionRules(step.conditionRules);
+        if (stepError) {
+          throw new Error(`VALIDATION_ERROR: Invalid condition rules on step '${step.stepKey}': ${stepError}`);
         }
       }
     }
@@ -268,6 +285,8 @@ export class WorkflowService {
       completedAt: row.completedAt?.toISOString?.() || null,
       completionAction: row.completionAction,
       completionComment: row.completionComment,
+      conditionRules: row.conditionRules || null,
+      conditionResult: row.conditionResult ?? null,
       createdAt: row.createdAt?.toISOString?.() || row.createdAt,
     };
   }

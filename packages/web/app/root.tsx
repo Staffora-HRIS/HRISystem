@@ -17,6 +17,9 @@ import type { Route } from "./+types/root";
 import "./styles/globals.css";
 
 export const links: Route.LinksFunction = () => [
+  { rel: "manifest", href: "/manifest.json" },
+  { rel: "icon", href: "/icons/icon.svg", type: "image/svg+xml" },
+  { rel: "apple-touch-icon", href: "/icons/icon.svg" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -39,6 +42,10 @@ export function meta(): Route.MetaDescriptors {
     { title: "Staffora" },
     { name: "description", content: "Staffora - Human Resource Information System" },
     { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+    { name: "theme-color", content: "#4f46e5" },
+    { name: "apple-mobile-web-app-capable", content: "yes" },
+    { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+    { name: "apple-mobile-web-app-title", content: "Staffora" },
   ];
 }
 

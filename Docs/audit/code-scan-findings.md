@@ -224,12 +224,9 @@ Other route files use `as unknown as RouteContext` (240 total), which is margina
 - **Context:** The "Use recovery code" button shows a toast with "not available yet" message.
 - **Impact:** Users locked out of their account with no MFA device have no recovery path.
 
-### F-037: Leave Type Editing Not Supported (MEDIUM)
+### F-037: ~~Leave Type Editing Not Supported~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/leave/types/route.tsx`
-- **Lines:** 239-240
-- **Code:** `title="Editing leave types is not yet supported. Delete and recreate to modify."`
-- **Context:** Edit button is disabled with tooltip explaining the limitation.
-- **Impact:** Admin workaround exists (delete and recreate), but not ideal.
+- **Resolution:** Edit button now opens a pre-populated modal. Backend PUT `/absence/leave-types/:id` endpoint handles updates with outbox event. Code field included in update flow.
 
 ### F-038: Leave Policy Editing Not Supported (MEDIUM)
 - **File:** `packages/web/app/routes/(admin)/leave/policies/route.tsx`

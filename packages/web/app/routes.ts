@@ -31,13 +31,19 @@ export default [
       route("cases", "routes/(app)/me/cases/route.tsx"),
       route("competencies", "routes/(app)/me/competencies/route.tsx"),
       route("onboarding", "routes/(app)/me/onboarding/route.tsx"),
+      route("org-chart", "routes/(app)/me/org-chart/route.tsx"),
     ]),
 
     // Manager portal (/manager/*)
     ...prefix("manager", [
       index("routes/(app)/manager/index.tsx"),
+      route("dashboard", "routes/(app)/manager/dashboard/route.tsx"),
       route("team", "routes/(app)/manager/team/route.tsx"),
+      route("org-chart", "routes/(app)/manager/org-chart/route.tsx"),
       route("approvals", "routes/(app)/manager/approvals/route.tsx"),
+      route("approvals/leave", "routes/(app)/manager/approvals/leave/route.tsx"),
+      route("approvals/timesheets", "routes/(app)/manager/approvals/timesheets/route.tsx"),
+      route("approvals/expenses", "routes/(app)/manager/approvals/expenses/route.tsx"),
       route("schedules", "routes/(app)/manager/schedules/route.tsx"),
       route("performance", "routes/(app)/manager/performance/route.tsx"),
     ]),

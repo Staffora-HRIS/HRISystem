@@ -1,12 +1,28 @@
 /**
  * Security Module
  *
- * Exports security-related routes, services, and types.
- * Includes:
- * - Core security routes (roles, permissions, users, audit)
- * - Field-level security (field permissions per role)
- * - Multi-portal system (admin, manager, employee)
- * - Manager portal features (team, approvals)
+ * Split into focused sub-modules for reduced cognitive complexity:
+ *
+ * - rbac.repository.ts / rbac.service.ts / routes.ts
+ *     Core RBAC: roles, permissions, users, audit log, role assignments
+ *
+ * - field-permission.service.ts / field-permission.routes.ts
+ *     Field-level access control per role
+ *
+ * - portal.service.ts / portal.routes.ts
+ *     Multi-portal access management (admin, manager, employee)
+ *
+ * - manager.service.ts / manager.routes.ts
+ *     Manager hierarchy, team queries, and approval workflows
+ *
+ * - permission-resolution.service.ts / permission-guard.middleware.ts
+ *     Enhanced 7-layer permission resolution engine (v2)
+ *
+ * Schemas are split into domain-focused files:
+ *   rbac.schemas.ts, field-permission.schemas.ts,
+ *   portal.schemas.ts, manager.schemas.ts
+ *
+ * The barrel schemas.ts re-exports all schema files for backwards compatibility.
  */
 
 // Routes
@@ -15,12 +31,39 @@ export { fieldPermissionRoutes, type FieldPermissionRoutes } from "./field-permi
 export { portalRoutes, type PortalRoutes } from "./portal.routes";
 export { managerRoutes, type ManagerRoutes } from "./manager.routes";
 
-// Services
+// RBAC Service & Repository (new canonical names)
+export { RbacSecurityService } from "./rbac.service";
+export type {
+  AuditLogEntry,
+  UserEntry,
+  RoleEntry,
+  PermissionEntry,
+  RolePermissionEntry,
+  RoleAssignmentEntry,
+} from "./rbac.service";
+export { RbacRepository } from "./rbac.repository";
+export type {
+  AuditLogRow,
+  UserRow,
+  RoleRow,
+  PermissionRow,
+  RolePermissionRow,
+  RoleDetailRow,
+  RoleAssignmentRow,
+} from "./rbac.repository";
+
+// Backwards-compatible aliases (deprecated)
 export { SecurityService } from "./service";
 export { SecurityRepository } from "./repository";
+
+// Field Permission Service
 export { FieldPermissionService, FieldPermissionError } from "./field-permission.service";
+
+// Portal Service
 export { PortalService, PortalAccessError } from "./portal.service";
 export type { PortalNavigationItem } from "./portal.service";
+
+// Manager Service
 export { ManagerService, ManagerAccessError } from "./manager.service";
 export type { TeamAbsenceEntry } from "./manager.service";
 
@@ -42,5 +85,5 @@ export {
 } from "./permission-guard.middleware";
 export type { EnhancedPermissionOptions } from "./permission-guard.middleware";
 
-// Schemas
+// Schemas (all domains via barrel)
 export * from "./schemas";

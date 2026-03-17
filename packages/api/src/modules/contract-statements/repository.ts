@@ -118,11 +118,11 @@ export interface CompensationDataRow extends Row {
 }
 
 export interface AddressRow extends Row {
-  streetLine1: string;
-  streetLine2: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
   city: string;
-  stateProvince: string | null;
-  postalCode: string;
+  county: string | null;
+  postcode: string | null;
   country: string;
 }
 
@@ -503,11 +503,11 @@ export class ContractStatementsRepository {
   ): Promise<AddressRow | null> {
     const rows = await tx<AddressRow[]>`
       SELECT
-        street_line1,
-        street_line2,
+        address_line_1,
+        address_line_2,
         city,
-        state_province,
-        postal_code,
+        county,
+        postcode,
         country
       FROM employee_addresses
       WHERE employee_id = ${employeeId}

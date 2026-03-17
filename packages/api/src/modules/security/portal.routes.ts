@@ -15,7 +15,7 @@ import {
   SwitchPortalSchema,
   GrantPortalAccessSchema,
   RevokePortalAccessSchema,
-} from "./schemas";
+} from "./portal.schemas";
 
 export const portalRoutes = new Elysia({ prefix: "/portal" })
   // Get all available portals

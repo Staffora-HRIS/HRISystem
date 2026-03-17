@@ -1,6 +1,6 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
@@ -17,6 +17,7 @@ import {
   CardBody,
   Button,
   Badge,
+  Checkbox,
   type BadgeVariant,
   Spinner,
   ConfirmModal,
@@ -28,7 +29,10 @@ import { queryKeys } from "~/lib/query-client";
 import {
   usePendingApprovals,
   useApprovalActions,
+  useBulkApprovalActions,
   type PendingApproval,
+  type BulkApprovalItem,
+  type BulkApprovalResult,
 } from "~/hooks/use-manager";
 
 const PRIORITY_COLORS: Record<string, BadgeVariant> = {
@@ -48,10 +52,36 @@ export default function ManagerLeaveApprovalsPage() {
     approval: PendingApproval;
     action: "approve" | "reject";
   } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkAction, setConfirmBulkAction] = useState<"approve" | "reject" | null>(null);
 
   const { approvals, isLoading, error } = usePendingApprovals("leave");
   const { approve, reject, isApproving, isRejecting } = useApprovalActions();
+  const { bulkAction, isPending: isBulkPending } = useBulkApprovalActions();
   const queryClient = useQueryClient();
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const allIds = approvals.map((a) => a.id);
+      const allSelected = allIds.length > 0 && allIds.every((id) => prev.has(id));
+      if (allSelected) {
+        return new Set();
+      }
+      return new Set(allIds);
+    });
+  }, [approvals]);
 
   const handleConfirm = () => {
     if (!confirmAction) return;
@@ -71,6 +101,12 @@ export default function ManagerLeaveApprovalsPage() {
           queryClient.invalidateQueries({ queryKey: queryKeys.manager.approvals() });
           queryClient.invalidateQueries({ queryKey: queryKeys.manager.overview() });
           setConfirmAction(null);
+          // Remove from selection if it was selected
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(approval.id);
+            return next;
+          });
         },
         onError: (err) => {
           const message =
@@ -80,6 +116,46 @@ export default function ManagerLeaveApprovalsPage() {
       }
     );
   };
+
+  const handleBulkConfirm = useCallback(async () => {
+    if (!confirmBulkAction || selectedIds.size === 0) return;
+
+    const items: BulkApprovalItem[] = approvals
+      .filter((a) => selectedIds.has(a.id))
+      .map((a) => ({
+        type: "leave_request" as const,
+        id: a.id,
+        action: confirmBulkAction,
+      }));
+
+    try {
+      const result: BulkApprovalResult = await bulkAction(items);
+      const approvedCount = result.approved.length;
+      const failedCount = result.failed.length;
+
+      if (failedCount === 0) {
+        toast.success(
+          `${approvedCount} leave request${approvedCount !== 1 ? "s" : ""} ${confirmBulkAction === "approve" ? "approved" : "rejected"} successfully`
+        );
+      } else if (approvedCount === 0) {
+        toast.error(
+          `All ${failedCount} leave request${failedCount !== 1 ? "s" : ""} failed to ${confirmBulkAction}`
+        );
+      } else {
+        toast.warning(
+          `${approvedCount} ${confirmBulkAction === "approve" ? "approved" : "rejected"}, ${failedCount} failed`
+        );
+      }
+
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: queryKeys.manager.approvals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.manager.overview() });
+    } catch {
+      toast.error(`Failed to ${confirmBulkAction} selected leave requests`);
+    } finally {
+      setConfirmBulkAction(null);
+    }
+  }, [confirmBulkAction, selectedIds, approvals, bulkAction, queryClient]);
 
   if (isLoading) {
     return (
@@ -128,6 +204,11 @@ export default function ManagerLeaveApprovalsPage() {
     (a) => a.dueDate && new Date(a.dueDate) < new Date()
   ).length;
 
+  const selectedCount = approvals.filter((a) => selectedIds.has(a.id)).length;
+  const allSelected =
+    approvals.length > 0 && approvals.every((a) => selectedIds.has(a.id));
+  const anyMutationPending = isApproving || isRejecting || isBulkPending;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -164,10 +245,48 @@ export default function ManagerLeaveApprovalsPage() {
         />
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-blue-800">
+            {selectedCount} leave request{selectedCount !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            size="sm"
+            onClick={() => setConfirmBulkAction("approve")}
+            disabled={anyMutationPending}
+          >
+            <CheckCircle2 className="h-4 w-4 mr-1" />
+            Bulk Approve
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmBulkAction("reject")}
+            disabled={anyMutationPending}
+          >
+            <XCircle className="h-4 w-4 mr-1" />
+            Bulk Reject
+          </Button>
+        </div>
+      )}
+
       {/* Leave Request Cards */}
       <Card>
         <CardHeader>
-          <h3 className="font-semibold">Pending Leave Requests</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Pending Leave Requests</h3>
+            {approvals.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all leave requests"
+                />
+                <span className="text-sm text-gray-600">Select all</span>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardBody className="p-0">
           {approvals.length === 0 ? (
@@ -193,12 +312,20 @@ export default function ManagerLeaveApprovalsPage() {
                   totalDays?: number;
                   reason?: string;
                 };
+                const isSelected = selectedIds.has(approval.id);
 
                 return (
                   <div
                     key={approval.id}
-                    className="flex items-start justify-between gap-4 p-4 hover:bg-gray-50 transition-colors"
+                    className={`flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50/50" : ""}`}
                   >
+                    <div className="pt-1 shrink-0">
+                      <Checkbox
+                        checked={isSelected}
+                        onChange={() => toggleSelection(approval.id)}
+                        aria-label={`Select leave request from ${approval.requesterName}`}
+                      />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-gray-900">
@@ -264,7 +391,7 @@ export default function ManagerLeaveApprovalsPage() {
                         onClick={() =>
                           setConfirmAction({ approval, action: "reject" })
                         }
-                        disabled={isApproving || isRejecting}
+                        disabled={anyMutationPending}
                         aria-label={`Reject leave request from ${approval.requesterName}`}
                       >
                         <XCircle className="h-4 w-4 mr-1" />
@@ -275,7 +402,7 @@ export default function ManagerLeaveApprovalsPage() {
                         onClick={() =>
                           setConfirmAction({ approval, action: "approve" })
                         }
-                        disabled={isApproving || isRejecting}
+                        disabled={anyMutationPending}
                         aria-label={`Approve leave request from ${approval.requesterName}`}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -290,7 +417,7 @@ export default function ManagerLeaveApprovalsPage() {
         </CardBody>
       </Card>
 
-      {/* Confirmation Modal */}
+      {/* Single Confirmation Modal */}
       {confirmAction && (
         <ConfirmModal
           open
@@ -301,6 +428,20 @@ export default function ManagerLeaveApprovalsPage() {
           confirmLabel={confirmAction.action === "approve" ? "Approve" : "Reject"}
           danger={confirmAction.action === "reject"}
           loading={isApproving || isRejecting}
+        />
+      )}
+
+      {/* Bulk Confirmation Modal */}
+      {confirmBulkAction && (
+        <ConfirmModal
+          open
+          onClose={() => setConfirmBulkAction(null)}
+          onConfirm={handleBulkConfirm}
+          title={`Bulk ${confirmBulkAction === "approve" ? "Approve" : "Reject"} Leave Requests`}
+          message={`Are you sure you want to ${confirmBulkAction} ${selectedCount} leave request${selectedCount !== 1 ? "s" : ""}?`}
+          confirmLabel={`${confirmBulkAction === "approve" ? "Approve" : "Reject"} ${selectedCount} Request${selectedCount !== 1 ? "s" : ""}`}
+          danger={confirmBulkAction === "reject"}
+          loading={isBulkPending}
         />
       )}
     </div>

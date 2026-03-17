@@ -5,6 +5,7 @@
  * - Organizational Units (org_units)
  * - Positions
  * - Employees with effective-dated records
+ * - Employee Addresses with effective dating and UK postcode validation
  * - History tracking
  *
  * Usage:
@@ -21,6 +22,8 @@ export { hrRoutes, type HRRoutes } from "./routes";
 
 // Export service
 export { HRService } from "./service";
+export { AddressService, isValidUkPostcode } from "./address.service";
+export type { AddressResponse } from "./address.service";
 export type { ServiceResult, PaginatedServiceResult, TenantContext as ServiceTenantContext } from "../../types/service-result";
 
 // Export repository
@@ -39,6 +42,9 @@ export {
   type StatusHistoryRow,
 } from "./repository";
 
+// Export address repository
+export { AddressRepository, type EmployeeAddressRow } from "./address.repository";
+
 // Export schemas
 export {
   // Enums
@@ -56,6 +62,7 @@ export {
   UuidSchema,
   DateSchema,
   PaginationQuerySchema,
+  UkPostcodeSchema,
   // Org Unit
   CreateOrgUnitSchema,
   UpdateOrgUnitSchema,
@@ -85,6 +92,14 @@ export {
   EmployeeListItemSchema,
   EmployeeListResponseSchema,
   EmployeeFiltersSchema,
+  // Address CRUD
+  CreateEmployeeAddressSchema,
+  UpdateEmployeeAddressSchema,
+  CloseEmployeeAddressSchema,
+  EmployeeAddressResponseSchema,
+  EmployeeAddressListResponseSchema,
+  EmployeeAddressIdParamsSchema,
+  AddressHistoryQuerySchema,
   // History
   EmployeeHistoryQuerySchema,
   HistoryRecordSchema,
@@ -134,6 +149,13 @@ export {
   type EmployeeListItem,
   type EmployeeListResponse,
   type EmployeeFilters,
+  type CreateEmployeeAddress,
+  type UpdateEmployeeAddress,
+  type CloseEmployeeAddress,
+  type EmployeeAddressResponse,
+  type EmployeeAddressListResponse,
+  type EmployeeAddressIdParams,
+  type AddressHistoryQuery,
   type EmployeeHistoryQuery,
   type HistoryRecord,
   type EmployeeHistoryResponse,

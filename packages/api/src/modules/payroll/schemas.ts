@@ -299,3 +299,433 @@ export const EmployeeIdParamsSchema = t.Object({
 });
 
 export type EmployeeIdParams = Static<typeof EmployeeIdParamsSchema>;
+
+// =============================================================================
+// RTI (Real Time Information) Schemas
+// =============================================================================
+
+/**
+ * RTI submission type
+ */
+export const RtiSubmissionTypeSchema = t.Union([
+  t.Literal("fps"),
+  t.Literal("eps"),
+  t.Literal("nvr"),
+  t.Literal("eas"),
+]);
+
+export type RtiSubmissionType = Static<typeof RtiSubmissionTypeSchema>;
+
+/**
+ * RTI submission status
+ */
+export const RtiSubmissionStatusSchema = t.Union([
+  t.Literal("draft"),
+  t.Literal("generated"),
+  t.Literal("submitted"),
+  t.Literal("accepted"),
+  t.Literal("rejected"),
+  t.Literal("error"),
+]);
+
+export type RtiSubmissionStatus = Static<typeof RtiSubmissionStatusSchema>;
+
+/**
+ * RunId path parameter schema
+ */
+export const RunIdParamsSchema = t.Object({
+  runId: UuidSchema,
+});
+
+export type RunIdParams = Static<typeof RunIdParamsSchema>;
+
+/**
+ * RTI query parameters (tax year and optional tax period)
+ */
+export const RtiFpsQuerySchema = t.Object({
+  run_id: UuidSchema,
+  tax_year: t.Optional(t.String({
+    pattern: "^\\d{4}-\\d{2}$",
+    description: "UK tax year in format YYYY-YY (e.g. 2025-26). Defaults to current tax year.",
+  })),
+  employer_paye_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Employer PAYE reference (e.g. 123/AB12345)",
+  })),
+  accounts_office_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Accounts Office Reference",
+  })),
+});
+
+export type RtiFpsQuery = Static<typeof RtiFpsQuerySchema>;
+
+export const RtiEpsQuerySchema = t.Object({
+  run_id: t.Optional(UuidSchema),
+  tax_year: t.Optional(t.String({
+    pattern: "^\\d{4}-\\d{2}$",
+    description: "UK tax year in format YYYY-YY (e.g. 2025-26). Defaults to current tax year.",
+  })),
+  tax_month: t.Optional(t.String({
+    pattern: "^([1-9]|1[0-2])$",
+    description: "Tax month (1-12)",
+  })),
+  employer_paye_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Employer PAYE reference (e.g. 123/AB12345)",
+  })),
+  accounts_office_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Accounts Office Reference",
+  })),
+});
+
+export type RtiEpsQuery = Static<typeof RtiEpsQuerySchema>;
+
+/**
+ * Submit payroll run request body
+ */
+export const SubmitPayrollRunSchema = t.Object({
+  employer_paye_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Employer PAYE reference for HMRC",
+  })),
+  accounts_office_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Accounts Office Reference for HMRC",
+  })),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export type SubmitPayrollRun = Static<typeof SubmitPayrollRunSchema>;
+
+// =============================================================================
+// FPS (Full Payment Submission) Data Structure
+// =============================================================================
+
+/**
+ * Per-employee FPS record - matches HMRC FPS data requirements.
+ * Contains all data needed for a Full Payment Submission to HMRC.
+ */
+export const FpsEmployeeRecordSchema = t.Object({
+  // Employee identification
+  employee_id: UuidSchema,
+  employee_number: t.String(),
+  first_name: t.String(),
+  last_name: t.String(),
+  date_of_birth: t.Union([t.String(), t.Null()]),
+  gender: t.Union([t.String(), t.Null()]),
+  ni_number: t.Union([t.String(), t.Null()]),
+
+  // Tax details
+  tax_code: t.Union([t.String(), t.Null()]),
+  ni_category: t.Union([t.String(), t.Null()]),
+
+  // Employment dates
+  hire_date: t.String(),
+
+  // Pay in this period
+  taxable_pay_in_period: t.String(),
+  tax_deducted_in_period: t.String(),
+
+  // NI contributions
+  ni_contributions: t.Object({
+    ni_category: t.Union([t.String(), t.Null()]),
+    gross_earnings_for_ni: t.String(),
+    employee_ni_contribution: t.String(),
+    employer_ni_contribution: t.String(),
+    ni_letter: t.Union([t.String(), t.Null()]),
+  }),
+
+  // Student loan
+  student_loan_plan: t.Union([StudentLoanPlanSchema, t.Null()]),
+  student_loan_deduction: t.String(),
+
+  // Pension
+  pension_employee_contribution: t.String(),
+  pension_employer_contribution: t.String(),
+
+  // Pay breakdown
+  basic_pay: t.String(),
+  overtime_pay: t.String(),
+  bonus_pay: t.String(),
+  total_gross_pay: t.String(),
+  total_deductions: t.String(),
+  net_pay: t.String(),
+  payment_method: PaymentMethodSchema,
+
+  // Year to date figures (cumulative)
+  taxable_pay_ytd: t.String(),
+  tax_deducted_ytd: t.String(),
+  employee_ni_ytd: t.String(),
+  employer_ni_ytd: t.String(),
+  student_loan_ytd: t.String(),
+});
+
+export type FpsEmployeeRecord = Static<typeof FpsEmployeeRecordSchema>;
+
+/**
+ * Full FPS data structure response
+ */
+export const FpsDataResponseSchema = t.Object({
+  // Submission metadata
+  submission_type: t.Literal("fps"),
+  tax_year: t.String(),
+  tax_month: t.Union([t.Number(), t.Null()]),
+
+  // Employer info
+  employer_paye_ref: t.Union([t.String(), t.Null()]),
+  accounts_office_ref: t.Union([t.String(), t.Null()]),
+
+  // Pay run reference
+  payroll_run_id: UuidSchema,
+  pay_period_start: t.String(),
+  pay_period_end: t.String(),
+  pay_date: t.String(),
+
+  // Employee records
+  employee_count: t.Number(),
+  employees: t.Array(FpsEmployeeRecordSchema),
+
+  // Totals
+  totals: t.Object({
+    total_taxable_pay: t.String(),
+    total_tax_deducted: t.String(),
+    total_employee_ni: t.String(),
+    total_employer_ni: t.String(),
+    total_student_loan_deductions: t.String(),
+    total_pension_employee: t.String(),
+    total_pension_employer: t.String(),
+    total_gross_pay: t.String(),
+    total_net_pay: t.String(),
+  }),
+
+  // Generation metadata
+  generated_at: t.String(),
+});
+
+export type FpsDataResponse = Static<typeof FpsDataResponseSchema>;
+
+// =============================================================================
+// EPS (Employer Payment Summary) Data Structure
+// =============================================================================
+
+/**
+ * EPS data structure response - summarises employer-level adjustments
+ * to the amounts due to HMRC for a tax period.
+ */
+export const EpsDataResponseSchema = t.Object({
+  // Submission metadata
+  submission_type: t.Literal("eps"),
+  tax_year: t.String(),
+  tax_month: t.Union([t.Number(), t.Null()]),
+
+  // Employer info
+  employer_paye_ref: t.Union([t.String(), t.Null()]),
+  accounts_office_ref: t.Union([t.String(), t.Null()]),
+
+  // Period summary - from the payroll run (if linked)
+  payroll_run_id: t.Union([UuidSchema, t.Null()]),
+  pay_period_start: t.Union([t.String(), t.Null()]),
+  pay_period_end: t.Union([t.String(), t.Null()]),
+
+  // Recoverable amounts (amounts the employer can offset against PAYE liability)
+  recoverable_amounts: t.Object({
+    smp_recovered: t.String(),
+    spp_recovered: t.String(),
+    sap_recovered: t.String(),
+    shpp_recovered: t.String(),
+    spbp_recovered: t.String(),
+    nic_compensation_on_smp: t.String(),
+    nic_compensation_on_spp: t.String(),
+    nic_compensation_on_sap: t.String(),
+    nic_compensation_on_shpp: t.String(),
+    nic_compensation_on_spbp: t.String(),
+    cis_deductions_suffered: t.String(),
+  }),
+
+  // Apprenticeship levy
+  apprenticeship_levy: t.Object({
+    levy_due_ytd: t.String(),
+    annual_allowance: t.String(),
+  }),
+
+  // Employment allowance
+  employment_allowance: t.Object({
+    claimed: t.Boolean(),
+    amount_ytd: t.String(),
+  }),
+
+  // Flags
+  no_payment_dates: t.Object({
+    from: t.Union([t.String(), t.Null()]),
+    to: t.Union([t.String(), t.Null()]),
+  }),
+  period_of_inactivity: t.Object({
+    from: t.Union([t.String(), t.Null()]),
+    to: t.Union([t.String(), t.Null()]),
+  }),
+  final_submission_for_year: t.Boolean(),
+
+  // Generation metadata
+  generated_at: t.String(),
+});
+
+export type EpsDataResponse = Static<typeof EpsDataResponseSchema>;
+
+// =============================================================================
+// RTI Submission Record Response
+// =============================================================================
+
+/**
+ * RTI submission record response
+ */
+export const RtiSubmissionResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  payroll_run_id: UuidSchema,
+  submission_type: RtiSubmissionTypeSchema,
+  status: RtiSubmissionStatusSchema,
+  tax_year: t.String(),
+  tax_month: t.Union([t.Number(), t.Null()]),
+  tax_week: t.Union([t.Number(), t.Null()]),
+  employer_paye_ref: t.Union([t.String(), t.Null()]),
+  accounts_office_ref: t.Union([t.String(), t.Null()]),
+  generated_at: t.Union([t.String(), t.Null()]),
+  submitted_at: t.Union([t.String(), t.Null()]),
+  response_at: t.Union([t.String(), t.Null()]),
+  notes: t.Union([t.String(), t.Null()]),
+  created_at: t.String(),
+  updated_at: t.String(),
+});
+
+export type RtiSubmissionResponse = Static<typeof RtiSubmissionResponseSchema>;
+
+/**
+ * Payroll run export data response (for GET /runs/:runId/export)
+ */
+export const PayrollRunExportResponseSchema = t.Object({
+  payroll_run: PayrollRunResponseSchema,
+  lines: t.Array(PayrollLineResponseSchema),
+  exported_at: t.String(),
+});
+
+export type PayrollRunExportResponse = Static<typeof PayrollRunExportResponseSchema>;
+
+// =============================================================================
+// Payroll Period Lock Schemas
+// =============================================================================
+
+/**
+ * Lock a payroll period request body
+ */
+export const LockPayrollPeriodSchema = t.Object({
+  period_start: DateSchema,
+  period_end: DateSchema,
+});
+
+export type LockPayrollPeriod = Static<typeof LockPayrollPeriodSchema>;
+
+/**
+ * Unlock a payroll period request body (reason is mandatory for audit)
+ */
+export const UnlockPayrollPeriodSchema = t.Object({
+  unlock_reason: t.String({
+    minLength: 1,
+    maxLength: 2000,
+    description: "Mandatory reason for unlocking the payroll period",
+  }),
+});
+
+export type UnlockPayrollPeriod = Static<typeof UnlockPayrollPeriodSchema>;
+
+/**
+ * Payroll period lock status query parameters
+ */
+export const PeriodLockStatusQuerySchema = t.Object({
+  period_start: t.Optional(DateSchema),
+  period_end: t.Optional(DateSchema),
+  active_only: t.Optional(t.String({ pattern: "^(true|false)$" })),
+});
+
+export type PeriodLockStatusQuery = Static<typeof PeriodLockStatusQuerySchema>;
+
+/**
+ * Payroll period lock response
+ */
+export const PeriodLockResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  period_start: t.String(),
+  period_end: t.String(),
+  locked_at: t.String(),
+  locked_by: UuidSchema,
+  unlock_reason: t.Union([t.String(), t.Null()]),
+  unlocked_at: t.Union([t.String(), t.Null()]),
+  unlocked_by: t.Union([UuidSchema, t.Null()]),
+  created_at: t.String(),
+  is_locked: t.Boolean(),
+});
+
+export type PeriodLockResponse = Static<typeof PeriodLockResponseSchema>;
+
+// =============================================================================
+// Payroll Journal Entry Schemas (TODO-233)
+// =============================================================================
+
+/**
+ * Journal entry response schema
+ */
+export const JournalEntryResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  payroll_run_id: UuidSchema,
+  entry_date: t.String(),
+  account_code: t.String(),
+  description: t.String(),
+  debit: t.String(),
+  credit: t.String(),
+  cost_centre_id: t.Union([UuidSchema, t.Null()]),
+  created_at: t.String(),
+});
+
+export type JournalEntryResponse = Static<typeof JournalEntryResponseSchema>;
+
+/**
+ * Generate journal entries request body.
+ * Optional cost_centre_id to assign all generated entries to a cost centre.
+ */
+export const GenerateJournalEntriesSchema = t.Object({
+  cost_centre_id: t.Optional(t.Union([UuidSchema, t.Null()])),
+});
+
+export type GenerateJournalEntries = Static<typeof GenerateJournalEntriesSchema>;
+
+/**
+ * Journal entries query parameters for listing by period
+ */
+export const JournalEntriesQuerySchema = t.Object({
+  payroll_run_id: t.Optional(UuidSchema),
+  period_start: t.Optional(DateSchema),
+  period_end: t.Optional(DateSchema),
+  account_code: t.Optional(t.String({ minLength: 1, maxLength: 50 })),
+  cost_centre_id: t.Optional(UuidSchema),
+  cursor: t.Optional(t.String({ minLength: 1 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 50 })),
+});
+
+export type JournalEntriesQuery = Static<typeof JournalEntriesQuerySchema>;
+
+/**
+ * Journal entries list response with balance summary
+ */
+export const JournalEntriesListResponseSchema = t.Object({
+  items: t.Array(JournalEntryResponseSchema),
+  summary: t.Object({
+    total_debits: t.String(),
+    total_credits: t.String(),
+    is_balanced: t.Boolean(),
+  }),
+  nextCursor: t.Union([t.String(), t.Null()]),
+  hasMore: t.Boolean(),
+});

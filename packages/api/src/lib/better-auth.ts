@@ -100,15 +100,29 @@ const getAuthConfig = () => {
 };
 
 /**
- * Create a pg Pool for Better Auth
- * Better Auth requires a standard pg Pool, not the postgres.js client
+ * Create a pg Pool for Better Auth and account lockout queries.
+ *
+ * Better Auth requires a standard pg Pool — it cannot use the postgres.js
+ * client directly. This pool is shared with the lockout handler in
+ * better-auth-handler.ts to avoid creating multiple independent pg Pools.
+ *
+ * PGBOUNCER COMPATIBILITY:
+ * When DATABASE_APP_URL points to PgBouncer (port 6432), the pg Pool uses
+ * unnamed prepared statements by default, which PgBouncer handles correctly
+ * even in transaction mode. No special configuration is needed for the pg
+ * driver — only named prepared statements (with a `name` property) would
+ * cause issues, and Better Auth does not use them.
+ *
+ * CONNECTION BUDGET: max=5 connections (part of the per-process total;
+ * see packages/api/src/plugins/db.ts for the full budget breakdown).
  */
 function createPgPool(): Pool {
-  // Prefer DATABASE_APP_URL (hris_app with NOBYPASSRLS), matching db plugin precedence
+  // Prefer DATABASE_APP_URL (hris_app with NOBYPASSRLS), matching db plugin precedence.
+  // In Docker, DATABASE_APP_URL routes through PgBouncer (pgbouncer:6432).
   const databaseUrl = process.env["DATABASE_APP_URL"] || process.env["DATABASE_URL"] || getDatabaseUrl();
   return new Pool({
     connectionString: databaseUrl,
-    max: 10,
+    max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     // Set search_path to app schema where our tables are
@@ -116,10 +130,15 @@ function createPgPool(): Pool {
   });
 }
 
-// Singleton pool for Better Auth
+// Singleton pool shared by Better Auth and account lockout handler
 let pgPool: Pool | null = null;
 
-function getPgPool(): Pool {
+/**
+ * Get the shared pg Pool singleton used by Better Auth and lockout queries.
+ * Exported so better-auth-handler.ts can reuse this pool instead of creating
+ * its own, consolidating all pg-driver connections into a single capped pool.
+ */
+export function getPgPool(): Pool {
   if (!pgPool) {
     pgPool = createPgPool();
   }
@@ -150,108 +169,147 @@ export function createBetterAuth() {
             const uuidRegex =
               /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-            const existing = await pool.query<{ id: string }>(
-              "SELECT id::text as id FROM app.users WHERE email = $1",
-              [email]
-            );
+            try {
+              const existing = await pool.query<{ id: string }>(
+                "SELECT id::text as id FROM app.users WHERE email = $1",
+                [email]
+              );
 
-            const existingId = existing.rows[0]?.id;
+              const existingId = existing.rows[0]?.id;
 
-            // Ensure Better Auth uses UUID string ids so our RBAC + tenant system can
-            // safely cast userId/sessionId to uuid.
-            //
-            // If an app.users record already exists for this email, we MUST reuse its
-            // UUID to keep identity stable across app.users (uuid) and app."user" (text).
-            const id = existingId
-              ? existingId
-              : uuidRegex.test(String(user.id))
-                ? String(user.id)
-                : crypto.randomUUID();
+              // Ensure Better Auth uses UUID string ids so our RBAC + tenant system can
+              // safely cast userId/sessionId to uuid.
+              //
+              // If an app.users record already exists for this email, we MUST reuse its
+              // UUID to keep identity stable across app.users (uuid) and app."user" (text).
+              const id = existingId
+                ? existingId
+                : uuidRegex.test(String(user.id))
+                  ? String(user.id)
+                  : crypto.randomUUID();
 
-            return {
-              data: {
-                ...user,
-                id,
-                email,
-              },
-            };
+              return {
+                data: {
+                  ...user,
+                  id,
+                  email,
+                },
+              };
+            } catch (error) {
+              // Log and re-throw — do NOT fail silently. A failed pre-create hook
+              // must abort user creation to prevent orphaned records in app."user"
+              // that have no corresponding app.users row.
+              console.error(
+                "[Auth] databaseHooks.user.create.before failed — aborting user creation:",
+                error instanceof Error ? error.message : String(error)
+              );
+              throw error;
+            }
           },
           after: async (user) => {
             const email = user.email.trim().toLowerCase();
 
-            await pool.query(
-              `
-                INSERT INTO app.users (
-                  id,
+            try {
+              await pool.query(
+                `
+                  INSERT INTO app.users (
+                    id,
+                    email,
+                    email_verified,
+                    password_hash,
+                    name,
+                    image,
+                    mfa_enabled,
+                    status,
+                    created_at,
+                    updated_at
+                  )
+                  VALUES (
+                    $1::uuid,
+                    $2,
+                    $3,
+                    NULL,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    now(),
+                    now()
+                  )
+                  ON CONFLICT (email) DO UPDATE
+                  SET
+                    email_verified = EXCLUDED.email_verified,
+                    name = EXCLUDED.name,
+                    image = EXCLUDED.image,
+                    mfa_enabled = EXCLUDED.mfa_enabled,
+                    status = EXCLUDED.status,
+                    updated_at = now()
+                `,
+                [
+                  user.id,
                   email,
-                  email_verified,
-                  password_hash,
-                  name,
-                  image,
-                  mfa_enabled,
-                  status,
-                  created_at,
-                  updated_at
-                )
-                VALUES (
-                  $1::uuid,
-                  $2,
-                  $3,
-                  NULL,
-                  $4,
-                  $5,
-                  $6,
-                  $7,
-                  now(),
-                  now()
-                )
-                ON CONFLICT (email) DO UPDATE
-                SET
-                  email_verified = EXCLUDED.email_verified,
-                  name = EXCLUDED.name,
-                  image = EXCLUDED.image,
-                  mfa_enabled = EXCLUDED.mfa_enabled,
-                  status = EXCLUDED.status,
-                  updated_at = now()
-              `,
-              [
-                user.id,
-                email,
-                Boolean((user as any).emailVerified ?? false),
-                user.name ?? email,
-                user.image ?? null,
-                Boolean((user as any).mfaEnabled ?? false),
-                ((user as any).status ?? "active") as string,
-              ]
-            );
+                  Boolean((user as any).emailVerified ?? false),
+                  user.name ?? email,
+                  user.image ?? null,
+                  Boolean((user as any).mfaEnabled ?? false),
+                  ((user as any).status ?? "active") as string,
+                ]
+              );
+            } catch (error) {
+              // CRITICAL: Sync to app.users failed after app."user" was created.
+              // This is the primary source of dual-table drift. Log with full
+              // context so the reconciliation job can detect and repair it.
+              console.error(
+                "[Auth] CRITICAL: databaseHooks.user.create.after failed — " +
+                `app.users sync failed for user ${user.id} (${email}). ` +
+                "The reconciliation job will repair this drift. Error:",
+                error instanceof Error ? error.message : String(error)
+              );
+              // Re-throw to signal the failure upstream. Better Auth will still
+              // have created the app."user" row, but the caller will know the
+              // sync failed. The DB trigger (0192_user_table_sync_trigger.sql)
+              // acts as a safety net if this hook is bypassed entirely.
+              throw error;
+            }
           },
         },
         update: {
           after: async (user) => {
             const email = user.email.trim().toLowerCase();
-            await pool.query(
-              `
-                UPDATE app.users
-                SET
-                  email = $2,
-                  email_verified = $3,
-                  name = $4,
-                  image = $5,
-                  mfa_enabled = $6,
-                  status = $7,
-                  updated_at = now()
-                WHERE id = $1::uuid
-              `,
-              [
-                user.id,
-                email,
-                Boolean((user as any).emailVerified ?? false),
-                user.name ?? email,
-                user.image ?? null,
-                Boolean((user as any).mfaEnabled ?? false),
-                ((user as any).status ?? "active") as string,
-              ]
-            );
+            try {
+              await pool.query(
+                `
+                  UPDATE app.users
+                  SET
+                    email = $2,
+                    email_verified = $3,
+                    name = $4,
+                    image = $5,
+                    mfa_enabled = $6,
+                    status = $7,
+                    updated_at = now()
+                  WHERE id = $1::uuid
+                `,
+                [
+                  user.id,
+                  email,
+                  Boolean((user as any).emailVerified ?? false),
+                  user.name ?? email,
+                  user.image ?? null,
+                  Boolean((user as any).mfaEnabled ?? false),
+                  ((user as any).status ?? "active") as string,
+                ]
+              );
+            } catch (error) {
+              // Log explicitly with user context so drift is traceable.
+              // The DB trigger provides a fallback safety net.
+              console.error(
+                "[Auth] CRITICAL: databaseHooks.user.update.after failed — " +
+                `app.users sync failed for user ${user.id} (${email}). Error:`,
+                error instanceof Error ? error.message : String(error)
+              );
+              throw error;
+            }
           },
         },
       },

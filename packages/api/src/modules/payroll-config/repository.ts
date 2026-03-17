@@ -12,7 +12,9 @@ import type {
   CreatePaySchedule,
   UpdatePaySchedule,
   CreatePayAssignment,
+  UpdatePayAssignment,
   CreateNiCategory,
+  UpdateNiCategory,
   PaginationQuery,
   PayFrequency,
 } from "./schemas";
@@ -59,6 +61,8 @@ export interface PayAssignmentRow extends Row {
   effectiveFrom: Date;
   effectiveTo: Date | null;
   createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
   // Joined fields
   scheduleName?: string;
   scheduleFrequency?: PayFrequency;
@@ -76,6 +80,7 @@ export interface NiCategoryRow extends Row {
   effectiveTo: Date | null;
   notes: string | null;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 // =============================================================================
@@ -316,7 +321,8 @@ export class PayrollConfigRepository {
       )
       RETURNING
         id, tenant_id, employee_id, pay_schedule_id,
-        effective_from, effective_to, created_at
+        effective_from, effective_to,
+        created_at, updated_at, updated_by
     `;
     return row as unknown as PayAssignmentRow;
   }
@@ -342,6 +348,8 @@ export class PayrollConfigRepository {
           epa.effective_from,
           epa.effective_to,
           epa.created_at,
+          epa.updated_at,
+          epa.updated_by,
           ps.name AS schedule_name,
           ps.frequency AS schedule_frequency
         FROM employee_pay_assignments epa
@@ -355,6 +363,7 @@ export class PayrollConfigRepository {
 
   /**
    * Check for overlapping pay assignments for an employee.
+   * Optionally excludes a specific record (for updates).
    * Returns true if an overlap exists.
    */
   async hasOverlappingPayAssignment(
@@ -362,8 +371,21 @@ export class PayrollConfigRepository {
     employeeId: string,
     effectiveFrom: string,
     effectiveTo: string | null | undefined,
-    tx: TransactionSql
+    tx: TransactionSql,
+    excludeId?: string
   ): Promise<boolean> {
+    if (excludeId) {
+      const rows = await tx`
+        SELECT 1 FROM employee_pay_assignments
+        WHERE employee_id = ${employeeId}::uuid
+          AND id != ${excludeId}::uuid
+          AND daterange(effective_from, effective_to, '[]') &&
+              daterange(${effectiveFrom}::date, ${effectiveTo ?? null}::date, '[]')
+        LIMIT 1
+      `;
+      return rows.length > 0;
+    }
+
     const rows = await tx`
       SELECT 1 FROM employee_pay_assignments
       WHERE employee_id = ${employeeId}::uuid
@@ -372,6 +394,144 @@ export class PayrollConfigRepository {
       LIMIT 1
     `;
     return rows.length > 0;
+  }
+
+  // ===========================================================================
+  // Employee Pay Assignments - Find by ID
+  // ===========================================================================
+
+  /**
+   * Find a single pay assignment by ID (with schedule details)
+   */
+  async findPayAssignmentById(
+    ctx: TenantContext,
+    id: string
+  ): Promise<PayAssignmentRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          epa.id,
+          epa.tenant_id,
+          epa.employee_id,
+          epa.pay_schedule_id,
+          epa.effective_from,
+          epa.effective_to,
+          epa.created_at,
+          epa.updated_at,
+          epa.updated_by,
+          ps.name AS schedule_name,
+          ps.frequency AS schedule_frequency
+        FROM employee_pay_assignments epa
+        JOIN pay_schedules ps ON ps.id = epa.pay_schedule_id
+        WHERE epa.id = ${id}::uuid
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as PayAssignmentRow;
+  }
+
+  /**
+   * Find the current (active) pay assignment for an employee.
+   * Current means effective_from <= today AND (effective_to IS NULL OR effective_to >= today).
+   */
+  async findCurrentPayAssignment(
+    ctx: TenantContext,
+    employeeId: string
+  ): Promise<PayAssignmentRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          epa.id,
+          epa.tenant_id,
+          epa.employee_id,
+          epa.pay_schedule_id,
+          epa.effective_from,
+          epa.effective_to,
+          epa.created_at,
+          epa.updated_at,
+          epa.updated_by,
+          ps.name AS schedule_name,
+          ps.frequency AS schedule_frequency
+        FROM employee_pay_assignments epa
+        JOIN pay_schedules ps ON ps.id = epa.pay_schedule_id
+        WHERE epa.employee_id = ${employeeId}::uuid
+          AND epa.effective_from <= CURRENT_DATE
+          AND (epa.effective_to IS NULL OR epa.effective_to >= CURRENT_DATE)
+        ORDER BY epa.effective_from DESC
+        LIMIT 1
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as PayAssignmentRow;
+  }
+
+  // ===========================================================================
+  // Employee Pay Assignments - Update
+  // ===========================================================================
+
+  /**
+   * Update an existing pay assignment.
+   * Supports partial updates: change schedule, adjust dates, or end assignment.
+   */
+  async updatePayAssignment(
+    ctx: TenantContext,
+    id: string,
+    data: UpdatePayAssignment,
+    tx: TransactionSql
+  ): Promise<PayAssignmentRow | null> {
+    const [row] = await tx`
+      UPDATE employee_pay_assignments
+      SET
+        pay_schedule_id = CASE
+          WHEN ${data.pay_schedule_id !== undefined} THEN ${data.pay_schedule_id ?? null}::uuid
+          ELSE pay_schedule_id
+        END,
+        effective_from = CASE
+          WHEN ${data.effective_from !== undefined} THEN ${data.effective_from ?? null}::date
+          ELSE effective_from
+        END,
+        effective_to = CASE
+          WHEN ${data.effective_to !== undefined} THEN ${data.effective_to ?? null}::date
+          ELSE effective_to
+        END,
+        updated_by = ${ctx.userId ?? null}::uuid
+      WHERE id = ${id}::uuid
+      RETURNING
+        id, tenant_id, employee_id, pay_schedule_id,
+        effective_from, effective_to,
+        created_at, updated_at, updated_by
+    `;
+
+    if (!row) return null;
+    return row as unknown as PayAssignmentRow;
+  }
+
+  // ===========================================================================
+  // Employee Pay Assignments - Delete
+  // ===========================================================================
+
+  /**
+   * Delete a pay assignment by ID.
+   * Returns the deleted row for audit purposes, or null if not found.
+   */
+  async deletePayAssignment(
+    ctx: TenantContext,
+    id: string,
+    tx: TransactionSql
+  ): Promise<PayAssignmentRow | null> {
+    const [row] = await tx`
+      DELETE FROM employee_pay_assignments
+      WHERE id = ${id}::uuid
+      RETURNING
+        id, tenant_id, employee_id, pay_schedule_id,
+        effective_from, effective_to,
+        created_at, updated_at, updated_by
+    `;
+
+    if (!row) return null;
+    return row as unknown as PayAssignmentRow;
   }
 
   // ===========================================================================
@@ -404,7 +564,7 @@ export class PayrollConfigRepository {
       )
       RETURNING
         id, tenant_id, employee_id, category_letter,
-        effective_from, effective_to, notes, created_at
+        effective_from, effective_to, notes, created_at, updated_at
     `;
     return row as unknown as NiCategoryRow;
   }
@@ -412,6 +572,27 @@ export class PayrollConfigRepository {
   // ===========================================================================
   // NI Categories - Read
   // ===========================================================================
+
+  /**
+   * Find a single NI category record by ID
+   */
+  async findNiCategoryById(
+    ctx: TenantContext,
+    id: string
+  ): Promise<NiCategoryRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, employee_id, category_letter,
+          effective_from, effective_to, notes, created_at, updated_at
+        FROM ni_categories
+        WHERE id = ${id}::uuid
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as NiCategoryRow;
+  }
 
   /**
    * Find current and historical NI categories for an employee
@@ -424,7 +605,7 @@ export class PayrollConfigRepository {
       return await tx`
         SELECT
           id, tenant_id, employee_id, category_letter,
-          effective_from, effective_to, notes, created_at
+          effective_from, effective_to, notes, created_at, updated_at
         FROM ni_categories
         WHERE employee_id = ${employeeId}::uuid
         ORDER BY effective_from DESC
@@ -434,7 +615,34 @@ export class PayrollConfigRepository {
   }
 
   /**
+   * Find the current (active) NI category for an employee.
+   * Current means effective_from <= today AND (effective_to IS NULL OR effective_to >= today).
+   */
+  async findCurrentNiCategory(
+    ctx: TenantContext,
+    employeeId: string
+  ): Promise<NiCategoryRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, employee_id, category_letter,
+          effective_from, effective_to, notes, created_at, updated_at
+        FROM ni_categories
+        WHERE employee_id = ${employeeId}::uuid
+          AND effective_from <= CURRENT_DATE
+          AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+        ORDER BY effective_from DESC
+        LIMIT 1
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as NiCategoryRow;
+  }
+
+  /**
    * Check for overlapping NI category records for an employee.
+   * Optionally excludes a specific record (for updates).
    * Returns true if an overlap exists.
    */
   async hasOverlappingNiCategory(
@@ -442,8 +650,21 @@ export class PayrollConfigRepository {
     employeeId: string,
     effectiveFrom: string,
     effectiveTo: string | null | undefined,
-    tx: TransactionSql
+    tx: TransactionSql,
+    excludeId?: string
   ): Promise<boolean> {
+    if (excludeId) {
+      const rows = await tx`
+        SELECT 1 FROM ni_categories
+        WHERE employee_id = ${employeeId}::uuid
+          AND id != ${excludeId}::uuid
+          AND daterange(effective_from, effective_to, '[]') &&
+              daterange(${effectiveFrom}::date, ${effectiveTo ?? null}::date, '[]')
+        LIMIT 1
+      `;
+      return rows.length > 0;
+    }
+
     const rows = await tx`
       SELECT 1 FROM ni_categories
       WHERE employee_id = ${employeeId}::uuid
@@ -452,5 +673,69 @@ export class PayrollConfigRepository {
       LIMIT 1
     `;
     return rows.length > 0;
+  }
+
+  // ===========================================================================
+  // NI Categories - Update
+  // ===========================================================================
+
+  /**
+   * Update an existing NI category record
+   */
+  async updateNiCategory(
+    ctx: TenantContext,
+    id: string,
+    data: UpdateNiCategory,
+    tx: TransactionSql
+  ): Promise<NiCategoryRow | null> {
+    const [row] = await tx`
+      UPDATE ni_categories
+      SET
+        category_letter = COALESCE(${data.category_letter ?? null}, category_letter),
+        effective_from = CASE
+          WHEN ${data.effective_from !== undefined} THEN ${data.effective_from ?? null}::date
+          ELSE effective_from
+        END,
+        effective_to = CASE
+          WHEN ${data.effective_to !== undefined} THEN ${data.effective_to ?? null}::date
+          ELSE effective_to
+        END,
+        notes = CASE
+          WHEN ${data.notes !== undefined} THEN ${data.notes ?? null}
+          ELSE notes
+        END
+      WHERE id = ${id}::uuid
+      RETURNING
+        id, tenant_id, employee_id, category_letter,
+        effective_from, effective_to, notes, created_at, updated_at
+    `;
+
+    if (!row) return null;
+    return row as unknown as NiCategoryRow;
+  }
+
+  // ===========================================================================
+  // NI Categories - Delete
+  // ===========================================================================
+
+  /**
+   * Delete an NI category record by ID.
+   * Returns the deleted row for audit purposes, or null if not found.
+   */
+  async deleteNiCategory(
+    ctx: TenantContext,
+    id: string,
+    tx: TransactionSql
+  ): Promise<NiCategoryRow | null> {
+    const [row] = await tx`
+      DELETE FROM ni_categories
+      WHERE id = ${id}::uuid
+      RETURNING
+        id, tenant_id, employee_id, category_letter,
+        effective_from, effective_to, notes, created_at, updated_at
+    `;
+
+    if (!row) return null;
+    return row as unknown as NiCategoryRow;
   }
 }

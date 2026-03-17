@@ -122,7 +122,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   {this.state.error.message}
                 </p>
                 {this.state.error.stack && (
-                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-500">
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
                     {this.state.error.stack}
                   </pre>
                 )}

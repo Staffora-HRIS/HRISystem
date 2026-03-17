@@ -497,12 +497,12 @@ describe("HR Sub-Modules Integration (RLS)", () => {
         is_primary: boolean;
       }[]>`
         INSERT INTO app.employee_addresses (
-          tenant_id, employee_id, address_type, street_line1,
-          city, postal_code, country, is_primary, effective_from
+          tenant_id, employee_id, address_type, address_line_1,
+          city, postcode, country, is_primary, effective_from
         )
         VALUES (
           ${tenantA.id}::uuid, ${employeeA}::uuid, 'home', '123 High Street',
-          'London', 'SW1A 1AA', 'GBR', true, '2024-01-15'
+          'London', 'SW1A 1AA', 'GB', true, '2024-01-15'
         )
         RETURNING id, address_type, city, is_primary
       `;
@@ -535,16 +535,16 @@ describe("HR Sub-Modules Integration (RLS)", () => {
 
       await setTenantContext(db, tenantA.id, userA.id);
       await resetSystemContext(db);
-      const rows = await db<{ city: string; postal_code: string }[]>`
+      const rows = await db<{ city: string; postcode: string }[]>`
         UPDATE app.employee_addresses
-        SET city = 'Manchester', postal_code = 'M1 1AA'
+        SET city = 'Manchester', postcode = 'M1 1AA'
         WHERE id = ${addressIdA}
-        RETURNING city, postal_code
+        RETURNING city, postcode
       `;
 
       expect(rows).toHaveLength(1);
       expect(rows[0]!.city).toBe("Manchester");
-      expect(rows[0]!.postal_code).toBe("M1 1AA");
+      expect(rows[0]!.postcode).toBe("M1 1AA");
     });
 
     it("RLS: tenant B cannot see tenant A employee addresses", async () => {
@@ -567,12 +567,12 @@ describe("HR Sub-Modules Integration (RLS)", () => {
       try {
         await db`
           INSERT INTO app.employee_addresses (
-            tenant_id, employee_id, address_type, street_line1,
+            tenant_id, employee_id, address_type, address_line_1,
             city, country, effective_from
           )
           VALUES (
             ${tenantA.id}::uuid, ${employeeA}::uuid, 'work', '456 Fake Road',
-            'Birmingham', 'GBR', '2024-01-15'
+            'Birmingham', 'GB', '2024-01-15'
           )
         `;
         throw new Error("Expected RLS error but insert succeeded");
@@ -986,12 +986,12 @@ describe("HR Sub-Modules Integration (RLS)", () => {
 
       const addrB = await db<{ id: string }[]>`
         INSERT INTO app.employee_addresses (
-          tenant_id, employee_id, address_type, street_line1,
+          tenant_id, employee_id, address_type, address_line_1,
           city, country, effective_from
         )
         VALUES (
           ${tenantB.id}::uuid, ${employeeB}::uuid, 'home', '789 Oak Lane',
-          'Edinburgh', 'GBR', '2024-02-01'
+          'Edinburgh', 'GB', '2024-02-01'
         )
         RETURNING id
       `;

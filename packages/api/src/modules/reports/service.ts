@@ -23,16 +23,12 @@ import type {
 // Types
 // =============================================================================
 
-export interface TenantContext {
-  tenantId: string;
-  userId?: string;
-}
+import type {
+  ServiceResult,
+  TenantContext,
+} from "../../types/service-result";
 
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: { code: string; message: string };
-}
+export type { ServiceResult, TenantContext };
 
 export type PaginatedServiceResult<T> = ServiceResult<{
   items: T[];
@@ -682,6 +678,43 @@ export class ReportsService {
         exportFormat: schedule.export_format,
       });
 
+      // Record schedule history
+      const action = report.isScheduled ? "updated" : "created";
+      await this.repository.recordScheduleHistory(tx, {
+        tenantId: ctx.tenantId,
+        reportId: id,
+        action,
+        frequency: schedule.frequency,
+        cron: schedule.cron,
+        time: schedule.time,
+        dayOfWeek: schedule.day_of_week,
+        dayOfMonth: schedule.day_of_month,
+        recipients: schedule.recipients,
+        exportFormat: schedule.export_format,
+        changedBy: ctx.userId!,
+      });
+
+      // Outbox event for schedule creation/update
+      const eventType = report.isScheduled
+        ? "reports.schedule.updated"
+        : "reports.schedule.created";
+      await tx`
+        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+        VALUES (
+          ${crypto.randomUUID()}, ${ctx.tenantId}, 'report', ${id},
+          ${eventType},
+          ${JSON.stringify({
+            reportId: id,
+            reportName: report.name,
+            frequency: schedule.frequency,
+            recipientCount: schedule.recipients.length,
+            exportFormat: schedule.export_format ?? "xlsx",
+            actor: ctx.userId,
+          })}::jsonb,
+          now()
+        )
+      `;
+
       return { success: true, data: updated! };
     });
   }
@@ -691,7 +724,40 @@ export class ReportsService {
     id: string
   ): Promise<ServiceResult<void>> {
     return this.db.withTransaction(ctx, async (tx) => {
+      const report = await this.repository.getReportById(tx, id);
+      if (!report) {
+        return {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Report not found" },
+        };
+      }
+
+      // Record schedule history before removing
+      await this.repository.recordScheduleHistory(tx, {
+        tenantId: ctx.tenantId,
+        reportId: id,
+        action: "removed",
+        frequency: report.scheduleFrequency ?? undefined,
+        changedBy: ctx.userId!,
+      });
+
       await this.repository.removeSchedule(tx, id);
+
+      // Outbox event for schedule removal
+      await tx`
+        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+        VALUES (
+          ${crypto.randomUUID()}, ${ctx.tenantId}, 'report', ${id},
+          'reports.schedule.removed',
+          ${JSON.stringify({
+            reportId: id,
+            reportName: report.name,
+            actor: ctx.userId,
+          })}::jsonb,
+          now()
+        )
+      `;
+
       return { success: true };
     });
   }

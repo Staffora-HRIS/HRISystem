@@ -14,6 +14,10 @@ import type {
   PayrollRunStatus,
   PayrollRunType,
   UpsertTaxDetails,
+  RtiSubmissionType,
+  RtiSubmissionStatus,
+  LockPayrollPeriod,
+  JournalEntriesQuery,
 } from "./schemas";
 
 export type { TenantContext };
@@ -126,6 +130,105 @@ export interface PayAssignmentRow extends Row {
   // Joined fields
   scheduleName?: string;
   scheduleFrequency?: string;
+}
+
+export interface FpsEmployeeDataRow extends Row {
+  payrollLineId: string;
+  employeeId: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: Date | null;
+  gender: string | null;
+  hireDate: Date;
+  niNumber: string | null;
+  currentTaxCode: string | null;
+  currentNiCategory: string | null;
+  studentLoanPlan: string | null;
+  basicPay: string;
+  overtimePay: string;
+  bonusPay: string;
+  totalGross: string;
+  taxDeduction: string;
+  niEmployee: string;
+  niEmployer: string;
+  pensionEmployee: string;
+  pensionEmployer: string;
+  studentLoan: string;
+  otherDeductions: string;
+  totalDeductions: string;
+  netPay: string;
+  snapshotTaxCode: string | null;
+  snapshotNiCategory: string | null;
+  paymentMethod: string;
+}
+
+export interface YtdTotalsRow extends Row {
+  employeeId: string;
+  taxablePayYtd: string;
+  taxDeductedYtd: string;
+  employeeNiYtd: string;
+  employerNiYtd: string;
+  studentLoanYtd: string;
+}
+
+export interface EpsRecoverableRow extends Row {
+  smpRecovered: string;
+  sppRecovered: string;
+  sapRecovered: string;
+  shppRecovered: string;
+  spbpRecovered: string;
+  nicCompensationOnSmp: string;
+  nicCompensationOnSpp: string;
+  nicCompensationOnSap: string;
+  nicCompensationOnShpp: string;
+  nicCompensationOnSpbp: string;
+  cisDeductionsSuffered: string;
+}
+
+export interface RtiSubmissionRow extends Row {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  submissionType: string;
+  status: string;
+  taxYear: string;
+  taxMonth: number | null;
+  taxWeek: number | null;
+  employerPayeRef: string | null;
+  accountsOfficeRef: string | null;
+  generatedAt: Date | null;
+  submittedAt: Date | null;
+  responseAt: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PeriodLockRow extends Row {
+  id: string;
+  tenantId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  lockedAt: Date;
+  lockedBy: string;
+  unlockReason: string | null;
+  unlockedAt: Date | null;
+  unlockedBy: string | null;
+  createdAt: Date;
+}
+
+export interface JournalEntryRow extends Row {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  entryDate: Date;
+  accountCode: string;
+  description: string;
+  debit: string;
+  credit: string;
+  costCentreId: string | null;
+  createdAt: Date;
 }
 
 // =============================================================================
@@ -797,6 +900,241 @@ export class PayrollRepository {
     return rows.length > 0 ? (rows[0] as PayAssignmentRow) : null;
   }
 
+  // ===========================================================================
+  // FPS/EPS Data Gathering for RTI
+  // ===========================================================================
+
+  /**
+   * Get detailed employee payroll data for FPS generation.
+   * Joins payroll_lines with employee personal details and tax details
+   * to produce a complete FPS record per employee.
+   */
+  async getFpsEmployeeData(
+    ctx: TenantContext,
+    runId: string,
+    tx: TransactionSql
+  ): Promise<FpsEmployeeDataRow[]> {
+    const rows = await tx`
+      SELECT
+        pl.id AS payroll_line_id,
+        pl.employee_id,
+        e.employee_number,
+        ep.first_name,
+        ep.last_name,
+        ep.date_of_birth,
+        ep.gender,
+        e.hire_date,
+        etd.ni_number,
+        etd.tax_code AS current_tax_code,
+        etd.ni_category AS current_ni_category,
+        etd.student_loan_plan,
+        pl.basic_pay,
+        pl.overtime_pay,
+        pl.bonus_pay,
+        pl.total_gross,
+        pl.tax_deduction,
+        pl.ni_employee,
+        pl.ni_employer,
+        pl.pension_employee,
+        pl.pension_employer,
+        pl.student_loan,
+        pl.other_deductions,
+        pl.total_deductions,
+        pl.net_pay,
+        pl.tax_code AS snapshot_tax_code,
+        pl.ni_category AS snapshot_ni_category,
+        pl.payment_method
+      FROM payroll_lines pl
+      JOIN employees e ON e.id = pl.employee_id
+      LEFT JOIN LATERAL (
+        SELECT first_name, last_name, date_of_birth, gender
+        FROM employee_personal
+        WHERE employee_id = e.id
+          AND effective_from <= CURRENT_DATE
+          AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+        ORDER BY effective_from DESC
+        LIMIT 1
+      ) ep ON true
+      LEFT JOIN LATERAL (
+        SELECT ni_number, tax_code, ni_category, student_loan_plan
+        FROM employee_tax_details
+        WHERE employee_id = e.id
+          AND effective_from <= CURRENT_DATE
+          AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+        ORDER BY effective_from DESC
+        LIMIT 1
+      ) etd ON true
+      WHERE pl.payroll_run_id = ${runId}::uuid
+      ORDER BY ep.last_name, ep.first_name
+    `;
+    return rows as unknown as FpsEmployeeDataRow[];
+  }
+
+  /**
+   * Get year-to-date totals for employees in a given tax year.
+   * The UK tax year runs from 6 April to 5 April.
+   */
+  async getYtdTotals(
+    ctx: TenantContext,
+    employeeIds: string[],
+    taxYearStart: string,
+    currentRunId: string,
+    tx: TransactionSql
+  ): Promise<Map<string, YtdTotalsRow>> {
+    if (employeeIds.length === 0) return new Map();
+
+    const rows = await tx`
+      SELECT
+        pl.employee_id,
+        COALESCE(SUM(pl.total_gross), 0) AS taxable_pay_ytd,
+        COALESCE(SUM(pl.tax_deduction), 0) AS tax_deducted_ytd,
+        COALESCE(SUM(pl.ni_employee), 0) AS employee_ni_ytd,
+        COALESCE(SUM(pl.ni_employer), 0) AS employer_ni_ytd,
+        COALESCE(SUM(pl.student_loan), 0) AS student_loan_ytd
+      FROM payroll_lines pl
+      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+      WHERE pl.employee_id = ANY(${employeeIds}::uuid[])
+        AND pr.pay_period_start >= ${taxYearStart}::date
+        AND pr.status IN ('review', 'approved', 'submitted', 'paid')
+        AND pr.id != ${currentRunId}::uuid
+      GROUP BY pl.employee_id
+    `;
+
+    const result = new Map<string, YtdTotalsRow>();
+    for (const row of rows) {
+      const r = row as unknown as YtdTotalsRow;
+      result.set(r.employeeId, r);
+    }
+    return result;
+  }
+
+  /**
+   * Get EPS recoverable statutory payments for a period.
+   * Returns zero-filled defaults (actual statutory pay tracking
+   * would come from absence module integration).
+   */
+  async getEpsRecoverableAmounts(
+    ctx: TenantContext,
+    _taxYearStart: string,
+    _periodEnd: string,
+    tx: TransactionSql
+  ): Promise<EpsRecoverableRow> {
+    // In a production system, these would be gathered from the
+    // statutory pay modules (SSP, SMP, SPP, SAP, ShPP, SPBP).
+    // For now, return zero-filled defaults as actual statutory
+    // pay tracking is out of scope for this data preparation endpoint.
+    const rows = await tx`
+      SELECT
+        COALESCE(0, 0) AS smp_recovered,
+        COALESCE(0, 0) AS spp_recovered,
+        COALESCE(0, 0) AS sap_recovered,
+        COALESCE(0, 0) AS shpp_recovered,
+        COALESCE(0, 0) AS spbp_recovered,
+        COALESCE(0, 0) AS nic_compensation_on_smp,
+        COALESCE(0, 0) AS nic_compensation_on_spp,
+        COALESCE(0, 0) AS nic_compensation_on_sap,
+        COALESCE(0, 0) AS nic_compensation_on_shpp,
+        COALESCE(0, 0) AS nic_compensation_on_spbp,
+        COALESCE(0, 0) AS cis_deductions_suffered
+    `;
+    return (rows[0] ?? {
+      smpRecovered: "0.00",
+      sppRecovered: "0.00",
+      sapRecovered: "0.00",
+      shppRecovered: "0.00",
+      spbpRecovered: "0.00",
+      nicCompensationOnSmp: "0.00",
+      nicCompensationOnSpp: "0.00",
+      nicCompensationOnSap: "0.00",
+      nicCompensationOnShpp: "0.00",
+      nicCompensationOnSpbp: "0.00",
+      cisDeductionsSuffered: "0.00",
+    }) as unknown as EpsRecoverableRow;
+  }
+
+  // ===========================================================================
+  // RTI Submission Tracking
+  // ===========================================================================
+
+  async createRtiSubmission(
+    ctx: TenantContext,
+    data: {
+      payrollRunId: string;
+      submissionType: string;
+      status: string;
+      taxYear: string;
+      taxMonth?: number | null;
+      taxWeek?: number | null;
+      employerPayeRef?: string | null;
+      accountsOfficeRef?: string | null;
+      submissionData: Record<string, unknown>;
+      generatedBy?: string | null;
+      submittedBy?: string | null;
+      notes?: string | null;
+      generatedAt?: Date | null;
+      submittedAt?: Date | null;
+    },
+    tx: TransactionSql
+  ): Promise<RtiSubmissionRow> {
+    const [row] = await tx`
+      INSERT INTO payroll_rti_submissions (
+        tenant_id, payroll_run_id,
+        submission_type, status,
+        tax_year, tax_month, tax_week,
+        employer_paye_ref, accounts_office_ref,
+        submission_data,
+        generated_by, submitted_by,
+        notes,
+        generated_at, submitted_at
+      ) VALUES (
+        ${ctx.tenantId}::uuid,
+        ${data.payrollRunId}::uuid,
+        ${data.submissionType}::app.rti_submission_type,
+        ${data.status}::app.rti_submission_status,
+        ${data.taxYear},
+        ${data.taxMonth ?? null},
+        ${data.taxWeek ?? null},
+        ${data.employerPayeRef ?? null},
+        ${data.accountsOfficeRef ?? null},
+        ${JSON.stringify(data.submissionData)}::jsonb,
+        ${data.generatedBy ?? null}::uuid,
+        ${data.submittedBy ?? null}::uuid,
+        ${data.notes ?? null},
+        ${data.generatedAt ?? null}::timestamptz,
+        ${data.submittedAt ?? null}::timestamptz
+      )
+      RETURNING
+        id, tenant_id, payroll_run_id,
+        submission_type, status,
+        tax_year, tax_month, tax_week,
+        employer_paye_ref, accounts_office_ref,
+        generated_at, submitted_at, response_at,
+        notes, created_at, updated_at
+    `;
+    return row as unknown as RtiSubmissionRow;
+  }
+
+  async findRtiSubmissionsByRunId(
+    ctx: TenantContext,
+    runId: string
+  ): Promise<RtiSubmissionRow[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, payroll_run_id,
+          submission_type, status,
+          tax_year, tax_month, tax_week,
+          employer_paye_ref, accounts_office_ref,
+          generated_at, submitted_at, response_at,
+          notes, created_at, updated_at
+        FROM payroll_rti_submissions
+        WHERE payroll_run_id = ${runId}::uuid
+        ORDER BY created_at DESC
+      `;
+    });
+    return rows as unknown as RtiSubmissionRow[];
+  }
+
   async hasOverlappingTaxDetails(
     ctx: TenantContext,
     employeeId: string,
@@ -814,5 +1152,299 @@ export class PayrollRepository {
       LIMIT 1
     `;
     return rows.length > 0;
+  }
+
+  // ===========================================================================
+  // Payroll Period Locks
+  // ===========================================================================
+
+  /**
+   * Create a new period lock.
+   */
+  async createPeriodLock(
+    ctx: TenantContext,
+    data: LockPayrollPeriod,
+    tx: TransactionSql
+  ): Promise<PeriodLockRow> {
+    const [row] = await tx`
+      INSERT INTO payroll_period_locks (
+        tenant_id,
+        period_start,
+        period_end,
+        locked_by
+      ) VALUES (
+        ${ctx.tenantId}::uuid,
+        ${data.period_start}::date,
+        ${data.period_end}::date,
+        ${ctx.userId ?? null}::uuid
+      )
+      RETURNING
+        id, tenant_id, period_start, period_end,
+        locked_at, locked_by, unlock_reason,
+        unlocked_at, unlocked_by, created_at
+    `;
+    return row as unknown as PeriodLockRow;
+  }
+
+  /**
+   * Find a period lock by ID.
+   */
+  async findPeriodLockById(
+    ctx: TenantContext,
+    id: string
+  ): Promise<PeriodLockRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, period_start, period_end,
+          locked_at, locked_by, unlock_reason,
+          unlocked_at, unlocked_by, created_at
+        FROM payroll_period_locks
+        WHERE id = ${id}::uuid
+      `;
+    });
+
+    if (rows.length === 0) return null;
+    return rows[0] as unknown as PeriodLockRow;
+  }
+
+  /**
+   * Find active (not unlocked) period locks that overlap with the given date range.
+   */
+  async findActiveLocksForPeriod(
+    ctx: TenantContext,
+    periodStart: string,
+    periodEnd: string
+  ): Promise<PeriodLockRow[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, period_start, period_end,
+          locked_at, locked_by, unlock_reason,
+          unlocked_at, unlocked_by, created_at
+        FROM payroll_period_locks
+        WHERE unlocked_at IS NULL
+          AND daterange(period_start, period_end, '[]') &&
+              daterange(${periodStart}::date, ${periodEnd}::date, '[]')
+        ORDER BY period_start ASC
+      `;
+    });
+
+    return rows as unknown as PeriodLockRow[];
+  }
+
+  /**
+   * List period locks with optional filters.
+   */
+  async listPeriodLocks(
+    ctx: TenantContext,
+    filters: {
+      periodStart?: string;
+      periodEnd?: string;
+      activeOnly?: boolean;
+    } = {}
+  ): Promise<PeriodLockRow[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, period_start, period_end,
+          locked_at, locked_by, unlock_reason,
+          unlocked_at, unlocked_by, created_at
+        FROM payroll_period_locks
+        WHERE 1=1
+          ${filters.activeOnly ? tx`AND unlocked_at IS NULL` : tx``}
+          ${filters.periodStart ? tx`AND period_end >= ${filters.periodStart}::date` : tx``}
+          ${filters.periodEnd ? tx`AND period_start <= ${filters.periodEnd}::date` : tx``}
+        ORDER BY period_start DESC
+      `;
+    });
+
+    return rows as unknown as PeriodLockRow[];
+  }
+
+  /**
+   * Unlock a period lock by setting unlocked_at, unlocked_by, and unlock_reason.
+   */
+  async unlockPeriodLock(
+    ctx: TenantContext,
+    id: string,
+    unlockReason: string,
+    tx: TransactionSql
+  ): Promise<PeriodLockRow | null> {
+    const [row] = await tx`
+      UPDATE payroll_period_locks
+      SET
+        unlock_reason = ${unlockReason},
+        unlocked_at = now(),
+        unlocked_by = ${ctx.userId ?? null}::uuid
+      WHERE id = ${id}::uuid
+        AND unlocked_at IS NULL
+      RETURNING
+        id, tenant_id, period_start, period_end,
+        locked_at, locked_by, unlock_reason,
+        unlocked_at, unlocked_by, created_at
+    `;
+
+    if (!row) return null;
+    return row as unknown as PeriodLockRow;
+  }
+
+  // ===========================================================================
+  // Journal Entries (TODO-233)
+  // ===========================================================================
+
+  /**
+   * Insert multiple journal entry rows in a single batch.
+   * Used by the service to generate all journal lines atomically
+   * within the same transaction as the outbox event.
+   */
+  async insertJournalEntries(
+    ctx: TenantContext,
+    entries: Array<{
+      payrollRunId: string;
+      entryDate: string;
+      accountCode: string;
+      description: string;
+      debit: string;
+      credit: string;
+      costCentreId: string | null;
+    }>,
+    tx: TransactionSql
+  ): Promise<JournalEntryRow[]> {
+    if (entries.length === 0) return [];
+
+    const rows: JournalEntryRow[] = [];
+    for (const entry of entries) {
+      const [row] = await tx`
+        INSERT INTO payroll_journal_entries (
+          tenant_id, payroll_run_id, entry_date,
+          account_code, description, debit, credit,
+          cost_centre_id
+        ) VALUES (
+          ${ctx.tenantId}::uuid,
+          ${entry.payrollRunId}::uuid,
+          ${entry.entryDate}::date,
+          ${entry.accountCode},
+          ${entry.description},
+          ${entry.debit}::numeric,
+          ${entry.credit}::numeric,
+          ${entry.costCentreId}::uuid
+        )
+        RETURNING
+          id, tenant_id, payroll_run_id, entry_date,
+          account_code, description, debit, credit,
+          cost_centre_id, created_at
+      `;
+      rows.push(row as unknown as JournalEntryRow);
+    }
+    return rows;
+  }
+
+  /**
+   * Check whether journal entries already exist for a given payroll run.
+   * Used to enforce idempotency: journals can only be generated once per run.
+   */
+  async hasJournalEntriesForRun(
+    ctx: TenantContext,
+    payrollRunId: string,
+    tx: TransactionSql
+  ): Promise<boolean> {
+    const rows = await tx`
+      SELECT 1 FROM payroll_journal_entries
+      WHERE payroll_run_id = ${payrollRunId}::uuid
+      LIMIT 1
+    `;
+    return rows.length > 0;
+  }
+
+  /**
+   * Get journal entries for a specific payroll run.
+   */
+  async findJournalEntriesByRunId(
+    ctx: TenantContext,
+    runId: string
+  ): Promise<JournalEntryRow[]> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, payroll_run_id, entry_date,
+          account_code, description, debit, credit,
+          cost_centre_id, created_at
+        FROM payroll_journal_entries
+        WHERE payroll_run_id = ${runId}::uuid
+        ORDER BY account_code, created_at
+      `;
+    });
+    return rows as unknown as JournalEntryRow[];
+  }
+
+  /**
+   * List journal entries with filters and cursor-based pagination.
+   * Supports filtering by payroll_run_id, period (entry_date range),
+   * account_code, and cost_centre_id.
+   */
+  async listJournalEntries(
+    ctx: TenantContext,
+    filters: JournalEntriesQuery
+  ): Promise<PaginatedResult<JournalEntryRow>> {
+    const limit = filters.limit ?? 50;
+    const fetchLimit = limit + 1;
+
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          id, tenant_id, payroll_run_id, entry_date,
+          account_code, description, debit, credit,
+          cost_centre_id, created_at
+        FROM payroll_journal_entries
+        WHERE 1=1
+          ${filters.payroll_run_id ? tx`AND payroll_run_id = ${filters.payroll_run_id}::uuid` : tx``}
+          ${filters.period_start ? tx`AND entry_date >= ${filters.period_start}::date` : tx``}
+          ${filters.period_end ? tx`AND entry_date <= ${filters.period_end}::date` : tx``}
+          ${filters.account_code ? tx`AND account_code = ${filters.account_code}` : tx``}
+          ${filters.cost_centre_id ? tx`AND cost_centre_id = ${filters.cost_centre_id}::uuid` : tx``}
+          ${filters.cursor ? tx`AND created_at < ${new Date(filters.cursor)}::timestamptz` : tx``}
+        ORDER BY entry_date DESC, created_at DESC
+        LIMIT ${fetchLimit}
+      `;
+    });
+
+    const items = rows.slice(0, limit) as unknown as JournalEntryRow[];
+    const hasMore = rows.length > limit;
+    const nextCursor = hasMore && items.length > 0
+      ? items[items.length - 1].createdAt.toISOString()
+      : null;
+
+    return { items, nextCursor, hasMore };
+  }
+
+  /**
+   * Get debit/credit totals for journal entries matching the given filters.
+   * Used to provide the summary in the list response.
+   */
+  async getJournalEntriesTotals(
+    ctx: TenantContext,
+    filters: JournalEntriesQuery
+  ): Promise<{ totalDebits: string; totalCredits: string }> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT
+          COALESCE(SUM(debit), 0) AS total_debits,
+          COALESCE(SUM(credit), 0) AS total_credits
+        FROM payroll_journal_entries
+        WHERE 1=1
+          ${filters.payroll_run_id ? tx`AND payroll_run_id = ${filters.payroll_run_id}::uuid` : tx``}
+          ${filters.period_start ? tx`AND entry_date >= ${filters.period_start}::date` : tx``}
+          ${filters.period_end ? tx`AND entry_date <= ${filters.period_end}::date` : tx``}
+          ${filters.account_code ? tx`AND account_code = ${filters.account_code}` : tx``}
+          ${filters.cost_centre_id ? tx`AND cost_centre_id = ${filters.cost_centre_id}::uuid` : tx``}
+      `;
+    });
+
+    const row = rows[0] as { totalDebits: string; totalCredits: string };
+    return {
+      totalDebits: String(row.totalDebits),
+      totalCredits: String(row.totalCredits),
+    };
   }
 }

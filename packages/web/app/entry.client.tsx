@@ -24,8 +24,24 @@ export function startClientHydration() {
   });
 }
 
+/**
+ * Register the service worker for PWA support.
+ * Registration happens after hydration so it does not block the critical path.
+ */
+function registerServiceWorker() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch((error) => {
+        // Registration failure is non-fatal; log and move on.
+        console.warn("Service worker registration failed:", error);
+      });
+    });
+  }
+}
+
 // In Vitest, we want to be able to import this module without triggering hydration.
 // Vitest injects `import.meta.vitest` during test runs.
 if (!(import.meta as any).vitest) {
   startClientHydration();
+  registerServiceWorker();
 }

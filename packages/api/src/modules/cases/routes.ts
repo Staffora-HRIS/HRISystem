@@ -191,11 +191,13 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
   })
 
   // ===========================================================================
-  // Appeal Routes
+  // Appeal Routes (ACAS Code of Practice compliant)
+  //
+  // ACAS Code para 26-27: right to appeal, heard by different manager.
   // ===========================================================================
 
-  // POST /:id/appeal - File an appeal against a resolved case
-  .post("/:id/appeal", async (ctx) => {
+  // POST /:id/appeals - File an appeal against a resolved case
+  .post("/:id/appeals", async (ctx) => {
     const { casesService, tenantContext, params, body, set } = ctx as any;
 
     const result = await casesService.fileAppeal(tenantContext, params.id, body);
@@ -211,18 +213,42 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     params: t.Object({ id: UuidSchema }),
     body: t.Object({
       reason: t.String({ minLength: 1, maxLength: 5000 }),
-      appealReviewerId: t.Optional(UuidSchema),
+      appealGrounds: t.Optional(t.String({ maxLength: 10000 })),
+      hearingOfficerId: t.Optional(UuidSchema),
+      hearingDate: t.Optional(t.String({ format: "date-time" })),
     }),
     beforeHandle: [requirePermission("cases", "write")],
     detail: {
       tags: ["Cases"],
       summary: "File case appeal",
-      description: "File an appeal against a resolved case. Only the original requester can appeal.",
+      description: "File an appeal against a resolved case. The hearing officer (if specified) must be a different person from the original decision maker per ACAS Code para 27.",
     },
   })
 
-  // GET /:id/appeal - Get the appeal for a case
-  .get("/:id/appeal", async (ctx) => {
+  // GET /:id/appeals - Get all appeals for a case
+  .get("/:id/appeals", async (ctx) => {
+    const { casesService, tenantContext, params, set } = ctx as any;
+
+    const result = await casesService.listAppeals(tenantContext, params.id);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return { appeals: result.data, count: result.data!.length };
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("cases", "read")],
+    detail: {
+      tags: ["Cases"],
+      summary: "List case appeals",
+      description: "Get all appeals for a case, ordered by most recent first.",
+    },
+  })
+
+  // GET /:id/appeals/latest - Get the most recent appeal for a case
+  .get("/:id/appeals/latest", async (ctx) => {
     const { casesService, tenantContext, params, set } = ctx as any;
 
     const result = await casesService.getAppeal(tenantContext, params.id);
@@ -238,13 +264,13 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
     beforeHandle: [requirePermission("cases", "read")],
     detail: {
       tags: ["Cases"],
-      summary: "Get case appeal",
+      summary: "Get latest case appeal",
       description: "Get the most recent appeal for a case.",
     },
   })
 
-  // POST /:id/appeal/decide - Decide an appeal outcome
-  .post("/:id/appeal/decide", async (ctx) => {
+  // PATCH /:id/appeals/decide - Decide an appeal outcome
+  .patch("/:id/appeals/decide", async (ctx) => {
     const { casesService, tenantContext, params, body, set } = ctx as any;
 
     const result = await casesService.decideAppeal(tenantContext, params.id, body);
@@ -263,13 +289,66 @@ export const casesRoutes = new Elysia({ prefix: "/cases" })
         t.Literal("overturned"),
         t.Literal("partially_upheld"),
       ]),
-      outcome: t.String({ minLength: 1, maxLength: 5000 }),
+      outcomeNotes: t.String({ minLength: 1, maxLength: 5000 }),
+      hearingOfficerId: t.Optional(UuidSchema),
     }),
     beforeHandle: [requirePermission("cases", "write")],
     detail: {
       tags: ["Cases"],
       summary: "Decide case appeal",
-      description: "Decide the outcome of a pending appeal. Overturned appeals reopen the case; upheld/partially upheld close it.",
+      description: "Decide the outcome of a pending appeal. The deciding officer must NOT be the original decision maker (ACAS Code para 27). Overturned appeals reopen the case; upheld/partially upheld close it.",
+    },
+  })
+
+  // Keep backward-compatible aliases for the old routes
+  // POST /:id/appeal -> redirect to /:id/appeals
+  .post("/:id/appeal", async (ctx) => {
+    const { casesService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await casesService.fileAppeal(tenantContext, params.id, body);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    set.status = 201;
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: t.Object({
+      reason: t.String({ minLength: 1, maxLength: 5000 }),
+      appealGrounds: t.Optional(t.String({ maxLength: 10000 })),
+      hearingOfficerId: t.Optional(UuidSchema),
+      hearingDate: t.Optional(t.String({ format: "date-time" })),
+    }),
+    beforeHandle: [requirePermission("cases", "write")],
+    detail: {
+      tags: ["Cases"],
+      summary: "File case appeal (legacy)",
+      description: "Legacy route. Use POST /:id/appeals instead.",
+    },
+  })
+
+  // GET /:id/appeal -> redirect to /:id/appeals/latest
+  .get("/:id/appeal", async (ctx) => {
+    const { casesService, tenantContext, params, set } = ctx as any;
+
+    const result = await casesService.getAppeal(tenantContext, params.id);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, CASES_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("cases", "read")],
+    detail: {
+      tags: ["Cases"],
+      summary: "Get case appeal (legacy)",
+      description: "Legacy route. Use GET /:id/appeals/latest instead.",
     },
   })
 

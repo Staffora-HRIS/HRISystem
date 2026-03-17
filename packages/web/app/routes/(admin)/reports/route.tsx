@@ -90,7 +90,7 @@ export default function ReportsLibraryPage() {
   } = useQuery({
     queryKey: [...queryKeys.reports.list(), search, categoryFilter, typeFilter],
     queryFn: () =>
-      api.get<{ data: ReportDef[]; total: number }>("/api/v1/reports", {
+      api.get<{ data: ReportDef[]; total: number }>("/reports", {
         params: {
           ...(search && { search }),
           ...(categoryFilter && { category: categoryFilter }),

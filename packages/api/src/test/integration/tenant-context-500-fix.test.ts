@@ -28,21 +28,7 @@ import {
   type TestUser,
 } from "../setup";
 import * as bcrypt from "bcryptjs";
-
-/**
- * Helper to build cookie header from response
- */
-function buildCookieHeader(response: Response): string {
-  const cookies: string[] = [];
-  response.headers.forEach((value, key) => {
-    if (key.toLowerCase() === "set-cookie") {
-      const cookieName = value.split("=")[0];
-      const cookieValue = value.split(";")[0];
-      cookies.push(cookieValue);
-    }
-  });
-  return cookies.join("; ");
-}
+import { buildCookieHeader } from "../helpers/cookies";
 
 describe("Tenant Context 500 Error Fix", () => {
   let db: ReturnType<typeof getTestDb> | null = null;
