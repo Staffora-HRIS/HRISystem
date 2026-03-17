@@ -380,3 +380,180 @@ When adding new UI elements to the Staffora frontend:
 5. **Disabled states** are exempt from contrast requirements but should still be visually distinguishable from their enabled counterparts.
 6. **Placeholder text** is exempt but should be visually distinct from user-entered content.
 7. **Large text** (>=18px regular, >=14px bold) needs only 3:1 contrast.
+
+---
+
+# Focus Management Audit (TODO-187)
+
+**Audit date:** 2026-03-17
+**Standard:** WCAG 2.1 Level AA (SC 2.1.1 Keyboard, SC 2.4.3 Focus Order, SC 2.4.7 Focus Visible)
+**Scope:** All dynamic/interactive UI patterns: Modal, Toast, Tabs, DataTable, Dropdown menus
+
+## Summary
+
+| Pattern | Issue found | Fix applied | Status |
+|---------|-----------|-------------|--------|
+| Modal (focus trap) | No focus trap, no focus restore | Added `useFocusTrap` hook integration | FIXED |
+| Modal (ARIA) | `role="dialog"` on wrapper div, not content | Moved `role="dialog"` and `aria-modal` to the content panel | FIXED |
+| Toast | Used `role="alert"` (steals SR attention) | Changed to `role="status"` + `aria-live="polite"` container | FIXED |
+| Toast (focus) | Action/dismiss buttons lacked visible focus rings | Added `focus:ring` classes | FIXED |
+| Tabs (keyboard) | No arrow key navigation between tabs | Added `useRovingTabindex` hook + `aria-orientation` | FIXED |
+| Tabs (tabindex) | All tabs had implicit tabindex=0 | Active tab gets `tabindex=0`, inactive get `tabindex=-1` | FIXED |
+| Tabs (ARIA linkage) | Hard-coded `panel-{value}` IDs could collide | Generated unique IDs with `useId()` + proper `aria-controls`/`aria-labelledby` | FIXED |
+| TabsContent | Missing `tabindex`, `aria-labelledby` | Added `tabindex=0` and `aria-labelledby` pointing to tab trigger | FIXED |
+| DataTable (sortable headers) | Sort activated by click only, no keyboard | Added `tabindex=0`, `onKeyDown` for Enter/Space, `aria-sort` | FIXED |
+| Dropdown menus (app-layout) | No focus restore to trigger on close | Added `useRef` + `requestAnimationFrame` focus restore | FIXED |
+| Dropdown menus (app-layout) | No arrow key navigation in menu | Added `ArrowDown`/`ArrowUp`/`Home`/`End` key handler | FIXED |
+| Dropdown menus (app-layout) | Menu items lacked `tabIndex={-1}` | Added `tabIndex={-1}` so arrow keys control focus, not Tab | FIXED |
+| Dropdown menus (admin-layout) | Same issues as app-layout | Same fixes applied | FIXED |
+| Dropdown menus (manager-layout) | Same issues + missing `aria-expanded`, `role="menu"` | Added full ARIA attributes + focus management | FIXED |
+
+## Hooks Created
+
+### `useFocusTrap<T extends HTMLElement>(options?)`
+
+**File:** `packages/web/app/hooks/use-focus-trap.ts`
+
+Traps Tab/Shift+Tab focus within a container. Returns a `RefObject` to attach to the trap container.
+
+**Options:**
+- `enabled` (boolean, default `true`) -- whether the trap is active
+- `autoFocus` (boolean, default `true`) -- auto-focus first focusable element
+- `restoreFocus` (boolean, default `true`) -- restore focus to previously focused element on unmount
+- `initialFocusSelector` (string, optional) -- CSS selector for the element to receive initial focus
+
+**Usage:**
+```tsx
+const trapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen });
+return <div ref={trapRef}>...</div>;
+```
+
+### `useFocusRestore(enabled?)`
+
+Saves `document.activeElement` on mount, restores focus on unmount. Lightweight alternative when a full trap is not needed (e.g., dropdown menus that use their own arrow key handling).
+
+### `useRovingTabindex(options?)`
+
+Returns a `onKeyDown` handler for containers that implement the roving tabindex pattern. Navigates among child elements matching `[role="tab"]`, `[role="menuitem"]`, `[role="option"]`, or `[data-roving-item]`.
+
+**Options:**
+- `orientation` (`"horizontal"` | `"vertical"` | `"both"`, default `"horizontal"`)
+- `homeEnd` (boolean, default `true`) -- whether Home/End keys jump to first/last
+- `loop` (boolean, default `true`) -- whether navigation wraps around
+
+## Component Changes Detail
+
+### Modal (`packages/web/app/components/ui/modal.tsx`)
+
+**Before:** No focus management. `role="dialog"` placed on the outer overlay wrapper. No ARIA labelling props.
+
+**After:**
+- Integrated `useFocusTrap` hook on the modal content panel
+- Focus automatically moves to the first focusable element inside the modal on open
+- Tab/Shift+Tab cycles through focusable elements without escaping
+- Focus restores to the previously focused element when the modal closes
+- `role="dialog"` and `aria-modal="true"` moved to the content panel (correct per WAI-ARIA)
+- Added `aria-label`, `aria-labelledby`, `aria-describedby`, and `initialFocusSelector` props
+
+### Toast (`packages/web/app/components/ui/toast.tsx`)
+
+**Before:** Individual toasts used `role="alert"`, which forces immediate announcement and can interrupt screen reader users. Container used `role="region"`. No visible focus rings on action/dismiss buttons.
+
+**After:**
+- Container uses `role="log"` + `aria-live="polite"` + `aria-relevant="additions"` for non-intrusive announcements
+- Individual toasts use `role="status"` + `aria-atomic="true"` for polite reading
+- Icon spans have `aria-hidden="true"` since they are decorative
+- Action and dismiss buttons have visible focus ring styles (`focus:ring-2 focus:ring-primary-500`)
+- Dismiss button label includes the toast title for screen reader context
+
+### Tabs (`packages/web/app/components/ui/tabs.tsx`)
+
+**Before:** No arrow key navigation. All tabs had implicit `tabindex=0`. Panel IDs could collide across multiple Tabs instances on the same page. No `aria-labelledby` on panels. No `tabindex` on panels.
+
+**After:**
+- `TabsList` wires `useRovingTabindex({ orientation: "horizontal" })` for Left/Right/Home/End key navigation
+- `TabsList` has `aria-orientation="horizontal"`
+- Active `TabsTrigger` gets `tabindex=0`, inactive get `tabindex=-1` (roving tabindex pattern)
+- `TabsTrigger` has `id` and `aria-controls` using `useId()`-generated unique prefix
+- `TabsTrigger` has `focus-visible:ring-2` for visible keyboard focus
+- `TabsContent` has matching `id`, `aria-labelledby` pointing to its tab, and `tabindex=0` to be reachable
+
+### DataTable (`packages/web/app/components/ui/table.tsx`)
+
+**Before:** Sortable column headers only responded to mouse click. No keyboard activation. No `aria-sort`.
+
+**After:**
+- Sortable headers have `tabindex=0` for keyboard focus
+- `onKeyDown` handler activates sort on Enter or Space
+- `aria-sort` set to `"ascending"`, `"descending"`, or `"none"` as appropriate
+- `focus-within:ring-2` style for visible focus indication on sortable headers
+
+### Dropdown Menus (app-layout, admin-layout, manager-layout)
+
+**Before:** Escape key closed menus but focus was lost (moved to body). No arrow key navigation. Menu items had no explicit `tabIndex`. No `aria-label` on menu containers.
+
+**After (all three layouts):**
+- Trigger buttons have `ref` for focus restoration
+- Menu containers have `ref` for auto-focus-first-item
+- `closeUserMenu()` / `closeTenantMenu()` restore focus to trigger via `requestAnimationFrame`
+- `handleMenuKeyDown()` handles ArrowDown, ArrowUp, Home, End
+- Menu items have `tabIndex={-1}` (focus managed by arrow keys, not Tab)
+- Menu items have `focus:bg-gray-100 focus:outline-none` for visible focus
+- Menu containers have `aria-label` for screen reader context
+- Manager layout now has `aria-expanded` and `aria-haspopup` on trigger (was missing)
+
+## Test Coverage
+
+**File:** `packages/web/app/__tests__/hooks/use-focus-trap.test.ts`
+
+42 tests covering:
+- Focus trap selector completeness (includes all interactive element types, excludes disabled and `tabindex=-1`)
+- Tab wrapping logic (Shift+Tab from first to last, Tab from last to first, middle navigation)
+- Roving tabindex navigation (ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Home, End)
+- Loop vs non-loop behavior
+- Orientation filtering (horizontal ignores ArrowUp/Down, vertical ignores ArrowLeft/Right)
+- Tabindex management (active=0, inactive=-1)
+- Menu dropdown focus patterns (arrow key cycling, wrapping, Home/End)
+- Focus restoration logic (connected vs disconnected elements)
+- Toast accessibility patterns (role=status, aria-live=polite, aria-atomic)
+- Tabs accessibility patterns (tabindex management, ID generation, aria-orientation)
+- DataTable accessibility patterns (aria-sort values, Enter/Space activation, focusability)
+
+## How to Verify Manually
+
+### Modal Focus Trap
+1. Open any modal (e.g., "Add Employee" on the employees page)
+2. Press Tab repeatedly -- focus should cycle within the modal and never escape to page content behind
+3. Press Shift+Tab -- focus should cycle backwards within the modal
+4. Press Escape -- modal should close and focus should return to the button that opened it
+5. Verify the close button (X) is reachable by Tab
+
+### Toast Non-Intrusive Behaviour
+1. Trigger an action that shows a toast (e.g., saving a form)
+2. Verify focus does NOT move to the toast -- it should remain on the element the user was interacting with
+3. If the toast has an action button, Tab to it and press Enter -- it should work
+4. Tab to the dismiss button -- it should have a visible focus ring
+
+### Tabs Arrow Key Navigation
+1. Navigate to a page with tabs (e.g., employee detail with "General", "Contracts", "History" tabs)
+2. Tab to the tab bar -- the active tab should receive focus
+3. Press ArrowRight -- focus should move to the next tab and activate it
+4. Press ArrowLeft -- focus should move to the previous tab
+5. Press End -- focus should jump to the last tab
+6. Press Home -- focus should jump to the first tab
+7. At the last tab, press ArrowRight -- focus should wrap to the first tab
+
+### DataTable Sort Headers
+1. Navigate to a page with a DataTable (e.g., employee list)
+2. Tab to a sortable column header -- it should show a focus ring
+3. Press Enter or Space -- the column should sort
+4. Press Enter or Space again -- sort direction should toggle
+5. Tab to the next sortable header -- focus ring should move
+
+### Dropdown Menus
+1. In the top-right header area, Tab to the user menu avatar button
+2. Press Enter or Space -- menu should open, first menu item should receive focus
+3. Press ArrowDown -- focus should move to the next menu item
+4. Press ArrowUp -- focus should move back
+5. Press Escape -- menu should close, focus should return to the avatar button
+6. If a tenant switcher is visible, repeat the same steps for that menu
