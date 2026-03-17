@@ -94,7 +94,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_pay_schedules_tenant_default
 -- Updated_at trigger
 CREATE TRIGGER trg_pay_schedules_updated_at
   BEFORE UPDATE ON app.pay_schedules
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.pay_schedules IS 'Configurable pay schedules defining frequency and pay day for payroll processing';

@@ -154,7 +154,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_runs_tenant_period_type
 -- Updated_at trigger
 CREATE TRIGGER trg_payroll_runs_updated_at
   BEFORE UPDATE ON app.payroll_runs
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.payroll_runs IS 'Payroll run tracking with lifecycle management and aggregated totals';
@@ -235,7 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_payroll_lines_employee
 -- Updated_at trigger
 CREATE TRIGGER trg_payroll_lines_updated_at
   BEFORE UPDATE ON app.payroll_lines
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.payroll_lines IS 'Per-employee payroll line items within a payroll run';
@@ -321,7 +321,7 @@ ALTER TABLE app.employee_tax_details
 -- Updated_at trigger
 CREATE TRIGGER trg_employee_tax_details_updated_at
   BEFORE UPDATE ON app.employee_tax_details
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.employee_tax_details IS 'Effective-dated HMRC tax details per employee (tax code, NI number, NI category, student loan plan)';

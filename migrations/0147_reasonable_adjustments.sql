@@ -138,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_reasonable_adjustments_updated_at
 CREATE OR REPLACE TRIGGER trg_reasonable_adjustments_updated_at
   BEFORE UPDATE ON app.reasonable_adjustments
   FOR EACH ROW
-  EXECUTE FUNCTION app.set_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DOWN Migration

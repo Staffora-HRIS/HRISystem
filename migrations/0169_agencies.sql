@@ -88,4 +88,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.agency_placements TO hris_app;
 
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON app.recruitment_agencies
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
