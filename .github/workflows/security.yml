@@ -17,7 +17,7 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -48,7 +48,7 @@ jobs:
           - name: web
             dockerfile: packages/web/Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build ${{ matrix.name }} image
         run: docker build -t staffora-${{ matrix.name }}:scan -f ${{ matrix.dockerfile }} .
@@ -81,7 +81,7 @@ jobs:
     name: Secret Detection
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

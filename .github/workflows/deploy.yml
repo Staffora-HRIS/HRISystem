@@ -78,7 +78,7 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -158,7 +158,7 @@ jobs:
             dockerfile: packages/web/Dockerfile
             image_env: WEB_IMAGE
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -206,7 +206,7 @@ jobs:
       name: staging
       url: https://staging.staffora.co.uk
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine image tag
         id: image_tag
@@ -281,7 +281,7 @@ jobs:
       name: production
       url: https://staffora.co.uk
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine image tag
         id: image_tag
