@@ -40,6 +40,7 @@ export {
   type ReportingLineRow,
   type CompensationRow,
   type StatusHistoryRow,
+  type EmploymentRecordRow,
 } from "./repository";
 
 // Export address repository
@@ -88,6 +89,9 @@ export {
   UpdateEmployeeManagerSchema,
   EmployeeStatusTransitionSchema,
   EmployeeTerminationSchema,
+  RehireEmployeeSchema,
+  EmploymentRecordResponseSchema,
+  RehireResponseSchema,
   EmployeeResponseSchema,
   EmployeeListItemSchema,
   EmployeeListResponseSchema,
@@ -145,6 +149,9 @@ export {
   type UpdateEmployeeManager,
   type EmployeeStatusTransition,
   type EmployeeTermination,
+  type RehireEmployee,
+  type EmploymentRecordResponse,
+  type RehireResponse,
   type EmployeeResponse,
   type EmployeeListItem,
   type EmployeeListResponse,

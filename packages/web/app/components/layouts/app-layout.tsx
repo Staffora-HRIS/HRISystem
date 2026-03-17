@@ -420,6 +420,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* User menu */}
             <div className="relative">
               <button
+                ref={userMenuTriggerRef}
                 type="button"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 aria-expanded={userMenuOpen}
@@ -439,10 +440,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <>
                   <div
                     className="fixed inset-0 z-10"
-                    onClick={() => setUserMenuOpen(false)}
+                    onClick={closeUserMenu}
                   />
                   <div
+                    ref={userMenuRef}
                     role="menu"
+                    aria-label="User menu"
+                    onKeyDown={handleMenuKeyDown}
                     className="absolute right-0 z-20 mt-2 w-56 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10"
                   >
                     <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-700">
@@ -456,20 +460,22 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <Link
                       to="/me/profile"
                       role="menuitem"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                      tabIndex={-1}
+                      onClick={closeUserMenu}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     >
                       My Profile
                     </Link>
                     <button
                       type="button"
                       role="menuitem"
+                      tabIndex={-1}
                       onClick={() => {
                         logout();
-                        setUserMenuOpen(false);
+                        closeUserMenu();
                       }}
                       disabled={isLoggingOut}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 dark:text-error-400 dark:hover:bg-gray-700"
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-error-400 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     >
                       {isLoggingOut ? (
                         <Spinner size="sm" />
