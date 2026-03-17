@@ -16,6 +16,11 @@ import type {
 } from "./repository";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import {
+  canTransitionEmployee,
+  getValidEmployeeTransitions,
+  EmployeeStates,
+} from "@staffora/shared";
 import type {
   CreateOrgUnit,
   UpdateOrgUnit,
@@ -46,15 +51,8 @@ import type {
 // Types
 // =============================================================================
 
-/**
- * State machine transitions
- */
-const VALID_STATUS_TRANSITIONS: Record<EmployeeStatus, EmployeeStatus[]> = {
-  pending: ["active"],
-  active: ["on_leave", "terminated"],
-  on_leave: ["active", "terminated"],
-  terminated: [],
-};
+// Employee state machine transitions are now provided by @staffora/shared.
+// See canTransitionEmployee() and getValidEmployeeTransitions() from ../../lib/shared.
 
 /**
  * Domain event types
@@ -850,7 +848,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -904,7 +902,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -958,7 +956,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -1040,7 +1038,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -1109,7 +1107,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -1165,7 +1163,7 @@ export class HRService {
       };
     }
 
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -1265,9 +1263,8 @@ export class HRService {
 
     const currentStatus = employeeResult.employee.status;
 
-    // Validate state machine transition
-    const validTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
-    if (!validTransitions.includes(data.to_status)) {
+    // Validate state machine transition (uses @staffora/shared employee lifecycle)
+    if (!canTransitionEmployee(currentStatus, data.to_status)) {
       return {
         success: false,
         error: {
@@ -1276,7 +1273,7 @@ export class HRService {
           details: {
             current_status: currentStatus,
             requested_status: data.to_status,
-            valid_transitions: validTransitions,
+            valid_transitions: getValidEmployeeTransitions(currentStatus),
           },
         },
       };
@@ -1332,7 +1329,7 @@ export class HRService {
     const currentStatus = employeeResult.employee.status;
 
     // Validate can terminate (not already terminated, not pending)
-    if (currentStatus === "terminated") {
+    if (currentStatus === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
@@ -1343,7 +1340,7 @@ export class HRService {
       };
     }
 
-    if (currentStatus === "pending") {
+    if (currentStatus === EmployeeStates.PENDING) {
       return {
         success: false,
         error: {
@@ -1433,7 +1430,7 @@ export class HRService {
     }
 
     // Cannot update terminated employees
-    if (employeeResult.employee.status === "terminated") {
+    if (employeeResult.employee.status === EmployeeStates.TERMINATED) {
       return {
         success: false,
         error: {
