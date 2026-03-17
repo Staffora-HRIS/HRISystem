@@ -134,7 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_data_breaches_detected_by
 -- Updated_at trigger
 CREATE TRIGGER set_data_breaches_updated_at
   BEFORE UPDATE ON app.data_breaches
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- -----------------------------------------------------------------------------
 -- data_breach_timeline - Breach Timeline / Audit Trail

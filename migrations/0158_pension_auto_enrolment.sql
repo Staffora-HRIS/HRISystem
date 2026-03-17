@@ -170,7 +170,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_pension_schemes_tenant_default
 -- Updated_at trigger
 CREATE TRIGGER trg_pension_schemes_updated_at
   BEFORE UPDATE ON app.pension_schemes
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.pension_schemes IS 'Workplace pension schemes for UK auto-enrolment compliance (Pensions Act 2008)';
@@ -257,7 +257,7 @@ CREATE INDEX IF NOT EXISTS idx_pension_enrolments_re_enrolment
 -- Updated_at trigger
 CREATE TRIGGER trg_pension_enrolments_updated_at
   BEFORE UPDATE ON app.pension_enrolments
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.pension_enrolments IS 'Employee pension auto-enrolment records tracking the full lifecycle (Pensions Act 2008)';
@@ -341,7 +341,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_pension_contributions_unique_period
 -- Updated_at trigger
 CREATE TRIGGER trg_pension_contributions_updated_at
   BEFORE UPDATE ON app.pension_contributions
-  FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- Comments
 COMMENT ON TABLE app.pension_contributions IS 'Pension contribution calculations per pay period for auto-enrolled employees';
