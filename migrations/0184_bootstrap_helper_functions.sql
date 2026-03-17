@@ -18,11 +18,15 @@
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 1. update_updated_at_column()
--- Used by ~100+ triggers across the schema to auto-set updated_at on UPDATE.
+-- These functions may already exist from docker/postgres/init.sql.
+-- Use DROP + CREATE to handle any return type mismatches safely.
+-- CASCADE is safe here since triggers referencing these functions will be
+-- recreated by 0185_fix_broken_trigger_references.sql.
 -- ---------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION app.update_updated_at_column()
+-- 1. update_updated_at_column()
+DROP FUNCTION IF EXISTS app.update_updated_at_column() CASCADE;
+CREATE FUNCTION app.update_updated_at_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -32,16 +36,9 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION app.update_updated_at_column()
-  IS 'Trigger function to automatically update the updated_at timestamp on row modification.';
-
--- ---------------------------------------------------------------------------
 -- 2. is_system_context()
--- Checks if the current session is running in system context (bypasses RLS).
--- Used in RLS policies to allow system operations (migrations, seeds, workers).
--- ---------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION app.is_system_context()
+DROP FUNCTION IF EXISTS app.is_system_context() CASCADE;
+CREATE FUNCTION app.is_system_context()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -49,21 +46,13 @@ SECURITY DEFINER
 SET search_path = app, public
 AS $$
 BEGIN
-    -- Check if running as superuser or in a system context
     RETURN current_setting('app.system_context', true) = 'true';
 END;
 $$;
 
-COMMENT ON FUNCTION app.is_system_context()
-  IS 'Checks if the current session is running in system context (bypasses RLS). Returns true when app.system_context setting is "true".';
-
--- ---------------------------------------------------------------------------
 -- 3. enable_system_context()
--- Enables system context for the current transaction (bypasses RLS).
--- Should only be used for migrations, seeds, and system operations.
--- ---------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION app.enable_system_context()
+DROP FUNCTION IF EXISTS app.enable_system_context() CASCADE;
+CREATE FUNCTION app.enable_system_context()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -74,15 +63,9 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION app.enable_system_context()
-  IS 'Enables system context for the current transaction, bypassing RLS policies. Use only for migrations, seeds, and administrative operations.';
-
--- ---------------------------------------------------------------------------
 -- 4. disable_system_context()
--- Disables system context, restoring normal RLS enforcement.
--- ---------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION app.disable_system_context()
+DROP FUNCTION IF EXISTS app.disable_system_context() CASCADE;
+CREATE FUNCTION app.disable_system_context()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
