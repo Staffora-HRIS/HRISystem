@@ -255,11 +255,11 @@ export class TimeRepository {
       const [row] = await tx<ScheduleRow[]>`
         INSERT INTO app.schedules (
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, is_template, status
+          org_unit_id, status
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.name}, ${data.description || null},
           ${data.startDate}, ${data.endDate}, ${data.orgUnitId || null}::uuid,
-          ${data.isTemplate || false}, 'draft'
+          'draft'
         )
         RETURNING *
       `;
@@ -283,11 +283,10 @@ export class TimeRepository {
       return tx<ScheduleRow[]>`
         SELECT
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, is_template, status, created_at, updated_at
+          org_unit_id, status, created_at, updated_at
         FROM app.schedules
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.orgUnitId ? tx`AND org_unit_id = ${filters.orgUnitId}::uuid` : tx``}
-        ${filters.isTemplate !== undefined ? tx`AND is_template = ${filters.isTemplate}` : tx``}
         ${filters.cursor ? tx`AND id < ${filters.cursor}::uuid` : tx``}
         ORDER BY start_date DESC, id DESC
         LIMIT ${limit + 1}
@@ -306,7 +305,7 @@ export class TimeRepository {
       return tx<ScheduleRow[]>`
         SELECT
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, is_template, status, created_at, updated_at
+          org_unit_id, status, created_at, updated_at
         FROM app.schedules
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
@@ -334,7 +333,6 @@ export class TimeRepository {
           start_date = COALESCE(${data.startDate || null}, start_date),
           end_date = COALESCE(${data.endDate || null}, end_date),
           org_unit_id = COALESCE(${data.orgUnitId || null}::uuid, org_unit_id),
-          is_template = COALESCE(${data.isTemplate ?? null}, is_template),
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         RETURNING *
@@ -504,7 +502,7 @@ export class TimeRepository {
       return tx<TimesheetRow[]>`
         SELECT
           id, tenant_id, employee_id, period_start, period_end, status,
-          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by_id, created_at, updated_at
+          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by, created_at, updated_at
         FROM app.timesheets
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
@@ -529,7 +527,7 @@ export class TimeRepository {
       return tx<TimesheetRow[]>`
         SELECT
           id, tenant_id, employee_id, period_start, period_end, status,
-          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by_id, created_at, updated_at
+          total_regular_hours, total_overtime_hours, submitted_at, approved_at, approved_by, created_at, updated_at
         FROM app.timesheets
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
@@ -618,6 +616,7 @@ export class TimeRepository {
         UPDATE app.timesheets SET
           status = 'submitted',
           submitted_at = now(),
+          submitted_by = ${ctx.userId || null}::uuid,
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'draft'
         RETURNING *
@@ -645,7 +644,7 @@ export class TimeRepository {
         UPDATE app.timesheets SET
           status = 'approved',
           approved_at = now(),
-          approved_by_id = ${approverId}::uuid,
+          approved_by = ${approverId}::uuid,
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'submitted'
         RETURNING *
@@ -680,18 +679,15 @@ export class TimeRepository {
       const [row] = await tx<TimesheetRow[]>`
         UPDATE app.timesheets SET
           status = 'rejected',
+          rejected_at = now(),
+          rejected_by = ${approverId}::uuid,
+          rejection_reason = ${comments || "Rejected"},
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'submitted'
         RETURNING *
       `;
 
       if (row) {
-        await tx`
-          SELECT app.record_timesheet_approval(
-            ${id}::uuid, 'reject', ${approverId}::uuid, ${comments || null}
-          )
-        `;
-
         await this.writeOutbox(tx, ctx.tenantId, "timesheet", id, "time.timesheet.rejected", {
           timesheetId: id,
           employeeId: row.employeeId,

@@ -95,7 +95,8 @@ const getAuthConfig = () => {
  * Better Auth requires a standard pg Pool, not the postgres.js client
  */
 function createPgPool(): Pool {
-  const databaseUrl = getDatabaseUrl();
+  // Prefer DATABASE_APP_URL (hris_app with NOBYPASSRLS), matching db plugin precedence
+  const databaseUrl = process.env["DATABASE_APP_URL"] || process.env["DATABASE_URL"] || getDatabaseUrl();
   return new Pool({
     connectionString: databaseUrl,
     max: 10,

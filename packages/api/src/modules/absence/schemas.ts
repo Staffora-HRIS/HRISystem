@@ -79,6 +79,7 @@ export const CreateLeavePolicySchema = t.Object({
     contractTypes: t.Optional(t.Array(t.String())),
     countries: t.Optional(t.Array(t.String())),
   })),
+  daysPerWeek: t.Optional(t.Number({ minimum: 0.5, maximum: 7 })),
 });
 export type CreateLeavePolicy = Static<typeof CreateLeavePolicySchema>;
 
