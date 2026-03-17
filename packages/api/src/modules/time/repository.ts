@@ -571,7 +571,7 @@ export class TimeRepository {
       // Insert new lines (batch insert)
       if (lines.length > 0) {
         await tx`
-          INSERT INTO app.timesheet_lines ${tx(
+          INSERT INTO app.timesheet_lines ${(tx as any)(
             lines.map(line => ({
               id: crypto.randomUUID(),
               timesheet_id: timesheetId,

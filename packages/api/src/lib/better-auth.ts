@@ -350,6 +350,18 @@ export function getBetterAuth() {
 }
 
 /**
+ * Unlock a user account that was locked due to failed login attempts.
+ * Resets the locked status on app.users.
+ */
+export async function adminUnlockAccount(userId: string): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(
+    `UPDATE app.users SET status = 'active', updated_at = now() WHERE id = $1::uuid AND status = 'locked'`,
+    [userId]
+  );
+}
+
+/**
  * Type exports for Better Auth
  */
 export type Auth = ReturnType<typeof createBetterAuth>;

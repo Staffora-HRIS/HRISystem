@@ -1538,7 +1538,7 @@ export class HRService {
       `;
     });
 
-    const contractualNoticeDays = contractRows[0]?.noticePeriodDays ?? null;
+    const contractualNoticeDays = (contractRows[0] as any)?.noticePeriodDays ?? null;
 
     // Compliance: contractual must be >= statutory (employer-to-employee notice)
     const isCompliant = contractualNoticeDays === null
@@ -1560,7 +1560,7 @@ export class HRService {
       success: true,
       data: {
         employee_id: employeeId,
-        hire_date: employee.hireDate,
+        hire_date: String(employee.hireDate),
         reference_date: referenceDate.toISOString().split("T")[0],
         years_of_service: yearsOfService,
         months_of_service: monthsOfService,
