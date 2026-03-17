@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS app.payslips (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id             uuid NOT NULL,
   employee_id           uuid NOT NULL REFERENCES app.employees(id) ON DELETE CASCADE,
-  pay_period_id         uuid REFERENCES app.pay_periods(id) ON DELETE SET NULL,
+  pay_period_id         uuid,
 
   -- Pay breakdown
   gross_pay             numeric(12,2) NOT NULL DEFAULT 0,
