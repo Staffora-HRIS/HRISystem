@@ -72,18 +72,18 @@ ALTER TABLE app.archived_records ENABLE ROW LEVEL SECURITY;
 
 -- Tenant isolation policy (SELECT, UPDATE, DELETE)
 CREATE POLICY tenant_isolation ON app.archived_records
-  USING (
-    tenant_id = current_setting('app.current_tenant', true)::uuid
-    OR current_setting('app.system_context', true) = 'true'
-  );
+  USING (tenant_id = current_setting('app.current_tenant')::uuid);
 
 -- Tenant isolation policy (INSERT)
 CREATE POLICY tenant_isolation_insert ON app.archived_records
-  FOR INSERT
-  WITH CHECK (
-    tenant_id = current_setting('app.current_tenant', true)::uuid
-    OR current_setting('app.system_context', true) = 'true'
-  );
+  FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant')::uuid);
+
+-- System context bypass (for scheduler/admin operations)
+CREATE POLICY system_bypass ON app.archived_records
+  USING (current_setting('app.system_context', true) = 'true');
+
+CREATE POLICY system_bypass_insert ON app.archived_records
+  FOR INSERT WITH CHECK (current_setting('app.system_context', true) = 'true');
 
 -- Grant permissions to the application role
 GRANT SELECT, INSERT, UPDATE, DELETE ON app.archived_records TO hris_app;
@@ -123,17 +123,17 @@ CREATE TRIGGER trg_archival_rules_updated_at
 ALTER TABLE app.archival_rules ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON app.archival_rules
-  USING (
-    tenant_id = current_setting('app.current_tenant', true)::uuid
-    OR current_setting('app.system_context', true) = 'true'
-  );
+  USING (tenant_id = current_setting('app.current_tenant')::uuid);
 
 CREATE POLICY tenant_isolation_insert ON app.archival_rules
-  FOR INSERT
-  WITH CHECK (
-    tenant_id = current_setting('app.current_tenant', true)::uuid
-    OR current_setting('app.system_context', true) = 'true'
-  );
+  FOR INSERT WITH CHECK (tenant_id = current_setting('app.current_tenant')::uuid);
+
+-- System context bypass (for scheduler/admin operations)
+CREATE POLICY system_bypass ON app.archival_rules
+  USING (current_setting('app.system_context', true) = 'true');
+
+CREATE POLICY system_bypass_insert ON app.archival_rules
+  FOR INSERT WITH CHECK (current_setting('app.system_context', true) = 'true');
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON app.archival_rules TO hris_app;
 

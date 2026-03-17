@@ -307,6 +307,91 @@ BEGIN
 END;
 $$;
 
+-- -----------------------------------------------------------------------------
+-- Update GDPR anonymize_employee function (from 0129) to use new column names
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION app.anonymize_employee(
+    p_tenant_id uuid,
+    p_employee_id uuid,
+    p_anonymized_label text DEFAULT 'ANONYMIZED'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = app, public
+AS $$
+DECLARE
+    result jsonb := '{}'::jsonb;
+    affected integer;
+BEGIN
+    -- Set tenant context so RLS is satisfied
+    PERFORM app.set_tenant_context(p_tenant_id);
+
+    -- 1. employees (anchor record)
+    UPDATE app.employees SET
+        employee_number = 'ANON-' || LEFT(p_employee_id::text, 8),
+        user_id = NULL,
+        termination_reason = CASE
+            WHEN termination_reason IS NOT NULL THEN 'REDACTED'
+            ELSE NULL
+        END,
+        updated_at = now()
+    WHERE id = p_employee_id AND tenant_id = p_tenant_id;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    result := result || jsonb_build_object('employees', affected);
+
+    -- 2. employee_personal (effective-dated personal info)
+    UPDATE app.employee_personal SET
+        first_name = p_anonymized_label,
+        middle_name = NULL,
+        last_name = 'USER',
+        preferred_name = NULL,
+        date_of_birth = NULL,
+        gender = NULL,
+        marital_status = NULL,
+        nationality = NULL,
+        updated_at = now()
+    WHERE employee_id = p_employee_id AND tenant_id = p_tenant_id;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    result := result || jsonb_build_object('employee_personal', affected);
+
+    -- 3. employee_contacts (phone, email, emergency contacts)
+    UPDATE app.employee_contacts SET
+        value = 'REDACTED',
+        is_verified = false,
+        updated_at = now()
+    WHERE employee_id = p_employee_id AND tenant_id = p_tenant_id;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    result := result || jsonb_build_object('employee_contacts', affected);
+
+    -- 4. employee_addresses (home, work, mailing addresses)
+    -- Updated to use new column names (address_line_1, county, postcode)
+    UPDATE app.employee_addresses SET
+        address_line_1 = 'REDACTED',
+        address_line_2 = NULL,
+        city = 'REDACTED',
+        county = NULL,
+        postcode = NULL,
+        updated_at = now()
+    WHERE employee_id = p_employee_id AND tenant_id = p_tenant_id;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    result := result || jsonb_build_object('employee_addresses', affected);
+
+    -- 5. employee_identifiers (SSN, passport, national ID, etc.)
+    UPDATE app.employee_identifiers SET
+        identifier_value = 'REDACTED',
+        issuing_country = NULL,
+        issue_date = NULL,
+        expiry_date = NULL,
+        updated_at = now()
+    WHERE employee_id = p_employee_id AND tenant_id = p_tenant_id;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    result := result || jsonb_build_object('employee_identifiers', affected);
+
+    RETURN result;
+END;
+$$;
+
 -- =============================================================================
 -- Comments (updated for new column names)
 -- =============================================================================
