@@ -574,6 +574,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             {/* User menu */}
             <div className="relative">
               <button
+                ref={userMenuTriggerRef}
                 type="button"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -589,11 +590,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 <>
                   <div
                     className="fixed inset-0 z-10"
-                    onClick={() => setUserMenuOpen(false)}
+                    onClick={closeUserMenu}
                   />
                   <div
+                    ref={userMenuRef}
                     className="absolute right-0 z-20 mt-2 w-56 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10"
                     role="menu"
+                    aria-label="User menu"
+                    onKeyDown={handleMenuKeyDown}
                   >
                     <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-700">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -605,9 +609,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     </div>
                     <Link
                       to="/me/profile"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                      onClick={closeUserMenu}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                       role="menuitem"
+                      tabIndex={-1}
                     >
                       My Profile
                     </Link>
@@ -615,11 +620,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                       type="button"
                       onClick={() => {
                         logout();
-                        setUserMenuOpen(false);
+                        closeUserMenu();
                       }}
                       disabled={isLoggingOut}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 dark:text-error-400 dark:hover:bg-gray-700"
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-error-400 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                       role="menuitem"
+                      tabIndex={-1}
                     >
                       {isLoggingOut ? (
                         <Spinner size="sm" />

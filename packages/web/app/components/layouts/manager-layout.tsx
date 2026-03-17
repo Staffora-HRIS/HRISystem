@@ -8,7 +8,7 @@
  * - Responsive design
  */
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode, type KeyboardEvent } from "react";
 import { Link, NavLink, useLocation, Navigate } from "react-router";
 import { cn } from "../../lib/utils";
 import { useTheme } from "../../lib/theme";
@@ -41,6 +41,67 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
   const { logout, isLoggingOut } = useAuth();
   const { resolvedTheme, toggleTheme } = useTheme();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Refs for focus restoration
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const closeUserMenu = useCallback(() => {
+    setUserMenuOpen(false);
+    requestAnimationFrame(() => userMenuTriggerRef.current?.focus());
+  }, []);
+
+  // Close user menu on Escape key (restores focus)
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") closeUserMenu();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [userMenuOpen, closeUserMenu]);
+
+  // Auto-focus first menu item when dropdown opens
+  useEffect(() => {
+    if (userMenuOpen && userMenuRef.current) {
+      const firstItem = userMenuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
+      firstItem?.focus();
+    }
+  }, [userMenuOpen]);
+
+  // Arrow key navigation within dropdown menus
+  const handleMenuKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    const menu = e.currentTarget;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault();
+        const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[next].focus();
+        break;
+      }
+      case "ArrowUp": {
+        e.preventDefault();
+        const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[prev].focus();
+        break;
+      }
+      case "Home": {
+        e.preventDefault();
+        items[0].focus();
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        items[items.length - 1].focus();
+        break;
+      }
+    }
+  }, []);
 
   // Check if user is a manager
   const { isManager, isLoading: checkingManager } = useIsManager();
@@ -468,9 +529,12 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
             {/* User menu */}
             <div className="relative">
               <button
+                ref={userMenuTriggerRef}
                 type="button"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="true"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-sm font-medium text-white">
                   {user ? getInitials(user.name || user.email) : "?"}
@@ -481,9 +545,15 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
                 <>
                   <div
                     className="fixed inset-0 z-10"
-                    onClick={() => setUserMenuOpen(false)}
+                    onClick={closeUserMenu}
                   />
-                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
+                  <div
+                    ref={userMenuRef}
+                    role="menu"
+                    aria-label="User menu"
+                    onKeyDown={handleMenuKeyDown}
+                    className="absolute right-0 z-20 mt-2 w-56 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10"
+                  >
                     <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-700">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
                         {user?.name || user?.email}
@@ -494,26 +564,32 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
                     </div>
                     <Link
                       to="/me/profile"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      tabIndex={-1}
+                      onClick={closeUserMenu}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     >
                       My Profile
                     </Link>
                     <Link
                       to="/dashboard"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      tabIndex={-1}
+                      onClick={closeUserMenu}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     >
                       Employee Dashboard
                     </Link>
                     <button
                       type="button"
+                      role="menuitem"
+                      tabIndex={-1}
                       onClick={() => {
                         logout();
-                        setUserMenuOpen(false);
+                        closeUserMenu();
                       }}
                       disabled={isLoggingOut}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 dark:text-error-400 dark:hover:bg-gray-700"
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-error-600 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-error-400 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     >
                       {isLoggingOut ? (
                         <Spinner size="sm" />

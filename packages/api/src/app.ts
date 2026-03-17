@@ -241,6 +241,7 @@ export const app = new Elysia()
           { name: "Time", description: "Time & Attendance endpoints" },
           { name: "Absence", description: "Leave management endpoints" },
           { name: "Talent", description: "Talent management endpoints" },
+          { name: "Talent - 360 Feedback", description: "360-degree multi-rater feedback endpoints" },
           { name: "LMS", description: "Learning management endpoints" },
           { name: "Workflows", description: "Workflow endpoints" },
           { name: "Cases", description: "Case management endpoints" },

@@ -1279,7 +1279,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
       // Audit log rehire (highly sensitive operation)
       if (audit) {
         await audit.log({
-          action: AuditActions.EMPLOYEE_CREATED,
+          action: AuditActions.EMPLOYEE_REHIRED,
           resourceType: "employee",
           resourceId: params.id,
           newValues: {

@@ -135,15 +135,17 @@ export function ChartBuilder({
 
   const hasAxes = Boolean(config.xAxis && config.yAxis?.length);
 
-  // Build seriesLabels for preview
+  // Build seriesLabels for preview (inline getLabel to avoid stale closure)
   const seriesLabels = useMemo(() => {
     if (!config.yAxis) return undefined;
     const labels: Record<string, string> = {};
     for (const key of config.yAxis) {
-      labels[key] = getLabel(key);
+      labels[key] =
+        fieldsMap.get(key)?.displayName ??
+        columns.find((c) => c.field_key === key)?.alias ??
+        key;
     }
     return labels;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.yAxis, fieldsMap, columns]);
 
   return (
