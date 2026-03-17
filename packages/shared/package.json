@@ -41,7 +41,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.32.0",
+    "@sinclair/typebox": "^0.34.48",
     "zod": "^3.24.1"
   },
   "devDependencies": {
