@@ -2,12 +2,15 @@
  * Client Portal Module Routes
  *
  * Customer-facing portal API for staffora.co.uk.
- * Uses its own session-based auth (portal_sessions) separate from the main HRIS auth.
+ * Authentication is handled by BetterAuth (global authPlugin).
+ * Portal users are identified by their BetterAuth user_id linking to a portal_users record.
  *
  * Route groups:
- * - Public: login, forgot-password, reset-password
+ * - Public: GET /auth/me (returns portal user profile using BetterAuth session)
  * - Authenticated: tickets, documents, news, billing, dashboard
  * - Admin: ticket management, user management, document/news CRUD
+ *
+ * Login/logout/forgot-password/reset-password are handled by BetterAuth at /api/auth/*.
  */
 
 import { Elysia, t } from "elysia";
@@ -43,103 +46,72 @@ const PORTAL_ERROR_CODES: Record<string, number> = {
   REPLY_FAILED: 500,
 };
 
-const PORTAL_COOKIE_NAME = "staffora_portal_session";
-const SESSION_SLIDING_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
 // =============================================================================
-// Portal Auth Middleware
+// Portal Auth Middleware (BetterAuth-based)
 // =============================================================================
 
 /**
- * Custom portal auth guard.
- * Reads the staffora_portal_session cookie, hashes the token with SHA-256,
- * and looks up the session in portal_sessions.
+ * Portal auth guard using BetterAuth sessions.
  *
- * On success:
- * - ctx.portalUser is set to the user
- * - ctx.portalSession is set to the session
- * - ctx.portalTenantContext is set for repository queries
- * - Sliding window extends the session if activity threshold is reached
+ * The global authPlugin (in plugins/auth-better.ts) already reads the BetterAuth
+ * session cookie and sets ctx.user, ctx.session, ctx.isAuthenticated.
  *
- * On failure:
- * - Returns 401
+ * This middleware:
+ * 1. Checks that the user is authenticated (BetterAuth session valid)
+ * 2. Looks up the portal_users profile by user_id = ctx.user.id
+ * 3. If no portal_users record, returns 403 "Not a portal user"
+ * 4. Sets ctx.portalUser, ctx.portalTenantContext for downstream handlers
  */
-async function requirePortalAuth(ctx: any) {
-  const { portalRepository, cookie, set } = ctx;
+async function requirePortalUser(ctx: any) {
+  const { user, isAuthenticated, set, portalRepository } = ctx;
 
-  const sessionCookie = cookie?.[PORTAL_COOKIE_NAME];
-  const rawToken = sessionCookie?.value;
-
-  if (!rawToken) {
+  if (!isAuthenticated || !user) {
     set.status = 401;
     return {
       error: {
         code: ErrorCodes.UNAUTHORIZED,
-        message: "Portal authentication required",
+        message: "Authentication required. Please sign in via /api/auth/sign-in/email.",
       },
     };
   }
 
-  const tokenHash = await hashToken(rawToken);
-  const session = await portalRepository.findSessionByTokenHash(tokenHash);
+  // Look up portal profile by BetterAuth user ID
+  const portalProfile = await portalRepository.findPortalProfileByUserId(user.id);
 
-  if (!session) {
-    set.status = 401;
-    // Clear stale cookie
-    if (sessionCookie && typeof sessionCookie.set === "function") {
-      sessionCookie.set({
-        value: "",
-        maxAge: 0,
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-      });
-    }
+  if (!portalProfile) {
+    set.status = 403;
     return {
       error: {
-        code: ErrorCodes.SESSION_EXPIRED,
-        message: "Portal session has expired",
+        code: ErrorCodes.PORTAL_ACCESS_DENIED,
+        message: "Not a portal user. Your account does not have portal access.",
       },
     };
   }
 
-  if (!(session.user.isActive ?? session.user.is_active)) {
+  if (!portalProfile.isActive) {
     set.status = 403;
     return {
       error: {
         code: "ACCOUNT_DISABLED",
-        message: "This account has been deactivated",
+        message: "This portal account has been deactivated.",
       },
     };
   }
 
-  // Sliding window: extend session if last activity was > threshold ago
-  const lastActivity = session.lastActivityAt
-    ? new Date(session.lastActivityAt).getTime()
-    : 0;
-  if (Date.now() - lastActivity > SESSION_SLIDING_WINDOW_MS) {
-    const newExpiry = new Date(
-      Date.now() + (session.expiresAt.getTime() - lastActivity)
-    );
-    await portalRepository.extendSession(session.id, newExpiry);
-  }
+  // Fire-and-forget: update last_login_at timestamp
+  portalRepository.updateLastLogin(portalProfile.id).catch(() => {});
 
   // Attach portal context to request
-  ctx.portalUser = session.user;
-  ctx.portalSession = {
-    id: session.id,
-    userId: session.userId,
-    tenantId: session.tenantId,
-    expiresAt: session.expiresAt,
-  };
+  ctx.portalUser = portalProfile;
   ctx.portalTenantContext = {
-    tenantId: session.tenantId,
-    userId: session.userId,
+    tenantId: portalProfile.tenantId,
+    userId: portalProfile.id,
   };
 }
 
 /**
  * Admin role check for portal admin routes.
+ * Must be used after requirePortalUser.
  */
 async function requirePortalAdmin(ctx: any) {
   const { portalUser, set } = ctx;
@@ -166,18 +138,6 @@ async function requirePortalAdmin(ctx: any) {
 }
 
 // =============================================================================
-// Helper
-// =============================================================================
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// =============================================================================
 // Routes
 // =============================================================================
 
@@ -192,144 +152,86 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
   })
 
   // =========================================================================
-  // Public Routes (no auth)
+  // Auth: GET /auth/me - returns current portal user profile
+  // Uses BetterAuth session (already validated by global authPlugin)
   // =========================================================================
 
-  .post(
-    "/auth/login",
+  .get(
+    "/auth/me",
     async (ctx) => {
-      const { portalService, body, set, cookie } = ctx as any;
+      const { portalRepository, set } = ctx as any;
+      const user = (ctx as any).user;
+      const isAuthenticated = (ctx as any).isAuthenticated;
 
-      const ipAddress =
-        ctx.request?.headers?.get("x-forwarded-for") ??
-        ctx.request?.headers?.get("x-real-ip") ??
-        null;
-      const userAgent =
-        ctx.request?.headers?.get("user-agent") ?? null;
-
-      const result = await portalService.login(
-        body.email,
-        body.password,
-        body.rememberMe ?? false,
-        ipAddress,
-        userAgent
-      );
-
-      if (!result.success) {
-        set.status = mapErrorToStatus(result.error.code, PORTAL_ERROR_CODES);
-        return { error: result.error };
+      if (!isAuthenticated || !user) {
+        set.status = 401;
+        return {
+          error: {
+            code: ErrorCodes.UNAUTHORIZED,
+            message: "Not authenticated",
+          },
+        };
       }
 
-      // Set session cookie
-      const maxAge = body.rememberMe
-        ? 30 * 24 * 60 * 60 // 30 days
-        : 24 * 60 * 60; // 24 hours
+      const portalProfile = await portalRepository.findPortalProfileByUserId(user.id);
 
-      if (cookie?.[PORTAL_COOKIE_NAME]) {
-        cookie[PORTAL_COOKIE_NAME].set({
-          value: result.data!.token,
-          maxAge,
-          path: "/",
-          httpOnly: true,
-          secure: process.env["NODE_ENV"] === "production",
-          sameSite: "lax",
-        });
+      if (!portalProfile) {
+        set.status = 403;
+        return {
+          error: {
+            code: ErrorCodes.PORTAL_ACCESS_DENIED,
+            message: "Not a portal user",
+          },
+        };
       }
 
-      return { user: result.data!.user };
-    },
-    {
-      body: t.Object({ email: t.String(), password: t.String() }),
-      detail: {
-        tags: ["Client Portal"],
-        summary: "Portal login",
-      },
-    }
-  )
+      if (!portalProfile.isActive) {
+        set.status = 403;
+        return {
+          error: {
+            code: "ACCOUNT_DISABLED",
+            message: "This portal account has been deactivated",
+          },
+        };
+      }
 
-  .post(
-    "/auth/forgot-password",
-    async (ctx) => {
-      const { portalService, body } = ctx as any;
-      await portalService.forgotPassword(body.email);
+      // Fire-and-forget: update last login
+      portalRepository.updateLastLogin(portalProfile.id).catch(() => {});
+
       return {
-        message:
-          "If an account exists with that email, a password reset link has been sent.",
+        user: {
+          id: portalProfile.id,
+          tenantId: portalProfile.tenantId,
+          userId: portalProfile.userId,
+          email: portalProfile.email,
+          firstName: portalProfile.firstName,
+          lastName: portalProfile.lastName,
+          avatarUrl: portalProfile.avatarUrl ?? null,
+          role: portalProfile.role,
+          isActive: portalProfile.isActive,
+          lastLoginAt:
+            portalProfile.lastLoginAt?.toISOString?.() ??
+            portalProfile.lastLoginAt ??
+            null,
+          createdAt:
+            portalProfile.createdAt?.toISOString?.() ?? portalProfile.createdAt,
+          updatedAt:
+            portalProfile.updatedAt?.toISOString?.() ?? portalProfile.updatedAt,
+        },
       };
     },
     {
-      body: t.Object({ email: t.String() }),
       detail: {
         tags: ["Client Portal"],
-        summary: "Request password reset",
-      },
-    }
-  )
-
-  .post(
-    "/auth/reset-password",
-    async (ctx) => {
-      const { portalService, body, set } = ctx as any;
-
-      const result = await portalService.resetPassword(
-        body.token,
-        body.newPassword
-      );
-
-      if (!result.success) {
-        set.status = mapErrorToStatus(result.error.code, PORTAL_ERROR_CODES);
-        return { error: result.error };
-      }
-
-      return { message: "Password has been reset successfully." };
-    },
-    {
-      body: t.Object({ token: t.String(), newPassword: t.String() }),
-      detail: {
-        tags: ["Client Portal"],
-        summary: "Reset password with token",
+        summary: "Get current portal user profile",
       },
     }
   )
 
   // =========================================================================
-  // Authenticated Routes
+  // Dashboard (Authenticated)
   // =========================================================================
 
-  .post(
-    "/auth/logout",
-    async (ctx) => {
-      const { portalService, portalSession, cookie, set } = ctx as any;
-
-      if (!portalSession) {
-        return { message: "Logged out" };
-      }
-
-      await portalService.logout(portalSession.id);
-
-      // Clear cookie
-      if (cookie?.[PORTAL_COOKIE_NAME]) {
-        cookie[PORTAL_COOKIE_NAME].set({
-          value: "",
-          maxAge: 0,
-          path: "/",
-          httpOnly: true,
-          sameSite: "lax",
-        });
-      }
-
-      return { message: "Logged out" };
-    },
-    {
-      beforeHandle: [requirePortalAuth],
-      detail: {
-        tags: ["Client Portal"],
-        summary: "Portal logout",
-      },
-    }
-  )
-
-  // Dashboard
   .get(
     "/dashboard",
     async (ctx) => {
@@ -350,7 +252,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
       return result.data;
     },
     {
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get dashboard data",
@@ -394,7 +296,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "List my tickets",
@@ -423,7 +325,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       body: CreateTicketSchema,
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Create ticket",
@@ -452,7 +354,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get ticket by ID",
@@ -489,7 +391,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     {
       params: t.Object({ id: UuidSchema }),
       body: CreateTicketMessageSchema,
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Reply to ticket",
@@ -531,7 +433,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "List documents",
@@ -559,7 +461,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get document by ID",
@@ -594,7 +496,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Acknowledge document",
@@ -635,7 +537,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "List news articles",
@@ -664,7 +566,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ slug: t.String({ minLength: 1 }) }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get news article by slug",
@@ -693,7 +595,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
       return result.data;
     },
     {
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get billing overview",
@@ -730,7 +632,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "List invoices",
@@ -758,7 +660,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth],
+      beforeHandle: [requirePortalUser],
       detail: {
         tags: ["Client Portal"],
         summary: "Get invoice by ID",
@@ -804,7 +706,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "List all tickets (admin)",
@@ -835,7 +737,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     {
       params: t.Object({ id: UuidSchema }),
       body: UpdateTicketSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Update ticket (admin)",
@@ -875,7 +777,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
       }),
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "List portal users (admin)",
@@ -904,7 +806,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       body: CreateUserSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Create portal user (admin)",
@@ -932,7 +834,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Get portal user (admin)",
@@ -962,7 +864,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     {
       params: t.Object({ id: UuidSchema }),
       body: UpdateUserSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Update portal user (admin)",
@@ -992,7 +894,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       body: CreateDocumentSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Create document (admin)",
@@ -1022,7 +924,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     {
       params: t.Object({ id: UuidSchema }),
       body: UpdateDocumentSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Update document (admin)",
@@ -1050,7 +952,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Delete document (admin)",
@@ -1080,7 +982,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       body: CreateNewsSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Create news article (admin)",
@@ -1110,7 +1012,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     {
       params: t.Object({ id: UuidSchema }),
       body: UpdateNewsSchema,
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Update news article (admin)",
@@ -1138,7 +1040,7 @@ export const clientPortalRoutes = new Elysia({ prefix: "/client-portal" })
     },
     {
       params: t.Object({ id: UuidSchema }),
-      beforeHandle: [requirePortalAuth, requirePortalAdmin],
+      beforeHandle: [requirePortalUser, requirePortalAdmin],
       detail: {
         tags: ["Client Portal"],
         summary: "Delete news article (admin)",

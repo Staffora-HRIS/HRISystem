@@ -2,7 +2,10 @@
  * Client Portal Module - Repository Layer
  *
  * Database operations for the customer-facing portal.
- * Auth queries use withSystemContext (pre-authentication).
+ * Auth operations (sessions, passwords, login tracking) have been removed.
+ * Authentication is now handled by BetterAuth.
+ *
+ * Portal user lookup by BetterAuth user_id uses withSystemContext (pre-tenant).
  * All other queries use withTransaction with tenant context (post-authentication).
  */
 
@@ -26,41 +29,23 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
+/**
+ * Portal user profile. No longer contains password_hash or auth fields.
+ * Links to BetterAuth via the user_id column.
+ */
 export interface PortalUser {
   id: string;
   tenantId: string;
+  userId: string;
   email: string;
   firstName: string;
   lastName: string;
+  avatarUrl: string | null;
   role: string;
-  passwordHash: string;
   isActive: boolean;
-  failedLoginAttempts: number;
-  lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface PortalSession {
-  id: string;
-  userId: string;
-  tenantId: string;
-  tokenHash: string;
-  ipAddress: string | null;
-  userAgent: string | null;
-  expiresAt: Date;
-  lastActivityAt: Date;
-  createdAt: Date;
-}
-
-export interface PasswordReset {
-  id: string;
-  userId: string;
-  tokenHash: string;
-  expiresAt: Date;
-  usedAt: Date | null;
-  createdAt: Date;
 }
 
 export interface PortalTicket {
@@ -232,17 +217,23 @@ export class ClientPortalRepository {
   constructor(private db: any) {}
 
   // ===========================================================================
-  // Auth Operations (System Context - no tenant RLS)
+  // Portal User Lookup (System Context - no tenant RLS)
   // ===========================================================================
 
-  async findUserByEmail(email: string): Promise<PortalUser | null> {
+  /**
+   * Find portal user profile by BetterAuth user_id.
+   * Uses system context because this runs before tenant context is established.
+   */
+  async findPortalProfileByUserId(userId: string): Promise<PortalUser | null> {
     const rows = await this.db.withSystemContext(async (tx: TransactionSql) => {
       return tx`
-        SELECT id, tenant_id, email, first_name, last_name, role,
-               password_hash, is_active, failed_login_attempts,
-               locked_until, last_login_at, created_at, updated_at
-        FROM app.portal_users
-        WHERE LOWER(email) = LOWER(${email})
+        SELECT pu.id, pu.tenant_id, pu.user_id, u.email,
+               pu.first_name, pu.last_name, pu.avatar_url,
+               pu.role, pu.is_active, pu.last_login_at,
+               pu.created_at, pu.updated_at
+        FROM app.portal_users pu
+        JOIN app.users u ON u.id = pu.user_id
+        WHERE pu.user_id = ${userId}::uuid
         LIMIT 1
       `;
     });
@@ -250,200 +241,15 @@ export class ClientPortalRepository {
     return this.mapUserRow(rows[0]);
   }
 
-  async createSession(
-    userId: string,
-    tenantId: string,
-    tokenHash: string,
-    ipAddress: string | null,
-    userAgent: string | null,
-    expiresAt: Date
-  ): Promise<PortalSession> {
-    const rows = await this.db.withSystemContext(async (tx: TransactionSql) => {
-      return tx`
-        INSERT INTO app.portal_sessions (
-          id, user_id, tenant_id, token_hash, ip_address, user_agent,
-          expires_at, last_activity_at, created_at
-        ) VALUES (
-          gen_random_uuid(), ${userId}::uuid, ${tenantId}::uuid,
-          ${tokenHash}, ${ipAddress}, ${userAgent},
-          ${expiresAt}, now(), now()
-        )
-        RETURNING *
-      `;
-    });
-    return rows[0] as PortalSession;
-  }
-
-  async findSessionByTokenHash(
-    tokenHash: string
-  ): Promise<(PortalSession & { user: PortalUser }) | null> {
-    const rows = await this.db.withSystemContext(async (tx: TransactionSql) => {
-      return tx`
-        SELECT
-          s.id as session_id,
-          s.user_id, s.tenant_id, s.token_hash, s.ip_address, s.user_agent,
-          s.expires_at, s.last_activity_at, s.created_at as session_created_at,
-          u.id as user_id_check, u.email, u.first_name, u.last_name,
-          u.role, u.password_hash, u.is_active, u.failed_login_attempts,
-          u.locked_until, u.last_login_at,
-          u.created_at as user_created_at, u.updated_at as user_updated_at
-        FROM app.portal_sessions s
-        JOIN app.portal_users u ON u.id = s.user_id
-        WHERE s.token_hash = ${tokenHash}
-          AND s.expires_at > now()
-        LIMIT 1
-      `;
-    });
-
-    if (rows.length === 0) return null;
-
-    const r = rows[0] as any;
-    return {
-      id: r.sessionId ?? r.session_id,
-      userId: r.userId ?? r.user_id,
-      tenantId: r.tenantId ?? r.tenant_id,
-      tokenHash: r.tokenHash ?? r.token_hash,
-      ipAddress: r.ipAddress ?? r.ip_address,
-      userAgent: r.userAgent ?? r.user_agent,
-      expiresAt: r.expiresAt ?? r.expires_at,
-      lastActivityAt: r.lastActivityAt ?? r.last_activity_at,
-      createdAt: r.sessionCreatedAt ?? r.session_created_at,
-      user: {
-        id: r.userId ?? r.user_id,
-        tenantId: r.tenantId ?? r.tenant_id,
-        email: r.email,
-        firstName: r.firstName ?? r.first_name,
-        lastName: r.lastName ?? r.last_name,
-        role: r.role,
-        passwordHash: r.passwordHash ?? r.password_hash,
-        isActive: r.isActive ?? r.is_active ?? false,
-        failedLoginAttempts: r.failedLoginAttempts ?? r.failed_login_attempts ?? 0,
-        lockedUntil: r.lockedUntil ?? r.locked_until ?? null,
-        lastLoginAt: r.lastLoginAt ?? r.last_login_at ?? null,
-        createdAt: r.userCreatedAt ?? r.user_created_at,
-        updatedAt: r.userUpdatedAt ?? r.user_updated_at,
-      },
-    };
-  }
-
-  async deleteSession(sessionId: string): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        DELETE FROM app.portal_sessions WHERE id = ${sessionId}::uuid
-      `;
-    });
-  }
-
-  async deleteUserSessions(userId: string): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        DELETE FROM app.portal_sessions WHERE user_id = ${userId}::uuid
-      `;
-    });
-  }
-
-  async extendSession(sessionId: string, newExpiresAt: Date): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        UPDATE app.portal_sessions
-        SET last_activity_at = now(), expires_at = ${newExpiresAt}
-        WHERE id = ${sessionId}::uuid
-      `;
-    });
-  }
-
-  async incrementFailedLogins(
-    userId: string
-  ): Promise<{ failedLoginAttempts: number }> {
-    const rows = await this.db.withSystemContext(async (tx: TransactionSql) => {
-      return tx`
-        UPDATE app.portal_users
-        SET failed_login_attempts = failed_login_attempts + 1,
-            updated_at = now()
-        WHERE id = ${userId}::uuid
-        RETURNING failed_login_attempts
-      `;
-    });
-    return { failedLoginAttempts: Number(rows[0]?.failedLoginAttempts ?? 0) };
-  }
-
-  async lockAccount(userId: string, until: Date): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        UPDATE app.portal_users
-        SET locked_until = ${until}, updated_at = now()
-        WHERE id = ${userId}::uuid
-      `;
-    });
-  }
-
-  async resetFailedLogins(userId: string): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        UPDATE app.portal_users
-        SET failed_login_attempts = 0, locked_until = NULL, updated_at = now()
-        WHERE id = ${userId}::uuid
-      `;
-    });
-  }
-
-  async updateLastLogin(userId: string): Promise<void> {
+  /**
+   * Update last_login_at for a portal user.
+   */
+  async updateLastLogin(portalUserId: string): Promise<void> {
     await this.db.withSystemContext(async (tx: TransactionSql) => {
       await tx`
         UPDATE app.portal_users
         SET last_login_at = now(), updated_at = now()
-        WHERE id = ${userId}::uuid
-      `;
-    });
-  }
-
-  async createPasswordReset(
-    userId: string,
-    tokenHash: string,
-    expiresAt: Date
-  ): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        INSERT INTO app.portal_password_resets (
-          id, user_id, token_hash, expires_at, created_at
-        ) VALUES (
-          gen_random_uuid(), ${userId}::uuid, ${tokenHash}, ${expiresAt}, now()
-        )
-      `;
-    });
-  }
-
-  async findPasswordReset(tokenHash: string): Promise<PasswordReset | null> {
-    const rows = await this.db.withSystemContext(async (tx: TransactionSql) => {
-      return tx`
-        SELECT id, user_id, token_hash, expires_at, used_at, created_at
-        FROM app.portal_password_resets
-        WHERE token_hash = ${tokenHash}
-          AND expires_at > now()
-          AND used_at IS NULL
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
-    });
-    return rows.length > 0 ? (rows[0] as PasswordReset) : null;
-  }
-
-  async markPasswordResetUsed(id: string): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        UPDATE app.portal_password_resets
-        SET used_at = now()
-        WHERE id = ${id}::uuid
-      `;
-    });
-  }
-
-  async updatePassword(userId: string, passwordHash: string): Promise<void> {
-    await this.db.withSystemContext(async (tx: TransactionSql) => {
-      await tx`
-        UPDATE app.portal_users
-        SET password_hash = ${passwordHash}, updated_at = now()
-        WHERE id = ${userId}::uuid
+        WHERE id = ${portalUserId}::uuid
       `;
     });
   }
@@ -1321,16 +1127,18 @@ export class ClientPortalRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT id, tenant_id, email, first_name, last_name, role,
-                 is_active, failed_login_attempts, locked_until,
-                 last_login_at, created_at, updated_at
-          FROM app.portal_users
-          WHERE tenant_id = ${ctx.tenantId}::uuid
-            ${filters.role ? tx`AND role = ${filters.role}` : tx``}
-            ${filters.isActive !== undefined ? tx`AND is_active = ${filters.isActive}` : tx``}
-            ${filters.search ? tx`AND (email ILIKE ${"%" + filters.search + "%"} OR first_name ILIKE ${"%" + filters.search + "%"} OR last_name ILIKE ${"%" + filters.search + "%"})` : tx``}
-            ${pagination.cursor ? tx`AND created_at < (SELECT created_at FROM app.portal_users WHERE id = ${pagination.cursor}::uuid)` : tx``}
-          ORDER BY created_at DESC
+          SELECT pu.id, pu.tenant_id, pu.user_id, u.email,
+                 pu.first_name, pu.last_name, pu.avatar_url,
+                 pu.role, pu.is_active,
+                 pu.last_login_at, pu.created_at, pu.updated_at
+          FROM app.portal_users pu
+          JOIN app.users u ON u.id = pu.user_id
+          WHERE pu.tenant_id = ${ctx.tenantId}::uuid
+            ${filters.role ? tx`AND pu.role = ${filters.role}` : tx``}
+            ${filters.isActive !== undefined ? tx`AND pu.is_active = ${filters.isActive}` : tx``}
+            ${filters.search ? tx`AND (u.email ILIKE ${"%" + filters.search + "%"} OR pu.first_name ILIKE ${"%" + filters.search + "%"} OR pu.last_name ILIKE ${"%" + filters.search + "%"})` : tx``}
+            ${pagination.cursor ? tx`AND pu.created_at < (SELECT created_at FROM app.portal_users WHERE id = ${pagination.cursor}::uuid)` : tx``}
+          ORDER BY pu.created_at DESC
           LIMIT ${limit + 1}
         `;
       }
@@ -1355,54 +1163,75 @@ export class ClientPortalRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT id, tenant_id, email, first_name, last_name, role,
-                 is_active, failed_login_attempts, locked_until,
-                 last_login_at, created_at, updated_at
-          FROM app.portal_users
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          SELECT pu.id, pu.tenant_id, pu.user_id, u.email,
+                 pu.first_name, pu.last_name, pu.avatar_url,
+                 pu.role, pu.is_active,
+                 pu.last_login_at, pu.created_at, pu.updated_at
+          FROM app.portal_users pu
+          JOIN app.users u ON u.id = pu.user_id
+          WHERE pu.id = ${id}::uuid AND pu.tenant_id = ${ctx.tenantId}::uuid
         `;
       }
     );
     return rows.length > 0 ? this.mapUserRow(rows[0]) : null;
   }
 
+  /**
+   * Create a portal user profile linked to a BetterAuth user.
+   * The BetterAuth user (app.users + app."user") must already exist.
+   */
   async createUser(
     ctx: TenantContext,
     data: {
-      email: string;
+      userId: string;
       firstName: string;
       lastName: string;
       role: string;
-      passwordHash: string;
     },
     txOverride?: TransactionSql
   ): Promise<PortalUser> {
     const exec = async (tx: TransactionSql) => {
       return tx`
         INSERT INTO app.portal_users (
-          id, tenant_id, email, first_name, last_name, role,
-          password_hash, is_active, failed_login_attempts,
-          created_at, updated_at
+          id, tenant_id, user_id, first_name, last_name, role,
+          is_active, created_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.tenantId}::uuid,
-          ${data.email}, ${data.firstName}, ${data.lastName}, ${data.role},
-          ${data.passwordHash}, true, 0,
-          now(), now()
+          ${data.userId}::uuid,
+          ${data.firstName}, ${data.lastName}, ${data.role},
+          true, now(), now()
         )
-        RETURNING id, tenant_id, email, first_name, last_name, role,
-                  is_active, failed_login_attempts, locked_until,
-                  last_login_at, created_at, updated_at
+        RETURNING *
       `;
     };
 
-    const [user] = txOverride
+    const [row] = txOverride
       ? await exec(txOverride)
       : await this.db.withTransaction(
           { tenantId: ctx.tenantId, userId: ctx.userId },
           exec
         );
 
-    return this.mapUserRow(user);
+    // We need to fetch the email from app.users since portal_users no longer has it
+    const emailRows = await this.db.withSystemContext(async (tx: TransactionSql) => {
+      return tx`SELECT email FROM app.users WHERE id = ${data.userId}::uuid`;
+    });
+    const email = emailRows[0]?.email ?? "";
+
+    return {
+      id: row.id,
+      tenantId: row.tenantId ?? row.tenant_id,
+      userId: row.userId ?? row.user_id ?? data.userId,
+      email,
+      firstName: row.firstName ?? row.first_name,
+      lastName: row.lastName ?? row.last_name,
+      avatarUrl: row.avatarUrl ?? row.avatar_url ?? null,
+      role: row.role,
+      isActive: row.isActive ?? row.is_active ?? true,
+      lastLoginAt: row.lastLoginAt ?? row.last_login_at ?? null,
+      createdAt: row.createdAt ?? row.created_at,
+      updatedAt: row.updatedAt ?? row.updated_at,
+    };
   }
 
   async updateUser(
@@ -1425,20 +1254,40 @@ export class ClientPortalRepository {
           is_active = COALESCE(${data.isActive ?? null}, is_active),
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-        RETURNING id, tenant_id, email, first_name, last_name, role,
-                  is_active, failed_login_attempts, locked_until,
-                  last_login_at, created_at, updated_at
+        RETURNING *
       `;
     };
 
-    const [user] = txOverride
+    const [row] = txOverride
       ? await exec(txOverride)
       : await this.db.withTransaction(
           { tenantId: ctx.tenantId, userId: ctx.userId },
           exec
         );
 
-    return user ? this.mapUserRow(user) : null;
+    if (!row) return null;
+
+    // Fetch email from users table
+    const userId = row.userId ?? row.user_id;
+    const emailRows = await this.db.withSystemContext(async (tx: TransactionSql) => {
+      return tx`SELECT email FROM app.users WHERE id = ${userId}::uuid`;
+    });
+    const email = emailRows[0]?.email ?? "";
+
+    return {
+      id: row.id,
+      tenantId: row.tenantId ?? row.tenant_id,
+      userId: userId,
+      email,
+      firstName: row.firstName ?? row.first_name,
+      lastName: row.lastName ?? row.last_name,
+      avatarUrl: row.avatarUrl ?? row.avatar_url ?? null,
+      role: row.role,
+      isActive: row.isActive ?? row.is_active ?? false,
+      lastLoginAt: row.lastLoginAt ?? row.last_login_at ?? null,
+      createdAt: row.createdAt ?? row.created_at,
+      updatedAt: row.updatedAt ?? row.updated_at,
+    };
   }
 
   async findUserByEmailInTenant(
@@ -1449,12 +1298,14 @@ export class ClientPortalRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT id, tenant_id, email, first_name, last_name, role,
-                 is_active, failed_login_attempts, locked_until,
-                 last_login_at, created_at, updated_at
-          FROM app.portal_users
-          WHERE LOWER(email) = LOWER(${email})
-            AND tenant_id = ${ctx.tenantId}::uuid
+          SELECT pu.id, pu.tenant_id, pu.user_id, u.email,
+                 pu.first_name, pu.last_name, pu.avatar_url,
+                 pu.role, pu.is_active,
+                 pu.last_login_at, pu.created_at, pu.updated_at
+          FROM app.portal_users pu
+          JOIN app.users u ON u.id = pu.user_id
+          WHERE LOWER(u.email) = LOWER(${email})
+            AND pu.tenant_id = ${ctx.tenantId}::uuid
           LIMIT 1
         `;
       }
@@ -1699,14 +1550,13 @@ export class ClientPortalRepository {
     return {
       id: row.id,
       tenantId: row.tenantId ?? row.tenant_id,
-      email: row.email,
+      userId: row.userId ?? row.user_id ?? "",
+      email: row.email ?? "",
       firstName: row.firstName ?? row.first_name,
       lastName: row.lastName ?? row.last_name,
+      avatarUrl: row.avatarUrl ?? row.avatar_url ?? null,
       role: row.role,
-      passwordHash: row.passwordHash ?? row.password_hash ?? "",
       isActive: row.isActive ?? row.is_active ?? false,
-      failedLoginAttempts: Number(row.failedLoginAttempts ?? row.failed_login_attempts ?? 0),
-      lockedUntil: row.lockedUntil ?? row.locked_until ?? null,
       lastLoginAt: row.lastLoginAt ?? row.last_login_at ?? null,
       createdAt: row.createdAt ?? row.created_at,
       updatedAt: row.updatedAt ?? row.updated_at,

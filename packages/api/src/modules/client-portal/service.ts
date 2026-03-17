@@ -2,8 +2,11 @@
  * Client Portal Module - Service Layer
  *
  * Business logic for the customer-facing portal.
- * Handles authentication, ticket management with state machine,
- * document/news CRUD, billing queries, and user administration.
+ * Authentication (login, logout, forgot-password, reset-password) has been
+ * removed. All auth is now handled by BetterAuth at /api/auth/*.
+ *
+ * This service handles: ticket management with state machine,
+ * document/news CRUD, billing queries, user administration, and dashboard.
  */
 
 import type { TransactionSql } from "postgres";
@@ -16,16 +19,12 @@ import {
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
 import type { TicketStatus } from "./schemas";
+import { getBetterAuth } from "../../lib/better-auth";
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
-const SESSION_TTL_HOURS = 24;
-const SESSION_REMEMBER_ME_DAYS = 30;
-const PASSWORD_RESET_TTL_HOURS = 1;
 const REOPEN_WINDOW_DAYS = 30;
 
 /**
@@ -58,7 +57,7 @@ const SLA_TARGETS: Record<
   critical: { firstResponseHours: 2, resolutionHours: 8 },
   high: { firstResponseHours: 4, resolutionHours: 24 },
   medium: { firstResponseHours: 8, resolutionHours: 48 },
-  low: { firstResponseHours: 24, resolutionHours: 120 }, // 5 business days ~= 120h
+  low: { firstResponseHours: 24, resolutionHours: 120 },
 };
 
 // =============================================================================
@@ -70,194 +69,6 @@ export class ClientPortalService {
     private repository: ClientPortalRepository,
     private db: any
   ) {}
-
-  // ===========================================================================
-  // Auth Operations
-  // ===========================================================================
-
-  async login(
-    email: string,
-    password: string,
-    rememberMe: boolean,
-    ipAddress: string | null,
-    userAgent: string | null
-  ): Promise<ServiceResult<{ token: string; user: Record<string, unknown> }>> {
-    const user = await this.repository.findUserByEmail(email);
-
-    if (!user) {
-      return {
-        success: false,
-        error: {
-          code: ErrorCodes.INVALID_CREDENTIALS,
-          message: "Invalid email or password",
-        },
-      };
-    }
-
-    if (!user.isActive) {
-      return {
-        success: false,
-        error: {
-          code: "ACCOUNT_DISABLED",
-          message: "This account has been deactivated",
-        },
-      };
-    }
-
-    // Check lockout
-    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-      const minutesRemaining = Math.ceil(
-        (new Date(user.lockedUntil).getTime() - Date.now()) / 60000
-      );
-      return {
-        success: false,
-        error: {
-          code: "ACCOUNT_LOCKED",
-          message: `Account is locked. Try again in ${minutesRemaining} minute${minutesRemaining === 1 ? "" : "s"}.`,
-        },
-      };
-    }
-
-    // Verify password using Bun's built-in bcrypt
-    const passwordValid = await Bun.password.verify(
-      password,
-      user.passwordHash
-    );
-    if (!passwordValid) {
-      const { failedLoginAttempts } =
-        await this.repository.incrementFailedLogins(user.id);
-
-      if (failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-        const lockUntil = new Date(
-          Date.now() + LOCKOUT_MINUTES * 60 * 1000
-        );
-        await this.repository.lockAccount(user.id, lockUntil);
-        return {
-          success: false,
-          error: {
-            code: "ACCOUNT_LOCKED",
-            message: `Too many failed attempts. Account locked for ${LOCKOUT_MINUTES} minutes.`,
-          },
-        };
-      }
-
-      return {
-        success: false,
-        error: {
-          code: ErrorCodes.INVALID_CREDENTIALS,
-          message: "Invalid email or password",
-        },
-      };
-    }
-
-    // Successful login: reset failed attempts, update last login
-    await this.repository.resetFailedLogins(user.id);
-    await this.repository.updateLastLogin(user.id);
-
-    // Create session
-    const rawToken = crypto.randomUUID();
-    const tokenHash = await this.hashToken(rawToken);
-    const expiresAt = rememberMe
-      ? new Date(
-          Date.now() + SESSION_REMEMBER_ME_DAYS * 24 * 60 * 60 * 1000
-        )
-      : new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
-
-    await this.repository.createSession(
-      user.id,
-      user.tenantId,
-      tokenHash,
-      ipAddress,
-      userAgent,
-      expiresAt
-    );
-
-    return {
-      success: true,
-      data: {
-        token: rawToken,
-        user: {
-          id: user.id,
-          tenantId: user.tenantId,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          lastLoginAt: user.lastLoginAt?.toISOString?.() ?? null,
-        },
-      },
-    };
-  }
-
-  async logout(sessionId: string): Promise<ServiceResult<void>> {
-    await this.repository.deleteSession(sessionId);
-    return { success: true };
-  }
-
-  async forgotPassword(email: string): Promise<ServiceResult<void>> {
-    // Always return success to prevent email enumeration
-    const user = await this.repository.findUserByEmail(email);
-
-    if (user && user.isActive) {
-      const rawToken = crypto.randomUUID();
-      const tokenHash = await this.hashToken(rawToken);
-      const expiresAt = new Date(
-        Date.now() + PASSWORD_RESET_TTL_HOURS * 60 * 60 * 1000
-      );
-
-      await this.repository.createPasswordReset(
-        user.id,
-        tokenHash,
-        expiresAt
-      );
-
-      // In production, send email via notification worker with the rawToken.
-      // For now, we emit a domain event that can be picked up by the outbox processor.
-      await this.db.withSystemContext(async (tx: TransactionSql) => {
-        await this.emitDomainEventSystem(tx, user.tenantId, {
-          aggregateType: "portal_user",
-          aggregateId: user.id,
-          eventType: "client-portal.password-reset.requested",
-          payload: {
-            userId: user.id,
-            email: user.email,
-            resetToken: rawToken,
-          },
-        });
-      });
-    }
-
-    return { success: true };
-  }
-
-  async resetPassword(
-    token: string,
-    newPassword: string
-  ): Promise<ServiceResult<void>> {
-    const tokenHash = await this.hashToken(token);
-    const reset = await this.repository.findPasswordReset(tokenHash);
-
-    if (!reset) {
-      return {
-        success: false,
-        error: {
-          code: ErrorCodes.BAD_REQUEST,
-          message: "Invalid or expired reset token",
-        },
-      };
-    }
-
-    const passwordHash = await Bun.password.hash(newPassword, {
-      algorithm: "bcrypt",
-      cost: 12,
-    });
-
-    await this.repository.updatePassword(reset.userId, passwordHash);
-    await this.repository.markPasswordResetUsed(reset.id);
-    await this.repository.deleteUserSessions(reset.userId);
-
-    return { success: true };
-  }
 
   // ===========================================================================
   // Ticket Operations
@@ -1170,8 +981,6 @@ export class ClientPortalService {
       publishedAt?: string;
     }
   ): Promise<ServiceResult<any>> {
-    const existing = await this.repository.getNewsBySlug(ctx, id);
-    // Try by ID instead
     let article: any = null;
 
     try {
@@ -1452,6 +1261,11 @@ export class ClientPortalService {
     return { success: true, data: this.formatUser(user) };
   }
 
+  /**
+   * Create a new portal user.
+   * 1. Creates a BetterAuth user via the BetterAuth API (handles app."user" + app.users)
+   * 2. Creates a portal_users profile record linking to that BetterAuth user
+   */
   async createUser(
     ctx: TenantContext,
     data: {
@@ -1477,23 +1291,53 @@ export class ClientPortalService {
       };
     }
 
-    const passwordHash = await Bun.password.hash(data.password, {
-      algorithm: "bcrypt",
-      cost: 12,
-    });
-
     try {
+      // Step 1: Create BetterAuth user (or find existing one)
+      const auth = getBetterAuth();
+      let betterAuthUserId: string;
+
+      try {
+        // Try to create via BetterAuth API
+        const signUpResult = await auth.api.signUpEmail({
+          body: {
+            email: data.email.trim().toLowerCase(),
+            password: data.password,
+            name: `${data.firstName} ${data.lastName}`,
+          },
+        });
+        betterAuthUserId = signUpResult.user.id;
+      } catch (signUpError: any) {
+        // If user already exists in BetterAuth (e.g. HRIS user), look up their ID
+        const existingRows = await this.db.withSystemContext(async (tx: TransactionSql) => {
+          return tx`
+            SELECT id::text as id FROM app.users WHERE LOWER(email) = LOWER(${data.email})
+          `;
+        });
+
+        if (existingRows.length === 0) {
+          return {
+            success: false,
+            error: {
+              code: "CREATE_FAILED",
+              message: "Failed to create user account",
+            },
+          };
+        }
+
+        betterAuthUserId = existingRows[0].id;
+      }
+
+      // Step 2: Create portal_users profile
       const user = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
           const result = await this.repository.createUser(
             ctx,
             {
-              email: data.email,
+              userId: betterAuthUserId,
               firstName: data.firstName,
               lastName: data.lastName,
               role: data.role,
-              passwordHash,
             },
             tx
           );
@@ -1504,6 +1348,7 @@ export class ClientPortalService {
             eventType: "client-portal.user.created",
             payload: {
               userId: result.id,
+              betterAuthUserId,
               email: data.email,
               role: data.role,
               actor: ctx.userId,
@@ -1569,11 +1414,6 @@ export class ClientPortalService {
             },
           });
 
-          // If deactivating, invalidate their sessions
-          if (data.isActive === false) {
-            await this.repository.deleteUserSessions(id);
-          }
-
           return result;
         }
       );
@@ -1606,14 +1446,14 @@ export class ClientPortalService {
 
   async getDashboard(
     ctx: TenantContext,
-    userId: string,
+    portalUserId: string,
     userRole: string
   ): Promise<ServiceResult<any>> {
     const isAdmin = userRole === "admin" || userRole === "super_admin";
 
     const [stats, recentTickets, license] = await Promise.all([
-      this.repository.getDashboardStats(ctx, userId, isAdmin),
-      this.repository.getRecentTickets(ctx, userId, isAdmin),
+      this.repository.getDashboardStats(ctx, portalUserId, isAdmin),
+      this.repository.getRecentTickets(ctx, portalUserId, isAdmin),
       this.repository.getLicense(ctx),
     ]);
 
@@ -1645,14 +1485,6 @@ export class ClientPortalService {
   // Helper Methods
   // ===========================================================================
 
-  private async hashToken(token: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(token);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
   private async emitDomainEvent(
     tx: TransactionSql,
     ctx: TenantContext,
@@ -1668,27 +1500,6 @@ export class ClientPortalService {
         id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
       ) VALUES (
         gen_random_uuid(), ${ctx.tenantId}::uuid, ${event.aggregateType},
-        ${event.aggregateId}::uuid, ${event.eventType},
-        ${JSON.stringify(event.payload)}::jsonb, now()
-      )
-    `;
-  }
-
-  private async emitDomainEventSystem(
-    tx: TransactionSql,
-    tenantId: string,
-    event: {
-      aggregateType: string;
-      aggregateId: string;
-      eventType: string;
-      payload: Record<string, unknown>;
-    }
-  ): Promise<void> {
-    await tx`
-      INSERT INTO app.domain_outbox (
-        id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at
-      ) VALUES (
-        gen_random_uuid(), ${tenantId}::uuid, ${event.aggregateType},
         ${event.aggregateId}::uuid, ${event.eventType},
         ${JSON.stringify(event.payload)}::jsonb, now()
       )

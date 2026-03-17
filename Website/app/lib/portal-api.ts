@@ -1,4 +1,16 @@
+/**
+ * Portal API Client
+ *
+ * HTTP client for the Staffora client portal API.
+ * Authentication is handled by BetterAuth:
+ * - Login: POST /api/auth/sign-in/email (BetterAuth endpoint)
+ * - Logout: POST /api/auth/sign-out (BetterAuth endpoint)
+ * - Password reset: BetterAuth's built-in flow
+ * - Session check: GET /api/v1/client-portal/auth/me (portal profile)
+ */
+
 const API_BASE = "/api/v1/client-portal";
+const AUTH_BASE = "/api/auth";
 
 export class PortalApiError extends Error {
   public status: number;
@@ -39,24 +51,63 @@ async function portalFetch<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Fetch wrapper for BetterAuth endpoints (different base URL).
+ */
+async function authFetch<T = unknown>(
+  path: string,
+  options?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${AUTH_BASE}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const error = await res
+      .json()
+      .catch(() => ({ error: { message: "Authentication failed" } }));
+    throw new PortalApiError(
+      res.status,
+      error.error?.message || error.message || "Authentication failed",
+      error.error?.code || error.code,
+    );
+  }
+
+  return res.json() as Promise<T>;
+}
+
 export const portalApi = {
   auth: {
+    /**
+     * Sign in via BetterAuth's email/password endpoint.
+     * Sets the staffora.session_token cookie on success.
+     */
     login: (data: { email: string; password: string; rememberMe?: boolean }) =>
-      portalFetch("/auth/login", {
+      authFetch("/sign-in/email", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          rememberMe: data.rememberMe,
+        }),
       }),
-    logout: () => portalFetch("/auth/logout", { method: "POST" }),
-    forgotPassword: (email: string) =>
-      portalFetch("/auth/forgot-password", {
-        method: "POST",
-        body: JSON.stringify({ email }),
-      }),
-    resetPassword: (data: { token: string; password: string }) =>
-      portalFetch("/auth/reset-password", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+
+    /**
+     * Sign out via BetterAuth's sign-out endpoint.
+     * Clears the session cookie.
+     */
+    logout: () =>
+      authFetch("/sign-out", { method: "POST" }),
+
+    /**
+     * Get the current user's portal profile.
+     * Returns the portal_users record if the authenticated BetterAuth user has portal access.
+     */
     me: () => portalFetch("/auth/me"),
   },
   dashboard: {
