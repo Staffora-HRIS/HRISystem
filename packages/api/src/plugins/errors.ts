@@ -80,6 +80,9 @@ export const ErrorCodes = {
   IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
   IDEMPOTENCY_HASH_MISMATCH: "IDEMPOTENCY_HASH_MISMATCH",
   REQUEST_STILL_PROCESSING: "REQUEST_STILL_PROCESSING",
+
+  // Report errors
+  REPORT_GENERATION_FAILED: "REPORT_GENERATION_FAILED",
 } as const;
 
 export type ErrorCode = keyof typeof ErrorCodes;
@@ -136,6 +139,7 @@ const ERROR_STATUS_MAP: Record<ErrorCode, number> = {
 
   // 500 Internal Server Error
   INTERNAL_ERROR: 500,
+  REPORT_GENERATION_FAILED: 500,
 
   // 503 Service Unavailable
   SERVICE_UNAVAILABLE: 503,
