@@ -2229,43 +2229,50 @@ class Scheduler {
               );
 
               // Find eligible records (batch of 200 per rule per tenant)
-              let eligibleQuery;
+              // Use sql.unsafe() for dynamic table/column identifiers
+              const escIdent = (name: string) =>
+                name.split(".").map((p) => `"${p}"`).join(".");
+              const tbl = escIdent(rule.sourceTable);
+              const dtCol = escIdent(rule.dateColumn);
+
+              let eligibleQuery: Array<{ id: string }>;
               if (rule.statusColumn && rule.statusValue) {
-                eligibleQuery = await this.sql<Array<{ id: string }>>`
-                  SELECT t.id::text as id
-                  FROM ${this.sql(rule.sourceTable)} t
-                  LEFT JOIN app.archived_records ar
-                    ON ar.source_table = ${rule.sourceTable}
-                    AND ar.source_id = t.id
-                    AND ar.status = 'archived'
-                  WHERE ar.id IS NULL
-                    AND t.${this.sql(rule.statusColumn)} = ${rule.statusValue}
-                    AND t.${this.sql(rule.dateColumn)} < ${cutoffDate}
-                  LIMIT 200
-                `;
+                const stCol = escIdent(rule.statusColumn);
+                eligibleQuery = await this.sql.unsafe<Array<{ id: string }>>(
+                  `SELECT t.id::text as id
+                   FROM ${tbl} t
+                   LEFT JOIN app.archived_records ar
+                     ON ar.source_table = $1
+                     AND ar.source_id = t.id
+                     AND ar.status = 'archived'
+                   WHERE ar.id IS NULL
+                     AND t.${stCol} = $2
+                     AND t.${dtCol} < $3
+                   LIMIT 200`,
+                  [rule.sourceTable, rule.statusValue, cutoffDate]
+                );
               } else {
-                eligibleQuery = await this.sql<Array<{ id: string }>>`
-                  SELECT t.id::text as id
-                  FROM ${this.sql(rule.sourceTable)} t
-                  LEFT JOIN app.archived_records ar
-                    ON ar.source_table = ${rule.sourceTable}
-                    AND ar.source_id = t.id
-                    AND ar.status = 'archived'
-                  WHERE ar.id IS NULL
-                    AND t.${this.sql(rule.dateColumn)} < ${cutoffDate}
-                  LIMIT 200
-                `;
+                eligibleQuery = await this.sql.unsafe<Array<{ id: string }>>(
+                  `SELECT t.id::text as id
+                   FROM ${tbl} t
+                   LEFT JOIN app.archived_records ar
+                     ON ar.source_table = $1
+                     AND ar.source_id = t.id
+                     AND ar.status = 'archived'
+                   WHERE ar.id IS NULL
+                     AND t.${dtCol} < $2
+                   LIMIT 200`,
+                  [rule.sourceTable, cutoffDate]
+                );
               }
 
               for (const record of eligibleQuery) {
                 try {
                   // Fetch full record data
-                  const [sourceRow] = await this.sql<Array<{ data: unknown }>>`
-                    SELECT row_to_json(t.*) as data
-                    FROM ${this.sql(rule.sourceTable)} t
-                    WHERE t.id = ${record.id}::uuid
-                    LIMIT 1
-                  `;
+                  const [sourceRow] = await this.sql.unsafe<Array<{ data: unknown }>>(
+                    `SELECT row_to_json(t.*) as data FROM ${tbl} t WHERE t.id = $1::uuid LIMIT 1`,
+                    [record.id]
+                  );
 
                   if (!sourceRow?.data) {
                     totalSkipped++;
@@ -2298,10 +2305,10 @@ class Scheduler {
                       )
                     `;
 
-                    await tx`
-                      DELETE FROM ${tx(rule.sourceTable)}
-                      WHERE id = ${record.id}::uuid
-                    `;
+                    await tx.unsafe(
+                      `DELETE FROM ${tbl} WHERE id = $1::uuid`,
+                      [record.id]
+                    );
 
                     // Outbox event
                     await tx`
