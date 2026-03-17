@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck — OpenTelemetry is an optional dependency, not yet installed
 /**
  * OpenTelemetry Setup Module
  *

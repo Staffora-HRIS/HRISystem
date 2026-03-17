@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck - sentry.ts: @sentry/node is an optional dependency not yet installed
 /**
  * Sentry Error Tracking Integration
  *
