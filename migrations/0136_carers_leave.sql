@@ -58,9 +58,7 @@ BEGIN
         'CARERS',
         'Carer''s Leave',
         'unpaid',
-        'Statutory unpaid leave for employees with dependants requiring long-term care. '
-        || 'Day-one right under the Carer''s Leave Act 2023 (effective April 2024). '
-        || '1 week (5 days) per rolling 12-month period. Can be taken as individual days or half days.',
+        'Statutory unpaid leave for employees with dependants requiring long-term care. Day-one right under the Carer''s Leave Act 2023 (effective April 2024). 1 week (5 days) per rolling 12-month period. Can be taken as individual days or half days.',
         'days',
         false,       -- no attachment required
         true,        -- requires approval (employer can request reasonable notice)
@@ -187,9 +185,7 @@ CREATE TRIGGER update_carers_leave_entitlements_updated_at
 -- Table Comments
 -- =============================================================================
 
-COMMENT ON TABLE app.carers_leave_entitlements IS
-    'Day-one right from April 2024 under the Carer''s Leave Act 2023. '
-    || '1 week unpaid leave per year for employees with dependants needing long-term care.';
+COMMENT ON TABLE app.carers_leave_entitlements IS 'Day-one right from April 2024 under the Carer''s Leave Act 2023. 1 week unpaid leave per year for employees with dependants needing long-term care.';
 COMMENT ON COLUMN app.carers_leave_entitlements.id IS 'Primary UUID identifier';
 COMMENT ON COLUMN app.carers_leave_entitlements.tenant_id IS 'Tenant that owns this record';
 COMMENT ON COLUMN app.carers_leave_entitlements.employee_id IS 'Employee receiving the entitlement';
