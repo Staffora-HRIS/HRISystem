@@ -130,6 +130,8 @@ CREATE TRIGGER trg_geofence_locations_updated_at
 -- =============================================================================
 
 -- Calculate Haversine distance between two points
+-- Drop first to handle return type change (0036 defines it as RETURNS numeric)
+DROP FUNCTION IF EXISTS app.haversine_distance(numeric, numeric, numeric, numeric);
 CREATE OR REPLACE FUNCTION app.haversine_distance(
     lat1 decimal,
     lon1 decimal,
