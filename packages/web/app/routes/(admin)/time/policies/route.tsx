@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -189,11 +189,39 @@ export default function TimePoliciesPage() {
     },
   ];
 
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      return api.post("/api/v1/time/schedules", payload);
+    },
+    onSuccess: () => {
+      toast.success("Policy created successfully");
+      setShowCreateModal(false);
+      queryClient.invalidateQueries({ queryKey: ["admin-time-policies"] });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to create policy";
+      toast.error(message);
+    },
+  });
+
   const handleCreate = () => {
-    // TODO: Wire to POST /api/v1/time/schedules with form data from modal
-    toast.success("Policy created successfully");
-    setShowCreateModal(false);
-    queryClient.invalidateQueries({ queryKey: ["admin-time-policies"] });
+    const form = formRef.current;
+    if (!form) return;
+
+    const data = new FormData(form);
+    createMutation.mutate({
+      name: data.get("name") as string,
+      description: (data.get("description") as string) || null,
+      type: data.get("type") as string,
+      workHoursPerDay: Number(data.get("workHoursPerDay")) || 8,
+      workDaysPerWeek: Number(data.get("workDaysPerWeek")) || 5,
+      breakDurationMinutes: Number(data.get("breakDurationMinutes")) || 60,
+      overtimeEnabled: data.get("overtimeEnabled") === "true",
+      overtimeThresholdDaily: Number(data.get("overtimeThresholdDaily")) || null,
+      overtimeThresholdWeekly: Number(data.get("overtimeThresholdWeekly")) || null,
+    });
   };
 
   return (
@@ -302,66 +330,80 @@ export default function TimePoliciesPage() {
           <h3 className="text-lg font-semibold">Create Time Policy</h3>
         </ModalHeader>
         <ModalBody className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Policy Name" placeholder="e.g. Standard Office Hours" required />
-            <Select
-              label="Policy Type"
-              options={POLICY_TYPE_OPTIONS}
-              defaultValue="standard"
-            />
-          </div>
-          <Input
-            label="Description"
-            placeholder="Describe this time policy"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Work Hours Per Day"
-              type="number"
-              defaultValue="8"
-              required
-            />
-            <Input
-              label="Work Days Per Week"
-              type="number"
-              defaultValue="5"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Break Duration (minutes)"
-              type="number"
-              defaultValue="60"
-              required
-            />
-            <Select
-              label="Overtime Enabled"
-              options={[
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ]}
-              defaultValue="true"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Overtime Threshold (Daily Hours)"
-              type="number"
-              defaultValue="8"
-            />
-            <Input
-              label="Overtime Threshold (Weekly Hours)"
-              type="number"
-              defaultValue="40"
-            />
-          </div>
+          <form ref={formRef}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input name="name" label="Policy Name" placeholder="e.g. Standard Office Hours" required />
+                <Select
+                  name="type"
+                  label="Policy Type"
+                  options={POLICY_TYPE_OPTIONS}
+                  defaultValue="standard"
+                />
+              </div>
+              <Input
+                name="description"
+                label="Description"
+                placeholder="Describe this time policy"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  name="workHoursPerDay"
+                  label="Work Hours Per Day"
+                  type="number"
+                  defaultValue="8"
+                  required
+                />
+                <Input
+                  name="workDaysPerWeek"
+                  label="Work Days Per Week"
+                  type="number"
+                  defaultValue="5"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  name="breakDurationMinutes"
+                  label="Break Duration (minutes)"
+                  type="number"
+                  defaultValue="60"
+                  required
+                />
+                <Select
+                  name="overtimeEnabled"
+                  label="Overtime Enabled"
+                  options={[
+                    { value: "true", label: "Yes" },
+                    { value: "false", label: "No" },
+                  ]}
+                  defaultValue="true"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  name="overtimeThresholdDaily"
+                  label="Overtime Threshold (Daily Hours)"
+                  type="number"
+                  defaultValue="8"
+                />
+                <Input
+                  name="overtimeThresholdWeekly"
+                  label="Overtime Threshold (Weekly Hours)"
+                  type="number"
+                  defaultValue="40"
+                />
+              </div>
+            </div>
+          </form>
         </ModalBody>
         <ModalFooter>
           <Button variant="outline" onClick={() => setShowCreateModal(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate}>Create Policy</Button>
+          <Button onClick={handleCreate} disabled={createMutation.isPending}>
+            {createMutation.isPending ? "Creating..." : "Create Policy"}
+          </Button>
         </ModalFooter>
       </Modal>
     </div>
