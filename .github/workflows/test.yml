@@ -32,18 +32,17 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "redis-cli -a staffora_redis_ci --no-auth-warning ping"
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      TEST_REDIS_PASSWORD: ''
+      REDIS_URL: redis://localhost:6379
+
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure Redis password
-        run: |
-          redis-cli CONFIG SET requirepass staffora_redis_ci
-          redis-cli -a staffora_redis_ci --no-auth-warning ping
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -88,8 +87,8 @@ jobs:
           TEST_DB_ADMIN_PASSWORD: hris_dev_password
           TEST_REDIS_HOST: localhost
           TEST_REDIS_PORT: '6379'
-          TEST_REDIS_PASSWORD: staffora_redis_ci
-          REDIS_URL: redis://:staffora_redis_ci@localhost:6379
+          TEST_REDIS_PASSWORD: ''
+          REDIS_URL: redis://localhost:6379
           BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
           SESSION_SECRET: test-session-secret-32-characters-long
           CSRF_SECRET: test-csrf-secret-that-is-32-chars

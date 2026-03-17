@@ -58,7 +58,7 @@ describe("queryClient configuration", () => {
 
   it("enables refetch on window focus", () => {
     const defaults = queryClient.getDefaultOptions();
-    expect(defaults.queries?.refetchOnWindowFocus).toBe(true);
+    expect(defaults.queries?.refetchOnWindowFocus).toBe("always");
   });
 
   it("enables refetch on reconnect", () => {

@@ -310,28 +310,73 @@ Detailed documentation is organized in `Docs/` with subfolder READMEs for AI con
 
 ```
 Docs/
-├── README.md                  ← Start here: folder map, project summary, critical patterns
+├── README.md                  ← Documentation portal: folder map, quick links, audience guides
+├── system-documentation.md    ← Complete system reference (consolidated from .claude/)
 ├── guides/                    ← Setup, deployment, frontend usage
-│   ├── README.md              # Quick reference: commands, ports, env vars
-│   ├── GETTING_STARTED.md     # Dev setup, first run, common commands
-│   ├── DEPLOYMENT.md          # Docker, env vars, production checklist
-│   └── FRONTEND.md            # React Router v7, hooks, React Query
+│   ├── README.md
+│   ├── GETTING_STARTED.md
+│   ├── DEPLOYMENT.md
+│   └── FRONTEND.md
 ├── architecture/              ← System design and internals
-│   ├── README.md              # Plugin order, module pattern, DB roles, streams
+│   ├── README.md
 │   ├── ARCHITECTURE.md        # Mermaid diagrams, request flow, data flow
 │   ├── DATABASE.md            # Schema, migrations, RLS, table catalog
-│   └── WORKER_SYSTEM.md       # Background jobs, Redis Streams, outbox
+│   ├── WORKER_SYSTEM.md       # Background jobs, Redis Streams, outbox
+│   ├── PERMISSIONS_SYSTEM.md  # Permission model and RBAC details
+│   ├── architecture-map.md    # High-level architecture map
+│   ├── repository-map.md      # Repository layout reference
+│   └── permissions-v2-migration-guide.md
 ├── api/                       ← API surface and contracts
-│   ├── README.md              # Headers, response format, endpoint counts
+│   ├── README.md
 │   ├── API_REFERENCE.md       # All 200+ endpoints by module
 │   └── ERROR_CODES.md         # Error codes with messages by module
-└── patterns/                  ← Reusable design patterns
-    ├── README.md              # Pattern summary: RLS, dating, outbox, RBAC
-    ├── STATE_MACHINES.md      # 5 state machines with Mermaid diagrams
-    └── SECURITY.md            # RLS, auth, RBAC, audit, idempotency
+├── patterns/                  ← Reusable design patterns
+│   ├── README.md              # Pattern summary: RLS, dating, outbox, RBAC
+│   ├── STATE_MACHINES.md      # 5 state machines with Mermaid diagrams
+│   └── SECURITY.md            # RLS, auth, RBAC, audit, idempotency
+├── operations/                ← Production readiness
+│   ├── README.md
+│   ├── production-checklist.md
+│   └── production-readiness-report.md
+├── devops/                    ← Infrastructure & CI/CD
+│   ├── README.md
+│   ├── devops-status-report.md
+│   └── devops-tasks.md
+├── compliance/                ← UK regulations & GDPR
+│   ├── README.md
+│   └── uk-hr-compliance-report.md
+├── checklists/                ← Engineering quality checklists
+│   ├── README.md
+│   ├── enterprise-engineering-checklist.md
+│   └── devops-master-checklist.md
+├── audit/                     ← System audit reports
+│   ├── README.md
+│   └── (18 audit files)
+├── issues/                    ← Known issues by category
+│   ├── README.md
+│   ├── architecture-*.md      # Architecture issues (8 files)
+│   ├── compliance-*.md        # Compliance issues (12 files)
+│   ├── security-*.md          # Security issues (8 files)
+│   └── tech-debt-*.md         # Technical debt (10 files)
+├── project-management/        ← Roadmaps, sprints, risk register
+│   ├── kanban-board.md
+│   ├── risk-register.md
+│   ├── roadmap.md
+│   ├── sprint-plan-phase1.md
+│   ├── sprint-plan-phase2.md
+│   ├── sprint-plan-phase3.md
+│   └── engineering-todo.md
+├── project-analysis/          ← Requirements & implementation status
+│   ├── README.md
+│   ├── master_requirements.md
+│   ├── implementation_status.md
+│   └── tickets.md
+└── archive/                   ← Superseded documentation
+    ├── README.md
+    └── (archived duplicates)
 ```
 
-When working on a specific area, read the relevant subfolder README first, then drill into the detailed file.
+When working on a specific area, read the relevant subfolder README first, then drill into the detailed file. Each subfolder README provides a summary of its contents and links to the detailed documents within.
 
 ## Skills (use `/skill-name` in Claude Code)
 
