@@ -17,10 +17,10 @@ import type {
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
 import {
-  canTransitionEmployee,
-  getValidEmployeeTransitions,
+  canTransition as canTransitionEmployee,
+  getValidTransitions as getValidEmployeeTransitions,
   EmployeeStates,
-} from "@staffora/shared";
+} from "@staffora/shared/state-machines";
 import type {
   CreateOrgUnit,
   UpdateOrgUnit,
