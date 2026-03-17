@@ -143,7 +143,95 @@ export const AuditActions = {
   // Settings
   SETTINGS_UPDATED: "platform.settings.updated",
   TENANT_UPDATED: "platform.tenant.updated",
+
+  // GDPR Data Access (Article 30 - read audit)
+  DATA_ACCESS: "gdpr.data_access",
+  EMPLOYEE_DATA_ACCESSED: "gdpr.employee_data.accessed",
+  DIVERSITY_DATA_ACCESSED: "gdpr.diversity_data.accessed",
+  EMERGENCY_CONTACT_ACCESSED: "gdpr.emergency_contact.accessed",
+  DSAR_DATA_ACCESSED: "gdpr.dsar.accessed",
+  BENEFITS_DATA_ACCESSED: "gdpr.benefits_data.accessed",
+  ABSENCE_DATA_ACCESSED: "gdpr.absence_data.accessed",
+  RIGHT_TO_WORK_ACCESSED: "gdpr.right_to_work.accessed",
 } as const;
+
+// =============================================================================
+// Sensitive Read Routes (GDPR Article 30 Compliance)
+// =============================================================================
+
+export interface SensitiveReadRoute {
+  pattern: RegExp;
+  resourceType: string;
+  action: string;
+}
+
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+/**
+ * Routes that access sensitive personal data and require read audit logging.
+ * Each entry matches a URL pattern and maps to a resource type and audit action.
+ */
+export const SENSITIVE_READ_ROUTES: SensitiveReadRoute[] = [
+  {
+    pattern: new RegExp(`^/api/v1/hr/employees/${UUID_PATTERN}$`),
+    resourceType: "employee",
+    action: AuditActions.EMPLOYEE_DATA_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/diversity(/.*)?$`),
+    resourceType: "diversity",
+    action: AuditActions.DIVERSITY_DATA_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/emergency-contacts(/.*)?$`),
+    resourceType: "emergency_contact",
+    action: AuditActions.EMERGENCY_CONTACT_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/dsar(/.*)?$`),
+    resourceType: "dsar",
+    action: AuditActions.DSAR_DATA_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/benefits/enrollments/${UUID_PATTERN}$`),
+    resourceType: "benefit_enrollment",
+    action: AuditActions.BENEFITS_DATA_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/absence/employees/${UUID_PATTERN}(/.*)?$`),
+    resourceType: "absence",
+    action: AuditActions.ABSENCE_DATA_ACCESSED,
+  },
+  {
+    pattern: new RegExp(`^/api/v1/right-to-work(/.*)?$`),
+    resourceType: "right_to_work",
+    action: AuditActions.RIGHT_TO_WORK_ACCESSED,
+  },
+];
+
+/**
+ * Match a request path against the sensitive read routes.
+ * Returns the matching route info or null if no match.
+ */
+export function matchSensitiveReadRoute(
+  path: string
+): { resourceType: string; action: string } | null {
+  if (!path) return null;
+  for (const route of SENSITIVE_READ_ROUTES) {
+    if (route.pattern.test(path)) {
+      return { resourceType: route.resourceType, action: route.action };
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if GDPR read audit logging is enabled via environment variable.
+ * Only returns true for the exact string "true" (case-sensitive).
+ */
+export function isReadAuditEnabled(): boolean {
+  return process.env["AUDIT_READ_ACCESS"] === "true";
+}
 
 // =============================================================================
 // Audit Service
