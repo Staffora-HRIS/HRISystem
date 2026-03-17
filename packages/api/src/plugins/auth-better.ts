@@ -435,9 +435,13 @@ export function authPlugin(options: AuthPluginOptions = {}) {
   // Singleton: created once when plugin is initialized, reused across all requests
   let authServiceSingleton: AuthService | null = null;
 
+  // Throttle verifySyncOnLogin: run at most once per user per 5 minutes
+  const syncCheckedUsers = new Map<string, number>();
+  const SYNC_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
   return new Elysia({ name: "auth" })
     .derive({ as: "global" }, async (ctx) => {
-      const { request } = ctx;
+      const { request, path } = ctx as any;
       const db = (ctx as any).db as DatabaseClient;
       const cache = (ctx as any).cache as CacheClient | undefined;
 
@@ -446,17 +450,14 @@ export function authPlugin(options: AuthPluginOptions = {}) {
       }
 
       // Skip expensive session resolution for health checks, docs, and auth endpoints.
-      // These paths don't need user/session context and should respond as fast as possible.
-      {
-        const pathname = new URL(request.url).pathname;
-        if (shouldSkipAuth(pathname)) {
-          return {
-            user: null,
-            session: null,
-            isAuthenticated: false as const,
-            authService: authServiceSingleton,
-          };
-        }
+      // Uses Elysia's pre-parsed `path` instead of creating a new URL object per request.
+      if (shouldSkipAuth(path)) {
+        return {
+          user: null,
+          session: null,
+          isAuthenticated: false as const,
+          authService: authServiceSingleton,
+        };
       }
 
       try {
@@ -480,8 +481,21 @@ export function authPlugin(options: AuthPluginOptions = {}) {
 
         // Fire-and-forget user table sync verification to catch drift
         // between Better Auth "user" table and app.users.
-        // Non-blocking: does not delay the response.
-        authServiceSingleton.verifySyncOnLogin(user.id).catch(() => {});
+        // Throttled: only runs once per user per 5 minutes to avoid
+        // unnecessary DB queries on every authenticated request.
+        const now = Date.now();
+        const lastChecked = syncCheckedUsers.get(user.id);
+        if (!lastChecked || now - lastChecked > SYNC_CHECK_INTERVAL_MS) {
+          syncCheckedUsers.set(user.id, now);
+          authServiceSingleton.verifySyncOnLogin(user.id).catch(() => {});
+          // Prevent unbounded growth: prune entries older than 2x interval
+          if (syncCheckedUsers.size > 1000) {
+            const cutoff = now - SYNC_CHECK_INTERVAL_MS * 2;
+            for (const [uid, ts] of syncCheckedUsers) {
+              if (ts < cutoff) syncCheckedUsers.delete(uid);
+            }
+          }
+        }
 
         return {
           user: user as User,
@@ -583,12 +597,10 @@ export function requireMfa() {
 
       if (hasMfa) {
         // Verify MFA was completed for this session by checking session metadata.
-        // TODO: Better Auth's two-factor plugin stores MFA verification status on
-        // the session object, but the exact field name depends on plugin version and
-        // configuration. The field "twoFactorVerified" may not be set by all
-        // Better Auth versions. Verify the Better Auth MFA plugin configuration and
-        // ensure the session schema includes this field. See:
-        // https://www.better-auth.com/docs/plugins/two-factor
+        // Better Auth's two-factor plugin sets "twoFactorVerified" on the session
+        // object after successful TOTP verification. If the field is not populated,
+        // MFA is considered not verified and access is denied.
+        // See: https://www.better-auth.com/docs/plugins/two-factor
         const sessionData = session as { twoFactorVerified?: boolean };
         if (!sessionData?.twoFactorVerified) {
           // Log a warning since twoFactorVerified may not be populated by Better Auth
@@ -608,6 +620,162 @@ export function requireMfa() {
       }
 
       return { user: user as User, mfaVerified: hasMfa ? true : false };
+    });
+}
+
+/**
+ * Role names that are considered "admin" roles for MFA enforcement purposes.
+ * These roles have elevated privileges and require MFA in production environments.
+ */
+const ADMIN_ROLE_NAMES = new Set([
+  "super_admin",
+  "tenant_admin",
+  "system_admin",
+  "hr_admin",
+]);
+
+/**
+ * Check whether a user has an admin role in the given tenant.
+ * Queries the RBAC system (role_assignments + roles) via system context
+ * since this runs before RLS tenant context is necessarily set.
+ */
+async function userHasAdminRole(
+  db: DatabaseClient,
+  tenantId: string,
+  userId: string
+): Promise<{ isAdmin: boolean; roleName: string | null }> {
+  try {
+    const rows = await db.withSystemContext(async (tx) => {
+      return await tx<{ roleName: string }[]>`
+        SELECT r.name as role_name
+        FROM app.role_assignments ra
+        JOIN app.roles r ON r.id = ra.role_id
+        WHERE ra.tenant_id = ${tenantId}::uuid
+          AND ra.user_id = ${userId}::uuid
+          AND ra.effective_from <= now()
+          AND (ra.effective_to IS NULL OR ra.effective_to > now())
+          AND r.name = ANY(${Array.from(ADMIN_ROLE_NAMES)})
+        LIMIT 1
+      `;
+    });
+    if (rows.length > 0) {
+      return { isAdmin: true, roleName: rows[0]!.roleName };
+    }
+    return { isAdmin: false, roleName: null };
+  } catch (error) {
+    console.warn("[AdminMFA] Failed to check admin role:", error);
+    return { isAdmin: false, roleName: null };
+  }
+}
+
+/**
+ * Require MFA for admin roles.
+ *
+ * This guard enforces that users with admin-level roles (super_admin,
+ * tenant_admin, system_admin, hr_admin) must have MFA enabled and verified
+ * before accessing protected resources.
+ *
+ * Behavior:
+ * - Non-admin users: passes through without MFA check (use requireMfa()
+ *   separately if MFA is required for all users on a route).
+ * - Admin users with MFA enabled and verified: passes through.
+ * - Admin users with MFA enabled but NOT verified for this session: returns 403
+ *   with AUTH_MFA_REQUIRED code, prompting MFA verification.
+ * - Admin users without MFA set up at all: returns 403 with AUTH_MFA_REQUIRED
+ *   code and a message instructing them to enable MFA.
+ *
+ * Enforcement is controlled by environment:
+ * - Always enforced when NODE_ENV === "production"
+ * - Can be enabled in dev/test with ENFORCE_ADMIN_MFA=true
+ * - Skipped in dev/test by default (with a warning log)
+ *
+ * Usage:
+ * ```ts
+ * app
+ *   .use(requireAuth())
+ *   .use(requireAdminMfa())
+ *   .get('/admin/settings', handler);
+ * ```
+ */
+export function requireAdminMfa() {
+  return new Elysia({ name: "require-admin-mfa" })
+    .derive(async (ctx) => {
+      const { user, session, authService } = ctx as any;
+      const { set } = ctx;
+      const db = (ctx as any).db as DatabaseClient;
+      const tenant = (ctx as any).tenant as { id: string } | null;
+
+      // Must be authenticated first
+      if (!user || !session) {
+        set.status = 401;
+        throw new AuthError(
+          AuthErrorCodes.INVALID_SESSION,
+          "Authentication required",
+          401
+        );
+      }
+
+      // Tenant context is required to check role assignments
+      if (!tenant) {
+        // No tenant context -- cannot determine admin status.
+        // Let the request through; downstream tenant/rbac guards will handle it.
+        return { user: user as User, adminMfaVerified: false };
+      }
+
+      // Check enforcement setting
+      const enforceAdminMfa =
+        process.env["NODE_ENV"] === "production" ||
+        process.env["ENFORCE_ADMIN_MFA"] === "true";
+
+      // Check if user has an admin role
+      const { isAdmin, roleName } = await userHasAdminRole(db, tenant.id, user.id);
+
+      if (!isAdmin) {
+        // Non-admin: no MFA requirement from this guard
+        return { user: user as User, adminMfaVerified: false };
+      }
+
+      // User is an admin -- check MFA status
+      const hasMfaSetUp = await authService.userHasMfa(user.id);
+
+      if (!hasMfaSetUp) {
+        // Admin has no MFA set up at all
+        if (enforceAdminMfa) {
+          set.status = 403;
+          throw new AuthError(
+            AuthErrorCodes.MFA_REQUIRED,
+            `MFA must be enabled for admin accounts (role: ${roleName}). Please set up two-factor authentication.`,
+            403
+          );
+        }
+        // Dev/test: warn but allow through
+        console.warn(
+          `[AdminMFA] Admin user ${user.id} (role: ${roleName}) does not have MFA enabled. ` +
+          `This would be blocked in production. Set ENFORCE_ADMIN_MFA=true to enforce in dev.`
+        );
+        return { user: user as User, adminMfaVerified: false };
+      }
+
+      // Admin has MFA set up -- check if it's verified for this session
+      const sessionData = session as { twoFactorVerified?: boolean };
+      if (!sessionData?.twoFactorVerified) {
+        if (enforceAdminMfa) {
+          set.status = 403;
+          throw new AuthError(
+            AuthErrorCodes.MFA_REQUIRED,
+            `MFA verification required for admin access (role: ${roleName}). Please complete two-factor authentication.`,
+            403
+          );
+        }
+        console.warn(
+          `[AdminMFA] Admin user ${user.id} (role: ${roleName}) has MFA enabled but session is not verified. ` +
+          `This would be blocked in production. Set ENFORCE_ADMIN_MFA=true to enforce in dev.`
+        );
+        return { user: user as User, adminMfaVerified: false };
+      }
+
+      // Admin with MFA enabled and verified
+      return { user: user as User, adminMfaVerified: true };
     });
 }
 

@@ -412,3 +412,27 @@ Prevention: When creating parallel workflows (test.yml vs deploy.yml), use YAML 
 Affected Files: `.github/workflows/test.yml`, `.github/workflows/security.yml`, `.github/workflows/deploy.yml`, `.github/workflows/codeql.yml` (new), `.github/workflows/release.yml` (new), `.github/workflows/stale.yml` (new), `.github/workflows/migration-check.yml` (new), `.github/CODEOWNERS` (new), `.github/pull_request_template.md` (new), `.github/ISSUE_TEMPLATE/` (new), `packages/web/.dockerignore` (new)
 
 Notes: Total workflows now: 8 (was 4). Coverage gates start conservative (60%/50%) and should be increased as test coverage improves. The migration-check.yml uses warnings (not errors) for RLS compliance to avoid blocking legitimate system-level migrations.
+
+---
+
+### Learning Entry
+
+Date: 2026-03-17
+Agent: Claude Code (auth review)
+Category: Architecture / Auth
+
+Context: Full auth code review to ensure everything uses Better Auth. Found three issues:
+
+Problem 1: Migration 0187_client_portal.sql creates portal_users with password_hash, portal_sessions, and portal_password_resets — a custom auth system parallel to Better Auth. The application code (routes.ts, service.ts, repository.ts) was already updated to use Better Auth sessions, but the migration still creates dead auth tables.
+
+Problem 2: bootstrap-root.ts creates users in app.users only, not in Better Auth's app."user" or app."account" tables. This means bootstrapped users can't sign in via Better Auth until databaseHooks eventually syncs them — which only happens if someone creates a user with the same email through Better Auth's signUp flow.
+
+Problem 3: adminUnlockAccount() in better-auth.ts only updates app.users, not app."user", creating a split-brain status.
+
+Root Cause: Portal migration was written before the BetterAuth integration decision. Bootstrap script predates Better Auth. Both were never updated to be consistent with the Better Auth table model.
+
+Solution: Created migration 0189_portal_betterauth_cleanup.sql to drop portal_sessions, portal_password_resets, and remove auth columns from portal_users. Fixed bootstrap-root.ts to atomically create app.users + app."user" + app."account" records. Fixed adminUnlockAccount to update both tables.
+
+Prevention: Any code that creates or modifies user/session/account data must update BOTH app.users (legacy) and app."user"/app."account" (Better Auth) tables atomically. Prefer using Better Auth's API (auth.api.signUpEmail) when possible.
+
+Affected Files: migrations/0189_portal_betterauth_cleanup.sql (new), packages/api/src/scripts/bootstrap-root.ts, packages/api/src/lib/better-auth.ts

@@ -38,7 +38,7 @@ jobs:
   docker-scan:
     name: Docker Image Scan (${{ matrix.name }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    # Run on all events (push, pull_request, schedule) to catch vulnerabilities before merge
     strategy:
       fail-fast: false
       matrix:

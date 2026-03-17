@@ -53,7 +53,6 @@ staffora/
 ├── packages/api/       # @staffora/api — Elysia.js backend (71+ modules)
 ├── packages/web/       # @staffora/web — React frontend (HRIS app)
 ├── packages/shared/    # @staffora/shared — Shared types, schemas, utilities
-├── Website/            # @staffora/website — Marketing site (staffora.co.uk)
 ├── migrations/         # PostgreSQL migrations (180+ files)
 ├── docker/             # Docker Compose, nginx, postgres, redis configs
 ├── Docs/               # Architecture, API reference, guides, patterns

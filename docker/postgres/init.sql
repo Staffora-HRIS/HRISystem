@@ -236,20 +236,39 @@ END
 $$;
 
 -- =============================================================================
+-- APPLICATION ROLE (NOBYPASSRLS — RLS enforced at runtime)
+-- =============================================================================
+
+-- Create the non-superuser application role used by the API and worker at runtime.
+-- hris_app has NOBYPASSRLS so RLS policies are enforced for all queries.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hris_app') THEN
+        CREATE ROLE hris_app LOGIN PASSWORD 'hris_dev_password' NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    END IF;
+END
+$$;
+
+-- =============================================================================
 -- GRANTS
 -- =============================================================================
 
--- Grant usage on app schema to the application user
--- Note: The actual grants depend on your PostgreSQL user setup
--- These are examples assuming a 'hris' application user
-
+-- Grant usage on app schema to the superuser (migrations)
 GRANT USAGE ON SCHEMA app TO hris;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO hris;
 
--- Default privileges for future objects
+-- Grant usage on app schema to the application user (runtime)
+GRANT USAGE ON SCHEMA app TO hris_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO hris_app;
+
+-- Default privileges for future objects (both roles)
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hris;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO hris;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT EXECUTE ON FUNCTIONS TO hris;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hris_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO hris_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT EXECUTE ON FUNCTIONS TO hris_app;
 
 -- =============================================================================
 -- COMMENTS

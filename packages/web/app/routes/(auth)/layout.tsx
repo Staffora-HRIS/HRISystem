@@ -22,15 +22,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const hasLegacySession = cookies.includes("session=");
   const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
 
-  if (process.env["NODE_ENV"] !== "production") {
-    console.log("[web][(auth) layout] cookieCheck", {
-      hasSessionToken,
-      hasSessionData,
-      hasLegacySession,
-      cookieLength: cookies.length,
-    });
-  }
-
   // If already authenticated, redirect to dashboard
   if (hasSession) {
     throw redirect("/dashboard");

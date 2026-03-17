@@ -10,6 +10,7 @@
 
 import { Elysia } from "elysia";
 import { getBetterAuth } from "./better-auth";
+import { Pool } from "pg";
 import postgres from "postgres";
 import { getDatabaseUrl } from "../config/database";
 
@@ -169,6 +170,157 @@ async function buildBetterAuthRequest(ctx: { request: Request; body?: unknown })
   return new Request(request.url, { method, headers });
 }
 
+// =============================================================================
+// Account Lockout Helpers
+// =============================================================================
+
+/**
+ * Singleton pg Pool for lockout queries.
+ * Reuses the same pool configuration as Better Auth (app schema search path).
+ */
+let lockoutPool: Pool | null = null;
+
+function getLockoutPool(): Pool {
+  if (!lockoutPool) {
+    const databaseUrl =
+      process.env["DATABASE_APP_URL"] ||
+      process.env["DATABASE_URL"] ||
+      getDatabaseUrl();
+    lockoutPool = new Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      options: "-c search_path=app,public",
+    });
+  }
+  return lockoutPool;
+}
+
+/**
+ * Check whether the sign-in request path matches the email/password sign-in endpoint.
+ */
+function isEmailSignInRequest(request: Request): boolean {
+  if (request.method !== "POST") return false;
+  try {
+    const url = new URL(request.url);
+    return url.pathname === "/api/auth/sign-in/email";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract the email from the request body for sign-in requests.
+ * Parses the JSON body from the Elysia ctx.body (already parsed) or raw request.
+ */
+function extractEmailFromBody(ctx: any): string | null {
+  try {
+    const body = ctx.body;
+    if (body && typeof body === "object" && typeof body.email === "string") {
+      return body.email.trim().toLowerCase();
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null;
+}
+
+/**
+ * Look up a user ID by email from the Better Auth "user" table.
+ * Returns null if the user does not exist.
+ */
+async function getUserIdByEmail(email: string): Promise<string | null> {
+  try {
+    const pool = getLockoutPool();
+    const result = await pool.query<{ id: string }>(
+      `SELECT id FROM app."user" WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    return result.rows[0]?.id ?? null;
+  } catch (error) {
+    console.warn("[Auth] getUserIdByEmail failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Check whether a user account is locked. Returns lockout details if locked.
+ */
+async function checkLockout(userId: string): Promise<{ isLocked: boolean; lockedUntil: Date | null }> {
+  try {
+    const pool = getLockoutPool();
+    const lockResult = await pool.query<{ is_locked: boolean }>(
+      `SELECT app.check_account_lockout($1::text) as is_locked`,
+      [userId]
+    );
+    const isLocked = lockResult.rows[0]?.is_locked ?? false;
+    if (!isLocked) return { isLocked: false, lockedUntil: null };
+
+    // Fetch lock expiry for Retry-After header
+    const lockInfo = await pool.query<{ locked_until: Date }>(
+      `SELECT "lockedUntil" as locked_until FROM app."user" WHERE id = $1`,
+      [userId]
+    );
+    return { isLocked: true, lockedUntil: lockInfo.rows[0]?.locked_until ?? null };
+  } catch (error) {
+    // If the function doesn't exist (migration not applied), treat as not locked
+    console.warn("[Auth] check_account_lockout failed (migration may not be applied):", error);
+    return { isLocked: false, lockedUntil: null };
+  }
+}
+
+/**
+ * Record a failed login attempt for a user.
+ */
+async function recordFailedLogin(userId: string): Promise<void> {
+  try {
+    const pool = getLockoutPool();
+    await pool.query(`SELECT app.record_failed_login($1::text)`, [userId]);
+  } catch (error) {
+    // Non-fatal: don't block auth flow if recording fails
+    console.warn("[Auth] record_failed_login failed:", error);
+  }
+}
+
+/**
+ * Build an account-locked response with proper error format and headers.
+ */
+function buildAccountLockedResponse(lockedUntil: Date | null): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Calculate Retry-After in seconds
+  if (lockedUntil) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((lockedUntil.getTime() - Date.now()) / 1000)
+    );
+    headers["Retry-After"] = String(retryAfterSeconds);
+  } else {
+    // Default to 5 minutes if we don't know the exact expiry
+    headers["Retry-After"] = "300";
+  }
+
+  const message = lockedUntil
+    ? `Account is locked until ${lockedUntil.toISOString()}. Too many failed login attempts.`
+    : "Account is locked due to too many failed login attempts.";
+
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: "ACCOUNT_LOCKED",
+        message,
+      },
+    }),
+    {
+      status: 423,
+      headers,
+    }
+  );
+}
+
 /**
  * Better Auth plugin for Elysia
  *
@@ -182,6 +334,11 @@ async function buildBetterAuthRequest(ctx: { request: Request; body?: unknown })
  *
  * IMPORTANT: Uses .all() to handle ALL HTTP methods including OPTIONS for CORS preflight.
  * This prevents 405 Method Not Allowed errors when the browser sends preflight requests.
+ *
+ * Account Lockout Integration:
+ * - Before sign-in: checks if the account is locked via app.check_account_lockout()
+ * - After failed sign-in: records the failure via app.record_failed_login()
+ * - After successful sign-in: resets failures via session.create.after databaseHook
  */
 export function betterAuthPlugin() {
   const auth = getBetterAuth();
@@ -191,11 +348,65 @@ export function betterAuthPlugin() {
     // The wildcard (*) captures any path after /api/auth/
     .all("/api/auth/*", async (ctx) => {
       const { request } = ctx as any;
+
+      // --- Account Lockout: Pre-check for sign-in requests ---
+      if (isEmailSignInRequest(request)) {
+        const email = extractEmailFromBody(ctx);
+        if (email) {
+          const userId = await getUserIdByEmail(email);
+          if (userId) {
+            const { isLocked, lockedUntil } = await checkLockout(userId);
+            if (isLocked) {
+              return buildAccountLockedResponse(lockedUntil);
+            }
+          }
+        }
+      }
+
       try {
         const safeRequest = await buildBetterAuthRequest(ctx as any);
         const response = await auth.handler(safeRequest);
-        return await normalizeBetterAuthResponse(response);
+        const normalized = await normalizeBetterAuthResponse(response);
+
+        // --- Account Lockout: Record failed login on 401 sign-in responses ---
+        if (isEmailSignInRequest(request) && normalized.status === 401) {
+          const email = extractEmailFromBody(ctx);
+          if (email) {
+            const userId = await getUserIdByEmail(email);
+            if (userId) {
+              await recordFailedLogin(userId);
+
+              // After recording, check if the account is now locked
+              const { isLocked, lockedUntil } = await checkLockout(userId);
+              if (isLocked) {
+                return buildAccountLockedResponse(lockedUntil);
+              }
+            }
+          }
+        }
+
+        return normalized;
       } catch (error) {
+        // Handle APIError thrown by databaseHooks (e.g., lockout in session.create.before)
+        if (error && typeof error === "object" && "statusCode" in error) {
+          const apiErr = error as { statusCode?: number; message?: string; body?: any };
+          if (apiErr.statusCode === 403) {
+            const message = apiErr.message ?? apiErr.body?.message ?? "Forbidden";
+            // Check if this is a lockout-related error from our session.create.before hook
+            if (typeof message === "string" && message.includes("locked")) {
+              const email = extractEmailFromBody(ctx);
+              if (email) {
+                const userId = await getUserIdByEmail(email);
+                if (userId) {
+                  const { lockedUntil } = await checkLockout(userId);
+                  return buildAccountLockedResponse(lockedUntil);
+                }
+              }
+              // Fallback: return generic locked response
+              return buildAccountLockedResponse(null);
+            }
+          }
+        }
         console.error("Better Auth handler error:", error instanceof Error ? error.message : "Unknown error");
         return buildAuthErrorResponse(error);
       }

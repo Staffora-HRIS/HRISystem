@@ -39,9 +39,6 @@ packages/web/app/routes/            @staffora/frontend
 # Shared package (changes affect all consumers)
 packages/shared/                    @staffora/backend @staffora/frontend
 
-# Marketing site
-Website/                            @staffora/frontend
-
 # Configuration (high impact)
 CLAUDE.md                           @staffora/engineering
 package.json                        @staffora/engineering

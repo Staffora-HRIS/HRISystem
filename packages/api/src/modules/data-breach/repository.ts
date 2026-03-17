@@ -5,7 +5,7 @@
  * All methods respect RLS through tenant context.
  * Uses cursor-based pagination for list operations.
  *
- * Enhanced for full ICO breach notification lifecycle (TODO-063).
+ * Enhanced for full ICO breach notification lifecycle.
  */
 
 import type { DatabaseClient, TransactionSql, Row } from "../../plugins/db";

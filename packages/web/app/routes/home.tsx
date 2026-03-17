@@ -20,15 +20,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const hasLegacySession = cookies.includes("session=");
   const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
 
-  if (process.env["NODE_ENV"] !== "production") {
-    console.log("[web][home] cookieCheck", {
-      hasSessionToken,
-      hasSessionData,
-      hasLegacySession,
-      cookieLength: cookies.length,
-    });
-  }
-
   if (hasSession) {
     throw redirect("/dashboard");
   } else {

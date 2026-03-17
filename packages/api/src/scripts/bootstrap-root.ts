@@ -114,12 +114,17 @@ export async function bootstrapRoot(
       throw new Error(`Invalid userId resolved for bootstrapRoot: ${String(userId)}`);
     }
 
+    // Hash the password for the legacy app.users table
+    const [{ hash: passwordHash }] = await tx<{ hash: string }[]>`
+      SELECT app.hash_password(${password}) AS hash
+    `;
+
     const insertedUser = await tx<{ id: string }[]>`
       INSERT INTO app.users (id, email, password_hash, status, email_verified, name)
       VALUES (
         ${userId}::uuid,
         ${email},
-        app.hash_password(${password}),
+        ${passwordHash},
         'active',
         true,
         ${options.name ?? "Root"}
@@ -135,6 +140,50 @@ export async function bootstrapRoot(
     `;
 
     if (!insertedUser[0]?.id) throw new Error("Failed to create/update root user");
+
+    // Also create/sync the Better Auth canonical user record (app."user")
+    // This ensures the user can sign in via Better Auth without relying on
+    // eventual sync from databaseHooks.
+    await tx`
+      INSERT INTO app."user" (id, email, name, "emailVerified", image, "createdAt", "updatedAt", status, "mfaEnabled")
+      VALUES (
+        ${userId},
+        ${email},
+        ${options.name ?? "Root"},
+        true,
+        NULL,
+        now(),
+        now(),
+        'active',
+        false
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET
+        email = EXCLUDED.email,
+        name = EXCLUDED.name,
+        "emailVerified" = true,
+        status = 'active',
+        "updatedAt" = now()
+    `;
+
+    // Create the Better Auth account record (credential provider) so
+    // Better Auth can verify the password during sign-in.
+    await tx`
+      INSERT INTO app."account" (id, "userId", "accountId", "providerId", password, "createdAt", "updatedAt")
+      VALUES (
+        ${crypto.randomUUID()},
+        ${userId},
+        ${userId},
+        'credential',
+        ${passwordHash},
+        now(),
+        now()
+      )
+      ON CONFLICT ("providerId", "accountId") DO UPDATE
+      SET
+        password = EXCLUDED.password,
+        "updatedAt" = now()
+    `;
 
     // Ensure tenant/user context is set to valid UUID text.
     // Important: many RLS policies cast current_setting('app.current_tenant')::uuid.

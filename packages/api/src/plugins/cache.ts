@@ -126,12 +126,64 @@ export const CacheKeys = {
 // =============================================================================
 
 /**
+ * Lightweight in-process LRU cache for hot data.
+ * Avoids JSON.parse/stringify round-trips to Redis on every request
+ * for frequently accessed keys (sessions, permissions, tenants).
+ */
+class LocalCache {
+  private cache = new Map<string, { value: unknown; expiresAt: number }>();
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 500) {
+    this.maxSize = maxSize;
+  }
+
+  get<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+
+  set(key: string, value: unknown, ttlSeconds: number): void {
+    // Evict oldest entries if at capacity (simple FIFO eviction)
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) this.cache.delete(firstKey);
+    }
+    // Local TTL is capped at 60s to keep memory bounded and data fresh
+    const localTtl = Math.min(ttlSeconds, 60);
+    this.cache.set(key, { value, expiresAt: Date.now() + localTtl * 1000 });
+  }
+
+  del(key: string): void {
+    this.cache.delete(key);
+  }
+
+  /** Delete all keys matching a prefix */
+  delByPrefix(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+/**
  * Redis cache client wrapper with tenant-scoped operations
  */
 export class CacheClient {
   private redis: Redis;
   private config: CacheConfig;
   private isConnected: boolean = false;
+  /** In-process cache for hot data — avoids Redis round-trip + JSON overhead */
+  private local = new LocalCache(500);
 
   constructor(config: CacheConfig) {
     this.config = config;
@@ -234,14 +286,22 @@ export class CacheClient {
   // ===========================================================================
 
   /**
-   * Get a value by key
+   * Get a value by key.
+   * Checks in-process cache first, then falls back to Redis.
    */
   async get<T = string>(key: string): Promise<T | null> {
+    // Check local cache first (avoids Redis round-trip + JSON.parse)
+    const localValue = this.local.get<T>(key);
+    if (localValue !== undefined) return localValue;
+
     const value = await this.redis.get(key);
     if (value === null) return null;
 
     try {
-      return JSON.parse(value) as T;
+      const parsed = JSON.parse(value) as T;
+      // Warm local cache for subsequent reads within same request cycle
+      this.local.set(key, parsed, 60);
+      return parsed;
     } catch {
       return value as unknown as T;
     }
@@ -255,8 +315,11 @@ export class CacheClient {
 
     if (ttlSeconds) {
       await this.redis.setex(key, ttlSeconds, serialized);
+      // Also update local cache
+      this.local.set(key, value, ttlSeconds);
     } else {
       await this.redis.set(key, serialized);
+      this.local.set(key, value, 60);
     }
   }
 
@@ -272,6 +335,7 @@ export class CacheClient {
    * Delete a key
    */
   async del(key: string): Promise<boolean> {
+    this.local.del(key);
     const result = await this.redis.del(key);
     return result > 0;
   }
@@ -281,6 +345,7 @@ export class CacheClient {
    */
   async delMany(keys: string[]): Promise<number> {
     if (keys.length === 0) return 0;
+    for (const key of keys) this.local.del(key);
     return await this.redis.del(...keys);
   }
 

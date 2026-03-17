@@ -11,6 +11,7 @@
 
 import { betterAuth } from "better-auth";
 import { twoFactor, organization } from "better-auth/plugins";
+import { verifyPassword as betterAuthVerifyScrypt } from "better-auth/crypto";
 import { dash } from "@better-auth/infra";
 import { APIError } from "better-auth/api";
 import { Pool } from "pg";
@@ -28,19 +29,27 @@ function isBcryptHash(hash: string): boolean {
  * Custom password verification that supports both bcrypt and scrypt hashes.
  * This allows legacy users with bcrypt passwords to sign in alongside
  * users created through Better Auth (which uses scrypt by default).
+ *
+ * IMPORTANT: Better Auth does NOT fall back to its default scrypt verifier
+ * when a custom verify function is provided. Our function must handle
+ * both formats explicitly.
  */
 async function verifyPassword(data: { hash: string; password: string }): Promise<boolean> {
   const { hash, password } = data;
-  
+
   if (isBcryptHash(hash)) {
     // Legacy bcrypt hash - verify using bcryptjs
     return bcrypt.compare(password, hash);
   }
-  
-  // Better Auth scrypt format: salt:hash (both hex encoded)
-  // Let Better Auth's default verification handle this by returning false
-  // and allowing the default scrypt verification to proceed
-  return false;
+
+  // Non-bcrypt: delegate to Better Auth's built-in scrypt verifier
+  // (handles "salt:key" hex format with N=16384, r=16, p=1, dkLen=64)
+  try {
+    return await betterAuthVerifyScrypt({ hash, password });
+  } catch (err) {
+    console.warn("[Auth] scrypt password verification failed:", err);
+    return false;
+  }
 }
 
 /**
@@ -246,15 +255,68 @@ export function createBetterAuth() {
           },
         },
       },
+      session: {
+        create: {
+          /**
+           * Before session creation: check if the user's account is locked.
+           * This runs AFTER password verification succeeds but BEFORE the session
+           * is persisted. If the account is locked, we throw an APIError to prevent
+           * session creation and deny access even with correct credentials.
+           */
+          before: async (session) => {
+            try {
+              const lockResult = await pool.query<{ is_locked: boolean }>(
+                `SELECT app.check_account_lockout($1::text) as is_locked`,
+                [session.userId]
+              );
+              if (lockResult.rows[0]?.is_locked) {
+                // Fetch lock expiry to include in the error message
+                const lockInfo = await pool.query<{ locked_until: Date }>(
+                  `SELECT "lockedUntil" as locked_until FROM app."user" WHERE id = $1`,
+                  [session.userId]
+                );
+                const lockedUntil = lockInfo.rows[0]?.locked_until;
+                const message = lockedUntil
+                  ? `Account is locked until ${lockedUntil.toISOString()}. Too many failed login attempts.`
+                  : "Account is locked due to too many failed login attempts.";
+                throw new APIError("FORBIDDEN", { message });
+              }
+            } catch (error) {
+              // Re-throw APIError (our lockout error) as-is
+              if (error instanceof APIError) throw error;
+              // Swallow DB errors (e.g., function missing) so login is not blocked
+              // when the lockout migration has not been applied
+              console.warn("[Auth] check_account_lockout failed (migration may not be applied):", error);
+            }
+            return { data: session };
+          },
+          /**
+           * After session creation: reset failed login counter.
+           * A successful session creation means the user authenticated correctly,
+           * so we clear any accumulated failed login attempts.
+           */
+          after: async (session) => {
+            try {
+              await pool.query(
+                `SELECT app.reset_failed_logins($1::text)`,
+                [session.userId]
+              );
+            } catch (error) {
+              // Non-fatal: don't block login if reset fails (e.g., migration not applied)
+              console.warn("[Auth] reset_failed_logins failed:", error);
+            }
+          },
+        },
+      },
     },
 
     // Email/password authentication with custom password handling
     // Supports both bcrypt (legacy) and scrypt (Better Auth default) hashes
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 8,
+      minPasswordLength: 12,
       maxPasswordLength: 128,
-      requireEmailVerification: false,
+      requireEmailVerification: process.env["NODE_ENV"] === "production",
       password: {
         hash: hashPassword,
         verify: verifyPassword,
@@ -352,12 +414,16 @@ export function getBetterAuth() {
 
 /**
  * Unlock a user account that was locked due to failed login attempts.
- * Resets the locked status on app.users.
+ * Updates both app.users (legacy) and app."user" (Better Auth canonical).
  */
 export async function adminUnlockAccount(userId: string): Promise<void> {
   const pool = getPgPool();
   await pool.query(
     `UPDATE app.users SET status = 'active', updated_at = now() WHERE id = $1::uuid AND status = 'locked'`,
+    [userId]
+  );
+  await pool.query(
+    `UPDATE app."user" SET status = 'active', "updatedAt" = now() WHERE id = $1 AND status = 'locked'`,
     [userId]
   );
 }

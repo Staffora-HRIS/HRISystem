@@ -1,33 +1,27 @@
 ---
 name: docker-build
-description: Rebuild and restart all Docker containers (Staffora core system + Staffora website). Use when you need a clean rebuild of both services.
+description: Rebuild and restart all Docker containers (Staffora core system). Use when you need a clean rebuild of services.
 ---
 
 # Docker Build All
 
-Rebuild and restart both Docker projects with no cache.
+Rebuild and restart Docker project with no cache.
 
 ## Steps
 
 1. Stop any old/orphan containers that might conflict:
 ```bash
 docker compose -f docker/docker-compose.yml down --remove-orphans
-docker compose -f Website/docker-compose.yml down --remove-orphans
 ```
 
-2. Rebuild both projects in parallel (no cache):
+2. Rebuild all services (no cache):
 ```bash
-# Core Staffora (api, web, worker)
 docker compose -f docker/docker-compose.yml build --no-cache api web worker
-
-# Staffora Website
-docker compose -f Website/docker-compose.yml build --no-cache
 ```
 
-3. Start both projects:
+3. Start all services:
 ```bash
 docker compose -f docker/docker-compose.yml up -d
-docker compose -f Website/docker-compose.yml up -d
 ```
 
 4. Verify all containers are healthy:
@@ -44,4 +38,3 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 | staffora-api | 3000 | docker/docker-compose.yml |
 | staffora-worker | 3001 (health) | docker/docker-compose.yml |
 | staffora-web | 5173 | docker/docker-compose.yml |
-| staffora-website | 5174 | Website/docker-compose.yml |

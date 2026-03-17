@@ -57,6 +57,17 @@ All entries must be:
 
 Avoid vague entries like "fixed bug". Always explain the root cause.
 
+## Score-Driven Perfection
+
+If a prompt or task includes a score (e.g., "85/100", "92/100") and it is NOT 100/100, you MUST take action to reach 100/100. Do not accept anything less than perfection.
+
+1. **Identify every gap** — Analyze what is missing or incomplete that prevents a perfect score
+2. **Fix every issue** — Address all gaps, no matter how small, until the score would be 100/100
+3. **Verify completeness** — Re-check your work against the scoring criteria before finishing
+4. **Never settle** — A score of 99/100 is still not done. Find and fix that last issue.
+
+This applies to audit reports, checklists, reviews, test coverage, compliance checks, or any task with a numeric score. The goal is always 100/100.
+
 ## Zero Manual Maintenance
 
 This memory system requires no manual maintenance. Agents automatically maintain both files as part of their normal workflow.

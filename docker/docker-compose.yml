@@ -102,6 +102,9 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
+      # DATABASE_APP_URL uses hris_app (NOBYPASSRLS) — RLS enforced at runtime
+      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
+      # DATABASE_URL with superuser for migrations only (fallback)
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
       REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       SESSION_SECRET: ${SESSION_SECRET:-dev_session_secret_32chars_min}
@@ -156,6 +159,7 @@ services:
     command: ["bun", "run", "src/worker.ts"]
     environment:
       NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_APP_URL: postgres://${POSTGRES_APP_USER:-hris_app}:${POSTGRES_APP_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
       DATABASE_URL: postgres://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}
       REDIS_URL: redis://:${REDIS_PASSWORD:-staffora_redis_dev}@redis:6379
       WORKER_TYPE: all
@@ -225,7 +229,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:5173/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5173/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

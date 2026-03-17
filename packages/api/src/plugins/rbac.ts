@@ -152,32 +152,32 @@ export class RbacService {
       };
     }
 
-    // Get roles for user
-    const roles = await this.db.withSystemContext(async (tx) => {
-      return await tx<Role[]>`
-        SELECT
-          role_id as "roleId",
-          role_name as "roleName",
-          is_system as "isSystem",
-          constraints,
-          effective_from as "effectiveFrom",
-          effective_to as "effectiveTo"
-        FROM app.get_user_roles(${tenantId}::uuid, ${userId}::uuid)
-      `;
-    });
-
-    // Get permissions from roles
-    const permissions = await this.db.withSystemContext(async (tx) => {
-      return await tx<Permission[]>`
-        SELECT
-          permission_key as "permissionKey",
-          resource,
-          action,
-          requires_mfa as "requiresMfa",
-          role_name as "roleName",
-          constraints
-        FROM app.get_user_permissions(${tenantId}::uuid, ${userId}::uuid)
-      `;
+    // Fetch roles and permissions in a single system context transaction
+    // to avoid two separate DB round-trips per cache miss
+    const { roles, permissions } = await this.db.withSystemContext(async (tx) => {
+      const [rolesResult, permsResult] = await Promise.all([
+        tx<Role[]>`
+          SELECT
+            role_id as "roleId",
+            role_name as "roleName",
+            is_system as "isSystem",
+            constraints,
+            effective_from as "effectiveFrom",
+            effective_to as "effectiveTo"
+          FROM app.get_user_roles(${tenantId}::uuid, ${userId}::uuid)
+        `,
+        tx<Permission[]>`
+          SELECT
+            permission_key as "permissionKey",
+            resource,
+            action,
+            requires_mfa as "requiresMfa",
+            role_name as "roleName",
+            constraints
+          FROM app.get_user_permissions(${tenantId}::uuid, ${userId}::uuid)
+        `,
+      ]);
+      return { roles: rolesResult, permissions: permsResult };
     });
 
     // Check for special roles
@@ -641,7 +641,10 @@ export class RbacService {
       // Fall through to deleting known keys if scan fails
     }
 
-    await Promise.all(keysToDelete.map((k) => this.cache.del(k)));
+    // Batch delete using delMany instead of individual del calls
+    if (keysToDelete.length > 0) {
+      await this.cache.delMany(keysToDelete);
+    }
   }
 }
 
