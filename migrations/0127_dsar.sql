@@ -144,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_dsar_requests_overdue ON app.dsar_requests (tenan
 CREATE OR REPLACE TRIGGER trg_dsar_requests_updated_at
   BEFORE UPDATE ON app.dsar_requests
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Table: dsar_data_items
@@ -200,7 +200,7 @@ CREATE INDEX IF NOT EXISTS idx_dsar_data_items_status ON app.dsar_data_items (ds
 CREATE OR REPLACE TRIGGER trg_dsar_data_items_updated_at
   BEFORE UPDATE ON app.dsar_data_items
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Table: dsar_audit_log
