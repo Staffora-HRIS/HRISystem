@@ -2175,6 +2175,190 @@ class Scheduler {
     }
   }
 
+  /**
+   * Run automated data archival across all active tenants.
+   *
+   * For each tenant, reads the enabled archival_rules and moves records
+   * that exceed their retention period into the archived_records table.
+   * Runs weekly on Sunday at 4 AM to minimise production impact.
+   */
+  private async runDataArchival() {
+    console.log("[Job] Running data archival...");
+
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // Get all active tenants
+      const tenants = await this.sql<{ id: string }[]>`
+        SELECT id FROM app.tenants WHERE status = 'active' LIMIT 1000
+      `;
+
+      let totalArchived = 0;
+      let totalSkipped = 0;
+      let errorCount = 0;
+
+      for (const tenant of tenants) {
+        try {
+          // Set tenant context for RLS
+          await this.sql`SELECT app.set_tenant_context(${tenant.id}::uuid)`;
+
+          // Get enabled archival rules for this tenant
+          const rules = await this.sql<
+            Array<{
+              id: string;
+              sourceCategory: string;
+              sourceTable: string;
+              statusColumn: string | null;
+              statusValue: string | null;
+              dateColumn: string;
+              retentionYears: number;
+            }>
+          >`
+            SELECT
+              id, source_category, source_table,
+              status_column, status_value,
+              date_column, retention_years
+            FROM app.archival_rules
+            WHERE enabled = true
+          `;
+
+          for (const rule of rules) {
+            try {
+              const cutoffDate = new Date();
+              cutoffDate.setFullYear(
+                cutoffDate.getFullYear() - rule.retentionYears
+              );
+
+              // Find eligible records (batch of 200 per rule per tenant)
+              let eligibleQuery;
+              if (rule.statusColumn && rule.statusValue) {
+                eligibleQuery = await this.sql<Array<{ id: string }>>`
+                  SELECT t.id::text as id
+                  FROM ${this.sql(rule.sourceTable)} t
+                  LEFT JOIN app.archived_records ar
+                    ON ar.source_table = ${rule.sourceTable}
+                    AND ar.source_id = t.id
+                    AND ar.status = 'archived'
+                  WHERE ar.id IS NULL
+                    AND t.${this.sql(rule.statusColumn)} = ${rule.statusValue}
+                    AND t.${this.sql(rule.dateColumn)} < ${cutoffDate}
+                  LIMIT 200
+                `;
+              } else {
+                eligibleQuery = await this.sql<Array<{ id: string }>>`
+                  SELECT t.id::text as id
+                  FROM ${this.sql(rule.sourceTable)} t
+                  LEFT JOIN app.archived_records ar
+                    ON ar.source_table = ${rule.sourceTable}
+                    AND ar.source_id = t.id
+                    AND ar.status = 'archived'
+                  WHERE ar.id IS NULL
+                    AND t.${this.sql(rule.dateColumn)} < ${cutoffDate}
+                  LIMIT 200
+                `;
+              }
+
+              for (const record of eligibleQuery) {
+                try {
+                  // Fetch full record data
+                  const [sourceRow] = await this.sql<Array<{ data: unknown }>>`
+                    SELECT row_to_json(t.*) as data
+                    FROM ${this.sql(rule.sourceTable)} t
+                    WHERE t.id = ${record.id}::uuid
+                    LIMIT 1
+                  `;
+
+                  if (!sourceRow?.data) {
+                    totalSkipped++;
+                    continue;
+                  }
+
+                  const retentionUntil = new Date();
+                  retentionUntil.setFullYear(
+                    retentionUntil.getFullYear() + rule.retentionYears
+                  );
+
+                  // Archive: insert into archived_records + delete source
+                  // in a single transaction
+                  await this.sql.begin(async (tx) => {
+                    await tx`
+                      INSERT INTO app.archived_records (
+                        id, tenant_id, source_table, source_id,
+                        source_category, archived_data,
+                        archived_by, retention_until
+                      )
+                      VALUES (
+                        gen_random_uuid(),
+                        ${tenant.id}::uuid,
+                        ${rule.sourceTable},
+                        ${record.id}::uuid,
+                        ${rule.sourceCategory}::app.archival_source_category,
+                        ${JSON.stringify(sourceRow.data)}::jsonb,
+                        NULL,
+                        ${retentionUntil}
+                      )
+                    `;
+
+                    await tx`
+                      DELETE FROM ${tx(rule.sourceTable)}
+                      WHERE id = ${record.id}::uuid
+                    `;
+
+                    // Outbox event
+                    await tx`
+                      INSERT INTO app.domain_outbox (
+                        id, tenant_id, aggregate_type, aggregate_id,
+                        event_type, payload, created_at
+                      )
+                      VALUES (
+                        gen_random_uuid(),
+                        ${tenant.id}::uuid,
+                        'archived_record',
+                        ${record.id}::uuid,
+                        'data.archival.record_archived',
+                        ${JSON.stringify({
+                          sourceTable: rule.sourceTable,
+                          sourceId: record.id,
+                          sourceCategory: rule.sourceCategory,
+                          actor: null,
+                          automated: true,
+                        })}::jsonb,
+                        now()
+                      )
+                    `;
+                  });
+
+                  totalArchived++;
+                } catch (recordErr) {
+                  // Individual record failure should not stop the batch
+                  totalSkipped++;
+                }
+              }
+            } catch (ruleErr) {
+              console.warn(
+                `[Job] Data archival rule ${rule.id} failed for tenant ${tenant.id}:`,
+                ruleErr
+              );
+              errorCount++;
+            }
+          }
+        } catch (tenantErr) {
+          console.warn(
+            `[Job] Data archival failed for tenant ${tenant.id}:`,
+            tenantErr
+          );
+          errorCount++;
+        }
+      }
+
+      console.log(
+        `[Job] Data archival complete — ${totalArchived} archived, ` +
+        `${totalSkipped} skipped, ${errorCount} errors across ${tenants.length} tenants`
+      );
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
+    }
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }

@@ -63,6 +63,8 @@ import {
   EmployeeAddressIdParamsSchema,
   AddressHistoryQuerySchema,
   AddressTypeSchema,
+  RehireEmployeeSchema,
+  RehireResponseSchema,
   type HistoryDimension,
 } from "./schemas";
 
@@ -88,6 +90,7 @@ const hrErrorStatusMap: Record<string, number> = {
   ALREADY_TERMINATED: 409,
   CANNOT_TERMINATE_PENDING: 400,
   INVALID_TERMINATION_DATE: 400,
+  INVALID_REHIRE_DATE: 400,
   INVALID_DIMENSION: 400,
 };
 
@@ -1233,6 +1236,72 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
         tags: ["Employees"],
         summary: "Terminate employee",
         description: "Terminate an employee and close all active records. Requires employees:delete permission.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /employees/:id/rehire - Rehire a terminated employee
+  .post(
+    "/employees/:id/rehire",
+    async (ctx) => {
+      const {
+        hrService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as any;
+
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await hrService.rehireEmployee(
+        tenantContext,
+        params.id,
+        body as any,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log rehire (highly sensitive operation)
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_CREATED,
+          resourceType: "employee",
+          resourceId: params.id,
+          newValues: {
+            rehire_date: (body as any)?.rehire_date,
+            reason: (body as any)?.reason,
+          },
+          metadata: { idempotencyKey, requestId, operation: "rehire" },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write") as any],
+      params: IdParamsSchema,
+      body: RehireEmployeeSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: RehireResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employees"],
+        summary: "Rehire terminated employee",
+        description: "Rehire a terminated employee, creating a new employment record that links to the previous terminated record for history preservation. The employee is set to 'pending' status and requires activation via the normal status transition flow. Requires employees:write permission.",
         security: [{ bearerAuth: [] }],
       },
     }

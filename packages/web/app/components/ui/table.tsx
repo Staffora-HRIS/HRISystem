@@ -244,6 +244,7 @@ export function DataTable<T>({
               {columns.map((column) => {
                 const isSorted = sorting?.column === column.id;
                 const sortDirection = isSorted ? sorting?.direction : undefined;
+                const isSortable = column.sortable && !!onSortingChange;
 
                 return (
                   <th
@@ -259,10 +260,32 @@ export function DataTable<T>({
                       "text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400",
                       column.align === "center" && "text-center",
                       column.align === "right" && "text-right",
-                      column.sortable && "cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700",
+                      isSortable && "cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700",
+                      isSortable && "focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-inset",
                       column.headerClassName
                     )}
-                    onClick={column.sortable ? () => handleSort(column.id) : undefined}
+                    aria-sort={
+                      isSorted
+                        ? sortDirection === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : isSortable
+                          ? "none"
+                          : undefined
+                    }
+                    onClick={isSortable ? () => handleSort(column.id) : undefined}
+                    onKeyDown={
+                      isSortable
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleSort(column.id);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={isSortable ? 0 : undefined}
+                    role={isSortable ? "columnheader button" : "columnheader"}
                   >
                     <span className="inline-flex items-center">
                       {typeof column.header === "function"

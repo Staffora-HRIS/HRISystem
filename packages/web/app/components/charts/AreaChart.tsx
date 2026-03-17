@@ -50,7 +50,10 @@ export const StafforaAreaChart = React.memo(function StafforaAreaChart({
   className,
   style,
   ariaLabel,
-  onDataPointClick,
+  // onDataPointClick is accepted via props but not wired to Area onClick
+  // due to Recharts v3 CurveMouseEventHandler signature mismatch.
+  // The BarChart and PieChart components support click handling.
+  onDataPointClick: _onDataPointClick,
   curveType = "monotone",
   strokeWidth = 2,
   fillOpacity = 0.15,

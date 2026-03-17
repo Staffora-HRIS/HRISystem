@@ -282,6 +282,202 @@ describe("Analytics Routes Integration", () => {
     });
   });
 
+  // =========================================================================
+  // Workforce Planning Analytics
+  // =========================================================================
+
+  describe("GET /api/v1/analytics/workforce-planning", () => {
+    it("should return workforce planning dashboard with default 12m horizon", async () => {
+      if (!sessionCookieA || !tenantA) return;
+
+      const res = await app.handle(
+        makeRequest(
+          "/api/v1/analytics/workforce-planning",
+          "GET",
+          sessionCookieA,
+          tenantA.id
+        )
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+
+      // Verify top-level structure
+      expect(body).toHaveProperty("headcount_projection");
+      expect(body).toHaveProperty("retirement_projection");
+      expect(body).toHaveProperty("attrition_forecast");
+      expect(body).toHaveProperty("skills_gap_analysis");
+      expect(body).toHaveProperty("generated_at");
+      expect(body).toHaveProperty("horizon_months");
+      expect(body.horizon_months).toBe(12);
+
+      // Verify headcount projection structure
+      const hcp = body.headcount_projection as Record<string, unknown>;
+      expect(hcp).toHaveProperty("current_headcount");
+      expect(hcp).toHaveProperty("monthly_growth_rate");
+      expect(hcp).toHaveProperty("observation_months");
+      expect(hcp).toHaveProperty("projections");
+      expect(Array.isArray(hcp.projections)).toBe(true);
+
+      // Verify retirement projection structure
+      const rp = body.retirement_projection as Record<string, unknown>;
+      expect(rp).toHaveProperty("total_active_employees");
+      expect(rp).toHaveProperty("employees_with_dob");
+      expect(rp).toHaveProperty("state_pension_age_note");
+      expect(rp).toHaveProperty("risk_bands");
+      expect(typeof rp.state_pension_age_note).toBe("string");
+      expect((rp.state_pension_age_note as string).toLowerCase()).toContain("pension");
+
+      // Verify attrition forecast structure
+      const af = body.attrition_forecast as Record<string, unknown>;
+      expect(af).toHaveProperty("trailing_12m_turnover_rate");
+      expect(af).toHaveProperty("avg_monthly_terminations");
+      expect(af).toHaveProperty("observation_months");
+      expect(af).toHaveProperty("history");
+      expect(af).toHaveProperty("forecast");
+      expect(Array.isArray(af.forecast)).toBe(true);
+
+      // Verify skills gap analysis structure
+      const sga = body.skills_gap_analysis as Record<string, unknown>;
+      expect(sga).toHaveProperty("total_competencies_analysed");
+      expect(sga).toHaveProperty("total_employees_with_assessments");
+      expect(sga).toHaveProperty("gaps");
+      expect(Array.isArray(sga.gaps)).toBe(true);
+    });
+
+    it("should accept custom horizon parameter", async () => {
+      if (!sessionCookieA || !tenantA) return;
+
+      const res = await app.handle(
+        makeRequest(
+          "/api/v1/analytics/workforce-planning?horizon=24m",
+          "GET",
+          sessionCookieA,
+          tenantA.id
+        )
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.horizon_months).toBe(24);
+
+      // 24 months should produce 24 projection points
+      const hcp = body.headcount_projection as { projections: unknown[] };
+      expect(hcp.projections.length).toBe(24);
+    });
+
+    it("should accept horizon in years", async () => {
+      if (!sessionCookieA || !tenantA) return;
+
+      const res = await app.handle(
+        makeRequest(
+          "/api/v1/analytics/workforce-planning?horizon=2y",
+          "GET",
+          sessionCookieA,
+          tenantA.id
+        )
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.horizon_months).toBe(24);
+    });
+
+    it("should return 401 without authentication", async () => {
+      if (!tenantA) return;
+
+      const res = await app.handle(
+        new Request("http://localhost/api/v1/analytics/workforce-planning", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Tenant-ID": tenantA.id,
+          },
+        })
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it("should reflect tenant-specific data (RLS)", async () => {
+      if (!sessionCookieA || !sessionCookieB || !tenantA || !tenantB) return;
+
+      // Insert an active employee into tenant A with DOB
+      let employeeIdA: string | null = null;
+      try {
+        await withSystemContext(db!, async (tx) => {
+          const empNum = `EMP-WP-${Date.now()}`;
+          const [emp] = (await tx.unsafe(
+            `INSERT INTO app.employees (tenant_id, employee_number, status, hire_date)
+             VALUES ($1::uuid, $2, 'active', CURRENT_DATE - interval '1 year') RETURNING id::text as id`,
+            [tenantA!.id, empNum]
+          )) as Array<{ id: string }>;
+          employeeIdA = emp?.id ?? null;
+
+          if (employeeIdA) {
+            // Add personal info with DOB for retirement projection
+            await tx.unsafe(
+              `INSERT INTO app.employee_personal (tenant_id, employee_id, first_name, last_name, date_of_birth, effective_from)
+               VALUES ($1::uuid, $2::uuid, 'Test', 'Worker', '1962-06-15', CURRENT_DATE)`,
+              [tenantA!.id, employeeIdA]
+            );
+          }
+        });
+      } catch {
+        return;
+      }
+
+      if (!employeeIdA) return;
+
+      // Tenant A should see data
+      const resA = await app.handle(
+        makeRequest(
+          "/api/v1/analytics/workforce-planning",
+          "GET",
+          sessionCookieA,
+          tenantA.id
+        )
+      );
+      expect(resA.status).toBe(200);
+      const bodyA = (await resA.json()) as {
+        headcount_projection: { current_headcount: number };
+      };
+      expect(bodyA.headcount_projection.current_headcount).toBeGreaterThanOrEqual(1);
+
+      // Tenant B should NOT see tenant A's employee
+      const resB = await app.handle(
+        makeRequest(
+          "/api/v1/analytics/workforce-planning",
+          "GET",
+          sessionCookieB,
+          tenantB.id
+        )
+      );
+      expect(resB.status).toBe(200);
+      const bodyB = (await resB.json()) as {
+        headcount_projection: { current_headcount: number };
+      };
+      expect(bodyB.headcount_projection.current_headcount).toBeLessThan(
+        bodyA.headcount_projection.current_headcount
+      );
+
+      // Cleanup
+      await withSystemContext(db!, async (tx) => {
+        await tx
+          .unsafe(
+            "DELETE FROM app.employee_personal WHERE employee_id = $1::uuid",
+            [employeeIdA!]
+          )
+          .catch(() => {});
+        await tx
+          .unsafe("DELETE FROM app.employees WHERE id = $1::uuid", [
+            employeeIdA!,
+          ])
+          .catch(() => {});
+      }).catch(() => {});
+    });
+  });
+
   describe("RLS isolation - analytics", () => {
     it("headcount summary should reflect only the tenant's own data", async () => {
       if (!sessionCookieA || !sessionCookieB || !tenantA || !tenantB) return;

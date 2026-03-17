@@ -189,7 +189,7 @@ export default function BankHolidaysPage() {
       header: "Date",
       cell: ({ row }) => (
         <div
-          className={`text-sm ${isPastDate(row.date) ? "text-gray-400 dark:text-gray-500" : "text-gray-600 dark:text-gray-400"}`}
+          className={`text-sm ${isPastDate(row.date) ? "text-gray-400 dark:text-gray-400" : "text-gray-600 dark:text-gray-400"}`}
         >
           {formatDate(row.date)}
         </div>

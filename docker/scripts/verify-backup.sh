@@ -216,11 +216,16 @@ fi
 # Check prerequisites
 if ! command -v docker &> /dev/null; then
   log_error "Docker is required but not found in PATH."
+  log_error "If running inside the backup sidecar, mount the Docker socket:"
+  log_error "  volumes:"
+  log_error "    - /var/run/docker.sock:/var/run/docker.sock"
+  log_error "Or run this script from the host instead."
   exit 2
 fi
 
 if ! docker info > /dev/null 2>&1; then
   log_error "Docker daemon is not running or not accessible."
+  log_error "If running inside a container, ensure the Docker socket is mounted."
   exit 2
 fi
 
