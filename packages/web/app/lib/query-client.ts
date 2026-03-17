@@ -247,6 +247,17 @@ export const queryKeys = {
     manager: () => [...queryKeys.analytics.all(), "manager"] as const,
   },
 
+  // Payroll
+  payroll: {
+    all: () => ["payroll", queryKeys._tenantScope()] as const,
+    runs: (filters?: Record<string, unknown>) =>
+      [...queryKeys.payroll.all(), "runs", filters] as const,
+    run: (id: string) => [...queryKeys.payroll.all(), "run", id] as const,
+    taxDetails: (employeeId: string) =>
+      [...queryKeys.payroll.all(), "tax-details", employeeId] as const,
+    pension: () => [...queryKeys.payroll.all(), "pension"] as const,
+  },
+
   // Directory
   directory: {
     all: () => ["directory", queryKeys._tenantScope()] as const,
