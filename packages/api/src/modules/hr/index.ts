@@ -104,6 +104,12 @@ export {
   EmployeeAddressListResponseSchema,
   EmployeeAddressIdParamsSchema,
   AddressHistoryQuerySchema,
+  // Position Assignments (Concurrent Employment)
+  AssignEmployeePositionSchema,
+  UpdateEmployeePositionAssignmentSchema,
+  EmployeePositionAssignmentResponseSchema,
+  EmployeePositionsListResponseSchema,
+  EmployeePositionParamsSchema,
   // History
   EmployeeHistoryQuerySchema,
   HistoryRecordSchema,
@@ -171,4 +177,9 @@ export {
   type HistoryDimensionParams,
   type IdempotencyHeader,
   type OptionalIdempotencyHeader,
+  type AssignEmployeePosition,
+  type UpdateEmployeePositionAssignment,
+  type EmployeePositionAssignmentResponse,
+  type EmployeePositionsListResponse,
+  type EmployeePositionParams,
 } from "./schemas";

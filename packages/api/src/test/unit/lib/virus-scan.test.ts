@@ -10,7 +10,7 @@
  * These tests mock the TCP socket to avoid requiring a running ClamAV instance.
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import {
   scanBuffer,
   getVirusScanConfig,

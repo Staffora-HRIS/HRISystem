@@ -1897,6 +1897,167 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Employee Positions (Concurrent Employment)
+  // ===========================================================================
+
+  // GET /employees/:id/positions - Get all position assignments for an employee
+  .get(
+    "/employees/:id/positions",
+    async (ctx) => {
+      const { hrService, params, tenantContext, error } = ctx as any;
+      const result = await hrService.getEmployeePositions(tenantContext, params.id);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: EmployeePositionsListResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Positions"],
+        summary: "Get employee positions",
+        description: "Get all active position assignments for an employee, including FTE percentages and total FTE summary. Supports concurrent employment.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /employees/:id/positions - Assign additional position to employee
+  .post(
+    "/employees/:id/positions",
+    async (ctx) => {
+      const { hrService, params, body, headers, tenantContext, audit, requestId, error } =
+        ctx as any;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await hrService.assignAdditionalPosition(
+        tenantContext,
+        params.id,
+        body as any,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the position assignment
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee_position_assignment",
+          resourceId: result.data!.id,
+          newValues: {
+            employee_id: params.id,
+            position_id: (body as any).position_id,
+            fte_percentage: (body as any).fte_percentage,
+            is_primary: (body as any).is_primary,
+          },
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "position_assigned",
+            effective_from: (body as any).effective_from,
+          },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: IdParamsSchema,
+      body: AssignEmployeePositionSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: EmployeePositionAssignmentResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Positions"],
+        summary: "Assign additional position",
+        description: "Assign an additional position to an employee for concurrent employment. Validates that total FTE does not exceed the configured maximum.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // DELETE /employees/:id/positions/:assignmentId - End a position assignment
+  .delete(
+    "/employees/:id/positions/:assignmentId",
+    async (ctx) => {
+      const { hrService, params, body, headers, tenantContext, audit, requestId, error } =
+        ctx as any;
+      const idempotencyKey = headers["idempotency-key"];
+      const effectiveTo = body?.effective_to || new Date().toISOString().split("T")[0];
+
+      const result = await hrService.endEmployeePositionAssignment(
+        tenantContext,
+        params.id,
+        params.assignmentId,
+        effectiveTo,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the position end
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee_position_assignment",
+          resourceId: params.assignmentId,
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "position_ended",
+            employee_id: params.id,
+            effective_to: effectiveTo,
+          },
+        });
+      }
+
+      return { success: true as const, message: "Position assignment ended successfully" };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: EmployeePositionParamsSchema,
+      body: t.Optional(t.Object({
+        effective_to: t.Optional(DateSchema),
+      })),
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: DeleteSuccessSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Positions"],
+        summary: "End position assignment",
+        description: "End a specific position assignment for an employee. Optionally provide an effective_to date (defaults to today).",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type HRRoutes = typeof hrRoutes;

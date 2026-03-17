@@ -683,4 +683,260 @@ describe("AnalyticsService", () => {
       });
     });
   });
+
+  // ===========================================================================
+  // Workforce Planning Analytics
+  // ===========================================================================
+
+  describe("Workforce Planning Analytics", () => {
+    describe("getWorkforcePlanning", () => {
+      it("should return workforce planning dashboard with default horizon", async () => {
+        const result = await service.getWorkforcePlanning(ctx);
+
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+        expect(result.data!.horizon_months).toBe(12);
+        expect(result.data!.generated_at).toBeTruthy();
+      });
+
+      it("should parse horizon in months correctly", async () => {
+        const result = await service.getWorkforcePlanning(ctx, { horizon: "24m" });
+
+        expect(result.success).toBe(true);
+        expect(result.data!.horizon_months).toBe(24);
+      });
+
+      it("should parse horizon in years correctly", async () => {
+        const result = await service.getWorkforcePlanning(ctx, { horizon: "3y" });
+
+        expect(result.success).toBe(true);
+        expect(result.data!.horizon_months).toBe(36);
+      });
+
+      it("should default to 12m for invalid horizon", async () => {
+        const result = await service.getWorkforcePlanning(ctx, { horizon: "abc" });
+
+        expect(result.success).toBe(true);
+        expect(result.data!.horizon_months).toBe(12);
+      });
+
+      // Headcount Projection
+      describe("headcount projection", () => {
+        it("should include current headcount from repository", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const hcp = result.data!.headcount_projection;
+
+          expect(hcp.current_headcount).toBe(130);
+        });
+
+        it("should compute monthly growth rate from history", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const hcp = result.data!.headcount_projection;
+
+          expect(typeof hcp.monthly_growth_rate).toBe("number");
+          // With history showing growth from 120 to 150, growth rate should be positive
+          expect(hcp.monthly_growth_rate).toBeGreaterThan(0);
+        });
+
+        it("should produce projection points for each month of the horizon", async () => {
+          const result = await service.getWorkforcePlanning(ctx, { horizon: "6m" });
+          const hcp = result.data!.headcount_projection;
+
+          expect(hcp.projections).toHaveLength(6);
+          for (const point of hcp.projections) {
+            expect(point).toHaveProperty("period");
+            expect(point).toHaveProperty("projected_headcount");
+            expect(point).toHaveProperty("projected_hires");
+            expect(point).toHaveProperty("projected_terminations");
+            expect(point).toHaveProperty("net_change");
+            expect(point.projected_headcount).toBeGreaterThanOrEqual(0);
+          }
+        });
+
+        it("should handle empty history gracefully", async () => {
+          repository.getMonthlyHeadcountHistory = mock(() => Promise.resolve([]));
+
+          const result = await service.getWorkforcePlanning(ctx);
+          const hcp = result.data!.headcount_projection;
+
+          expect(hcp.current_headcount).toBe(130);
+          expect(hcp.monthly_growth_rate).toBe(0);
+          expect(hcp.observation_months).toBe(0);
+          // Projections should still be generated (with 0 change)
+          expect(hcp.projections).toHaveLength(12);
+        });
+      });
+
+      // Retirement Projection
+      describe("retirement projection", () => {
+        it("should include total active employees and DOB coverage", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const rp = result.data!.retirement_projection;
+
+          expect(rp.total_active_employees).toBe(130);
+          expect(rp.employees_with_dob).toBe(110);
+        });
+
+        it("should include UK state pension age note", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const rp = result.data!.retirement_projection;
+
+          expect(rp.state_pension_age_note).toContain("66");
+          expect(rp.state_pension_age_note).toContain("67");
+          expect(rp.state_pension_age_note).toContain("68");
+        });
+
+        it("should bucket employees into risk bands", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const rp = result.data!.retirement_projection;
+
+          expect(rp.risk_bands.length).toBeGreaterThan(0);
+
+          for (const band of rp.risk_bands) {
+            expect(band).toHaveProperty("years_to_retirement");
+            expect(band).toHaveProperty("employee_count");
+            expect(band).toHaveProperty("percentage");
+            expect(band).toHaveProperty("departments");
+            expect(band.employee_count).toBeGreaterThan(0);
+          }
+        });
+
+        it("should include department breakdown within risk bands", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const rp = result.data!.retirement_projection;
+
+          // The mock data has employees in Engineering and Sales
+          const allDepts = rp.risk_bands.flatMap((b) => b.departments);
+          const deptNames = allDepts.map((d) => d.org_unit_name);
+          expect(deptNames).toContain("Engineering");
+          expect(deptNames).toContain("Sales");
+        });
+
+        it("should handle no retirement data gracefully", async () => {
+          repository.getRetirementProjectionData = mock(() => Promise.resolve([]));
+
+          const result = await service.getWorkforcePlanning(ctx);
+          const rp = result.data!.retirement_projection;
+
+          expect(rp.risk_bands).toHaveLength(0);
+          expect(rp.total_active_employees).toBe(130);
+        });
+      });
+
+      // Attrition Forecast
+      describe("attrition forecast", () => {
+        it("should compute trailing 12m turnover rate", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const af = result.data!.attrition_forecast;
+
+          expect(typeof af.trailing_12m_turnover_rate).toBe("number");
+          expect(af.trailing_12m_turnover_rate).toBeGreaterThanOrEqual(0);
+        });
+
+        it("should include historical data points", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const af = result.data!.attrition_forecast;
+
+          expect(af.history.length).toBeGreaterThan(0);
+          for (const point of af.history) {
+            expect(point).toHaveProperty("period");
+            expect(point).toHaveProperty("terminations");
+            expect(point).toHaveProperty("avg_headcount");
+            expect(point).toHaveProperty("turnover_rate");
+          }
+        });
+
+        it("should produce forecast points for each month of horizon", async () => {
+          const result = await service.getWorkforcePlanning(ctx, { horizon: "6m" });
+          const af = result.data!.attrition_forecast;
+
+          expect(af.forecast).toHaveLength(6);
+          for (const point of af.forecast) {
+            expect(point).toHaveProperty("period");
+            expect(point).toHaveProperty("projected_turnover_rate");
+            expect(point).toHaveProperty("projected_terminations");
+          }
+        });
+
+        it("should compute average monthly terminations", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const af = result.data!.attrition_forecast;
+
+          expect(af.avg_monthly_terminations).toBeGreaterThan(0);
+          // 12 completed months, total terminations = 2+3+1+2+2+3+1+2+3+2+1+3 = 25
+          // avg = 25/12 ≈ 2.1
+          expect(af.avg_monthly_terminations).toBeCloseTo(2.1, 0);
+        });
+      });
+
+      // Skills Gap Analysis
+      describe("skills gap analysis", () => {
+        it("should include total competencies analysed", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const sga = result.data!.skills_gap_analysis;
+
+          expect(sga.total_competencies_analysed).toBe(2);
+          expect(sga.total_employees_with_assessments).toBe(85);
+        });
+
+        it("should return gap items with correct structure", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const sga = result.data!.skills_gap_analysis;
+
+          expect(sga.gaps).toHaveLength(2);
+          for (const gap of sga.gaps) {
+            expect(gap).toHaveProperty("competency_id");
+            expect(gap).toHaveProperty("competency_name");
+            expect(gap).toHaveProperty("competency_category");
+            expect(gap).toHaveProperty("employees_assessed");
+            expect(gap).toHaveProperty("employees_required");
+            expect(gap).toHaveProperty("avg_current_level");
+            expect(gap).toHaveProperty("avg_required_level");
+            expect(gap).toHaveProperty("avg_gap");
+            expect(gap).toHaveProperty("employees_below_required");
+            expect(gap).toHaveProperty("coverage_rate");
+          }
+        });
+
+        it("should map competency data correctly from repository", async () => {
+          const result = await service.getWorkforcePlanning(ctx);
+          const sga = result.data!.skills_gap_analysis;
+
+          const leadership = sga.gaps.find((g) => g.competency_name === "Leadership");
+          expect(leadership).toBeDefined();
+          expect(leadership!.avg_gap).toBe(0.7);
+          expect(leadership!.coverage_rate).toBe(70.0);
+          expect(leadership!.employees_below_required).toBe(15);
+        });
+
+        it("should handle empty skills gap data gracefully", async () => {
+          repository.getSkillsGapData = mock(() =>
+            Promise.resolve({
+              totalEmployeesWithAssessments: 0,
+              gaps: [],
+            })
+          );
+
+          const result = await service.getWorkforcePlanning(ctx);
+          const sga = result.data!.skills_gap_analysis;
+
+          expect(sga.total_competencies_analysed).toBe(0);
+          expect(sga.total_employees_with_assessments).toBe(0);
+          expect(sga.gaps).toHaveLength(0);
+        });
+      });
+
+      // Calls all sub-repositories
+      it("should call all repository methods with correct context and filters", async () => {
+        const filters = { horizon: "12m", org_unit_id: "ou1" };
+        await service.getWorkforcePlanning(ctx, filters);
+
+        expect(repository.getActiveHeadcount).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getMonthlyHeadcountHistory).toHaveBeenCalledWith(ctx, 24, filters);
+        expect(repository.getRetirementProjectionData).toHaveBeenCalledWith(ctx, 1, filters);
+        expect(repository.getEmployeesWithDobCount).toHaveBeenCalledWith(ctx, filters);
+        expect(repository.getSkillsGapData).toHaveBeenCalledWith(ctx, filters);
+      });
+    });
+  });
 });
