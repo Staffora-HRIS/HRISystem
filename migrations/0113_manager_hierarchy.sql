@@ -79,6 +79,8 @@ CREATE INDEX IF NOT EXISTS idx_manager_subordinates_subordinate
 -- =============================================================================
 
 -- Function to get direct reports for a manager
+-- Drop first to handle return type change from 0024_reporting_lines (different column set)
+DROP FUNCTION IF EXISTS app.get_direct_reports(uuid) CASCADE;
 CREATE OR REPLACE FUNCTION app.get_direct_reports(
     p_manager_employee_id uuid
 )
