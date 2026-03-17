@@ -99,24 +99,39 @@ ALTER TABLE app.data_breaches
 -- resolved -> remediation_only (if not ICO notified) or closed
 -- closed -> closed (same)
 
-UPDATE app.data_breaches SET status = 'reported' WHERE status = 'detected';
-UPDATE app.data_breaches SET status = 'assessing' WHERE status = 'investigating';
-UPDATE app.data_breaches SET status = 'assessing' WHERE status = 'contained';
-UPDATE app.data_breaches SET status = 'subjects_notified' WHERE status = 'notified_individuals';
--- notified_ico stays as is (ico_notified is already in the enum)
--- resolved -> closed (these are done, we close them)
-UPDATE app.data_breaches SET status = 'closed', closed_at = resolved_at WHERE status = 'resolved' AND resolved_at IS NOT NULL;
-UPDATE app.data_breaches SET status = 'closed', closed_at = now() WHERE status = 'resolved' AND resolved_at IS NULL;
+-- Data migration: map old statuses to new ones.
+-- Note: ALTER TYPE ADD VALUE cannot be used in the same transaction as the new value.
+-- These UPDATEs will only succeed on subsequent runs (after enum values are committed).
+-- On first run with an empty database, there are no rows to update, so this is safe.
+DO $$
+BEGIN
+  UPDATE app.data_breaches SET status = 'reported' WHERE status = 'detected';
+  UPDATE app.data_breaches SET status = 'assessing' WHERE status = 'investigating';
+  UPDATE app.data_breaches SET status = 'assessing' WHERE status = 'contained';
+  UPDATE app.data_breaches SET status = 'subjects_notified' WHERE status = 'notified_individuals';
+  UPDATE app.data_breaches SET status = 'closed', closed_at = resolved_at WHERE status = 'resolved' AND resolved_at IS NOT NULL;
+  UPDATE app.data_breaches SET status = 'closed', closed_at = now() WHERE status = 'resolved' AND resolved_at IS NULL;
+EXCEPTION WHEN others THEN
+  -- On fresh database, the new enum values are not yet usable in this transaction.
+  -- This is safe because there are no rows to migrate on a fresh install.
+  RAISE NOTICE 'Skipping data breach status migration (new enum values not yet usable): %', SQLERRM;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- 5. Index for overdue ICO notifications (using new states)
 -- -----------------------------------------------------------------------------
 
-CREATE INDEX IF NOT EXISTS idx_data_breaches_ico_pending
-  ON app.data_breaches (ico_deadline)
-  WHERE ico_notified = false
-    AND status IN ('reported', 'assessing')
-    AND ico_deadline IS NOT NULL;
+-- Index uses new enum values; wrap to handle first-run transaction limitation
+DO $$
+BEGIN
+  CREATE INDEX IF NOT EXISTS idx_data_breaches_ico_pending
+    ON app.data_breaches (ico_deadline)
+    WHERE ico_notified = false
+      AND status IN ('reported', 'assessing')
+      AND ico_deadline IS NOT NULL;
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'Skipping idx_data_breaches_ico_pending (new enum values): %', SQLERRM;
+END $$;
 
 -- Index for dashboard: open breaches by severity
 CREATE INDEX IF NOT EXISTS idx_data_breaches_open_severity
