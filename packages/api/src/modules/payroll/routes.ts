@@ -35,11 +35,24 @@ import {
   EmployeeIdParamsSchema,
   PayslipParamsSchema,
   OptionalIdempotencyHeaderSchema,
+  LockPayrollPeriodSchema,
+  UnlockPayrollPeriodSchema,
+  PeriodLockStatusQuerySchema,
+  PeriodLockResponseSchema,
+  JournalEntryResponseSchema,
+  GenerateJournalEntriesSchema,
+  JournalEntriesQuerySchema,
+  JournalEntriesListResponseSchema,
   // Types
   type CreatePayrollRun,
   type UpsertTaxDetails,
   type ExportPayroll,
   type PayrollRunFilters,
+  type LockPayrollPeriod,
+  type UnlockPayrollPeriod,
+  type PeriodLockStatusQuery,
+  type GenerateJournalEntries,
+  type JournalEntriesQuery,
 } from "./schemas";
 
 // =============================================================================
@@ -698,6 +711,371 @@ export const payrollRoutes = new Elysia({
       beforeHandle: [requirePermission("payroll:runs", "read")],
       params: IdParamsSchema,
       detail: { tags: ["Payroll"], summary: "Get current pay schedule assignment for employee" },
+    }
+  )
+
+  // ===========================================================================
+  // Payroll Period Lock Routes
+  // ===========================================================================
+
+  // POST /period-locks — Lock a payroll period
+  .post(
+    "/period-locks",
+    async (ctx) => {
+      const {
+        payrollService,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        set,
+      } = ctx as typeof ctx & PayrollPluginContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await payrollService.lockPayrollPeriod(
+        tenantContext!,
+        body as unknown as LockPayrollPeriod,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      if (audit) {
+        await audit.log({
+          action: "payroll.period.locked",
+          resourceType: "payroll_period_lock",
+          resourceId: result.data!.id,
+          newValues: result.data as unknown as Record<string, unknown>,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      body: LockPayrollPeriodSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: PeriodLockResponseSchema,
+        400: ErrorResponseSchema,
+        401: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Lock a payroll period",
+        description:
+          "Lock a payroll period to prevent modifications to time entries, absence records, and compensation changes within the locked date range. Only one active lock can exist per date range.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /period-locks/:id/unlock — Unlock a payroll period (with mandatory reason)
+  .post(
+    "/period-locks/:id/unlock",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        set,
+      } = ctx as typeof ctx & PayrollPluginContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await payrollService.unlockPayrollPeriod(
+        tenantContext!,
+        params.id,
+        body as unknown as UnlockPayrollPeriod,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      if (audit) {
+        await audit.log({
+          action: "payroll.period.unlocked",
+          resourceType: "payroll_period_lock",
+          resourceId: result.data!.id,
+          oldValues: { is_locked: true },
+          newValues: result.data as unknown as Record<string, unknown>,
+          metadata: {
+            unlock_reason: (body as unknown as UnlockPayrollPeriod).unlock_reason,
+            idempotencyKey,
+            requestId,
+          },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      params: IdParamsSchema,
+      body: UnlockPayrollPeriodSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: PeriodLockResponseSchema,
+        400: ErrorResponseSchema,
+        401: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Unlock a payroll period",
+        description:
+          "Unlock a previously locked payroll period. Requires a mandatory reason for audit purposes. Once unlocked, modifications to data within the period will be permitted again.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /period-locks — Get payroll period lock status
+  .get(
+    "/period-locks",
+    async (ctx) => {
+      const { payrollService, query, tenantContext, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+
+      const filters = {
+        periodStart: query.period_start as string | undefined,
+        periodEnd: query.period_end as string | undefined,
+        activeOnly: query.active_only === "true",
+      };
+
+      const result = await payrollService.getPeriodLockStatus(
+        tenantContext!,
+        filters
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      query: t.Partial(PeriodLockStatusQuerySchema),
+      response: {
+        200: t.Object({
+          items: t.Array(PeriodLockResponseSchema),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Get payroll period lock status",
+        description:
+          "List payroll period locks with optional filters. Use active_only=true to see only currently locked periods. Optionally filter by period_start and period_end to find locks overlapping with a specific date range.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /period-locks/:id — Get a single period lock by ID
+  .get(
+    "/period-locks/:id",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+
+      const result = await payrollService.getPeriodLockById(
+        tenantContext!,
+        params.id
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: PeriodLockResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Get period lock by ID",
+        description: "Get a single payroll period lock record by its ID.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Journal Entry Routes (TODO-233)
+  // ===========================================================================
+
+  // POST /runs/:id/journal-entries — Generate journal entries from a payroll run
+  .post(
+    "/runs/:id/journal-entries",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        set,
+      } = ctx as typeof ctx & PayrollPluginContext;
+      const idempotencyKey = headers["idempotency-key"];
+      const typedBody = body as unknown as GenerateJournalEntries;
+
+      const result = await payrollService.generateJournalEntries(
+        tenantContext!,
+        params.id,
+        typedBody.cost_centre_id ?? null,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      if (audit) {
+        await audit.log({
+          action: "payroll.journal_entries.generated",
+          resourceType: "payroll_run",
+          resourceId: params.id,
+          newValues: {
+            entryCount: result.data!.length,
+            costCentreId: typedBody.cost_centre_id ?? null,
+          },
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      set.status = 201;
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "write")],
+      params: IdParamsSchema,
+      body: GenerateJournalEntriesSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: t.Object({ items: t.Array(JournalEntryResponseSchema) }),
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Generate journal entries from payroll run",
+        description:
+          "Generate double-entry accounting journal entries from an approved, submitted, or paid payroll run. " +
+          "Creates debit entries for salary expenses, employer NI, and employer pension, plus credit entries " +
+          "for PAYE tax, NI liabilities, pension liabilities, student loan, and net wages payable. " +
+          "Journal entries can only be generated once per payroll run.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /runs/:id/journal-entries — Get journal entries for a specific payroll run
+  .get(
+    "/runs/:id/journal-entries",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+
+      const result = await payrollService.getJournalEntriesByRunId(
+        tenantContext!,
+        params.id
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: t.Object({ items: t.Array(JournalEntryResponseSchema) }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Get journal entries for a payroll run",
+        description:
+          "Retrieve all journal entries generated for a specific payroll run. " +
+          "Returns an empty array if no journals have been generated yet.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /journal-entries — List journal entries with filters (by period, account, cost centre)
+  .get(
+    "/journal-entries",
+    async (ctx) => {
+      const { payrollService, query, tenantContext, requestId, set } =
+        ctx as typeof ctx & PayrollPluginContext;
+
+      const filters: JournalEntriesQuery = {
+        payroll_run_id: query.payroll_run_id,
+        period_start: query.period_start,
+        period_end: query.period_end,
+        account_code: query.account_code,
+        cost_centre_id: query.cost_centre_id,
+        cursor: query.cursor,
+        limit: query.limit !== undefined ? Number(query.limit) : undefined,
+      };
+
+      const result = await payrollService.listJournalEntries(
+        tenantContext!,
+        filters
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:runs", "read")],
+      query: t.Partial(JournalEntriesQuerySchema),
+      response: {
+        200: JournalEntriesListResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "List journal entries",
+        description:
+          "List payroll journal entries with optional filters for payroll_run_id, " +
+          "date range (period_start/period_end), account_code, and cost_centre_id. " +
+          "Returns entries with a debit/credit summary and cursor-based pagination.",
+        security: [{ bearerAuth: [] }],
+      },
     }
   );
 

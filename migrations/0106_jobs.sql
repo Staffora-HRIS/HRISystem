@@ -94,9 +94,10 @@ CREATE TRIGGER jobs_updated_at
 COMMENT ON TABLE app.jobs IS 'Job catalog/classification for the organization';
 
 -- =============================================================================
--- DOWN Migration (commented out — run manually to rollback)
+-- DOWN Migration (run manually to rollback)
 -- =============================================================================
 
+-- To rollback, uncomment and execute:
 -- DROP TRIGGER IF EXISTS jobs_updated_at ON app.jobs;
 -- DROP POLICY IF EXISTS jobs_tenant_write ON app.jobs;
 -- DROP POLICY IF EXISTS jobs_tenant_isolation ON app.jobs;

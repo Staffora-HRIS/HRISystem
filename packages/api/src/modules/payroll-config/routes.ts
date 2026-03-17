@@ -27,8 +27,10 @@ import {
   UpdatePayScheduleSchema,
   PayScheduleResponseSchema,
   CreatePayAssignmentSchema,
+  UpdatePayAssignmentSchema,
   PayAssignmentResponseSchema,
   CreateNiCategorySchema,
+  UpdateNiCategorySchema,
   NiCategoryResponseSchema,
   PaginationQuerySchema,
   IdParamsSchema,
@@ -38,7 +40,9 @@ import {
   type CreatePaySchedule,
   type UpdatePaySchedule,
   type CreatePayAssignment,
+  type UpdatePayAssignment,
   type CreateNiCategory,
+  type UpdateNiCategory,
 } from "./schemas";
 
 // =============================================================================
@@ -415,6 +419,207 @@ export const payrollConfigRoutes = new Elysia({
     }
   )
 
+  // GET /pay-assignments/:id - Get pay assignment by ID
+  .get(
+    "/pay-assignments/:id",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, error } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const result = await payrollService.getPayAssignmentById(
+        tenantContext,
+        params.id
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:assignments", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: PayAssignmentResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Get pay assignment by ID",
+        description: "Get a single pay schedule assignment by its ID, including schedule name and frequency",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /employees/:employeeId/pay-assignments/current - Get current pay assignment
+  .get(
+    "/employees/:employeeId/pay-assignments/current",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, error } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const result = await payrollService.getCurrentPayAssignment(
+        tenantContext,
+        params.employeeId
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      return { data: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:assignments", "read")],
+      params: EmployeeIdParamsSchema,
+      response: {
+        200: t.Object({
+          data: t.Union([PayAssignmentResponseSchema, t.Null()]),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Get current pay assignment for an employee",
+        description:
+          "Get the currently active pay schedule assignment for an employee (effective_from <= today, effective_to is null or >= today). Returns null if no current assignment exists.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // PUT /pay-assignments/:id - Update pay assignment
+  .put(
+    "/pay-assignments/:id",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await payrollService.updatePayAssignment(
+        tenantContext,
+        params.id,
+        body as unknown as UpdatePayAssignment,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the update
+      if (audit) {
+        await audit.log({
+          action: "payroll.assignment.updated",
+          resourceType: "employee_pay_assignment",
+          resourceId: params.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:assignments", "write")],
+      params: IdParamsSchema,
+      body: UpdatePayAssignmentSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: PayAssignmentResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Update pay assignment",
+        description:
+          "Update an existing pay schedule assignment. Common use cases: end an assignment by setting effective_to, reassign to a different schedule, or adjust effective dates. Validates date consistency and prevents overlapping assignments.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // DELETE /pay-assignments/:id - Delete pay assignment
+  .delete(
+    "/pay-assignments/:id",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as typeof ctx & PayrollConfigPluginContext;
+
+      const result = await payrollService.deletePayAssignment(
+        tenantContext,
+        params.id
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the deletion
+      if (audit) {
+        await audit.log({
+          action: "payroll.assignment.deleted",
+          resourceType: "employee_pay_assignment",
+          resourceId: params.id,
+          metadata: { requestId },
+        });
+      }
+
+      return { success: true, message: "Pay assignment deleted" };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:assignments", "write")],
+      params: IdParamsSchema,
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          message: t.String(),
+        }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Delete pay assignment",
+        description:
+          "Delete a pay schedule assignment. Prefer ending an assignment by setting effective_to via PUT rather than deleting. A domain event is emitted for audit trail.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
   // ===========================================================================
   // NI Category Routes
   // ===========================================================================
@@ -452,7 +657,83 @@ export const payrollConfigRoutes = new Elysia({
         tags: ["Payroll Config"],
         summary: "List employee NI categories",
         description:
-          "Get all current and historical NI category records for an employee",
+          "Get all current and historical NI category records for an employee. Returns records ordered by effective_from descending.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /employees/:employeeId/ni-categories/current - Get current NI category for an employee
+  .get(
+    "/employees/:employeeId/ni-categories/current",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, error } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const result = await payrollService.getCurrentNiCategory(
+        tenantContext,
+        params.employeeId
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      return { data: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:ni_categories", "read")],
+      params: EmployeeIdParamsSchema,
+      response: {
+        200: t.Object({
+          data: t.Union([NiCategoryResponseSchema, t.Null()]),
+        }),
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Get current NI category for an employee",
+        description:
+          "Get the currently active NI category record for an employee (effective_from <= today, effective_to is null or >= today). Returns null if no current record exists.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /ni-categories/:id - Get NI category by ID
+  .get(
+    "/ni-categories/:id",
+    async (ctx) => {
+      const { payrollService, params, tenantContext, error } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const result = await payrollService.getNiCategoryById(
+        tenantContext,
+        params.id
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:ni_categories", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: NiCategoryResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Get NI category by ID",
+        description: "Get a single NI category record by its ID",
         security: [{ bearerAuth: [] }],
       },
     }
@@ -522,7 +803,132 @@ export const payrollConfigRoutes = new Elysia({
         tags: ["Payroll Config"],
         summary: "Create NI category record",
         description:
-          "Set an NI category for an employee with effective dating. Valid HMRC categories: A, B, C, F, H, I, J, L, M, S, V, Z. Prevents overlapping records.",
+          "Set an NI category for an employee with effective dating. Valid HMRC categories: A (standard), B (married women reduced rate), C (over state pension age), F (freeport), H (apprentice under 25), I (married women freeport), J (deferment), L (deferment freeport), M (under 21), S (state pension age freeport), V (veteran), Z (under 21 deferment). Prevents overlapping records.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // PUT /ni-categories/:id - Update NI category record
+  .put(
+    "/ni-categories/:id",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as typeof ctx & PayrollConfigPluginContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await payrollService.updateNiCategory(
+        tenantContext,
+        params.id,
+        body as unknown as UpdateNiCategory,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the update
+      if (audit) {
+        await audit.log({
+          action: "payroll.ni_category.updated",
+          resourceType: "ni_category",
+          resourceId: params.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:ni_categories", "write")],
+      params: IdParamsSchema,
+      body: UpdateNiCategorySchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: NiCategoryResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Update NI category record",
+        description:
+          "Update an existing NI category record. Validates effective dates and prevents overlapping records. Only the provided fields are updated.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // DELETE /ni-categories/:id - Delete NI category record
+  .delete(
+    "/ni-categories/:id",
+    async (ctx) => {
+      const {
+        payrollService,
+        params,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+      } = ctx as typeof ctx & PayrollConfigPluginContext;
+
+      const result = await payrollService.deleteNiCategory(
+        tenantContext,
+        params.id
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          payrollErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the deletion
+      if (audit) {
+        await audit.log({
+          action: "payroll.ni_category.deleted",
+          resourceType: "ni_category",
+          resourceId: params.id,
+          metadata: { requestId },
+        });
+      }
+
+      return { success: true, message: "NI category record deleted" };
+    },
+    {
+      beforeHandle: [requirePermission("payroll:ni_categories", "write")],
+      params: IdParamsSchema,
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          message: t.String(),
+        }),
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll Config"],
+        summary: "Delete NI category record",
+        description:
+          "Delete an NI category record. This permanently removes the record. For audit purposes, a domain event is emitted before deletion.",
         security: [{ bearerAuth: [] }],
       },
     }

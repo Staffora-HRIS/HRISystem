@@ -50,6 +50,7 @@ const DOCUMENTS_ERROR_CODES: Record<string, number> = {
   INVALID_FILE: 400,
   FILE_TOO_LARGE: 413,
   INVALID_MIME_TYPE: 415,
+  VIRUS_DETECTED: 422,
 };
 
 /**
@@ -406,12 +407,13 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       response: {
         201: DocumentResponseSchema,
         400: ErrorResponseSchema,
+        422: ErrorResponseSchema,
         500: ErrorResponseSchema,
       },
       detail: {
         tags: ["Documents"],
         summary: "Create document",
-        description: "Create a new document record after file upload",
+        description: "Create a new document record after file upload. The file is scanned for viruses before the record is created.",
         security: [{ bearerAuth: [] }],
       },
     }
@@ -592,12 +594,13 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
         201: DocumentVersionResponseSchema,
         400: ErrorResponseSchema,
         404: ErrorResponseSchema,
+        422: ErrorResponseSchema,
         500: ErrorResponseSchema,
       },
       detail: {
         tags: ["Documents"],
         summary: "Create document version",
-        description: "Upload a new version of a document",
+        description: "Upload a new version of a document. The file is scanned for viruses before the version record is created.",
         security: [{ bearerAuth: [] }],
       },
     }

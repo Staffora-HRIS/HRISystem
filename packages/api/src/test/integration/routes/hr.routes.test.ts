@@ -24,49 +24,7 @@ import {
   type TestTenant,
   type TestUser,
 } from "../../setup";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Extract cookies from Set-Cookie header into a single Cookie string */
-function buildCookieHeader(response: Response): string {
-  const headersObj = response.headers as unknown as {
-    getSetCookie?: () => string[];
-  };
-  let setCookies: string[];
-
-  if (typeof headersObj.getSetCookie === "function") {
-    setCookies = headersObj.getSetCookie();
-  } else {
-    const raw = response.headers.get("Set-Cookie") ?? "";
-    setCookies = raw ? splitCombinedSetCookieHeader(raw) : [];
-  }
-
-  return setCookies
-    .map((cookie) => cookie.split(";")[0] ?? cookie)
-    .filter(Boolean)
-    .join("; ");
-}
-
-function splitCombinedSetCookieHeader(value: string): string[] {
-  const out: string[] = [];
-  let start = 0;
-
-  for (let i = 0; i < value.length; i++) {
-    if (value[i] !== "," || value[i + 1] !== " ") continue;
-
-    const rest = value.slice(i + 2);
-    const boundary = /^[A-Za-z0-9!#$%&'*+.^_`|~.-]+=/.test(rest);
-    if (!boundary) continue;
-
-    out.push(value.slice(start, i));
-    start = i + 2;
-  }
-
-  out.push(value.slice(start));
-  return out.map((s) => s.trim()).filter(Boolean);
-}
+import { buildCookieHeader } from "../../helpers/cookies";
 
 // ---------------------------------------------------------------------------
 // Test suite

@@ -10,6 +10,7 @@ import { AbsenceService } from "./service";
 import {
   CreateLeaveTypeSchema,
   CreateLeavePolicySchema,
+  UpdateLeavePolicySchema,
   CreateLeaveRequestSchema,
   LeaveRequestFiltersSchema,
   LeaveApprovalSchema,
@@ -185,6 +186,35 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
         500: ErrorResponseSchema,
       },
       detail: { tags: ["Absence"], summary: "Delete (deactivate) leave policy" },
+    }
+  )
+
+  .put(
+    "/policies/:id",
+    async (ctx) => {
+      const { absenceService, tenantContext, params, body, error } = ctx as any;
+      const result = await absenceService.updateLeavePolicy(tenantContext, params.id, body as any);
+      if (!result.success) {
+        const statusCode = result.error?.code === "LEAVE_POLICY_NOT_FOUND" ? 404
+          : result.error?.code === "LEAVE_TYPE_NOT_FOUND" ? 404
+          : result.error?.code === "BELOW_STATUTORY_MINIMUM" ? 422
+          : 500;
+        return error(statusCode, {
+          error: result.error,
+        });
+      }
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      params: IdParamsSchema,
+      body: UpdateLeavePolicySchema,
+      response: {
+        404: ErrorResponseSchema,
+        422: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: { tags: ["Absence"], summary: "Update leave policy" },
     }
   )
 

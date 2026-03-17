@@ -6,5 +6,5 @@
 
 export { recruitmentRoutes, type RecruitmentRoutes } from "./routes";
 export { RecruitmentService } from "./service";
-export { RecruitmentRepository } from "./repository";
+export { RecruitmentRepository, type RecruitmentCost } from "./repository";
 export * from "./schemas";

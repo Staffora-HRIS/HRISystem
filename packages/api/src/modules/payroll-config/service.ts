@@ -32,7 +32,9 @@ import type {
   CreatePaySchedule,
   UpdatePaySchedule,
   CreatePayAssignment,
+  UpdatePayAssignment,
   CreateNiCategory,
+  UpdateNiCategory,
   PayScheduleResponse,
   PayAssignmentResponse,
   NiCategoryResponse,
@@ -47,7 +49,11 @@ type DomainEventType =
   | "payroll.schedule.created"
   | "payroll.schedule.updated"
   | "payroll.assignment.created"
-  | "payroll.ni_category.created";
+  | "payroll.assignment.updated"
+  | "payroll.assignment.deleted"
+  | "payroll.ni_category.created"
+  | "payroll.ni_category.updated"
+  | "payroll.ni_category.deleted";
 
 // =============================================================================
 // Service
@@ -141,6 +147,9 @@ export class PayrollConfigService {
       created_at: row.createdAt instanceof Date
         ? row.createdAt.toISOString()
         : String(row.createdAt),
+      updated_at: row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : String(row.updatedAt),
     };
 
     if (row.scheduleName) {
@@ -174,6 +183,9 @@ export class PayrollConfigService {
       created_at: row.createdAt instanceof Date
         ? row.createdAt.toISOString()
         : String(row.createdAt),
+      updated_at: row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : String(row.updatedAt),
     };
   }
 
@@ -555,6 +567,244 @@ export class PayrollConfigService {
     };
   }
 
+  /**
+   * Get a single pay assignment by ID.
+   */
+  async getPayAssignmentById(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<PayAssignmentResponse>> {
+    const row = await this.repository.findPayAssignmentById(context, id);
+    if (!row) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Pay assignment ${id} not found`,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.mapAssignmentToResponse(row),
+    };
+  }
+
+  /**
+   * Get the current (active) pay assignment for an employee.
+   * Returns the record where effective_from <= today and
+   * (effective_to IS NULL OR effective_to >= today).
+   */
+  async getCurrentPayAssignment(
+    context: TenantContext,
+    employeeId: string
+  ): Promise<ServiceResult<PayAssignmentResponse | null>> {
+    const row = await this.repository.findCurrentPayAssignment(
+      context,
+      employeeId
+    );
+
+    return {
+      success: true,
+      data: row ? this.mapAssignmentToResponse(row) : null,
+    };
+  }
+
+  /**
+   * Update an existing pay assignment.
+   *
+   * Common use cases:
+   * - End an assignment by setting effective_to (e.g., employee changes schedule)
+   * - Reassign to a different pay schedule
+   * - Adjust effective dates
+   *
+   * Validates:
+   * - Assignment exists
+   * - If pay_schedule_id is changing, the new schedule exists
+   * - effective_to >= effective_from (considering merged values)
+   * - No overlapping assignments (excluding self)
+   */
+  async updatePayAssignment(
+    context: TenantContext,
+    id: string,
+    data: UpdatePayAssignment,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<PayAssignmentResponse>> {
+    // Fetch existing record to merge values for validation
+    const existing = await this.repository.findPayAssignmentById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Pay assignment ${id} not found`,
+        },
+      };
+    }
+
+    // If changing the pay schedule, verify the new one exists
+    if (data.pay_schedule_id && data.pay_schedule_id !== existing.payScheduleId) {
+      const schedule = await this.repository.findPayScheduleById(
+        context,
+        data.pay_schedule_id
+      );
+      if (!schedule) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `Pay schedule ${data.pay_schedule_id} not found`,
+          },
+        };
+      }
+    }
+
+    // Determine effective values after the update
+    const effectiveFrom = data.effective_from
+      ?? (existing.effectiveFrom instanceof Date
+        ? existing.effectiveFrom.toISOString().split("T")[0]
+        : String(existing.effectiveFrom));
+
+    const effectiveTo = data.effective_to !== undefined
+      ? data.effective_to
+      : existing.effectiveTo
+        ? existing.effectiveTo instanceof Date
+          ? existing.effectiveTo.toISOString().split("T")[0]
+          : String(existing.effectiveTo)
+        : null;
+
+    // Validate effective_to >= effective_from
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: "effective_to must be on or after effective_from",
+          details: {
+            effective_from: effectiveFrom,
+            effective_to: effectiveTo,
+          },
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      // Check for overlapping assignments (excluding current record)
+      const hasOverlap = await this.repository.hasOverlappingPayAssignment(
+        context,
+        existing.employeeId,
+        effectiveFrom,
+        effectiveTo,
+        tx,
+        id
+      );
+
+      if (hasOverlap) {
+        return {
+          success: false,
+          error: {
+            code: "EFFECTIVE_DATE_OVERLAP",
+            message:
+              "Employee already has a pay schedule assignment that overlaps with the given date range",
+            details: {
+              employee_id: existing.employeeId,
+              effective_from: effectiveFrom,
+              effective_to: effectiveTo,
+            },
+          },
+        };
+      }
+
+      const row = await this.repository.updatePayAssignment(context, id, data, tx);
+
+      if (!row) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `Pay assignment ${id} not found`,
+          },
+        };
+      }
+
+      // Emit domain event
+      await this.emitEvent(
+        tx,
+        context,
+        "employee_pay_assignment",
+        row.id,
+        "payroll.assignment.updated",
+        {
+          assignment: this.mapAssignmentToResponse(row),
+          previous: this.mapAssignmentToResponse(existing),
+          employee_id: existing.employeeId,
+        }
+      );
+
+      return {
+        success: true,
+        data: this.mapAssignmentToResponse(row),
+      };
+    });
+  }
+
+  /**
+   * Delete a pay assignment.
+   *
+   * Validates:
+   * - Assignment exists
+   * Emits a domain event for audit trail.
+   */
+  async deletePayAssignment(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<{ deleted: true }>> {
+    // Verify record exists first
+    const existing = await this.repository.findPayAssignmentById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `Pay assignment ${id} not found`,
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      const deleted = await this.repository.deletePayAssignment(context, id, tx);
+
+      if (!deleted) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `Pay assignment ${id} not found`,
+          },
+        };
+      }
+
+      // Emit domain event
+      await this.emitEvent(
+        tx,
+        context,
+        "employee_pay_assignment",
+        id,
+        "payroll.assignment.deleted",
+        {
+          assignment: this.mapAssignmentToResponse(deleted),
+          employee_id: deleted.employeeId,
+        }
+      );
+
+      return {
+        success: true,
+        data: { deleted: true as const },
+      };
+    });
+  }
+
   // ===========================================================================
   // NI Categories
   // ===========================================================================
@@ -635,6 +885,30 @@ export class PayrollConfigService {
   }
 
   /**
+   * Get a single NI category record by ID.
+   */
+  async getNiCategoryById(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<NiCategoryResponse>> {
+    const row = await this.repository.findNiCategoryById(context, id);
+    if (!row) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `NI category record ${id} not found`,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.mapNiCategoryToResponse(row),
+    };
+  }
+
+  /**
    * Get all NI categories for an employee (current and historical)
    */
   async getNiCategoriesByEmployee(
@@ -650,5 +924,196 @@ export class PayrollConfigService {
       success: true,
       data: rows.map((row) => this.mapNiCategoryToResponse(row)),
     };
+  }
+
+  /**
+   * Get the current (active) NI category for an employee.
+   * Returns the record where effective_from <= today and
+   * (effective_to IS NULL OR effective_to >= today).
+   */
+  async getCurrentNiCategory(
+    context: TenantContext,
+    employeeId: string
+  ): Promise<ServiceResult<NiCategoryResponse | null>> {
+    const row = await this.repository.findCurrentNiCategory(
+      context,
+      employeeId
+    );
+
+    return {
+      success: true,
+      data: row ? this.mapNiCategoryToResponse(row) : null,
+    };
+  }
+
+  /**
+   * Update an existing NI category record.
+   *
+   * Validates:
+   * - Record exists
+   * - effective_to >= effective_from (considering merged values)
+   * - No overlapping NI category records (excluding self)
+   */
+  async updateNiCategory(
+    context: TenantContext,
+    id: string,
+    data: UpdateNiCategory,
+    _idempotencyKey?: string
+  ): Promise<ServiceResult<NiCategoryResponse>> {
+    // Fetch existing record to merge values for validation
+    const existing = await this.repository.findNiCategoryById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `NI category record ${id} not found`,
+        },
+      };
+    }
+
+    // Determine effective values after the update
+    const effectiveFrom = data.effective_from
+      ?? (existing.effectiveFrom instanceof Date
+        ? existing.effectiveFrom.toISOString().split("T")[0]
+        : String(existing.effectiveFrom));
+
+    const effectiveTo = data.effective_to !== undefined
+      ? data.effective_to
+      : existing.effectiveTo
+        ? existing.effectiveTo instanceof Date
+          ? existing.effectiveTo.toISOString().split("T")[0]
+          : String(existing.effectiveTo)
+        : null;
+
+    // Validate effective_to >= effective_from
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: "effective_to must be on or after effective_from",
+          details: {
+            effective_from: effectiveFrom,
+            effective_to: effectiveTo,
+          },
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      // Check for overlapping NI categories (excluding current record)
+      const hasOverlap = await this.repository.hasOverlappingNiCategory(
+        context,
+        existing.employeeId,
+        effectiveFrom,
+        effectiveTo,
+        tx,
+        id
+      );
+
+      if (hasOverlap) {
+        return {
+          success: false,
+          error: {
+            code: "EFFECTIVE_DATE_OVERLAP",
+            message:
+              "Employee already has an NI category record that overlaps with the given date range",
+            details: {
+              employee_id: existing.employeeId,
+              effective_from: effectiveFrom,
+              effective_to: effectiveTo,
+            },
+          },
+        };
+      }
+
+      const row = await this.repository.updateNiCategory(context, id, data, tx);
+
+      if (!row) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `NI category record ${id} not found`,
+          },
+        };
+      }
+
+      // Emit domain event
+      await this.emitEvent(
+        tx,
+        context,
+        "ni_category",
+        row.id,
+        "payroll.ni_category.updated",
+        {
+          ni_category: this.mapNiCategoryToResponse(row),
+          previous: this.mapNiCategoryToResponse(existing),
+          employee_id: existing.employeeId,
+        }
+      );
+
+      return {
+        success: true,
+        data: this.mapNiCategoryToResponse(row),
+      };
+    });
+  }
+
+  /**
+   * Delete an NI category record.
+   *
+   * Validates:
+   * - Record exists
+   * Emits a domain event for audit trail.
+   */
+  async deleteNiCategory(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<{ deleted: true }>> {
+    // Verify record exists first
+    const existing = await this.repository.findNiCategoryById(context, id);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `NI category record ${id} not found`,
+        },
+      };
+    }
+
+    return await this.db.withTransaction(context, async (tx) => {
+      const deleted = await this.repository.deleteNiCategory(context, id, tx);
+
+      if (!deleted) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `NI category record ${id} not found`,
+          },
+        };
+      }
+
+      // Emit domain event
+      await this.emitEvent(
+        tx,
+        context,
+        "ni_category",
+        id,
+        "payroll.ni_category.deleted",
+        {
+          ni_category: this.mapNiCategoryToResponse(deleted),
+          employee_id: deleted.employeeId,
+        }
+      );
+
+      return {
+        success: true,
+        data: { deleted: true as const },
+      };
+    });
   }
 }

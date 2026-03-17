@@ -59,7 +59,7 @@ export function RouteErrorBoundary() {
         >
           <div className="max-w-md text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-              <FileQuestion className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+              <FileQuestion className="h-8 w-8 text-gray-400 dark:text-gray-400" />
             </div>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
               404
@@ -67,7 +67,7 @@ export function RouteErrorBoundary() {
             <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
               Page not found
             </p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               The page you are looking for does not exist or has been moved.
             </p>
             <div className="mt-6 flex items-center justify-center gap-3">
@@ -109,7 +109,7 @@ export function RouteErrorBoundary() {
             <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
               Access denied
             </p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               You don&apos;t have permission to access this page. Contact your
               administrator if you believe this is a mistake.
             </p>
@@ -152,7 +152,7 @@ export function RouteErrorBoundary() {
           <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
             {error.statusText || "Something went wrong"}
           </p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             The server encountered an error. Please try again.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">

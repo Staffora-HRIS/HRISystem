@@ -1,8 +1,9 @@
 /**
  * Distributed Lock Unit Tests
  *
- * Tests the Redis-based distributed lock module used by the scheduler
- * to prevent duplicate job execution across multiple worker instances.
+ * Tests the Redlock-style distributed lock module used by the scheduler
+ * and cache plugin to prevent duplicate job execution and provide safe
+ * mutual exclusion across multiple worker instances.
  *
  * Requires Redis to be running (via Docker).
  *
@@ -82,6 +83,7 @@ describe("acquireLock", () => {
     // Acquire with very short TTL (1 second)
     const lock1 = await acquireLock("test:acquire-expire", {
       ttlSeconds: 1,
+      autoRenew: false, // Disable auto-renewal so it actually expires
     });
     expect(lock1).not.toBeNull();
 
@@ -101,6 +103,7 @@ describe("acquireLock", () => {
     // Acquire with very short TTL (1 second)
     const lock1 = await acquireLock("test:acquire-wait", {
       ttlSeconds: 1,
+      autoRenew: false,
     });
     expect(lock1).not.toBeNull();
 
@@ -135,14 +138,140 @@ describe("acquireLock", () => {
 });
 
 // =============================================================================
+// Fencing tokens
+// =============================================================================
+
+describe("fencing tokens", () => {
+  it("should issue a fencing token on acquisition", async () => {
+    const lock = await acquireLock("test:fencing-basic", {
+      ttlSeconds: 10,
+    });
+
+    expect(lock).not.toBeNull();
+    expect(typeof lock!.fencingToken).toBe("number");
+    expect(lock!.fencingToken).toBeGreaterThan(0);
+
+    await lock!.release();
+  });
+
+  it("should issue monotonically increasing fencing tokens", async () => {
+    const lock1 = await acquireLock("test:fencing-monotonic-1", {
+      ttlSeconds: 10,
+    });
+    expect(lock1).not.toBeNull();
+
+    const lock2 = await acquireLock("test:fencing-monotonic-2", {
+      ttlSeconds: 10,
+    });
+    expect(lock2).not.toBeNull();
+
+    // Second token must be strictly greater than first
+    expect(lock2!.fencingToken).toBeGreaterThan(lock1!.fencingToken);
+
+    await lock1!.release();
+    await lock2!.release();
+  });
+
+  it("should increase fencing token across sequential acquisitions of same key", async () => {
+    const lock1 = await acquireLock("test:fencing-sequential", {
+      ttlSeconds: 10,
+    });
+    expect(lock1).not.toBeNull();
+    const token1 = lock1!.fencingToken;
+    await lock1!.release();
+
+    const lock2 = await acquireLock("test:fencing-sequential", {
+      ttlSeconds: 10,
+    });
+    expect(lock2).not.toBeNull();
+    const token2 = lock2!.fencingToken;
+    await lock2!.release();
+
+    expect(token2).toBeGreaterThan(token1);
+  });
+});
+
+// =============================================================================
+// Validity time
+// =============================================================================
+
+describe("validity time", () => {
+  it("should report positive validity time on acquisition", async () => {
+    const lock = await acquireLock("test:validity-basic", {
+      ttlSeconds: 10,
+    });
+
+    expect(lock).not.toBeNull();
+    expect(lock!.validityMs).toBeGreaterThan(0);
+    // Validity should be less than the full TTL due to clock drift + acquisition time
+    expect(lock!.validityMs).toBeLessThanOrEqual(10_000);
+
+    await lock!.release();
+  });
+
+  it("should account for clock drift in validity", async () => {
+    const lock = await acquireLock("test:validity-drift", {
+      ttlSeconds: 5,
+    });
+
+    expect(lock).not.toBeNull();
+    // With CLOCK_DRIFT_FACTOR = 0.01 and CLOCK_DRIFT_BASE_MS = 2,
+    // at minimum we lose 5000*0.01 + 2 = 52ms
+    // So validity should be at most 5000 - 52 = 4948ms
+    expect(lock!.validityMs).toBeLessThanOrEqual(4948);
+
+    await lock!.release();
+  });
+});
+
+// =============================================================================
+// Auto-renewal
+// =============================================================================
+
+describe("auto-renewal", () => {
+  it("should keep lock alive beyond original TTL when auto-renewal is enabled", async () => {
+    // Acquire with 2-second TTL, auto-renewal at 50% (every 1s)
+    const lock = await acquireLock("test:autorenew-alive", {
+      ttlSeconds: 2,
+      autoRenew: true,
+      renewalFraction: 0.5,
+    });
+    expect(lock).not.toBeNull();
+
+    // Wait longer than the original TTL
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Lock should still be owned by us -- release should succeed
+    const released = await lock!.release();
+    expect(released).toBe(true);
+  });
+
+  it("should not renew when auto-renewal is disabled", async () => {
+    const lock = await acquireLock("test:autorenew-disabled", {
+      ttlSeconds: 1,
+      autoRenew: false,
+    });
+    expect(lock).not.toBeNull();
+
+    // Wait for TTL to expire
+    await new Promise((r) => setTimeout(r, 1200));
+
+    // Lock should have expired -- release should return false
+    const released = await lock!.release();
+    expect(released).toBe(false);
+  });
+});
+
+// =============================================================================
 // Lock release safety
 // =============================================================================
 
 describe("lock release", () => {
   it("should not release a lock owned by another instance", async () => {
-    // Acquire with very short TTL
+    // Acquire with very short TTL and no auto-renewal
     const lock1 = await acquireLock("test:release-safety", {
       ttlSeconds: 1,
+      autoRenew: false,
     });
     expect(lock1).not.toBeNull();
 
@@ -272,6 +401,39 @@ describe("withLock", () => {
     expect(result2.acquired).toBe(false);
 
     expect(executionOrder).toEqual(["start-1", "end-1"]);
+  });
+
+  it("should pass fencing token to callback", async () => {
+    let receivedToken: number | undefined;
+
+    const result = await withLock(
+      "test:withlock-fencing",
+      { ttlSeconds: 10 },
+      async (fencingToken) => {
+        receivedToken = fencingToken;
+        return "done";
+      }
+    );
+
+    expect(result.acquired).toBe(true);
+    if (result.acquired) {
+      expect(result.fencingToken).toBeGreaterThan(0);
+      expect(receivedToken).toBe(result.fencingToken);
+    }
+  });
+
+  it("should return fencing token in result", async () => {
+    const result = await withLock(
+      "test:withlock-fencing-result",
+      { ttlSeconds: 10 },
+      async () => "value"
+    );
+
+    expect(result.acquired).toBe(true);
+    if (result.acquired) {
+      expect(typeof result.fencingToken).toBe("number");
+      expect(result.fencingToken).toBeGreaterThan(0);
+    }
   });
 });
 

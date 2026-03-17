@@ -10,7 +10,7 @@ import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
 import { LMSRepository } from "./repository";
 import { LMSService } from "./service";
-import { CreateLearningPathSchema } from "./schemas";
+import { CreateLearningPathSchema, ComplianceReportQuerySchema } from "./schemas";
 import { mapErrorToStatus } from "../../lib/route-helpers";
 
 const UuidSchema = t.String({ format: "uuid" });
@@ -300,6 +300,39 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     body: CreateLearningPathSchema,
     beforeHandle: [requirePermission("lms", "write")],
     detail: { tags: ["LMS"], summary: "Create learning path" }
+  })
+
+  // Compliance Report
+  .get("/compliance-report", async (ctx) => {
+    const { lmsService, tenantContext, query, set } = ctx as any;
+
+    try {
+      const filters = {
+        courseId: query.courseId || undefined,
+        orgUnitId: query.orgUnitId || undefined,
+        includeArchived: query.includeArchived === "true",
+      };
+
+      const result = await lmsService.getComplianceReport(tenantContext, filters);
+
+      if (!result.success) {
+        set.status = mapErrorToStatus(result.error.code, LMS_ERROR_CODES);
+        return { error: result.error };
+      }
+
+      return result.data;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    query: ComplianceReportQuerySchema,
+    beforeHandle: [requirePermission("lms", "read")],
+    detail: {
+      tags: ["LMS"],
+      summary: "Get mandatory training compliance report",
+      description: "Returns compliance statistics for mandatory training courses with per-course and per-department breakdowns. Includes overdue tracking.",
+    }
   })
 
   // My Learning

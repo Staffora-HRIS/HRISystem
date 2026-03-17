@@ -188,8 +188,10 @@ export function ToastViewport() {
   return createPortal(
     <div
       className="fixed right-4 top-4 z-50 flex flex-col gap-2"
-      role="region"
+      role="log"
       aria-label="Notifications"
+      aria-live="polite"
+      aria-relevant="additions"
     >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={() => removeToast(toast.id)} />
@@ -216,9 +218,10 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
         "dark:bg-gray-800",
         borderColors[toast.type]
       )}
-      role="alert"
+      role="status"
+      aria-atomic="true"
     >
-      <span className={cn("shrink-0", iconColors[toast.type])}>
+      <span className={cn("shrink-0", iconColors[toast.type])} aria-hidden="true">
         {icons[toast.type]}
       </span>
 
@@ -238,7 +241,12 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
               toast.action?.onClick();
               onDismiss();
             }}
-            className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
+            className={cn(
+              "mt-2 text-sm font-medium text-primary-600 hover:text-primary-500",
+              "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded",
+              "dark:text-primary-400"
+            )}
+            tabIndex={0}
           >
             {toast.action.label}
           </button>
@@ -249,8 +257,13 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700"
-          aria-label="Dismiss"
+          className={cn(
+            "shrink-0 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500",
+            "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1",
+            "dark:hover:bg-gray-700"
+          )}
+          aria-label={`Dismiss ${toast.title} notification`}
+          tabIndex={0}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path

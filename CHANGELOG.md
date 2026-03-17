@@ -22,8 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed all USD defaults to GBP, en-US to en-GB
 - Client portal module (`packages/api/src/modules/client-portal/`)
 - Permissions system with role-based access control
+- Statutory notice period calculation utility (`calculateStatutoryNoticePeriod`) in `@staffora/shared/utils`
+  - UK Employment Rights Act 1996 s.86: 1 week per year of service, max 12 weeks
+  - Validates contractual notice meets or exceeds statutory minimum
+  - Exposed via `GET /api/v1/hr/employees/:id/statutory-notice`
+- Time policies create form wired to `POST /api/v1/time/schedules`
 - CONTRIBUTING.md, LICENSE, README.md
 - Enterprise engineering audit documentation
+- DOWN migration sections for `0106_jobs.sql` and `0096_better_auth_twofactor_columns.sql`
+- Migration renumbering documentation in `migrations/README.md`
+
+### Changed
+- Pinned Trivy version in CI, enabled CodeQL failures, added test concurrency
 
 ### Fixed
 - CSRF protection now uses HMAC-SHA256 with constant-time comparison
@@ -37,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Benefits /stats endpoint referencing non-existent table
 - Time service constructor property name mismatch
 - Frontend API path mismatches for benefits, onboarding, competencies
+- Production rollback workflow, RLS enforcement in migrations, env var documentation
+- Test suite failures reduced from 265 to 46
 
 ### Security
 - CSRF tokens now HMAC-SHA256 signed with timing-safe validation

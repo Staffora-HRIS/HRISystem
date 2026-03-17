@@ -6,16 +6,21 @@
  * All routes require authentication.
  *
  * Endpoints:
- * - GET    /notifications           — List user's notifications
- * - GET    /notifications/unread-count — Get unread count
- * - GET    /notifications/:id       — Get single notification
- * - POST   /notifications/:id/read  — Mark single notification as read
- * - POST   /notifications/read-all  — Mark all as read
- * - POST   /notifications/:id/dismiss — Dismiss notification
- * - DELETE /notifications/:id       — Delete notification
- * - GET    /notifications/push-tokens — List push tokens
- * - POST   /notifications/push-tokens — Register push token
- * - DELETE /notifications/push-tokens/:id — Remove push token
+ * - GET    /notifications                  — List user's notifications
+ * - GET    /notifications/unread-count     — Get unread count
+ * - GET    /notifications/:id              — Get single notification
+ * - POST   /notifications/:id/read        — Mark single notification as read
+ * - POST   /notifications/read-all        — Mark all as read
+ * - POST   /notifications/:id/dismiss     — Dismiss notification
+ * - DELETE /notifications/:id              — Delete notification
+ * - GET    /notifications/push-tokens      — List push tokens (FCM)
+ * - POST   /notifications/push-tokens      — Register push token (FCM)
+ * - DELETE /notifications/push-tokens/:id  — Remove push token (FCM)
+ * - GET    /notifications/push/vapid-key   — Get VAPID public key
+ * - GET    /notifications/push/subscriptions       — List Web Push subscriptions
+ * - POST   /notifications/push/subscribe           — Subscribe to Web Push
+ * - DELETE /notifications/push/unsubscribe         — Unsubscribe from Web Push (by endpoint)
+ * - DELETE /notifications/push/subscriptions/:id   — Unsubscribe from Web Push (by ID)
  */
 
 import { Elysia, t } from "elysia";
@@ -33,6 +38,10 @@ import {
   PaginationQuerySchema,
   IdParamsSchema,
   OptionalIdempotencyHeaderSchema,
+  WebPushSubscribeSchema,
+  WebPushUnsubscribeSchema,
+  WebPushSubscriptionResponseSchema,
+  VapidPublicKeyResponseSchema,
 } from "./schemas";
 
 /** Elysia context shape after plugins inject db/tenant/user */
@@ -519,6 +528,222 @@ export const notificationsRoutes = new Elysia({ prefix: "/notifications" })
       detail: {
         tags: ["Notifications"],
         summary: "Delete a notification",
+      },
+    }
+  )
+
+  // =========================================================================
+  // GET /notifications/push/vapid-key — Get VAPID public key
+  // =========================================================================
+  .get(
+    "/push/vapid-key",
+    async (ctx) => {
+      const { set } = ctx as unknown as DerivedContext;
+
+      const publicKey = process.env["VAPID_PUBLIC_KEY"];
+      if (!publicKey) {
+        set.status = 503;
+        return {
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: "Web Push notifications are not configured",
+          },
+        };
+      }
+
+      return { public_key: publicKey };
+    },
+    {
+      response: {
+        200: VapidPublicKeyResponseSchema,
+        503: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Notifications"],
+        summary: "Get VAPID public key for Web Push subscription",
+      },
+    }
+  )
+
+  // =========================================================================
+  // GET /notifications/push/subscriptions — List Web Push subscriptions
+  // =========================================================================
+  .get(
+    "/push/subscriptions",
+    async (ctx) => {
+      const { notificationsService, tenantContext, currentUserId, set } =
+        ctx as unknown as DerivedContext;
+
+      try {
+        const subscriptions = await notificationsService.listPushSubscriptions(
+          tenantContext,
+          currentUserId
+        );
+        return { items: subscriptions };
+      } catch (error: unknown) {
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    {
+      detail: {
+        tags: ["Notifications"],
+        summary: "List Web Push subscriptions for current user",
+      },
+    }
+  )
+
+  // =========================================================================
+  // POST /notifications/push/subscribe — Subscribe to Web Push
+  // =========================================================================
+  .post(
+    "/push/subscribe",
+    async (ctx) => {
+      const { notificationsService, tenantContext, currentUserId, body, set } =
+        ctx as unknown as DerivedContext;
+
+      try {
+        const result = await notificationsService.subscribePush(
+          tenantContext,
+          currentUserId,
+          body as {
+            endpoint: string;
+            auth_key: string;
+            p256dh_key: string;
+            device_type?: "web" | "mobile_web" | "pwa";
+            user_agent?: string;
+          }
+        );
+
+        if (!result.success) {
+          set.status = mapErrorToStatus(result.error!.code);
+          return { error: result.error };
+        }
+
+        set.status = 201;
+        return result.data;
+      } catch (error: unknown) {
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    {
+      body: WebPushSubscribeSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: WebPushSubscriptionResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Notifications"],
+        summary: "Subscribe to Web Push notifications",
+      },
+    }
+  )
+
+  // =========================================================================
+  // DELETE /notifications/push/unsubscribe — Unsubscribe from Web Push (by endpoint)
+  // =========================================================================
+  .delete(
+    "/push/unsubscribe",
+    async (ctx) => {
+      const { notificationsService, tenantContext, currentUserId, body, set } =
+        ctx as unknown as DerivedContext;
+
+      try {
+        const { endpoint } = body as { endpoint: string };
+        const result = await notificationsService.unsubscribePush(
+          tenantContext,
+          currentUserId,
+          endpoint
+        );
+
+        if (!result.success) {
+          set.status = mapErrorToStatus(result.error!.code);
+          return { error: result.error };
+        }
+
+        return { success: true as const, message: "Push subscription removed" };
+      } catch (error: unknown) {
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    {
+      body: WebPushUnsubscribeSchema,
+      response: {
+        200: DeleteSuccessSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Notifications"],
+        summary: "Unsubscribe from Web Push notifications by endpoint",
+      },
+    }
+  )
+
+  // =========================================================================
+  // DELETE /notifications/push/subscriptions/:id — Unsubscribe by ID
+  // =========================================================================
+  .delete(
+    "/push/subscriptions/:id",
+    async (ctx) => {
+      const { notificationsService, tenantContext, currentUserId, params, set } =
+        ctx as unknown as DerivedContext;
+
+      try {
+        const result = await notificationsService.unsubscribePushById(
+          tenantContext,
+          currentUserId,
+          params.id
+        );
+
+        if (!result.success) {
+          set.status = mapErrorToStatus(result.error!.code);
+          return { error: result.error };
+        }
+
+        return { success: true as const, message: "Push subscription removed" };
+      } catch (error: unknown) {
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    {
+      params: IdParamsSchema,
+      response: {
+        200: DeleteSuccessSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Notifications"],
+        summary: "Unsubscribe from Web Push notifications by subscription ID",
       },
     }
   );

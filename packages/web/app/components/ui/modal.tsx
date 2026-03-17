@@ -9,6 +9,7 @@ import {
   forwardRef,
   useEffect,
   useCallback,
+  useRef,
   type HTMLAttributes,
   type ReactNode,
   type MouseEvent,
@@ -16,6 +17,7 @@ import {
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { Button, type ButtonProps } from "./button";
+import { useFocusTrap } from "../../hooks/use-focus-trap";
 
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
 
@@ -30,6 +32,14 @@ export interface ModalProps {
   className?: string;
   overlayClassName?: string;
   children: ReactNode;
+  /** Selector for the element that should receive initial focus. Falls back to the first focusable element. */
+  initialFocusSelector?: string;
+  /** Accessible label for the dialog. Uses aria-label when no aria-labelledby is appropriate. */
+  "aria-label"?: string;
+  /** ID of the element that labels the dialog. */
+  "aria-labelledby"?: string;
+  /** ID of the element that describes the dialog. */
+  "aria-describedby"?: string;
 }
 
 const sizeStyles: Record<ModalSize, string> = {
@@ -51,7 +61,19 @@ export function Modal({
   className,
   overlayClassName,
   children,
+  initialFocusSelector,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
 }: ModalProps) {
+  // Focus trap: traps Tab focus within the modal and restores focus on close
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({
+    enabled: open,
+    autoFocus: true,
+    restoreFocus: true,
+    initialFocusSelector,
+  });
+
   // Handle escape key
   const handleKeyDown = useCallback(
     (event: globalThis.KeyboardEvent) => {
@@ -102,8 +124,6 @@ export function Modal({
         "animate-in fade-in duration-200",
         overlayClassName
       )}
-      role="dialog"
-      aria-modal="true"
     >
       {/* Overlay */}
       <div
@@ -114,6 +134,12 @@ export function Modal({
 
       {/* Modal content */}
       <div
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-describedby={ariaDescribedBy}
         className={cn(
           "relative z-10 w-full rounded-xl bg-white shadow-xl",
           "animate-in zoom-in-95 slide-in-from-bottom-4 duration-200",

@@ -1371,6 +1371,337 @@ export const caseBundleProcessor: ProcessorRegistration<CaseBundlePayload> = {
   retry: true,
 };
 
+// =============================================================================
+// Bulk Document Generation Item Processor
+// =============================================================================
+
+/**
+ * Payload for a single bulk document generation item.
+ * Matches the shape written by the domain event handler.
+ */
+export interface BulkDocumentItemPayload {
+  batchId: string;
+  batchItemId: string;
+  templateId: string;
+  templateName: string;
+  employeeId: string;
+  variables: Record<string, string>;
+}
+
+/**
+ * Process a single employee's document generation within a bulk batch.
+ *
+ * Flow:
+ * 1. Mark the batch item as 'processing'
+ * 2. Load the letter template and employee data
+ * 3. Render the template with merged placeholder values
+ * 4. Create a generated_letters record
+ * 5. Mark the batch item as 'completed' with the generated letter ID
+ * 6. Update batch counters
+ * 7. If all items processed, finalize the batch status
+ */
+async function processBulkDocumentItem(
+  payload: JobPayload<BulkDocumentItemPayload>,
+  context: JobContext
+): Promise<void> {
+  const { log, db } = context;
+  const { batchId, batchItemId, templateId, employeeId, variables } = payload.data;
+  const tenantId = payload.tenantId!;
+
+  log.info("Processing bulk document generation item", {
+    batchId,
+    batchItemId,
+    employeeId,
+  });
+
+  try {
+    // Mark item as processing
+    await db.withSystemContext(async (tx) => {
+      await tx`
+        UPDATE app.document_generation_batch_items
+        SET status = 'processing', started_at = now()
+        WHERE id = ${batchItemId}::uuid
+      `;
+    });
+
+    // Load template
+    const template = await db.withSystemContext(async (tx) => {
+      const rows = await tx<Array<{
+        id: string;
+        name: string;
+        subject: string | null;
+        bodyTemplate: string;
+        placeholders: unknown[];
+        active: boolean;
+      }>>`
+        SELECT id, name, subject, body_template, placeholders, active
+        FROM app.letter_templates
+        WHERE id = ${templateId}::uuid
+          AND tenant_id = ${tenantId}::uuid
+      `;
+      return rows[0] ?? null;
+    });
+
+    if (!template) {
+      throw new Error(`Letter template ${templateId} not found`);
+    }
+
+    if (!template.active) {
+      throw new Error(`Letter template ${templateId} is inactive`);
+    }
+
+    // Load employee data for placeholder rendering
+    const employeeData = await db.withSystemContext(async (tx) => {
+      const rows = await tx<Record<string, unknown>[]>`
+        SELECT
+          e.id,
+          e.employee_number,
+          e.status,
+          e.hire_date,
+          ep.first_name,
+          ep.last_name,
+          ep.middle_name,
+          ep.preferred_name,
+          ep.date_of_birth,
+          ep.gender,
+          ep.nationality,
+          ec.contract_type,
+          ec.employment_type,
+          ec.fte,
+          ec.working_hours_per_week,
+          ec.probation_end_date,
+          ec.notice_period_days,
+          p.title    AS position_title,
+          p.code     AS position_code,
+          ou.name    AS org_unit_name,
+          ou.code    AS org_unit_code,
+          comp.base_salary,
+          comp.currency,
+          comp.pay_frequency,
+          mgr_personal.first_name AS manager_first_name,
+          mgr_personal.last_name  AS manager_last_name,
+          mgr_emp.employee_number AS manager_employee_number
+        FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id AND ep.effective_to IS NULL
+        LEFT JOIN app.employee_contracts ec
+          ON ec.employee_id = e.id AND ec.effective_to IS NULL
+        LEFT JOIN app.position_assignments pa
+          ON pa.employee_id = e.id AND pa.effective_to IS NULL AND pa.is_primary = true
+        LEFT JOIN app.positions p
+          ON p.id = pa.position_id
+        LEFT JOIN app.org_units ou
+          ON ou.id = pa.org_unit_id
+        LEFT JOIN app.compensation comp
+          ON comp.employee_id = e.id AND comp.effective_to IS NULL
+        LEFT JOIN app.reporting_lines rl
+          ON rl.employee_id = e.id AND rl.effective_to IS NULL AND rl.is_primary = true
+        LEFT JOIN app.employees mgr_emp
+          ON mgr_emp.id = rl.manager_id
+        LEFT JOIN app.employee_personal mgr_personal
+          ON mgr_personal.employee_id = mgr_emp.id AND mgr_personal.effective_to IS NULL
+        WHERE e.id = ${employeeId}::uuid
+          AND e.tenant_id = ${tenantId}::uuid
+      `;
+      return rows[0] ?? null;
+    });
+
+    if (!employeeData) {
+      throw new Error(`Employee ${employeeId} not found`);
+    }
+
+    // Build flat string map for template rendering
+    const safeStr = (val: unknown): string => {
+      if (val === null || val === undefined) return "";
+      if (val instanceof Date) return val.toISOString().split("T")[0]!;
+      return String(val);
+    };
+
+    const autoValues: Record<string, string> = {
+      employee_number: safeStr(employeeData.employeeNumber),
+      first_name: safeStr(employeeData.firstName),
+      last_name: safeStr(employeeData.lastName),
+      full_name: [employeeData.firstName, employeeData.lastName].filter(Boolean).join(" "),
+      middle_name: safeStr(employeeData.middleName),
+      preferred_name: safeStr(employeeData.preferredName),
+      date_of_birth: safeStr(employeeData.dateOfBirth),
+      gender: safeStr(employeeData.gender),
+      nationality: safeStr(employeeData.nationality),
+      hire_date: safeStr(employeeData.hireDate),
+      status: safeStr(employeeData.status),
+      contract_type: safeStr(employeeData.contractType),
+      employment_type: safeStr(employeeData.employmentType),
+      fte: safeStr(employeeData.fte),
+      working_hours_per_week: safeStr(employeeData.workingHoursPerWeek),
+      probation_end_date: safeStr(employeeData.probationEndDate),
+      notice_period_days: safeStr(employeeData.noticePeriodDays),
+      position_title: safeStr(employeeData.positionTitle),
+      position_code: safeStr(employeeData.positionCode),
+      org_unit_name: safeStr(employeeData.orgUnitName),
+      org_unit_code: safeStr(employeeData.orgUnitCode),
+      base_salary: safeStr(employeeData.baseSalary),
+      currency: safeStr(employeeData.currency),
+      pay_frequency: safeStr(employeeData.payFrequency),
+      manager_name: [employeeData.managerFirstName, employeeData.managerLastName].filter(Boolean).join(" "),
+      manager_employee_number: safeStr(employeeData.managerEmployeeNumber),
+      today_date: new Date().toISOString().split("T")[0]!,
+      current_year: String(new Date().getFullYear()),
+    };
+
+    // Merge: explicit variables override auto-resolved employee data
+    const mergedValues: Record<string, string> = {
+      ...autoValues,
+      ...variables,
+    };
+
+    // Render template
+    const renderTemplate = (tpl: string, values: Record<string, string>): string => {
+      return tpl.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
+        return values[key] !== undefined ? values[key] : `{{${key}}}`;
+      });
+    };
+
+    const renderedSubject = template.subject
+      ? renderTemplate(template.subject, mergedValues)
+      : null;
+    const renderedBody = renderTemplate(template.bodyTemplate, mergedValues);
+
+    // Create generated letter and update batch item atomically
+    await db.withSystemContext(async (tx) => {
+      // Create generated letter
+      const letterRows = await tx<Array<{ id: string }>>`
+        INSERT INTO app.generated_letters (
+          tenant_id, template_id, employee_id, generated_by,
+          subject, body, placeholders_used
+        )
+        VALUES (
+          ${tenantId}::uuid,
+          ${templateId}::uuid,
+          ${employeeId}::uuid,
+          ${payload.userId || "system"}::uuid,
+          ${renderedSubject},
+          ${renderedBody},
+          ${JSON.stringify(mergedValues)}::jsonb
+        )
+        RETURNING id
+      `;
+
+      const generatedLetterId = letterRows[0]!.id;
+
+      // Mark batch item as completed
+      await tx`
+        UPDATE app.document_generation_batch_items
+        SET
+          status = 'completed',
+          generated_letter_id = ${generatedLetterId}::uuid,
+          completed_at = now()
+        WHERE id = ${batchItemId}::uuid
+      `;
+
+      // Increment completed count on the batch
+      await tx`
+        UPDATE app.document_generation_batches
+        SET completed_items = completed_items + 1, updated_at = now()
+        WHERE id = ${batchId}::uuid
+      `;
+
+      // Check if all items are done and finalize batch
+      await tx`
+        UPDATE app.document_generation_batches
+        SET
+          status = CASE
+            WHEN completed_items + failed_items = total_items AND failed_items = 0 THEN 'completed'
+            WHEN completed_items + failed_items = total_items AND completed_items > 0 AND failed_items > 0 THEN 'completed_with_errors'
+            WHEN completed_items + failed_items = total_items AND failed_items = total_items THEN 'failed'
+            ELSE 'processing'
+          END,
+          updated_at = now()
+        WHERE id = ${batchId}::uuid
+      `;
+
+      // Write outbox event for completed item
+      await tx`
+        INSERT INTO app.domain_outbox (
+          id, tenant_id, aggregate_type, aggregate_id,
+          event_type, payload, created_at
+        )
+        VALUES (
+          gen_random_uuid(),
+          ${tenantId}::uuid,
+          'document_generation_batch_item',
+          ${batchItemId}::uuid,
+          'documents.bulk_generation.item_completed',
+          ${JSON.stringify({
+            batchId,
+            batchItemId,
+            employeeId,
+            generatedLetterId,
+            actor: payload.userId,
+          })}::jsonb,
+          now()
+        )
+      `;
+
+      log.info("Bulk document item generated successfully", {
+        batchItemId,
+        employeeId,
+        generatedLetterId,
+      });
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log.error("Bulk document item generation failed", error, {
+      batchItemId,
+      employeeId,
+    });
+
+    // Mark item as failed and update batch counters
+    await db.withSystemContext(async (tx) => {
+      await tx`
+        UPDATE app.document_generation_batch_items
+        SET
+          status = 'failed',
+          error_message = ${errorMessage},
+          completed_at = now()
+        WHERE id = ${batchItemId}::uuid
+      `;
+
+      await tx`
+        UPDATE app.document_generation_batches
+        SET failed_items = failed_items + 1, updated_at = now()
+        WHERE id = ${batchId}::uuid
+      `;
+
+      // Check if all items are done and finalize batch
+      await tx`
+        UPDATE app.document_generation_batches
+        SET
+          status = CASE
+            WHEN completed_items + failed_items = total_items AND failed_items = 0 THEN 'completed'
+            WHEN completed_items + failed_items = total_items AND completed_items > 0 AND failed_items > 0 THEN 'completed_with_errors'
+            WHEN completed_items + failed_items = total_items AND failed_items = total_items THEN 'failed'
+            ELSE 'processing'
+          END,
+          updated_at = now()
+        WHERE id = ${batchId}::uuid
+      `;
+    });
+
+    // Do NOT re-throw: we handled the failure by recording it in the batch item.
+    // Re-throwing would cause the job framework to retry, creating duplicates.
+  }
+}
+
+/**
+ * Bulk document item processor registration
+ */
+export const bulkDocumentItemProcessor: ProcessorRegistration<BulkDocumentItemPayload> = {
+  type: JobTypes.PDF_BULK_DOCUMENT_ITEM,
+  processor: processBulkDocumentItem,
+  timeoutMs: 120000, // 2 minutes per item
+  retry: false, // Failures are tracked in the batch item table, not retried by the job framework
+};
+
 /**
  * All PDF processors
  */
@@ -1378,6 +1709,7 @@ export const pdfProcessors: ProcessorRegistration[] = [
   certificateProcessor,
   employmentLetterProcessor,
   caseBundleProcessor,
+  bulkDocumentItemProcessor,
 ];
 
 export default pdfProcessors;

@@ -114,8 +114,8 @@ export class TenantService {
 
     const tenant = results[0] as Tenant;
 
-    // Cache the result (5 minutes max to limit exposure window if tenant becomes suspended)
-    await this.cache.set(cacheKey, tenant, CacheTTL.SESSION);
+    // Cache the result (60 seconds to limit exposure window if tenant becomes suspended)
+    await this.cache.set(cacheKey, tenant, CacheTTL.SHORT);
 
     return tenant;
   }
@@ -146,8 +146,8 @@ export class TenantService {
 
     const tenant = results[0] as Tenant;
 
-    // Cache the result (5 minutes max to limit exposure window if tenant becomes suspended)
-    await this.cache.set(cacheKey, tenant, CacheTTL.SESSION);
+    // Cache the result (60 seconds to limit exposure window if tenant becomes suspended)
+    await this.cache.set(cacheKey, tenant, CacheTTL.SHORT);
 
     return tenant;
   }

@@ -144,6 +144,10 @@ export const InstanceTaskSchema = t.Object({
   order: t.Number(),
   notes: t.Union([t.String(), t.Null()]),
   formData: t.Optional(t.Record(t.String(), t.Unknown())),
+  /** IDs of template tasks that must be completed before this task can proceed */
+  dependsOnTaskIds: t.Optional(t.Array(UuidSchema)),
+  /** IDs of incomplete dependency tasks currently blocking this task */
+  blockedByTaskIds: t.Optional(t.Array(UuidSchema)),
 });
 
 // =============================================================================
@@ -199,6 +203,34 @@ export const InstanceWithTasksResponseSchema = t.Composite([
 ]);
 
 // =============================================================================
+// Task Dependency Schemas
+// =============================================================================
+
+export const TaskDependencySchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  taskId: UuidSchema,
+  dependsOnTaskId: UuidSchema,
+  dependsOnTaskName: t.Optional(t.String()),
+  createdAt: t.String(),
+});
+
+export const CreateTaskDependencySchema = t.Object({
+  taskId: UuidSchema,
+  dependsOnTaskId: UuidSchema,
+});
+
+export const DeleteTaskDependencySchema = t.Object({
+  taskId: UuidSchema,
+  dependsOnTaskId: UuidSchema,
+});
+
+export const TaskDependencyListResponseSchema = t.Object({
+  dependencies: t.Array(TaskDependencySchema),
+  count: t.Number(),
+});
+
+// =============================================================================
 // Task Completion Schemas
 // =============================================================================
 
@@ -214,6 +246,74 @@ export const SkipTaskSchema = t.Object({
 export const ReassignTaskSchema = t.Object({
   assigneeId: UuidSchema,
   reason: t.Optional(t.String({ maxLength: 500 })),
+});
+
+// =============================================================================
+// Compliance Check Schemas
+// =============================================================================
+
+export const ComplianceCheckTypeSchema = t.Union([
+  t.Literal("right_to_work"),
+  t.Literal("dbs"),
+  t.Literal("references"),
+  t.Literal("medical"),
+  t.Literal("qualifications"),
+]);
+
+export const ComplianceCheckStatusSchema = t.Union([
+  t.Literal("pending"),
+  t.Literal("in_progress"),
+  t.Literal("passed"),
+  t.Literal("failed"),
+  t.Literal("waived"),
+]);
+
+export const CreateComplianceCheckSchema = t.Object({
+  checkType: ComplianceCheckTypeSchema,
+  required: t.Optional(t.Boolean()),
+  dueDate: t.Optional(DateSchema),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export const UpdateComplianceCheckSchema = t.Partial(
+  t.Object({
+    status: ComplianceCheckStatusSchema,
+    dueDate: DateSchema,
+    notes: t.String({ maxLength: 2000 }),
+    referenceNumber: t.String({ maxLength: 200 }),
+    expiresAt: DateSchema,
+    waiverReason: t.String({ minLength: 1, maxLength: 2000 }),
+  })
+);
+
+export const ComplianceCheckResponseSchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  onboardingId: UuidSchema,
+  employeeId: UuidSchema,
+  checkType: ComplianceCheckTypeSchema,
+  status: ComplianceCheckStatusSchema,
+  required: t.Boolean(),
+  dueDate: t.Union([t.String(), t.Null()]),
+  completedAt: t.Union([t.String(), t.Null()]),
+  completedBy: t.Union([UuidSchema, t.Null()]),
+  notes: t.Union([t.String(), t.Null()]),
+  waivedBy: t.Union([UuidSchema, t.Null()]),
+  waiverReason: t.Union([t.String(), t.Null()]),
+  referenceNumber: t.Union([t.String(), t.Null()]),
+  expiresAt: t.Union([t.String(), t.Null()]),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
+export const ComplianceCheckListResponseSchema = t.Object({
+  items: t.Array(ComplianceCheckResponseSchema),
+  complianceSatisfied: t.Boolean(),
+});
+
+export const ComplianceCheckIdParamsSchema = t.Object({
+  id: UuidSchema,
+  checkId: UuidSchema,
 });
 
 // =============================================================================
@@ -306,3 +406,10 @@ export type InstanceTask = typeof InstanceTaskSchema.static;
 export type CreateInstance = typeof CreateInstanceSchema.static;
 export type UpdateInstance = typeof UpdateInstanceSchema.static;
 export type InstanceResponse = typeof InstanceResponseSchema.static;
+export type TaskDependency = typeof TaskDependencySchema.static;
+export type CreateTaskDependency = typeof CreateTaskDependencySchema.static;
+export type ComplianceCheckType = typeof ComplianceCheckTypeSchema.static;
+export type ComplianceCheckStatus = typeof ComplianceCheckStatusSchema.static;
+export type CreateComplianceCheck = typeof CreateComplianceCheckSchema.static;
+export type UpdateComplianceCheck = typeof UpdateComplianceCheckSchema.static;
+export type ComplianceCheckResponse = typeof ComplianceCheckResponseSchema.static;

@@ -22,7 +22,7 @@ import {
   Home, User, Clock, Calendar, Heart, FileText, BookOpen,
   BadgeCheck, ClipboardList, HelpCircle, Users, ClipboardCheck,
   CalendarDays, BarChart3, Settings, Menu, Moon, Sun, LogOut,
-  ChevronDown, Check, ChevronRight, X, Bell, Search
+  ChevronDown, Check, ChevronRight, X, Bell, Search, Network
 } from "lucide-react";
 
 // Navigation item types
@@ -90,6 +90,11 @@ const selfServiceItems: NavItem[] = [
     name: "Help & Support",
     href: "/me/cases",
     icon: <HelpCircle className="h-5 w-5" />,
+  },
+  {
+    name: "Organisation Chart",
+    href: "/me/org-chart",
+    icon: <Network className="h-5 w-5" />,
   },
 ];
 
@@ -335,7 +340,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[10px] font-bold text-white">
+              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-600 text-[10px] font-bold text-white">
                 3
               </span>
             </button>

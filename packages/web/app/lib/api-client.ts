@@ -52,10 +52,24 @@ export class ApiError extends Error {
   }
 }
 
+// Retry configuration
+interface RetryConfig {
+  /** Maximum number of retries (default: 3) */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff (default: 500) */
+  baseDelay?: number;
+  /** Maximum delay in ms (default: 10000) */
+  maxDelay?: number;
+  /** HTTP status codes that trigger a retry (default: [429, 502, 503]) */
+  retryableStatuses?: number[];
+}
+
 // Request configuration type
 interface RequestConfig extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
   timeout?: number;
+  /** Override retry behaviour for this request. Set to false to disable retries. */
+  retry?: RetryConfig | false;
 }
 
 // Response types
@@ -124,6 +138,54 @@ function getApiBaseUrl(): string {
   // Default to localhost:3000 for development
   // This ensures requests go to the API server, not the frontend
   return "http://localhost:3000/api/v1";
+}
+
+/** Default retry configuration */
+const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
+  maxRetries: 3,
+  baseDelay: 500,
+  maxDelay: 10_000,
+  retryableStatuses: [429, 502, 503],
+};
+
+/**
+ * Parse a Retry-After header value into milliseconds.
+ * Supports both integer seconds ("120") and HTTP-date format.
+ * Returns null if the header is missing or unparseable.
+ */
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+
+  // Integer seconds
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+
+  // HTTP-date
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) {
+    const delayMs = date - Date.now();
+    return delayMs > 0 ? delayMs : 0;
+  }
+
+  return null;
+}
+
+/**
+ * Calculate the delay for an exponential back-off retry attempt.
+ * Adds jitter (0-25% of the computed delay) to avoid thundering herd.
+ */
+function calculateBackoff(
+  attempt: number,
+  baseDelay: number,
+  maxDelay: number
+): number {
+  const exponentialDelay = baseDelay * Math.pow(2, attempt);
+  const clamped = Math.min(exponentialDelay, maxDelay);
+  // Add jitter: random 0-25% of clamped delay
+  const jitter = clamped * 0.25 * Math.random();
+  return clamped + jitter;
 }
 
 class ApiClient {
@@ -291,10 +353,21 @@ class ApiClient {
   }
 
   /**
-   * Make an HTTP request
+   * Make an HTTP request with automatic retry for transient failures.
+   *
+   * Retries are triggered for 429 (Too Many Requests), 502 (Bad Gateway), and
+   * 503 (Service Unavailable) responses. The Retry-After header is respected
+   * when present; otherwise exponential back-off with jitter is used.
+   * Maximum 3 retries by default.
    */
   async request<T>(endpoint: string, config: RequestConfig = {}): Promise<T> {
-    const { params, timeout = 30000, ...fetchConfig } = config;
+    const { params, timeout = 30000, retry: retryOption, ...fetchConfig } = config;
+
+    // Resolve retry config: false disables retries entirely
+    const retryConfig: Required<RetryConfig> | null =
+      retryOption === false
+        ? null
+        : { ...DEFAULT_RETRY_CONFIG, ...(retryOption ?? {}) };
 
     let url = this.buildUrl(endpoint, params);
     let requestConfig: RequestInit = {
@@ -310,104 +383,141 @@ class ApiClient {
       requestConfig = result.config;
     }
 
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    requestConfig.signal = controller.signal;
+    const maxAttempts = retryConfig ? retryConfig.maxRetries + 1 : 1;
 
-    try {
-      let response = await fetch(url, requestConfig);
-      clearTimeout(timeoutId);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Create abort controller for timeout (fresh per attempt)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const attemptConfig: RequestInit = { ...requestConfig, signal: controller.signal };
 
-      // Run response interceptors
-      for (const interceptor of this.responseInterceptors) {
-        response = await interceptor(response);
-      }
+      try {
+        let response = await fetch(url, attemptConfig);
+        clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        let errorData: { code: string; message: string; details?: Record<string, unknown> };
+        // Run response interceptors
+        for (const interceptor of this.responseInterceptors) {
+          response = await interceptor(response);
+        }
 
-        try {
-          const raw = await response.json();
-          // Backend convention: { error: { code, message, requestId, details? } }
-          if (
-            raw &&
-            typeof raw === "object" &&
-            "error" in raw &&
-            (raw as any).error &&
-            typeof (raw as any).error === "object"
-          ) {
-            const wrapped = (raw as any).error as any;
-            errorData = {
-              code: String(wrapped.code ?? "UNKNOWN_ERROR"),
-              message: String((wrapped.message ?? response.statusText) || "An unexpected error occurred"),
-              details:
-                wrapped.details && typeof wrapped.details === "object" ? (wrapped.details as Record<string, unknown>) : undefined,
-            };
-          } else if (raw && typeof raw === "object" && "code" in raw && "message" in raw) {
-            errorData = {
-              code: String((raw as any).code ?? "UNKNOWN_ERROR"),
-              message: String((((raw as any).message as unknown) ?? response.statusText) || "An unexpected error occurred"),
-              details:
-                (raw as any).details && typeof (raw as any).details === "object"
-                  ? ((raw as any).details as Record<string, unknown>)
-                  : undefined,
-            };
-          } else {
+        if (!response.ok) {
+          // Check if this status code is retryable and we have retries left
+          const isRetryable =
+            retryConfig !== null &&
+            retryConfig.retryableStatuses.includes(response.status) &&
+            attempt < retryConfig.maxRetries;
+
+          if (isRetryable) {
+            // Determine delay: prefer Retry-After header, fall back to exponential backoff
+            const retryAfterMs = parseRetryAfter(response.headers.get("Retry-After"));
+            const delayMs =
+              retryAfterMs !== null
+                ? Math.min(retryAfterMs, retryConfig.maxDelay)
+                : calculateBackoff(attempt, retryConfig.baseDelay, retryConfig.maxDelay);
+
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue; // retry
+          }
+
+          let errorData: { code: string; message: string; details?: Record<string, unknown> };
+
+          try {
+            const raw = await response.json();
+            // Backend convention: { error: { code, message, requestId, details? } }
+            if (
+              raw &&
+              typeof raw === "object" &&
+              "error" in raw &&
+              (raw as any).error &&
+              typeof (raw as any).error === "object"
+            ) {
+              const wrapped = (raw as any).error as any;
+              errorData = {
+                code: String(wrapped.code ?? "UNKNOWN_ERROR"),
+                message: String((wrapped.message ?? response.statusText) || "An unexpected error occurred"),
+                details:
+                  wrapped.details && typeof wrapped.details === "object" ? (wrapped.details as Record<string, unknown>) : undefined,
+              };
+            } else if (raw && typeof raw === "object" && "code" in raw && "message" in raw) {
+              errorData = {
+                code: String((raw as any).code ?? "UNKNOWN_ERROR"),
+                message: String((((raw as any).message as unknown) ?? response.statusText) || "An unexpected error occurred"),
+                details:
+                  (raw as any).details && typeof (raw as any).details === "object"
+                    ? ((raw as any).details as Record<string, unknown>)
+                    : undefined,
+              };
+            } else {
+              errorData = {
+                code: "UNKNOWN_ERROR",
+                message: response.statusText || "An unexpected error occurred",
+              };
+            }
+          } catch {
             errorData = {
               code: "UNKNOWN_ERROR",
               message: response.statusText || "An unexpected error occurred",
             };
           }
-        } catch {
-          errorData = {
-            code: "UNKNOWN_ERROR",
-            message: response.statusText || "An unexpected error occurred",
-          };
+
+          let error = new ApiError({
+            ...errorData,
+            status: response.status,
+          });
+
+          // Run error interceptors
+          for (const interceptor of this.errorInterceptors) {
+            error = await interceptor(error);
+          }
+
+          throw error;
         }
 
-        let error = new ApiError({
-          ...errorData,
-          status: response.status,
-        });
-
-        // Run error interceptors
-        for (const interceptor of this.errorInterceptors) {
-          error = await interceptor(error);
+        // Handle empty responses
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          return undefined as T;
         }
 
-        throw error;
-      }
+        const data = await response.json();
+        return data as T;
+      } catch (error) {
+        clearTimeout(timeoutId);
 
-      // Handle empty responses
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        return undefined as T;
-      }
+        if (error instanceof ApiError) {
+          throw error;
+        }
 
-      const data = await response.json();
-      return data as T;
-    } catch (error) {
-      clearTimeout(timeoutId);
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new ApiError({
+            code: "TIMEOUT",
+            message: "Request timed out",
+            status: 408,
+          });
+        }
 
-      if (error instanceof ApiError) {
-        throw error;
-      }
+        // Network errors are retryable (e.g., DNS failure, connection refused)
+        const isLastAttempt = !retryConfig || attempt >= retryConfig.maxRetries;
+        if (!isLastAttempt) {
+          const delayMs = calculateBackoff(attempt, retryConfig!.baseDelay, retryConfig!.maxDelay);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue; // retry
+        }
 
-      if (error instanceof DOMException && error.name === "AbortError") {
         throw new ApiError({
-          code: "TIMEOUT",
-          message: "Request timed out",
-          status: 408,
+          code: "NETWORK_ERROR",
+          message: error instanceof Error ? error.message : "Network error occurred",
+          status: 0,
         });
       }
-
-      throw new ApiError({
-        code: "NETWORK_ERROR",
-        message: error instanceof Error ? error.message : "Network error occurred",
-        status: 0,
-      });
     }
+
+    // Should not be reached, but TypeScript needs this
+    throw new ApiError({
+      code: "NETWORK_ERROR",
+      message: "Request failed after all retry attempts",
+      status: 0,
+    });
   }
 
   /**

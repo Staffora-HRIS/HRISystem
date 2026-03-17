@@ -703,6 +703,46 @@ export const reportsRoutes = new Elysia({ prefix: "/reports" })
   // Scheduling
   // =========================================================================
 
+  .get(
+    "/:id/schedule",
+    async (ctx) => {
+      const { tenantContext, requestId, params } = ctx as any;
+      const reportsService = getService(ctx);
+      if (!tenantContext) {
+        ctx.set.status = 401;
+        return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } };
+      }
+
+      const result = await reportsService.getReport(tenantContext, params.id);
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error!.code);
+        ctx.set.status = status;
+        return { error: { ...result.error, requestId } };
+      }
+
+      const report = result.data!;
+      return {
+        data: {
+          isScheduled: report.isScheduled,
+          frequency: report.scheduleFrequency,
+          cron: report.scheduleCron,
+          time: report.scheduleTime,
+          dayOfWeek: report.scheduleDayOfWeek,
+          dayOfMonth: report.scheduleDayOfMonth,
+          recipients: report.scheduleRecipients,
+          exportFormat: report.scheduleExportFormat,
+          lastScheduledRun: report.lastScheduledRun,
+          nextScheduledRun: report.nextScheduledRun,
+        },
+      };
+    },
+    {
+      beforeHandle: [requirePermission("reports", "read")],
+      params: IdParamsSchema,
+      detail: { tags: ["Reports"], summary: "Get report schedule" },
+    }
+  )
+
   .post(
     "/:id/schedule",
     async (ctx) => {

@@ -11,6 +11,15 @@
 
 import { Elysia } from "elysia";
 import Redis, { type RedisOptions } from "ioredis";
+import {
+  acquireLock as distributedAcquireLock,
+  withLock as distributedWithLock,
+  type LockHandle,
+  type LockOptions,
+} from "../lib/distributed-lock";
+
+// Re-export lock types for consumers who access locking via the CacheClient
+export type { LockHandle, LockOptions };
 
 // =============================================================================
 // Configuration
@@ -553,40 +562,58 @@ export class CacheClient {
 
   // ===========================================================================
   // Distributed Locking
+  //
+  // Delegates to the Redlock-style implementation in lib/distributed-lock.ts
+  // which provides fencing tokens, auto-renewal, clock drift compensation,
+  // and safe Lua-based release. These convenience methods preserve the
+  // CacheClient API surface for callers that don't need the full LockHandle.
   // ===========================================================================
 
   /**
-   * Acquire a distributed lock
-   * Returns a release function if successful, null if lock is held
+   * Acquire a distributed lock using Redlock-style safety guarantees.
+   *
+   * Returns a release function if successful, null if lock is held.
+   * For access to the fencing token and full LockHandle, use
+   * `acquireLockHandle()` instead.
+   *
+   * @deprecated Prefer `acquireLockHandle()` or `withLock()` from
+   *   `lib/distributed-lock` which expose fencing tokens.
    */
   async acquireLock(
     resource: string,
     ttlSeconds: number = 30
   ): Promise<(() => Promise<void>) | null> {
-    const lockKey = CacheKeys.lock(resource);
-    const lockValue = `${Date.now()}-${Math.random()}`;
-
-    // Try to acquire the lock
-    const result = await this.redis.set(lockKey, lockValue, "EX", ttlSeconds, "NX");
-
-    if (result !== "OK") {
-      return null; // Lock is held by someone else
+    const handle = await distributedAcquireLock(resource, { ttlSeconds });
+    if (!handle) {
+      return null;
     }
 
-    // Return a release function using atomic Lua compare-and-delete
     return async () => {
-      // Only release if we still own the lock (atomic to prevent race conditions)
-      await this.redis.eval(
-        "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",
-        1,
-        lockKey,
-        lockValue
-      );
+      await handle.release();
     };
   }
 
   /**
-   * Execute a function with a distributed lock
+   * Acquire a distributed lock and return the full LockHandle, including
+   * the fencing token for downstream write ordering.
+   */
+  async acquireLockHandle(
+    resource: string,
+    ttlSeconds: number = 30
+  ): Promise<LockHandle | null> {
+    return distributedAcquireLock(resource, { ttlSeconds });
+  }
+
+  /**
+   * Execute a function with a distributed lock.
+   *
+   * Uses Redlock-style safety: fencing tokens, auto-renewal, clock drift
+   * compensation, and atomic Lua release. The lock is automatically renewed
+   * while the callback executes and released when it completes or throws.
+   *
+   * @param resource - Lock resource name
+   * @param callback - Function to execute while holding the lock
+   * @param options - TTL, wait, and retry settings
    */
   async withLock<T>(
     resource: string,
@@ -595,27 +622,21 @@ export class CacheClient {
   ): Promise<T> {
     const { ttlSeconds = 30, waitMs = 100, maxRetries = 50 } = options;
 
-    let retries = 0;
-    let release: (() => Promise<void>) | null = null;
+    const result = await distributedWithLock(
+      resource,
+      {
+        ttlSeconds,
+        waitTimeoutMs: waitMs * maxRetries,
+        retryIntervalMs: waitMs,
+      },
+      async () => callback()
+    );
 
-    // Try to acquire the lock
-    while (retries < maxRetries) {
-      release = await this.acquireLock(resource, ttlSeconds);
-      if (release) break;
-
-      retries++;
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-    }
-
-    if (!release) {
+    if (!result.acquired) {
       throw new Error(`Failed to acquire lock for resource: ${resource}`);
     }
 
-    try {
-      return await callback();
-    } finally {
-      await release();
-    }
+    return result.result;
   }
 }
 

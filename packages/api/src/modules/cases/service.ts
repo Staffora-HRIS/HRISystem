@@ -602,12 +602,20 @@ export class CasesService {
 
   /**
    * File an appeal against a resolved case.
-   * Only the original requester can appeal, and only resolved cases can be appealed.
+   *
+   * ACAS Code of Practice compliance:
+   * - Para 26: Employee has right to appeal against a disciplinary decision.
+   * - Para 27: Appeal must be heard by a different, ideally more senior, manager.
+   *
+   * Validation:
+   * - Only resolved cases can be appealed.
+   * - If a hearing officer is specified, they must NOT be the original decision maker
+   *   (the user who resolved the case, or the assigned handler).
    */
   async fileAppeal(
     ctx: TenantContext,
     caseId: string,
-    data: { reason: string; appealReviewerId?: string }
+    data: { reason: string; appealGrounds?: string; hearingOfficerId?: string; hearingDate?: string }
   ): Promise<ServiceResult<any>> {
     const hrCase = await this.repository.getCaseById(ctx, caseId);
     if (!hrCase) {
@@ -621,28 +629,62 @@ export class CasesService {
       };
     }
 
-    if (hrCase.requesterId !== ctx.userId) {
+    // Determine the original decision maker (resolved_by, falling back to assigned_to)
+    const originalDecisionMakerId = await this.getOriginalDecisionMaker(ctx, caseId);
+
+    // ACAS Code para 27: hearing officer must be different from original decision maker
+    if (data.hearingOfficerId && originalDecisionMakerId) {
+      if (data.hearingOfficerId === originalDecisionMakerId) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.FORBIDDEN,
+            message: "Appeal hearing officer must be a different person from the original decision maker (ACAS Code of Practice, paragraph 27)",
+            details: {
+              originalDecisionMakerId,
+              hearingOfficerId: data.hearingOfficerId,
+              acasReference: "ACAS Code of Practice on Disciplinary and Grievance Procedures, paragraph 27",
+            },
+          },
+        };
+      }
+    }
+
+    // Check for existing pending appeal
+    const existingAppeal = await this.getExistingPendingAppeal(ctx, caseId);
+    if (existingAppeal) {
       return {
         success: false,
-        error: { code: ErrorCodes.FORBIDDEN, message: "Only the case requester can file an appeal" },
+        error: {
+          code: ErrorCodes.CONFLICT,
+          message: "A pending appeal already exists for this case",
+          details: { existingAppealId: existingAppeal.id },
+        },
       };
     }
+
+    // Look up appellant employee ID from requester
+    const appellantEmployeeId = hrCase.requesterId;
 
     try {
       const appeal = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          // Create the appeal record
+          // Create the appeal record with full ACAS-compliant fields
           const [row] = await tx<Array<Record<string, any>>>`
             INSERT INTO app.case_appeals (
-              id, tenant_id, case_id, appealed_by, reason, reviewer_id, status, created_at
+              id, tenant_id, case_id, appealed_by, reason, appeal_grounds,
+              hearing_officer_id, original_decision_maker_id,
+              appellant_employee_id, hearing_date,
+              status, appeal_date, created_at, updated_at
             ) VALUES (
               gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseId}::uuid,
-              ${ctx.userId}::uuid, ${data.reason},
-              ${data.appealReviewerId ?? null}::uuid,
-              'pending', now()
+              ${ctx.userId}::uuid, ${data.reason}, ${data.appealGrounds ?? null},
+              ${data.hearingOfficerId ?? null}::uuid, ${originalDecisionMakerId}::uuid,
+              ${appellantEmployeeId}::uuid, ${data.hearingDate ?? null}::timestamptz,
+              'pending', now(), now(), now()
             )
-            RETURNING id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
+            RETURNING *
           `;
 
           // Transition case to appealed status
@@ -652,16 +694,19 @@ export class CasesService {
             WHERE id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
           `;
 
-          // Emit domain event
+          // Emit domain event: appeal filed
           await this.emitDomainEvent(tx, ctx, {
             aggregateType: "case",
             aggregateId: caseId,
-            eventType: "cases.appealed",
+            eventType: "cases.appeal.filed",
             payload: {
               caseId,
               appealId: row.id,
               appealedBy: ctx.userId,
-              reviewerId: data.appealReviewerId ?? null,
+              appellantEmployeeId,
+              originalDecisionMakerId,
+              hearingOfficerId: data.hearingOfficerId ?? null,
+              hearingDate: data.hearingDate ?? null,
             },
           });
 
@@ -669,20 +714,7 @@ export class CasesService {
         }
       );
 
-      return {
-        success: true,
-        data: {
-          id: appeal.id,
-          caseId: appeal.caseId ?? appeal.case_id,
-          appealedBy: appeal.appealedBy ?? appeal.appealed_by,
-          reason: appeal.reason,
-          reviewerId: appeal.reviewerId ?? appeal.reviewer_id ?? null,
-          status: appeal.status,
-          outcome: appeal.outcome ?? null,
-          decidedAt: appeal.decidedAt ?? appeal.decided_at ?? null,
-          createdAt: (appeal.createdAt ?? appeal.created_at)?.toISOString?.() ?? appeal.createdAt ?? appeal.created_at,
-        },
-      };
+      return { success: true, data: this.mapAppealRow(appeal) };
     } catch (error: any) {
       return {
         success: false,
@@ -692,14 +724,14 @@ export class CasesService {
   }
 
   /**
-   * Get the appeal for a case (if one exists).
+   * Get the most recent appeal for a case.
    */
   async getAppeal(ctx: TenantContext, caseId: string): Promise<ServiceResult<any>> {
     const rows = await this.db.withTransaction(
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
+          SELECT *
           FROM app.case_appeals
           WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
           ORDER BY created_at DESC
@@ -712,37 +744,54 @@ export class CasesService {
       return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No appeal found for this case" } };
     }
 
-    const r = rows[0];
-    return {
-      success: true,
-      data: {
-        id: r.id,
-        caseId: r.caseId ?? r.case_id,
-        appealedBy: r.appealedBy ?? r.appealed_by,
-        reason: r.reason,
-        reviewerId: r.reviewerId ?? r.reviewer_id ?? null,
-        status: r.status,
-        outcome: r.outcome ?? null,
-        decidedAt: (r.decidedAt ?? r.decided_at)?.toISOString?.() ?? null,
-        createdAt: (r.createdAt ?? r.created_at)?.toISOString?.() ?? r.createdAt ?? r.created_at,
-      },
-    };
+    return { success: true, data: this.mapAppealRow(rows[0]) };
   }
 
   /**
-   * Decide an appeal outcome (upheld, overturned, partially_upheld).
-   * Only the assigned reviewer or an admin can decide.
+   * List all appeals for a case (history).
    */
-  async decideAppeal(
-    ctx: TenantContext,
-    caseId: string,
-    data: { decision: "upheld" | "overturned" | "partially_upheld"; outcome: string }
-  ): Promise<ServiceResult<any>> {
+  async listAppeals(ctx: TenantContext, caseId: string): Promise<ServiceResult<any[]>> {
     const rows = await this.db.withTransaction(
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT id, reviewer_id, status
+          SELECT *
+          FROM app.case_appeals
+          WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY created_at DESC
+        `;
+      }
+    );
+
+    return { success: true, data: rows.map((r: any) => this.mapAppealRow(r)) };
+  }
+
+  /**
+   * Decide an appeal outcome (upheld, overturned, partially_upheld).
+   *
+   * ACAS Code para 27: the person deciding the appeal MUST be different
+   * from the original decision maker.
+   *
+   * Outcomes:
+   * - upheld: original decision stands, case moves to closed
+   * - partially_upheld: original decision modified, case moves to closed
+   * - overturned: original decision reversed, case reopens to in_progress
+   */
+  async decideAppeal(
+    ctx: TenantContext,
+    caseId: string,
+    data: {
+      decision: "upheld" | "overturned" | "partially_upheld";
+      outcomeNotes: string;
+      hearingOfficerId?: string;
+    }
+  ): Promise<ServiceResult<any>> {
+    // Fetch the pending appeal
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        return tx`
+          SELECT *
           FROM app.case_appeals
           WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'pending'
           ORDER BY created_at DESC
@@ -752,23 +801,68 @@ export class CasesService {
     );
 
     if (rows.length === 0) {
-      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No pending appeal found" } };
+      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No pending appeal found for this case" } };
     }
 
     const appeal = rows[0];
+    const originalDecisionMakerId = appeal.originalDecisionMakerId;
+
+    // Determine the hearing officer: explicit parameter > appeal record > current user
+    const hearingOfficerId = data.hearingOfficerId
+      ?? appeal.hearingOfficerId
+      ?? ctx.userId;
+
+    // ACAS Code para 27: the person deciding MUST be different from the original decision maker
+    if (originalDecisionMakerId && hearingOfficerId === originalDecisionMakerId) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.FORBIDDEN,
+          message: "Appeal must be decided by a different person from the original decision maker (ACAS Code of Practice, paragraph 27)",
+          details: {
+            originalDecisionMakerId,
+            hearingOfficerId,
+            acasReference: "ACAS Code of Practice on Disciplinary and Grievance Procedures, paragraph 27",
+          },
+        },
+      };
+    }
+
+    // Also check: the current user deciding must not be the original decision maker
+    if (originalDecisionMakerId && ctx.userId === originalDecisionMakerId) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.FORBIDDEN,
+          message: "You cannot decide this appeal because you were the original decision maker (ACAS Code of Practice, paragraph 27)",
+          details: {
+            originalDecisionMakerId,
+            currentUserId: ctx.userId,
+            acasReference: "ACAS Code of Practice on Disciplinary and Grievance Procedures, paragraph 27",
+          },
+        },
+      };
+    }
 
     try {
-      await this.db.withTransaction(
+      const updatedAppeal = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          // Update appeal status
-          await tx`
+          // Update appeal with decision
+          const [row] = await tx<Array<Record<string, any>>>`
             UPDATE app.case_appeals
-            SET status = ${data.decision}, outcome = ${data.outcome}, decided_at = now()
-            WHERE id = ${appeal.id}::uuid
+            SET status = ${data.decision},
+                outcome = ${data.outcomeNotes},
+                outcome_notes = ${data.outcomeNotes},
+                hearing_officer_id = ${hearingOfficerId}::uuid,
+                decided_at = now(),
+                updated_at = now()
+            WHERE id = ${appeal.id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+            RETURNING *
           `;
 
           // Transition case based on decision
+          // Overturned -> reopen for further review; upheld/partially -> close
           const newCaseStatus = data.decision === "overturned" ? "in_progress" : "closed";
           await tx`
             UPDATE app.cases
@@ -776,7 +870,7 @@ export class CasesService {
             WHERE id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
           `;
 
-          // Emit domain event
+          // Emit domain event: appeal decided
           await this.emitDomainEvent(tx, ctx, {
             aggregateType: "case",
             aggregateId: caseId,
@@ -785,28 +879,94 @@ export class CasesService {
               caseId,
               appealId: appeal.id,
               decision: data.decision,
-              outcome: data.outcome,
+              outcomeNotes: data.outcomeNotes,
               decidedBy: ctx.userId,
+              hearingOfficerId,
+              originalDecisionMakerId,
+              newCaseStatus,
             },
           });
+
+          return row;
         }
       );
 
-      return {
-        success: true,
-        data: {
-          appealId: appeal.id,
-          caseId,
-          decision: data.decision,
-          outcome: data.outcome,
-        },
-      };
+      return { success: true, data: this.mapAppealRow(updatedAppeal) };
     } catch (error: any) {
       return {
         success: false,
         error: { code: "APPEAL_DECISION_FAILED", message: error.message || "Failed to decide appeal" },
       };
     }
+  }
+
+  // ===========================================================================
+  // Appeal Helpers
+  // ===========================================================================
+
+  /**
+   * Determine the original decision maker for a case.
+   * Uses resolved_by first, then assigned_to as fallback.
+   */
+  private async getOriginalDecisionMaker(ctx: TenantContext, caseId: string): Promise<string | null> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        return tx`
+          SELECT resolved_by, assigned_to
+          FROM app.cases
+          WHERE id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        `;
+      }
+    );
+
+    if (rows.length === 0) return null;
+    return rows[0].resolvedBy || rows[0].assignedTo || null;
+  }
+
+  /**
+   * Check if there is already a pending appeal for this case.
+   */
+  private async getExistingPendingAppeal(ctx: TenantContext, caseId: string): Promise<any | null> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        return tx`
+          SELECT id FROM app.case_appeals
+          WHERE case_id = ${caseId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+            AND status = 'pending'
+          LIMIT 1
+        `;
+      }
+    );
+
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Map a case_appeals DB row (camelCase from postgres.js) to API response shape.
+   */
+  private mapAppealRow(row: Record<string, any>): Record<string, any> {
+    return {
+      id: row.id,
+      caseId: row.caseId,
+      appealedBy: row.appealedBy,
+      appellantEmployeeId: row.appellantEmployeeId ?? null,
+      reason: row.reason,
+      appealGrounds: row.appealGrounds ?? null,
+      reviewerId: row.reviewerId ?? null,
+      hearingOfficerId: row.hearingOfficerId ?? null,
+      originalDecisionMakerId: row.originalDecisionMakerId ?? null,
+      hearingDate: row.hearingDate?.toISOString?.() ?? row.hearingDate ?? null,
+      status: row.status,
+      outcome: row.outcome ?? null,
+      outcomeNotes: row.outcomeNotes ?? null,
+      decidedAt: row.decidedAt?.toISOString?.() ?? null,
+      appealDate: row.appealDate?.toISOString?.() ?? null,
+      createdAt: row.createdAt?.toISOString?.() ?? String(row.createdAt),
+      updatedAt: row.updatedAt?.toISOString?.() ?? String(row.updatedAt),
+    };
   }
 
   // ===========================================================================

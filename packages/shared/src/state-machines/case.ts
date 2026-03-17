@@ -23,6 +23,8 @@ export const CaseStates = {
   ESCALATED: "escalated",
   /** Case has been resolved but awaiting confirmation */
   RESOLVED: "resolved",
+  /** Case resolution has been appealed */
+  APPEALED: "appealed",
   /** Case has been closed after resolution confirmed */
   CLOSED: "closed",
   /** Case was cancelled (duplicate, invalid, etc.) */
@@ -70,10 +72,18 @@ const CASE_TRANSITIONS: Record<CaseState, CaseState[]> = {
     CaseStates.CANCELLED,
   ],
 
-  // From resolved: can be closed or reopened
+  // From resolved: can be closed, reopened, or appealed
   [CaseStates.RESOLVED]: [
     CaseStates.CLOSED,
     CaseStates.IN_PROGRESS, // Reopen if resolution not satisfactory
+    CaseStates.APPEALED,
+  ],
+
+  // From appealed: can be reopened (in_progress), upheld (resolved), or closed
+  [CaseStates.APPEALED]: [
+    CaseStates.IN_PROGRESS,
+    CaseStates.RESOLVED,
+    CaseStates.CLOSED,
   ],
 
   // From closed: terminal state (archive)
@@ -116,6 +126,12 @@ export const CASE_TRANSITION_LABELS: Record<
   [CaseStates.RESOLVED]: {
     [CaseStates.CLOSED]: "Close Case",
     [CaseStates.IN_PROGRESS]: "Reopen",
+    [CaseStates.APPEALED]: "Appeal Resolution",
+  },
+  [CaseStates.APPEALED]: {
+    [CaseStates.IN_PROGRESS]: "Reopen After Appeal",
+    [CaseStates.RESOLVED]: "Uphold Resolution",
+    [CaseStates.CLOSED]: "Close After Appeal",
   },
   [CaseStates.CLOSED]: {},
   [CaseStates.CANCELLED]: {},

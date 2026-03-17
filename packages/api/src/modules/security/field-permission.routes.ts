@@ -13,7 +13,7 @@ import {
   FieldPermissionLevel,
   BulkFieldPermissionUpdateSchema,
   SetFieldPermissionSchema,
-} from "./schemas";
+} from "./field-permission.schemas";
 
 export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   // Get all field definitions

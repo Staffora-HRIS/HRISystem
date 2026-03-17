@@ -15,6 +15,7 @@ import type {
   RecruitmentFilters,
   DiversityFilters,
   CompensationFilters,
+  WorkforcePlanningFilters,
   HeadcountSummary,
   HeadcountByDepartment,
   HeadcountTrend,
@@ -29,6 +30,11 @@ import type {
   ManagerDashboard,
   DiversityDashboard,
   CompensationDashboard,
+  WorkforcePlanningDashboard,
+  HeadcountProjection,
+  RetirementProjection,
+  AttritionForecast,
+  SkillsGapAnalysis,
 } from "./schemas";
 
 // =============================================================================
@@ -278,15 +284,49 @@ export class AnalyticsService {
   // Diversity Analytics
   // ===========================================================================
 
+  /**
+   * Minimum group size threshold for diversity data.
+   * Groups with fewer than this number of members are suppressed
+   * to prevent re-identification of individuals (Equality Act 2010 data protection).
+   */
+  private static readonly MIN_THRESHOLD = 5;
+
+  /**
+   * Apply minimum threshold: filter out groups where count < MIN_THRESHOLD
+   * to prevent re-identification of individuals in small groups.
+   */
+  private applyThreshold<T extends { count: number }>(
+    items: T[]
+  ): T[] {
+    return items.filter((item) => item.count >= AnalyticsService.MIN_THRESHOLD);
+  }
+
   async getDiversityDashboard(
     context: TenantContext,
     filters: DiversityFilters = {}
   ): Promise<ServiceResult<DiversityDashboard>> {
-    const [genderRows, ageBandRows, nationalityRows, deptRows] = await Promise.all([
+    const [
+      genderRows,
+      ageBandRows,
+      nationalityRows,
+      ethnicityRows,
+      disabilityRows,
+      deptRows,
+      hiringTrends,
+      leavingTrends,
+      completionRate,
+      payGapSummary,
+    ] = await Promise.all([
       this.repository.getDiversityByGender(context, filters),
       this.repository.getDiversityByAgeBand(context, filters),
       this.repository.getDiversityByNationality(context, filters),
+      this.repository.getDiversityByEthnicity(context, filters),
+      this.repository.getDiversityByDisability(context, filters),
       this.repository.getDiversityByDepartment(context, filters),
+      this.repository.getDiversityHiringTrends(context, filters),
+      this.repository.getDiversityLeavingTrends(context, filters),
+      this.repository.getDiversityCompletionRate(context),
+      this.repository.getGenderPayGapSummary(context, filters),
     ]);
 
     const totalFromGender = genderRows.reduce((s: number, r: any) => s + Number(r.count), 0);
@@ -294,23 +334,48 @@ export class AnalyticsService {
     const totalFromNat = nationalityRows.reduce((s: number, r: any) => s + Number(r.count), 0);
     const total = totalFromGender || totalFromAge || totalFromNat || 0;
 
-    const byGender = genderRows.map((r: any) => ({
-      gender: r.gender,
-      count: Number(r.count),
-      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
-    }));
+    // Map and apply minimum threshold to all breakdowns
+    const byGender = this.applyThreshold(
+      genderRows.map((r: any) => ({
+        gender: r.gender,
+        count: Number(r.count),
+        percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+      }))
+    );
 
-    const byAgeBand = ageBandRows.map((r: any) => ({
-      age_band: r.ageBand ?? r.age_band,
-      count: Number(r.count),
-      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
-    }));
+    const byAgeBand = this.applyThreshold(
+      ageBandRows.map((r: any) => ({
+        age_band: r.ageBand ?? r.age_band,
+        count: Number(r.count),
+        percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+      }))
+    );
 
-    const byNationality = nationalityRows.map((r: any) => ({
-      nationality: r.nationality,
-      count: Number(r.count),
-      percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
-    }));
+    const byNationality = this.applyThreshold(
+      nationalityRows.map((r: any) => ({
+        nationality: r.nationality,
+        count: Number(r.count),
+        percentage: total > 0 ? Math.round((Number(r.count) / total) * 1000) / 10 : 0,
+      }))
+    );
+
+    const ethnicityTotal = ethnicityRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const byEthnicity = this.applyThreshold(
+      ethnicityRows.map((r: any) => ({
+        ethnicity: r.ethnicity,
+        count: Number(r.count),
+        percentage: ethnicityTotal > 0 ? Math.round((Number(r.count) / ethnicityTotal) * 1000) / 10 : 0,
+      }))
+    );
+
+    const disabilityTotal = disabilityRows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const byDisability = this.applyThreshold(
+      disabilityRows.map((r: any) => ({
+        disability_status: r.disabilityStatus ?? r.disability_status,
+        count: Number(r.count),
+        percentage: disabilityTotal > 0 ? Math.round((Number(r.count) / disabilityTotal) * 1000) / 10 : 0,
+      }))
+    );
 
     // Group department rows by org_unit
     const deptMap = new Map<string, { org_unit_id: string; org_unit_name: string; total: number; genders: Map<string, number> }>();
@@ -327,16 +392,43 @@ export class AnalyticsService {
       dept.genders.set(gender, (dept.genders.get(gender) || 0) + count);
     }
 
-    const byDepartment = Array.from(deptMap.values()).map((dept) => ({
-      org_unit_id: dept.org_unit_id,
-      org_unit_name: dept.org_unit_name,
-      total: dept.total,
-      gender_breakdown: Array.from(dept.genders.entries()).map(([gender, count]) => ({
-        gender,
-        count,
-        percentage: dept.total > 0 ? Math.round((count / dept.total) * 1000) / 10 : 0,
-      })),
-    }));
+    // Apply threshold to department breakdowns
+    const byDepartment = Array.from(deptMap.values())
+      .filter((dept) => dept.total >= AnalyticsService.MIN_THRESHOLD)
+      .map((dept) => ({
+        org_unit_id: dept.org_unit_id,
+        org_unit_name: dept.org_unit_name,
+        total: dept.total,
+        gender_breakdown: Array.from(dept.genders.entries())
+          .filter(([, count]) => count >= AnalyticsService.MIN_THRESHOLD)
+          .map(([gender, count]) => ({
+            gender,
+            count,
+            percentage: dept.total > 0 ? Math.round((count / dept.total) * 1000) / 10 : 0,
+          })),
+      }));
+
+    // Map hiring trends (apply threshold per period+value group)
+    const mappedHiringTrends = hiringTrends
+      .filter((r: any) => Number(r.hires) >= AnalyticsService.MIN_THRESHOLD)
+      .map((r: any) => ({
+        period: r.period,
+        characteristic: r.characteristic ?? "gender",
+        value: r.value,
+        hires: Number(r.hires) || 0,
+        leavers: 0,
+      }));
+
+    // Map leaving trends (apply threshold per period+value group)
+    const mappedLeavingTrends = leavingTrends
+      .filter((r: any) => Number(r.leavers) >= AnalyticsService.MIN_THRESHOLD)
+      .map((r: any) => ({
+        period: r.period,
+        characteristic: r.characteristic ?? "gender",
+        value: r.value,
+        hires: 0,
+        leavers: Number(r.leavers) || 0,
+      }));
 
     return {
       success: true,
@@ -345,7 +437,18 @@ export class AnalyticsService {
         by_gender: byGender,
         by_age_band: byAgeBand,
         by_nationality: byNationality,
+        by_ethnicity: byEthnicity,
+        by_disability: byDisability,
         by_department: byDepartment,
+        hiring_trends: mappedHiringTrends,
+        leaving_trends: mappedLeavingTrends,
+        diversity_completion: {
+          total_employees: completionRate.totalEmployees,
+          total_submissions: completionRate.totalSubmissions,
+          completion_rate: completionRate.completionRate,
+        },
+        gender_pay_gap_summary: payGapSummary,
+        minimum_threshold: AnalyticsService.MIN_THRESHOLD,
         as_of_date: filters.as_of_date || new Date().toISOString().split("T")[0]!,
       },
     };
@@ -359,12 +462,16 @@ export class AnalyticsService {
     context: TenantContext,
     filters: CompensationFilters = {}
   ): Promise<ServiceResult<CompensationDashboard>> {
-    const [summary, bandRows, deptRows, changeRows] = await Promise.all([
-      this.repository.getCompensationSummary(context, filters),
-      this.repository.getCompensationByBand(context, filters),
-      this.repository.getCompensationByDepartment(context, filters),
-      this.repository.getRecentCompensationChanges(context, filters),
-    ]);
+    const [summary, bandRows, deptRows, changeRows, compaRows, equityByGrade, equityOverall] =
+      await Promise.all([
+        this.repository.getCompensationSummary(context, filters),
+        this.repository.getCompensationByBand(context, filters),
+        this.repository.getCompensationByDepartment(context, filters),
+        this.repository.getRecentCompensationChanges(context, filters),
+        this.repository.getCompaRatioByGrade(context, filters),
+        this.repository.getPayEquityByGrade(context, filters),
+        this.repository.getPayEquityOverall(context, filters),
+      ]);
 
     const totalBand = bandRows.reduce((s: number, r: any) => s + Number(r.count), 0);
 
@@ -380,6 +487,7 @@ export class AnalyticsService {
       org_unit_name: r.org_unit_name ?? r.orgUnitName ?? "Unassigned",
       headcount: Number(r.headcount) || 0,
       avg_salary: Number(r.avg_salary ?? r.avgSalary) || 0,
+      median_salary: Number(r.median_salary ?? r.medianSalary) || 0,
       min_salary: Number(r.min_salary ?? r.minSalary) || 0,
       max_salary: Number(r.max_salary ?? r.maxSalary) || 0,
       total_payroll: Number(r.total_payroll ?? r.totalPayroll) || 0,
@@ -391,6 +499,68 @@ export class AnalyticsService {
       avg_change_percentage: Number(r.avg_change_percentage ?? r.avgChangePercentage) || 0,
     }));
 
+    // Build compa-ratio summary
+    const byGradeCompa = compaRows.map((r: any) => ({
+      job_grade: r.job_grade ?? r.jobGrade,
+      headcount: Number(r.headcount) || 0,
+      range_min: Number(r.range_min ?? r.rangeMin) || 0,
+      range_max: Number(r.range_max ?? r.rangeMax) || 0,
+      range_midpoint: Number(r.range_midpoint ?? r.rangeMidpoint) || 0,
+      avg_salary: Number(r.avg_salary ?? r.avgSalary) || 0,
+      avg_compa_ratio: Number(r.avg_compa_ratio ?? r.avgCompaRatio) || 0,
+      below_range_count: Number(r.below_range_count ?? r.belowRangeCount) || 0,
+      within_range_count: Number(r.within_range_count ?? r.withinRangeCount) || 0,
+      above_range_count: Number(r.above_range_count ?? r.aboveRangeCount) || 0,
+    }));
+
+    const totalWithRange = byGradeCompa.reduce((s, r) => s + r.headcount, 0);
+    const totalBelow = byGradeCompa.reduce((s, r) => s + r.below_range_count, 0);
+    const totalWithin = byGradeCompa.reduce((s, r) => s + r.within_range_count, 0);
+    const totalAbove = byGradeCompa.reduce((s, r) => s + r.above_range_count, 0);
+
+    const weightedCompaSum = byGradeCompa.reduce(
+      (s, r) => s + r.avg_compa_ratio * r.headcount, 0
+    );
+    const overallCompaRatio = totalWithRange > 0
+      ? Number((weightedCompaSum / totalWithRange).toFixed(4))
+      : 0;
+
+    const compaRatio = {
+      overall_avg_compa_ratio: overallCompaRatio,
+      total_employees_with_range: totalWithRange,
+      total_below_range: totalBelow,
+      total_within_range: totalWithin,
+      total_above_range: totalAbove,
+      by_grade: byGradeCompa,
+    };
+
+    // Build pay equity summary
+    const byLevel = equityByGrade.map((r: any) => ({
+      job_grade: r.job_grade ?? r.jobGrade ?? "Ungraded",
+      male_count: Number(r.male_count ?? r.maleCount) || 0,
+      female_count: Number(r.female_count ?? r.femaleCount) || 0,
+      male_avg_salary: Number(r.male_avg_salary ?? r.maleAvgSalary) || 0,
+      female_avg_salary: Number(r.female_avg_salary ?? r.femaleAvgSalary) || 0,
+      pay_gap_percentage: r.pay_gap_percentage != null
+        ? Number(r.pay_gap_percentage ?? r.payGapPercentage)
+        : null,
+      male_median_salary: Number(r.male_median_salary ?? r.maleMedianSalary) || 0,
+      female_median_salary: Number(r.female_median_salary ?? r.femaleMedianSalary) || 0,
+      median_pay_gap_percentage: r.median_pay_gap_percentage != null
+        ? Number(r.median_pay_gap_percentage ?? r.medianPayGapPercentage)
+        : null,
+    }));
+
+    const payEquity = {
+      total_male: Number(equityOverall.total_male) || 0,
+      total_female: Number(equityOverall.total_female) || 0,
+      overall_male_avg_salary: Number(equityOverall.overall_male_avg_salary) || 0,
+      overall_female_avg_salary: Number(equityOverall.overall_female_avg_salary) || 0,
+      overall_mean_pay_gap_percentage: equityOverall.overall_mean_pay_gap_percentage ?? null,
+      overall_median_pay_gap_percentage: equityOverall.overall_median_pay_gap_percentage ?? null,
+      by_level: byLevel,
+    };
+
     return {
       success: true,
       data: {
@@ -398,6 +568,330 @@ export class AnalyticsService {
         by_band: byBand,
         by_department: byDepartment,
         recent_changes: recentChanges,
+        compa_ratio: compaRatio,
+        pay_equity: payEquity,
+      },
+    };
+  }
+
+  // ===========================================================================
+  // Workforce Planning Analytics
+  // ===========================================================================
+
+  /**
+   * Parse a horizon string like "12m", "24m", "3y" into months.
+   * Defaults to 12 months if missing or invalid.
+   */
+  private parseHorizonMonths(horizon?: string): number {
+    if (!horizon) return 12;
+
+    const match = horizon.match(/^(\d+)(m|y)$/);
+    if (!match) return 12;
+
+    const value = parseInt(match[1]!, 10);
+    const unit = match[2];
+
+    if (unit === "y") return value * 12;
+    return value;
+  }
+
+  /**
+   * Build headcount projections based on observed monthly growth rate.
+   * Uses the trailing historical data to compute average monthly net change,
+   * then projects forward for the requested horizon.
+   */
+  private buildHeadcountProjection(
+    currentHeadcount: number,
+    history: Array<{ period: string; hires: number; terminations: number; endHeadcount: number }>,
+    horizonMonths: number
+  ): HeadcountProjection {
+    // Calculate monthly growth rate from history
+    // Use only months that have meaningful data (exclude the most recent partial month)
+    const completedMonths = history.slice(0, -1); // drop current (potentially partial) month
+    const observationMonths = completedMonths.length;
+
+    let monthlyGrowthRate = 0;
+    if (observationMonths >= 2) {
+      const firstHeadcount = completedMonths[0]?.endHeadcount || 0;
+      const lastHeadcount = completedMonths[completedMonths.length - 1]?.endHeadcount || 0;
+
+      if (firstHeadcount > 0) {
+        // Compound monthly growth rate: (last/first)^(1/n) - 1
+        monthlyGrowthRate =
+          Math.pow(lastHeadcount / firstHeadcount, 1 / (observationMonths - 1)) - 1;
+      }
+    }
+
+    // Average monthly hires and terminations for projection
+    const totalHires = completedMonths.reduce((s, m) => s + m.hires, 0);
+    const totalTerminations = completedMonths.reduce((s, m) => s + m.terminations, 0);
+    const avgMonthlyHires = observationMonths > 0 ? totalHires / observationMonths : 0;
+    const avgMonthlyTerminations =
+      observationMonths > 0 ? totalTerminations / observationMonths : 0;
+
+    // Build projection points
+    const projections = [];
+    let runningHeadcount = currentHeadcount;
+
+    const today = new Date();
+    for (let i = 1; i <= horizonMonths; i++) {
+      const projDate = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const periodStr = projDate.toISOString().split("T")[0]!;
+
+      const projectedHires = Math.round(avgMonthlyHires);
+      const projectedTerminations = Math.round(avgMonthlyTerminations);
+      const netChange = projectedHires - projectedTerminations;
+      runningHeadcount = Math.max(0, runningHeadcount + netChange);
+
+      projections.push({
+        period: periodStr,
+        projected_headcount: runningHeadcount,
+        projected_hires: projectedHires,
+        projected_terminations: projectedTerminations,
+        net_change: netChange,
+      });
+    }
+
+    return {
+      current_headcount: currentHeadcount,
+      monthly_growth_rate: Number(monthlyGrowthRate.toFixed(4)),
+      observation_months: observationMonths,
+      projections,
+    };
+  }
+
+  /**
+   * Build retirement projection by bucketing employees into risk bands.
+   */
+  private buildRetirementProjection(
+    totalActive: number,
+    employeesWithDob: number,
+    retirementData: Array<{
+      employeeId: string;
+      dateOfBirth: string;
+      yearsToRetirement: number;
+      orgUnitId: string | null;
+      orgUnitName: string | null;
+    }>
+  ): RetirementProjection {
+    // Define risk bands
+    const bands: Array<{
+      label: string;
+      minYears: number;
+      maxYears: number;
+      employees: typeof retirementData;
+    }> = [
+      { label: "0-2 years", minYears: 0, maxYears: 2, employees: [] },
+      { label: "3-5 years", minYears: 2, maxYears: 5, employees: [] },
+      { label: "6-10 years", minYears: 5, maxYears: 10, employees: [] },
+      { label: "11-15 years", minYears: 10, maxYears: 15, employees: [] },
+      { label: "16-20 years", minYears: 15, maxYears: 20, employees: [] },
+    ];
+
+    // Bucket employees
+    for (const emp of retirementData) {
+      for (const band of bands) {
+        if (emp.yearsToRetirement >= band.minYears && emp.yearsToRetirement < band.maxYears) {
+          band.employees.push(emp);
+          break;
+        }
+      }
+    }
+
+    const riskBands = bands
+      .filter((b) => b.employees.length > 0)
+      .map((band) => {
+        // Aggregate departments within this band
+        const deptMap = new Map<
+          string,
+          { org_unit_id: string; org_unit_name: string; count: number }
+        >();
+        for (const emp of band.employees) {
+          const id = emp.orgUnitId || "unassigned";
+          const name = emp.orgUnitName || "Unassigned";
+          if (!deptMap.has(id)) {
+            deptMap.set(id, { org_unit_id: id, org_unit_name: name, count: 0 });
+          }
+          deptMap.get(id)!.count++;
+        }
+
+        return {
+          years_to_retirement: band.label,
+          employee_count: band.employees.length,
+          percentage:
+            totalActive > 0
+              ? Number(((band.employees.length / totalActive) * 100).toFixed(1))
+              : 0,
+          departments: Array.from(deptMap.values()).sort((a, b) => b.count - a.count),
+        };
+      });
+
+    return {
+      total_active_employees: totalActive,
+      employees_with_dob: employeesWithDob,
+      state_pension_age_note:
+        "UK State Pension age: 66 (born before 6 Apr 1960), 67 (6 Apr 1960 - 5 Mar 1961), 68 (after 5 Mar 1961). " +
+        "Employees within the planning horizon whose estimated pension date falls within range are included.",
+      risk_bands: riskBands,
+    };
+  }
+
+  /**
+   * Build attrition forecast from historical monthly data.
+   * Uses trailing average to project forward.
+   */
+  private buildAttritionForecast(
+    history: Array<{ period: string; hires: number; terminations: number; endHeadcount: number }>,
+    horizonMonths: number
+  ): AttritionForecast {
+    // Build history points with annualised turnover rates
+    const completedMonths = history.slice(0, -1); // drop potentially partial current month
+
+    const historyPoints = completedMonths.map((m) => ({
+      period: m.period.substring(0, 7), // YYYY-MM
+      terminations: m.terminations,
+      avg_headcount: m.endHeadcount,
+      turnover_rate:
+        m.endHeadcount > 0
+          ? Number(((m.terminations / m.endHeadcount) * 12 * 100).toFixed(1))
+          : 0,
+    }));
+
+    const observationMonths = completedMonths.length;
+    const totalTerminations = completedMonths.reduce((s, m) => s + m.terminations, 0);
+    const avgMonthlyTerminations =
+      observationMonths > 0 ? totalTerminations / observationMonths : 0;
+
+    // Trailing 12-month turnover rate
+    const last12 = completedMonths.slice(-12);
+    const last12Terminations = last12.reduce((s, m) => s + m.terminations, 0);
+    const avgHeadcountLast12 =
+      last12.length > 0 ? last12.reduce((s, m) => s + m.endHeadcount, 0) / last12.length : 0;
+    const trailing12mRate =
+      avgHeadcountLast12 > 0
+        ? Number(((last12Terminations / avgHeadcountLast12) * 100).toFixed(1))
+        : 0;
+
+    // Build forecast points
+    const forecast = [];
+    const lastHeadcount =
+      completedMonths.length > 0
+        ? completedMonths[completedMonths.length - 1]!.endHeadcount
+        : 0;
+
+    const today = new Date();
+    for (let i = 1; i <= horizonMonths; i++) {
+      const projDate = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const periodStr = `${projDate.getFullYear()}-${String(projDate.getMonth() + 1).padStart(2, "0")}`;
+
+      const projectedTerminations = Math.round(avgMonthlyTerminations);
+      const projectedRate =
+        lastHeadcount > 0
+          ? Number(((projectedTerminations / lastHeadcount) * 12 * 100).toFixed(1))
+          : 0;
+
+      forecast.push({
+        period: periodStr,
+        projected_turnover_rate: projectedRate,
+        projected_terminations: projectedTerminations,
+      });
+    }
+
+    return {
+      trailing_12m_turnover_rate: trailing12mRate,
+      avg_monthly_terminations: Number(avgMonthlyTerminations.toFixed(1)),
+      observation_months: observationMonths,
+      history: historyPoints,
+      forecast,
+    };
+  }
+
+  /**
+   * Build skills gap analysis response from repository data.
+   */
+  private buildSkillsGapAnalysis(data: {
+    totalEmployeesWithAssessments: number;
+    gaps: Array<{
+      competencyId: string;
+      competencyName: string;
+      competencyCategory: string;
+      employeesAssessed: number;
+      employeesRequired: number;
+      avgCurrentLevel: number;
+      avgRequiredLevel: number;
+      avgGap: number;
+      employeesBelowRequired: number;
+      coverageRate: number;
+    }>;
+  }): SkillsGapAnalysis {
+    return {
+      total_competencies_analysed: data.gaps.length,
+      total_employees_with_assessments: data.totalEmployeesWithAssessments,
+      gaps: data.gaps.map((g) => ({
+        competency_id: g.competencyId,
+        competency_name: g.competencyName,
+        competency_category: g.competencyCategory,
+        employees_assessed: g.employeesAssessed,
+        employees_required: g.employeesRequired,
+        avg_current_level: g.avgCurrentLevel,
+        avg_required_level: g.avgRequiredLevel,
+        avg_gap: g.avgGap,
+        employees_below_required: g.employeesBelowRequired,
+        coverage_rate: g.coverageRate,
+      })),
+    };
+  }
+
+  /**
+   * Main workforce planning analytics endpoint.
+   * Aggregates four sub-analyses: headcount projection, retirement projection,
+   * attrition forecast, and skills gap analysis.
+   */
+  async getWorkforcePlanning(
+    context: TenantContext,
+    filters: WorkforcePlanningFilters = {}
+  ): Promise<ServiceResult<WorkforcePlanningDashboard>> {
+    const horizonMonths = this.parseHorizonMonths(filters.horizon);
+    const horizonYears = Math.ceil(horizonMonths / 12);
+
+    // Use 24 months of lookback for historical analysis (or at least horizonMonths)
+    const lookbackMonths = Math.max(24, horizonMonths);
+
+    // Execute all four sub-analyses in parallel
+    const [currentHeadcount, monthlyHistory, retirementData, employeesWithDob, skillsGapData] =
+      await Promise.all([
+        this.repository.getActiveHeadcount(context, filters),
+        this.repository.getMonthlyHeadcountHistory(context, lookbackMonths, filters),
+        this.repository.getRetirementProjectionData(context, horizonYears, filters),
+        this.repository.getEmployeesWithDobCount(context, filters),
+        this.repository.getSkillsGapData(context, filters),
+      ]);
+
+    const headcountProjection = this.buildHeadcountProjection(
+      currentHeadcount,
+      monthlyHistory,
+      horizonMonths
+    );
+
+    const retirementProjection = this.buildRetirementProjection(
+      currentHeadcount,
+      employeesWithDob,
+      retirementData
+    );
+
+    const attritionForecast = this.buildAttritionForecast(monthlyHistory, horizonMonths);
+
+    const skillsGapAnalysis = this.buildSkillsGapAnalysis(skillsGapData);
+
+    return {
+      success: true,
+      data: {
+        headcount_projection: headcountProjection,
+        retirement_projection: retirementProjection,
+        attrition_forecast: attritionForecast,
+        skills_gap_analysis: skillsGapAnalysis,
+        generated_at: new Date().toISOString(),
+        horizon_months: horizonMonths,
       },
     };
   }

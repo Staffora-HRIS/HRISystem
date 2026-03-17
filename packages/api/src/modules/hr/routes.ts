@@ -19,6 +19,8 @@ import { AuditActions } from "../../plugins/audit";
 import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { HRRepository, type TenantContext } from "./repository";
 import { HRService } from "./service";
+import { AddressRepository } from "./address.repository";
+import { AddressService } from "./address.service";
 import {
   // Schemas
   CreateOrgUnitSchema,
@@ -52,6 +54,15 @@ import {
   UuidSchema,
   DateSchema,
   HistoryDimensionSchema,
+  // Address schemas
+  CreateEmployeeAddressSchema,
+  UpdateEmployeeAddressSchema,
+  CloseEmployeeAddressSchema,
+  EmployeeAddressResponseSchema,
+  EmployeeAddressListResponseSchema,
+  EmployeeAddressIdParamsSchema,
+  AddressHistoryQuerySchema,
+  AddressTypeSchema,
   type HistoryDimension,
 } from "./schemas";
 
@@ -92,8 +103,10 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
     // Create repository and service with database client from db plugin
     const repository = new HRRepository(db);
     const service = new HRService(repository, db);
+    const addressRepository = new AddressRepository(db);
+    const addressService = new AddressService(addressRepository, repository, db);
 
-    return { hrService: service, hrRepository: repository };
+    return { hrService: service, hrRepository: repository, addressService };
   })
 
   // ===========================================================================
@@ -1516,6 +1529,296 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
         summary: "Get employee history",
         description:
           "Get historical records for a specific dimension (personal, contract, position, compensation, manager, status). Requires employees:history:read permission.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Employee Address Routes
+  // ===========================================================================
+
+  // GET /employees/:id/addresses - List current addresses
+  .get(
+    "/employees/:id/addresses",
+    async (ctx) => {
+      const { addressService, params, tenantContext, error } = ctx as any;
+      const result = await addressService.getCurrentAddresses(tenantContext, params.id);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: IdParamsSchema,
+      response: {
+        200: EmployeeAddressListResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "List current addresses",
+        description: "List all current (non-closed) addresses for an employee",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /employees/:id/addresses/history - Get address history
+  .get(
+    "/employees/:id/addresses/history",
+    async (ctx) => {
+      const { addressService, params, query, tenantContext, error } = ctx as any;
+      const result = await addressService.getAddressHistory(
+        tenantContext,
+        params.id,
+        query.address_type,
+        { from: query.from, to: query.to }
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return { items: result.data };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read") as any],
+      params: IdParamsSchema,
+      query: t.Partial(AddressHistoryQuerySchema),
+      response: {
+        200: EmployeeAddressListResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "Get address history",
+        description: "Get full address history for an employee, optionally filtered by address type and date range",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // GET /employees/:id/addresses/:addressId - Get single address
+  .get(
+    "/employees/:id/addresses/:addressId",
+    async (ctx) => {
+      const { addressService, params, tenantContext, error } = ctx as any;
+      const result = await addressService.getAddress(tenantContext, params.id, params.addressId);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "read")],
+      params: EmployeeAddressIdParamsSchema,
+      response: {
+        200: EmployeeAddressResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "Get address by ID",
+        description: "Get a single address record by its ID",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /employees/:id/addresses - Create address
+  .post(
+    "/employees/:id/addresses",
+    async (ctx) => {
+      const { addressService, params, body, headers, tenantContext, audit, requestId, error, set } =
+        ctx as any;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await addressService.createAddress(
+        tenantContext,
+        params.id,
+        body as any,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log address creation
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee_address",
+          resourceId: result.data!.id,
+          newValues: {
+            address_type: result.data!.address_type,
+            city: result.data!.city,
+            postcode: result.data!.postcode,
+            country: result.data!.country,
+          },
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "address_created",
+            employee_id: params.id,
+            effective_from: result.data!.effective_from,
+          },
+        });
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: IdParamsSchema,
+      body: CreateEmployeeAddressSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: EmployeeAddressResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "Create address",
+        description: "Create a new effective-dated address for an employee. UK postcode format is validated when country is GB.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // PUT /employees/:id/addresses/:addressId - Update address (effective-dated)
+  .put(
+    "/employees/:id/addresses/:addressId",
+    async (ctx) => {
+      const { addressService, params, body, headers, tenantContext, audit, requestId, error } =
+        ctx as any;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await addressService.updateAddress(
+        tenantContext,
+        params.id,
+        params.addressId,
+        body as any,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log address update
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee_address",
+          resourceId: result.data!.id,
+          newValues: body as any,
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "address_updated",
+            employee_id: params.id,
+            previous_address_id: params.addressId,
+            effective_from: result.data!.effective_from,
+          },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: EmployeeAddressIdParamsSchema,
+      body: UpdateEmployeeAddressSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: EmployeeAddressResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "Update address",
+        description: "Update an employee address (effective-dated: closes existing record and creates new one). UK postcode format is validated when country is GB.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // DELETE /employees/:id/addresses/:addressId - Close (soft-delete) address
+  .delete(
+    "/employees/:id/addresses/:addressId",
+    async (ctx) => {
+      const { addressService, params, body, headers, tenantContext, audit, requestId, error } =
+        ctx as any;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await addressService.closeAddress(
+        tenantContext,
+        params.id,
+        params.addressId,
+        body.close_date,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", hrErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log address closure
+      if (audit) {
+        await audit.log({
+          action: AuditActions.EMPLOYEE_UPDATED,
+          resourceType: "employee_address",
+          resourceId: params.addressId,
+          metadata: {
+            idempotencyKey,
+            requestId,
+            operation: "address_closed",
+            employee_id: params.id,
+            close_date: body.close_date,
+          },
+        });
+      }
+
+      return { success: true, message: "Address closed successfully" };
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      params: EmployeeAddressIdParamsSchema,
+      body: CloseEmployeeAddressSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        200: DeleteSuccessSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Employee Addresses"],
+        summary: "Close address",
+        description: "Close (soft-delete) an address by setting its effective_to date. The address record is preserved for history.",
         security: [{ bearerAuth: [] }],
       },
     }

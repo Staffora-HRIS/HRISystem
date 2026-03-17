@@ -592,6 +592,134 @@ export class LMSRepository {
   }
 
   // ===========================================================================
+  // Compliance Report Operations
+  // ===========================================================================
+
+  /**
+   * Get compliance statistics for all mandatory courses.
+   * Returns per-course breakdown of assignment statuses.
+   */
+  async getMandatoryCourseCompliance(
+    ctx: TenantContext,
+    filters: { courseId?: string; includeArchived?: boolean }
+  ): Promise<any[]> {
+    return this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            c.id AS course_id,
+            COALESCE(c.name, c.code) AS course_name,
+            c.category,
+            c.is_mandatory,
+            c.mandatory_due_days,
+            COUNT(a.id) AS total_assigned,
+            COUNT(a.id) FILTER (WHERE a.status = 'completed') AS completed_count,
+            COUNT(a.id) FILTER (WHERE a.status = 'in_progress') AS in_progress_count,
+            COUNT(a.id) FILTER (WHERE a.status = 'not_started') AS not_started_count,
+            COUNT(a.id) FILTER (
+              WHERE a.due_date < CURRENT_DATE
+                AND a.status NOT IN ('completed', 'expired')
+            ) AS overdue_count
+          FROM app.courses c
+          LEFT JOIN app.assignments a
+            ON a.course_id = c.id
+            AND a.tenant_id = c.tenant_id
+            AND a.assignment_type = 'required'
+          WHERE c.tenant_id = ${ctx.tenantId}::uuid
+            AND c.is_mandatory = true
+            ${filters.courseId ? tx`AND c.id = ${filters.courseId}::uuid` : tx``}
+            ${!filters.includeArchived ? tx`AND c.status != 'archived'` : tx``}
+          GROUP BY c.id, c.name, c.code, c.category, c.is_mandatory, c.mandatory_due_days
+          ORDER BY c.name ASC
+        `;
+      }
+    );
+  }
+
+  /**
+   * Get compliance statistics broken down by department (org unit).
+   * Joins through position_assignments to find each employee's org unit.
+   */
+  async getDepartmentCompliance(
+    ctx: TenantContext,
+    filters: { courseId?: string; orgUnitId?: string; includeArchived?: boolean }
+  ): Promise<any[]> {
+    return this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            ou.id AS org_unit_id,
+            ou.name AS org_unit_name,
+            COUNT(a.id) AS total_assigned,
+            COUNT(a.id) FILTER (WHERE a.status = 'completed') AS completed_count,
+            COUNT(a.id) FILTER (WHERE a.status = 'in_progress') AS in_progress_count,
+            COUNT(a.id) FILTER (WHERE a.status = 'not_started') AS not_started_count,
+            COUNT(a.id) FILTER (
+              WHERE a.due_date < CURRENT_DATE
+                AND a.status NOT IN ('completed', 'expired')
+            ) AS overdue_count
+          FROM app.assignments a
+          JOIN app.courses c
+            ON c.id = a.course_id
+            AND c.tenant_id = a.tenant_id
+            AND c.is_mandatory = true
+          JOIN app.position_assignments pa
+            ON pa.employee_id = a.employee_id
+            AND pa.tenant_id = a.tenant_id
+            AND pa.is_primary = true
+            AND pa.effective_to IS NULL
+          JOIN app.org_units ou
+            ON ou.id = pa.org_unit_id
+            AND ou.tenant_id = a.tenant_id
+          WHERE a.tenant_id = ${ctx.tenantId}::uuid
+            AND a.assignment_type = 'required'
+            ${filters.courseId ? tx`AND c.id = ${filters.courseId}::uuid` : tx``}
+            ${filters.orgUnitId ? tx`AND ou.id = ${filters.orgUnitId}::uuid` : tx``}
+            ${!filters.includeArchived ? tx`AND c.status != 'archived'` : tx``}
+          GROUP BY ou.id, ou.name
+          ORDER BY ou.name ASC
+        `;
+      }
+    );
+  }
+
+  /**
+   * Get all overdue mandatory training assignments.
+   * Used by the scheduler to send reminders.
+   */
+  async getOverdueMandatoryAssignments(limit: number = 500): Promise<any[]> {
+    // Uses system context — caller is responsible for enabling it
+    return this.db.sql`
+      SELECT
+        a.id AS assignment_id,
+        a.tenant_id,
+        a.employee_id,
+        a.course_id,
+        a.due_date,
+        (CURRENT_DATE - a.due_date)::integer AS days_overdue,
+        c.name AS course_name,
+        e.user_id,
+        ep.first_name,
+        ep.last_name,
+        u.email
+      FROM app.assignments a
+      JOIN app.courses c ON c.id = a.course_id AND c.tenant_id = a.tenant_id
+      JOIN app.employees e ON e.id = a.employee_id AND e.tenant_id = a.tenant_id
+      LEFT JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.tenant_id = a.tenant_id
+      LEFT JOIN app.users u ON u.id = e.user_id
+      WHERE c.is_mandatory = true
+        AND a.assignment_type = 'required'
+        AND a.due_date < CURRENT_DATE
+        AND a.status NOT IN ('completed', 'expired')
+        AND e.status = 'active'
+      ORDER BY a.due_date ASC
+      LIMIT ${limit}
+    `;
+  }
+
+  // ===========================================================================
   // Helper Methods
   // ===========================================================================
 

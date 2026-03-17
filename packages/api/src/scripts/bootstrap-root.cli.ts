@@ -5,11 +5,22 @@ function loadDatabaseUrl(): string {
   const url = process.env["DATABASE_URL"];
   if (url) return url;
 
+  const nodeEnv = process.env["NODE_ENV"] || "development";
+  const dbPassword = process.env["DB_PASSWORD"]
+    ?? (nodeEnv === "development" || nodeEnv === "test" ? "hris_dev_password" : undefined);
+
+  if (!dbPassword) {
+    throw new Error(
+      "DB_PASSWORD or DATABASE_URL environment variable is required. " +
+      "Hardcoded fallback is only available when NODE_ENV is 'development' or 'test'."
+    );
+  }
+
   const host = process.env["DB_HOST"] ?? "localhost";
   const port = process.env["DB_PORT"] ?? "5432";
   const database = process.env["DB_NAME"] ?? "hris";
   const user = encodeURIComponent(process.env["DB_USER"] ?? "hris");
-  const password = encodeURIComponent(process.env["DB_PASSWORD"] ?? "hris_dev_password");
+  const password = encodeURIComponent(dbPassword);
 
   return `postgres://${user}:${password}@${host}:${port}/${database}`;
 }

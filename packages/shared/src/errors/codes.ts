@@ -170,6 +170,30 @@ export const CaseErrorCodes = {
 } as const;
 
 // =============================================================================
+// Payroll Error Codes
+// =============================================================================
+
+/** Payroll module error codes */
+export const PayrollErrorCodes = {
+  /** Tax code format is invalid for UK HMRC rules */
+  INVALID_TAX_CODE_FORMAT: "INVALID_TAX_CODE_FORMAT",
+  /** No current tax code found for the employee */
+  NO_CURRENT_TAX_CODE: "NO_CURRENT_TAX_CODE",
+  /** Payroll run cannot transition to the requested status */
+  INVALID_PAYROLL_TRANSITION: "INVALID_PAYROLL_TRANSITION",
+} as const;
+
+// =============================================================================
+// Documents Error Codes
+// =============================================================================
+
+/** Document management error codes */
+export const DocumentsErrorCodes = {
+  /** Uploaded file is infected with malware */
+  VIRUS_DETECTED: "VIRUS_DETECTED",
+} as const;
+
+// =============================================================================
 // Combined Error Codes Object
 // =============================================================================
 
@@ -198,6 +222,10 @@ export const ErrorCodes = {
   ...LMSErrorCodes,
   // Case
   ...CaseErrorCodes,
+  // Payroll
+  ...PayrollErrorCodes,
+  // Documents
+  ...DocumentsErrorCodes,
 } as const;
 
 /** Type representing all possible error codes */
@@ -237,3 +265,11 @@ export type LMSErrorCode = (typeof LMSErrorCodes)[keyof typeof LMSErrorCodes];
 
 /** Type for case error codes */
 export type CaseErrorCode = (typeof CaseErrorCodes)[keyof typeof CaseErrorCodes];
+
+/** Type for payroll error codes */
+export type PayrollErrorCode =
+  (typeof PayrollErrorCodes)[keyof typeof PayrollErrorCodes];
+
+/** Type for documents error codes */
+export type DocumentsErrorCode =
+  (typeof DocumentsErrorCodes)[keyof typeof DocumentsErrorCodes];

@@ -17,6 +17,9 @@ import type {
   CreateSwapRequest,
   TimeEventFilters,
   TimesheetFilters,
+  SubmitTimesheetWithChain,
+  ApprovalChainDecision,
+  PendingApprovalsFilters,
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
@@ -38,6 +41,9 @@ export const TimeErrorCodes = {
   INVALID_TIME_SEQUENCE: "INVALID_TIME_SEQUENCE",
   SHIFT_OVERLAP: "SHIFT_OVERLAP",
   INVALID_DATE_RANGE: "INVALID_DATE_RANGE",
+  APPROVAL_CHAIN_NOT_FOUND: "APPROVAL_CHAIN_NOT_FOUND",
+  NOT_AUTHORIZED_APPROVER: "NOT_AUTHORIZED_APPROVER",
+  APPROVAL_CHAIN_EMPTY: "APPROVAL_CHAIN_EMPTY",
 } as const;
 
 // =============================================================================
@@ -662,8 +668,296 @@ export class TimeService {
   }
 
   // ===========================================================================
+  // Approval Chains
+  // ===========================================================================
+
+  async submitTimesheetWithChain(
+    ctx: TenantContext,
+    timesheetId: string,
+    input: SubmitTimesheetWithChain
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      // Validate the timesheet exists and is in draft status
+      const timesheet = await this.repo.getTimesheetById(ctx, timesheetId);
+      if (!timesheet) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_NOT_FOUND,
+            message: "Timesheet not found",
+          },
+        };
+      }
+
+      if (timesheet.status !== "draft") {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_ALREADY_SUBMITTED,
+            message: `Timesheet is already in '${timesheet.status}' status and cannot be submitted`,
+            details: { currentStatus: timesheet.status },
+          },
+        };
+      }
+
+      if (!input.approverIds || input.approverIds.length === 0) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.APPROVAL_CHAIN_EMPTY,
+            message: "At least one approver is required in the approval chain",
+          },
+        };
+      }
+
+      // Submit the timesheet first (changes status to submitted)
+      const submitted = await this.repo.submitTimesheet(ctx, timesheetId);
+      if (!submitted) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_NOT_FOUND,
+            message: "Timesheet not found or could not be submitted",
+          },
+        };
+      }
+
+      // Create the approval chain entries
+      const chainEntries = await this.repo.createApprovalChain(
+        ctx,
+        timesheetId,
+        input.approverIds
+      );
+
+      return {
+        success: true,
+        data: {
+          ...this.formatTimesheet(submitted),
+          approvalChain: chainEntries.map(this.formatApprovalChainEntry),
+        },
+      };
+    } catch (error) {
+      console.error("Error submitting timesheet with approval chain:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to submit timesheet with approval chain",
+        },
+      };
+    }
+  }
+
+  async getApprovalChain(
+    ctx: TenantContext,
+    timesheetId: string
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const timesheet = await this.repo.getTimesheetById(ctx, timesheetId);
+      if (!timesheet) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_NOT_FOUND,
+            message: "Timesheet not found",
+          },
+        };
+      }
+
+      const chain = await this.repo.getApprovalChain(ctx, timesheetId);
+
+      // Determine current active level
+      const activeEntry = chain.find((e) => e.status === "active");
+      const currentLevel = activeEntry ? activeEntry.level : null;
+
+      // Determine overall status
+      let overallStatus = "pending";
+      if (chain.length === 0) {
+        overallStatus = "no_chain";
+      } else if (chain.every((e) => e.status === "approved")) {
+        overallStatus = "fully_approved";
+      } else if (chain.some((e) => e.status === "rejected")) {
+        overallStatus = "rejected";
+      } else if (activeEntry) {
+        overallStatus = "in_progress";
+      }
+
+      return {
+        success: true,
+        data: {
+          timesheetId,
+          totalLevels: chain.length,
+          currentLevel,
+          overallStatus,
+          entries: chain.map(this.formatApprovalChainEntry),
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching approval chain:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to fetch approval chain",
+        },
+      };
+    }
+  }
+
+  async processApprovalChainDecision(
+    ctx: TenantContext,
+    timesheetId: string,
+    approverId: string,
+    input: ApprovalChainDecision
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      // Validate timesheet exists and is submitted
+      const timesheet = await this.repo.getTimesheetById(ctx, timesheetId);
+      if (!timesheet) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_NOT_FOUND,
+            message: "Timesheet not found",
+          },
+        };
+      }
+
+      if (timesheet.status !== "submitted") {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIMESHEET_NOT_SUBMITTED,
+            message: "Timesheet is not in submitted status",
+            details: { currentStatus: timesheet.status },
+          },
+        };
+      }
+
+      // Check the approver has an active chain entry
+      const activeEntry = await this.repo.getActiveChainEntry(
+        ctx,
+        timesheetId,
+        approverId
+      );
+      if (!activeEntry) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.NOT_AUTHORIZED_APPROVER,
+            message: "You do not have an active approval pending for this timesheet",
+          },
+        };
+      }
+
+      // Process the decision
+      const decision = input.action === "approve" ? "approved" : "rejected";
+      const result = await this.repo.processChainDecision(
+        ctx,
+        timesheetId,
+        approverId,
+        decision as "approved" | "rejected",
+        input.comments
+      );
+
+      // Fetch updated chain for the response
+      const updatedChain = await this.repo.getApprovalChain(ctx, timesheetId);
+
+      return {
+        success: true,
+        data: {
+          action: result.action,
+          level: result.level,
+          timesheetStatus: result.timesheetStatus,
+          approvalChain: updatedChain.map(this.formatApprovalChainEntry),
+        },
+      };
+    } catch (error) {
+      console.error("Error processing approval chain decision:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to process approval chain decision",
+        },
+      };
+    }
+  }
+
+  async getPendingApprovals(
+    ctx: TenantContext,
+    approverId: string,
+    filters: PendingApprovalsFilters
+  ): Promise<ServiceResult<{ items: unknown[]; cursor: string | null; hasMore: boolean }>> {
+    try {
+      const result = await this.repo.getPendingApprovals(ctx, approverId, {
+        cursor: filters.cursor,
+        limit: filters.limit,
+      });
+
+      return {
+        success: true,
+        data: {
+          items: result.data.map((row: any) => ({
+            chainId: row.chainId,
+            timesheetId: row.timesheetId,
+            employeeId: row.employeeId,
+            employeeNumber: row.employeeNumber,
+            periodStart:
+              row.periodStart instanceof Date
+                ? row.periodStart.toISOString().split("T")[0]
+                : row.periodStart,
+            periodEnd:
+              row.periodEnd instanceof Date
+                ? row.periodEnd.toISOString().split("T")[0]
+                : row.periodEnd,
+            totalRegularHours: row.totalRegularHours,
+            totalOvertimeHours: row.totalOvertimeHours,
+            level: row.level,
+            submittedAt:
+              row.submittedAt instanceof Date
+                ? row.submittedAt.toISOString()
+                : row.submittedAt,
+          })),
+          cursor: result.cursor,
+          hasMore: result.hasMore,
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching pending approvals:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to fetch pending approvals",
+        },
+      };
+    }
+  }
+
+  // ===========================================================================
   // Helpers
   // ===========================================================================
+
+  private formatApprovalChainEntry(entry: any) {
+    return {
+      id: entry.id,
+      timesheetId: entry.timesheetId,
+      level: entry.level,
+      approverId: entry.approverId,
+      approverName: entry.approverName || null,
+      status: entry.status,
+      decidedAt:
+        entry.decidedAt instanceof Date
+          ? entry.decidedAt.toISOString()
+          : entry.decidedAt || null,
+      comments: entry.comments || null,
+      createdAt:
+        entry.createdAt instanceof Date
+          ? entry.createdAt.toISOString()
+          : entry.createdAt,
+    };
+  }
 
   private async getLastTimeEvent(ctx: TenantContext, employeeId: string) {
     const result = await this.repo.getTimeEvents(ctx, {

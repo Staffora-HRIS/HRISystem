@@ -32,18 +32,21 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       redis:
-        image: redis:7
+        image: bitnami/redis:7.0
         ports:
           - 6379:6379
+        env:
+          REDIS_PASSWORD: staffora_redis_dev
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "redis-cli -a staffora_redis_dev --no-auth-warning ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
-      TEST_REDIS_PASSWORD: ''
-      REDIS_URL: redis://localhost:6379
+      TEST_REDIS_PASSWORD: staffora_redis_dev
+      REDIS_PASSWORD: staffora_redis_dev
+      REDIS_URL: redis://:staffora_redis_dev@localhost:6379
 
     steps:
       - uses: actions/checkout@v4
@@ -91,8 +94,8 @@ jobs:
           TEST_DB_ADMIN_PASSWORD: hris_dev_password
           TEST_REDIS_HOST: localhost
           TEST_REDIS_PORT: '6379'
-          TEST_REDIS_PASSWORD: ''
-          REDIS_URL: redis://localhost:6379
+          TEST_REDIS_PASSWORD: staffora_redis_dev
+          REDIS_URL: redis://:staffora_redis_dev@localhost:6379
           BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
           SESSION_SECRET: test-session-secret-32-characters-long
           CSRF_SECRET: test-csrf-secret-that-is-32-chars

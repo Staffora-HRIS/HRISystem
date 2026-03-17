@@ -57,6 +57,7 @@ export function mapErrorToStatus(
     CONFLICT: 409,
     STATE_MACHINE_VIOLATION: 409,
     INTERNAL_ERROR: 500,
+    VIRUS_DETECTED: 422,
   };
   const merged = extra ? { ...base, ...extra } : base;
   return merged[code] || 500;

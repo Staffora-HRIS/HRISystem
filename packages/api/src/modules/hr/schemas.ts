@@ -455,20 +455,129 @@ export const EmployeeContactInputSchema = t.Object({
 export type EmployeeContactInput = Static<typeof EmployeeContactInputSchema>;
 
 /**
- * Address
+ * UK postcode pattern (validated at service level for GB addresses)
+ * Accepts formats: A9 9AA, A99 9AA, A9A 9AA, AA9 9AA, AA99 9AA, AA9A 9AA
+ */
+export const UkPostcodeSchema = t.String({
+  maxLength: 10,
+  description: "UK postcode (e.g., SW1A 1AA, M1 1AA, EC2A 4BX)",
+});
+
+/**
+ * Address input (for employee creation - inline addresses)
+ * Uses new UK-aligned column names
  */
 export const EmployeeAddressInputSchema = t.Object({
   address_type: AddressTypeSchema,
-  street_line1: t.String({ minLength: 1, maxLength: 255 }),
-  street_line2: t.Optional(t.String({ maxLength: 255 })),
+  address_line_1: t.String({ minLength: 1, maxLength: 255 }),
+  address_line_2: t.Optional(t.String({ maxLength: 255 })),
   city: t.String({ minLength: 1, maxLength: 100 }),
-  state_province: t.Optional(t.String({ maxLength: 100 })),
-  postal_code: t.String({ minLength: 1, maxLength: 20 }),
-  country: t.String({ minLength: 2, maxLength: 3 }),
+  county: t.Optional(t.String({ maxLength: 100 })),
+  postcode: t.Optional(UkPostcodeSchema),
+  country: t.Optional(t.String({ minLength: 2, maxLength: 3, default: "GB" })),
   is_primary: t.Optional(t.Boolean()),
 });
 
 export type EmployeeAddressInput = Static<typeof EmployeeAddressInputSchema>;
+
+/**
+ * Create address request (effective-dated)
+ */
+export const CreateEmployeeAddressSchema = t.Object({
+  address_type: AddressTypeSchema,
+  address_line_1: t.String({ minLength: 1, maxLength: 255 }),
+  address_line_2: t.Optional(t.String({ maxLength: 255 })),
+  city: t.String({ minLength: 1, maxLength: 100 }),
+  county: t.Optional(t.String({ maxLength: 100 })),
+  postcode: t.Optional(UkPostcodeSchema),
+  country: t.Optional(t.String({ minLength: 2, maxLength: 3, default: "GB" })),
+  effective_from: DateSchema,
+  effective_to: t.Optional(t.Union([DateSchema, t.Null()])),
+  is_primary: t.Optional(t.Boolean()),
+});
+
+export type CreateEmployeeAddress = Static<typeof CreateEmployeeAddressSchema>;
+
+/**
+ * Update address request (effective-dated)
+ */
+export const UpdateEmployeeAddressSchema = t.Object({
+  effective_from: DateSchema,
+  address_type: t.Optional(AddressTypeSchema),
+  address_line_1: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
+  address_line_2: t.Optional(t.Union([t.String({ maxLength: 255 }), t.Null()])),
+  city: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  county: t.Optional(t.Union([t.String({ maxLength: 100 }), t.Null()])),
+  postcode: t.Optional(t.Union([UkPostcodeSchema, t.Null()])),
+  country: t.Optional(t.String({ minLength: 2, maxLength: 3 })),
+  is_primary: t.Optional(t.Boolean()),
+});
+
+export type UpdateEmployeeAddress = Static<typeof UpdateEmployeeAddressSchema>;
+
+/**
+ * Close (soft-delete) address request
+ */
+export const CloseEmployeeAddressSchema = t.Object({
+  close_date: DateSchema,
+});
+
+export type CloseEmployeeAddress = Static<typeof CloseEmployeeAddressSchema>;
+
+/**
+ * Address response
+ */
+export const EmployeeAddressResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  employee_id: UuidSchema,
+  address_type: AddressTypeSchema,
+  address_line_1: t.String(),
+  address_line_2: t.Union([t.String(), t.Null()]),
+  city: t.String(),
+  county: t.Union([t.String(), t.Null()]),
+  postcode: t.Union([t.String(), t.Null()]),
+  country: t.String(),
+  effective_from: t.String(),
+  effective_to: t.Union([t.String(), t.Null()]),
+  is_primary: t.Boolean(),
+  is_current: t.Boolean(),
+  created_by: t.Union([UuidSchema, t.Null()]),
+  created_at: t.String(),
+  updated_at: t.String(),
+});
+
+export type EmployeeAddressResponse = Static<typeof EmployeeAddressResponseSchema>;
+
+/**
+ * Address list response
+ */
+export const EmployeeAddressListResponseSchema = t.Object({
+  items: t.Array(EmployeeAddressResponseSchema),
+});
+
+export type EmployeeAddressListResponse = Static<typeof EmployeeAddressListResponseSchema>;
+
+/**
+ * Address history query filters
+ */
+export const AddressHistoryQuerySchema = t.Object({
+  address_type: t.Optional(AddressTypeSchema),
+  from: t.Optional(DateSchema),
+  to: t.Optional(DateSchema),
+});
+
+export type AddressHistoryQuery = Static<typeof AddressHistoryQuerySchema>;
+
+/**
+ * Employee address ID params
+ */
+export const EmployeeAddressIdParamsSchema = t.Object({
+  id: UuidSchema,
+  addressId: UuidSchema,
+});
+
+export type EmployeeAddressIdParams = Static<typeof EmployeeAddressIdParamsSchema>;
 
 /**
  * Create employee request (full hire)
@@ -845,3 +954,131 @@ export const OptionalIdempotencyHeaderSchema = t.Object({
 });
 
 export type OptionalIdempotencyHeader = Static<typeof OptionalIdempotencyHeaderSchema>;
+
+// =============================================================================
+// Employee Position Assignment Schemas (Concurrent Employment)
+// =============================================================================
+
+/**
+ * Assign additional position to employee request.
+ * Used for concurrent employment where an employee holds multiple positions.
+ */
+export const AssignEmployeePositionSchema = t.Object({
+  position_id: UuidSchema,
+  org_unit_id: UuidSchema,
+  is_primary: t.Optional(t.Boolean({ default: false })),
+  fte_percentage: t.Number({
+    minimum: 0.01,
+    maximum: 100,
+    description: "Percentage of FTE this position represents (0.01-100)",
+  }),
+  effective_from: DateSchema,
+  assignment_reason: t.Optional(t.String({ maxLength: 100 })),
+});
+
+export type AssignEmployeePosition = Static<typeof AssignEmployeePositionSchema>;
+
+/**
+ * Update an existing position assignment
+ */
+export const UpdateEmployeePositionAssignmentSchema = t.Partial(
+  t.Object({
+    is_primary: t.Boolean(),
+    fte_percentage: t.Number({ minimum: 0.01, maximum: 100 }),
+    effective_from: DateSchema,
+    effective_to: t.Union([DateSchema, t.Null()]),
+  })
+);
+
+export type UpdateEmployeePositionAssignment = Static<typeof UpdateEmployeePositionAssignmentSchema>;
+
+/**
+ * Employee position assignment response (includes FTE)
+ */
+export const EmployeePositionAssignmentResponseSchema = t.Object({
+  id: UuidSchema,
+  employee_id: UuidSchema,
+  position_id: UuidSchema,
+  position_code: t.String(),
+  position_title: t.String(),
+  org_unit_id: UuidSchema,
+  org_unit_name: t.String(),
+  is_primary: t.Boolean(),
+  fte_percentage: t.Number(),
+  assignment_reason: t.Union([t.String(), t.Null()]),
+  effective_from: t.String(),
+  effective_to: t.Union([t.String(), t.Null()]),
+  created_at: t.String(),
+});
+
+export type EmployeePositionAssignmentResponse = Static<typeof EmployeePositionAssignmentResponseSchema>;
+
+/**
+ * List of employee positions response with FTE summary
+ */
+export const EmployeePositionsListResponseSchema = t.Object({
+  employee_id: UuidSchema,
+  total_fte_percentage: t.Number(),
+  max_fte_percentage: t.Number(),
+  positions: t.Array(EmployeePositionAssignmentResponseSchema),
+});
+
+export type EmployeePositionsListResponse = Static<typeof EmployeePositionsListResponseSchema>;
+
+/**
+ * Employee position assignment ID params
+ */
+export const EmployeePositionParamsSchema = t.Object({
+  id: UuidSchema,
+  assignmentId: UuidSchema,
+});
+
+export type EmployeePositionParams = Static<typeof EmployeePositionParamsSchema>;
+
+// =============================================================================
+// Rehire Schemas
+// =============================================================================
+
+/**
+ * Rehire employee request.
+ * Rehires a terminated employee, creating a new employment record that
+ * links to the previous terminated record for history preservation.
+ */
+export const RehireEmployeeSchema = t.Object({
+  rehire_date: DateSchema,
+  contract: EmployeeContractInputSchema,
+  position: EmployeePositionInputSchema,
+  compensation: EmployeeCompensationInputSchema,
+  manager_id: t.Optional(UuidSchema),
+  reason: t.Optional(t.String({ maxLength: 500 })),
+});
+
+export type RehireEmployee = Static<typeof RehireEmployeeSchema>;
+
+/**
+ * Employment record response
+ */
+export const EmploymentRecordResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  employee_id: UuidSchema,
+  employment_number: t.Number(),
+  start_date: t.String(),
+  end_date: t.Union([t.String(), t.Null()]),
+  termination_reason: t.Union([t.String(), t.Null()]),
+  is_current: t.Boolean(),
+  previous_employment_id: t.Union([UuidSchema, t.Null()]),
+  created_at: t.String(),
+});
+
+export type EmploymentRecordResponse = Static<typeof EmploymentRecordResponseSchema>;
+
+/**
+ * Rehire response: the updated employee plus employment history chain
+ */
+export const RehireResponseSchema = t.Object({
+  employee: EmployeeResponseSchema,
+  employment_records: t.Array(EmploymentRecordResponseSchema),
+});
+
+export type RehireResponse = Static<typeof RehireResponseSchema>;

@@ -57,7 +57,7 @@ const settingsSections: SettingsSection[] = [
     name: "Appearance",
     description: "Customize branding, themes, and UI preferences",
     icon: Palette,
-    href: "/admin/settings/tenant",
+    href: "/admin/settings/appearance",
     available: true,
   },
   {

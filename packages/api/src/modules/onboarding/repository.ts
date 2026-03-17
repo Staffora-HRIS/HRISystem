@@ -14,6 +14,11 @@ import type {
   UpdateInstance,
   InstanceResponse,
   InstanceTask,
+  TaskDependency,
+  CreateTaskDependency,
+  CreateComplianceCheck,
+  UpdateComplianceCheck,
+  ComplianceCheckResponse,
 } from "./schemas";
 import type { TenantContext } from "../../types/service-result";
 
@@ -507,7 +512,19 @@ export class OnboardingRepository {
         WHERE instance_id = ${instanceId}::uuid
       `;
 
-      if (Number(stats.required_count) === Number(stats.completed_required_count)) {
+      // Also check if all required compliance checks are satisfied
+      const [complianceStats] = await tx`
+        SELECT
+          COUNT(*) FILTER (WHERE required = true) as required_count,
+          COUNT(*) FILTER (WHERE required = true AND status IN ('passed', 'waived')) as satisfied_count
+        FROM app.onboarding_compliance_checks
+        WHERE onboarding_id = ${instanceId}::uuid
+      `;
+
+      const allTasksComplete = Number(stats.required_count) === Number(stats.completed_required_count);
+      const allComplianceSatisfied = Number(complianceStats.required_count) === Number(complianceStats.satisfied_count);
+
+      if (allTasksComplete && allComplianceSatisfied) {
         await tx`
           UPDATE app.onboarding_instances SET
             status = 'completed',
@@ -627,8 +644,422 @@ export class OnboardingRepository {
   }
 
   // ===========================================================================
+  // Task Dependency Operations
+  // ===========================================================================
+
+  /**
+   * List all dependencies for a given template task.
+   */
+  async listTaskDependencies(
+    ctx: TenantContext,
+    taskId: string
+  ): Promise<TaskDependency[]> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            d.id, d.tenant_id, d.task_id, d.depends_on_task_id, d.created_at,
+            t.name AS depends_on_task_name
+          FROM app.onboarding_task_dependencies d
+          JOIN app.onboarding_template_tasks t ON t.id = d.depends_on_task_id
+          WHERE d.task_id = ${taskId}::uuid
+            AND d.tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY t.sequence_order ASC
+        `;
+      }
+    );
+
+    return rows.map(this.mapTaskDependencyRow);
+  }
+
+  /**
+   * List all dependencies for all tasks in a template.
+   */
+  async listTemplateDependencies(
+    ctx: TenantContext,
+    templateId: string
+  ): Promise<TaskDependency[]> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            d.id, d.tenant_id, d.task_id, d.depends_on_task_id, d.created_at,
+            t.name AS depends_on_task_name
+          FROM app.onboarding_task_dependencies d
+          JOIN app.onboarding_template_tasks t ON t.id = d.depends_on_task_id
+          JOIN app.onboarding_template_tasks t2 ON t2.id = d.task_id
+          WHERE t2.template_id = ${templateId}::uuid
+            AND d.tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY t2.sequence_order ASC, t.sequence_order ASC
+        `;
+      }
+    );
+
+    return rows.map(this.mapTaskDependencyRow);
+  }
+
+  /**
+   * Add a dependency between two template tasks.
+   */
+  async addTaskDependency(
+    ctx: TenantContext,
+    data: CreateTaskDependency,
+    txOverride?: any
+  ): Promise<TaskDependency> {
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.onboarding_task_dependencies (
+          id, tenant_id, task_id, depends_on_task_id, created_at
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid,
+          ${data.taskId}::uuid, ${data.dependsOnTaskId}::uuid, now()
+        )
+        RETURNING *
+      `;
+    };
+
+    const [row] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return this.mapTaskDependencyRow(row);
+  }
+
+  /**
+   * Remove a dependency between two template tasks.
+   */
+  async removeTaskDependency(
+    ctx: TenantContext,
+    taskId: string,
+    dependsOnTaskId: string,
+    txOverride?: any
+  ): Promise<boolean> {
+    const exec = async (tx: any) => {
+      return tx`
+        DELETE FROM app.onboarding_task_dependencies
+        WHERE task_id = ${taskId}::uuid
+          AND depends_on_task_id = ${dependsOnTaskId}::uuid
+          AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING id
+      `;
+    };
+
+    const result = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return result.length > 0;
+  }
+
+  /**
+   * Get incomplete (non-completed, non-skipped) dependencies for an instance task.
+   * This looks up the template-level dependencies and checks the status of corresponding
+   * instance-level task completions.
+   *
+   * Returns the list of template_task_ids that are still blocking.
+   */
+  async getIncompleteTaskDependencies(
+    ctx: TenantContext,
+    instanceId: string,
+    taskId: string,
+    txOverride?: any
+  ): Promise<{ templateTaskId: string; taskName: string; status: string }[]> {
+    const exec = async (tx: any) => {
+      return tx`
+        SELECT
+          dep.depends_on_task_id AS template_task_id,
+          tt.name AS task_name,
+          tc.status
+        FROM app.onboarding_task_completions otc_current
+        JOIN app.onboarding_task_dependencies dep
+          ON dep.task_id = otc_current.template_task_id
+          AND dep.tenant_id = otc_current.tenant_id
+        JOIN app.onboarding_template_tasks tt
+          ON tt.id = dep.depends_on_task_id
+        JOIN app.onboarding_task_completions tc
+          ON tc.instance_id = otc_current.instance_id
+          AND tc.template_task_id = dep.depends_on_task_id
+        WHERE otc_current.instance_id = ${instanceId}::uuid
+          AND otc_current.task_id = ${taskId}
+          AND tc.status NOT IN ('completed', 'skipped')
+      `;
+    };
+
+    const rows = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return rows.map((r: any) => ({
+      templateTaskId: r.template_task_id,
+      taskName: r.task_name,
+      status: r.status,
+    }));
+  }
+
+  /**
+   * For a given instance, get the dependency mapping for all tasks.
+   * Returns a map of taskId -> { dependsOnTaskIds, blockedByTaskIds }.
+   */
+  async getInstanceTaskDependencyMap(
+    ctx: TenantContext,
+    instanceId: string,
+    txOverride?: any
+  ): Promise<Map<string, { dependsOnTaskIds: string[]; blockedByTaskIds: string[] }>> {
+    const exec = async (tx: any) => {
+      // Get all dependencies and their completion status for this instance
+      return tx`
+        SELECT
+          otc_current.task_id AS current_task_id,
+          dep.depends_on_task_id,
+          tc_dep.status AS dep_status
+        FROM app.onboarding_task_completions otc_current
+        JOIN app.onboarding_task_dependencies dep
+          ON dep.task_id = otc_current.template_task_id
+          AND dep.tenant_id = otc_current.tenant_id
+        JOIN app.onboarding_task_completions tc_dep
+          ON tc_dep.instance_id = otc_current.instance_id
+          AND tc_dep.template_task_id = dep.depends_on_task_id
+        WHERE otc_current.instance_id = ${instanceId}::uuid
+      `;
+    };
+
+    const rows = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    const depMap = new Map<string, { dependsOnTaskIds: string[]; blockedByTaskIds: string[] }>();
+
+    for (const row of rows) {
+      const taskId = row.current_task_id;
+      if (!depMap.has(taskId)) {
+        depMap.set(taskId, { dependsOnTaskIds: [], blockedByTaskIds: [] });
+      }
+      const entry = depMap.get(taskId)!;
+      entry.dependsOnTaskIds.push(row.depends_on_task_id);
+      if (!['completed', 'skipped'].includes(row.dep_status)) {
+        entry.blockedByTaskIds.push(row.depends_on_task_id);
+      }
+    }
+
+    return depMap;
+  }
+
+  // ===========================================================================
+  // Compliance Check Operations
+  // ===========================================================================
+
+  /**
+   * List all compliance checks for an onboarding instance.
+   */
+  async listComplianceChecks(
+    ctx: TenantContext,
+    onboardingId: string
+  ): Promise<{ items: ComplianceCheckResponse[]; complianceSatisfied: boolean }> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT *
+          FROM app.onboarding_compliance_checks
+          WHERE onboarding_id = ${onboardingId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY created_at ASC
+        `;
+      }
+    );
+
+    const items = rows.map(this.mapComplianceCheckRow);
+    const complianceSatisfied = items
+      .filter((c: ComplianceCheckResponse) => c.required)
+      .every((c: ComplianceCheckResponse) => c.status === "passed" || c.status === "waived");
+
+    return { items, complianceSatisfied };
+  }
+
+  /**
+   * Get a single compliance check by ID.
+   */
+  async getComplianceCheckById(
+    ctx: TenantContext,
+    checkId: string
+  ): Promise<ComplianceCheckResponse | null> {
+    const [row] = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT *
+          FROM app.onboarding_compliance_checks
+          WHERE id = ${checkId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+        `;
+      }
+    );
+
+    return row ? this.mapComplianceCheckRow(row) : null;
+  }
+
+  /**
+   * Create a new compliance check for an onboarding instance.
+   */
+  async createComplianceCheck(
+    ctx: TenantContext,
+    onboardingId: string,
+    employeeId: string,
+    data: CreateComplianceCheck,
+    txOverride?: any
+  ): Promise<ComplianceCheckResponse> {
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.onboarding_compliance_checks (
+          id, tenant_id, onboarding_id, employee_id,
+          check_type, status, required, due_date, notes, created_by
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${onboardingId}::uuid, ${employeeId}::uuid,
+          ${data.checkType}, 'pending', ${data.required !== false},
+          ${data.dueDate || null}::date, ${data.notes || null}, ${ctx.userId}::uuid
+        )
+        RETURNING *
+      `;
+    };
+
+    const [row] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return this.mapComplianceCheckRow(row);
+  }
+
+  /**
+   * Update a compliance check (status, notes, reference, waiver, etc.).
+   */
+  async updateComplianceCheck(
+    ctx: TenantContext,
+    checkId: string,
+    data: UpdateComplianceCheck,
+    txOverride?: any
+  ): Promise<ComplianceCheckResponse | null> {
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_compliance_checks SET
+          status = COALESCE(${data.status}, status),
+          due_date = COALESCE(${data.dueDate || null}::date, due_date),
+          notes = COALESCE(${data.notes}, notes),
+          reference_number = COALESCE(${data.referenceNumber}, reference_number),
+          expires_at = COALESCE(${data.expiresAt || null}::date, expires_at),
+          completed_at = CASE
+            WHEN ${data.status} IN ('passed', 'failed') AND completed_at IS NULL THEN now()
+            ELSE completed_at
+          END,
+          completed_by = CASE
+            WHEN ${data.status} IN ('passed', 'failed') AND completed_by IS NULL THEN ${ctx.userId}::uuid
+            ELSE completed_by
+          END,
+          waived_by = CASE
+            WHEN ${data.status} = 'waived' AND waived_by IS NULL THEN ${ctx.userId}::uuid
+            ELSE waived_by
+          END,
+          waiver_reason = CASE
+            WHEN ${data.status} = 'waived' THEN COALESCE(${data.waiverReason}, waiver_reason)
+            ELSE waiver_reason
+          END,
+          updated_at = now()
+        WHERE id = ${checkId}::uuid
+          AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [row] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return row ? this.mapComplianceCheckRow(row) : null;
+  }
+
+  /**
+   * Check if all required compliance checks for an onboarding instance are satisfied.
+   */
+  async isComplianceSatisfied(
+    ctx: TenantContext,
+    onboardingId: string,
+    txOverride?: any
+  ): Promise<boolean> {
+    const exec = async (tx: any) => {
+      return tx`
+        SELECT COUNT(*) as unsatisfied_count
+        FROM app.onboarding_compliance_checks
+        WHERE onboarding_id = ${onboardingId}::uuid
+          AND required = true
+          AND status NOT IN ('passed', 'waived')
+      `;
+    };
+
+    const [result] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
+
+    return Number(result.unsatisfied_count) === 0;
+  }
+
+  // ===========================================================================
   // Helper Methods
   // ===========================================================================
+
+  private mapComplianceCheckRow(row: any): ComplianceCheckResponse {
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      onboardingId: row.onboarding_id,
+      employeeId: row.employee_id,
+      checkType: row.check_type,
+      status: row.status,
+      required: row.required,
+      dueDate: row.due_date?.toISOString()?.split("T")[0] || row.due_date || null,
+      completedAt: row.completed_at?.toISOString() || row.completed_at || null,
+      completedBy: row.completed_by || null,
+      notes: row.notes || null,
+      waivedBy: row.waived_by || null,
+      waiverReason: row.waiver_reason || null,
+      referenceNumber: row.reference_number || null,
+      expiresAt: row.expires_at?.toISOString()?.split("T")[0] || row.expires_at || null,
+      createdAt: row.created_at?.toISOString() || row.created_at,
+      updatedAt: row.updated_at?.toISOString() || row.updated_at,
+    };
+  }
+
+  private mapTaskDependencyRow(row: any): TaskDependency {
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      taskId: row.task_id,
+      dependsOnTaskId: row.depends_on_task_id,
+      dependsOnTaskName: row.depends_on_task_name,
+      createdAt: row.created_at?.toISOString() || row.created_at,
+    };
+  }
 
   private mapTemplateRow(row: any): TemplateResponse {
     return {

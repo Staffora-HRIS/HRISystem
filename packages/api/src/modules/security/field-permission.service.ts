@@ -14,7 +14,7 @@ import type {
   EffectiveFieldPermission,
   FieldMetadata,
   EntityFieldGroup,
-} from "./schemas";
+} from "./field-permission.schemas";
 
 // =============================================================================
 // Types

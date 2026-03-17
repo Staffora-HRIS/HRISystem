@@ -26,6 +26,7 @@ export {
   type PaginatedResult,
   type NotificationRow,
   type PushTokenRow,
+  type PushSubscriptionRow,
 } from "./repository";
 
 // Export schemas
@@ -59,4 +60,14 @@ export {
   type IdParams,
   type OptionalIdempotencyHeader,
   type PaginationQuery,
+  WebPushSubscribeSchema,
+  WebPushUnsubscribeSchema,
+  WebPushSubscriptionResponseSchema,
+  WebPushDeviceTypeSchema,
+  VapidPublicKeyResponseSchema,
+  type WebPushDeviceType,
+  type WebPushSubscribe,
+  type WebPushUnsubscribe,
+  type WebPushSubscriptionResponse,
+  type VapidPublicKeyResponse,
 } from "./schemas";

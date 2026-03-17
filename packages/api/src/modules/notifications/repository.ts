@@ -12,6 +12,7 @@ import type {
   NotificationFilters,
   PaginationQuery,
   RegisterPushToken,
+  WebPushSubscribe,
 } from "./schemas";
 
 export type { TenantContext } from "../../types/service-result";
@@ -57,6 +58,19 @@ export interface PushTokenRow extends Row {
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Raw DB row shape for Web Push subscriptions */
+export interface PushSubscriptionRow extends Row {
+  id: string;
+  tenantId: string;
+  userId: string;
+  endpoint: string;
+  authKey: string;
+  p256dhKey: string;
+  deviceType: string;
+  userAgent: string | null;
+  createdAt: Date;
 }
 
 // =============================================================================
@@ -349,5 +363,154 @@ export class NotificationsRepository {
 
     if (tx) return exec(tx);
     return this.db.withTransaction(ctx, exec);
+  }
+
+  // ===========================================================================
+  // Web Push Subscription Operations
+  // ===========================================================================
+
+  /**
+   * Create or replace a Web Push subscription for a user.
+   * Uses ON CONFLICT on (tenant_id, endpoint) to upsert.
+   */
+  async createPushSubscription(
+    ctx: TenantContext,
+    userId: string,
+    data: WebPushSubscribe,
+    tx?: TransactionSql<Record<string, unknown>>
+  ): Promise<PushSubscriptionRow> {
+    const exec = async (sql: TransactionSql<Record<string, unknown>>) => {
+      const rows = await sql<PushSubscriptionRow[]>`
+        INSERT INTO push_subscriptions (
+          tenant_id, user_id, endpoint, auth_key, p256dh_key, device_type, user_agent
+        )
+        VALUES (
+          ${ctx.tenantId}::uuid,
+          ${userId}::uuid,
+          ${data.endpoint},
+          ${data.auth_key},
+          ${data.p256dh_key},
+          ${data.device_type ?? "web"},
+          ${data.user_agent ?? null}
+        )
+        ON CONFLICT (tenant_id, endpoint)
+        DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          auth_key = EXCLUDED.auth_key,
+          p256dh_key = EXCLUDED.p256dh_key,
+          device_type = EXCLUDED.device_type,
+          user_agent = EXCLUDED.user_agent,
+          created_at = now()
+        RETURNING
+          id, tenant_id, user_id, endpoint,
+          auth_key, p256dh_key, device_type,
+          user_agent, created_at
+      `;
+      return rows[0];
+    };
+
+    if (tx) return exec(tx);
+    return this.db.withTransaction(ctx, exec);
+  }
+
+  /**
+   * Remove a Web Push subscription by endpoint.
+   * Users can only delete their own subscriptions (enforced by WHERE clause + RLS).
+   */
+  async deletePushSubscription(
+    ctx: TenantContext,
+    userId: string,
+    endpoint: string,
+    tx?: TransactionSql<Record<string, unknown>>
+  ): Promise<boolean> {
+    const exec = async (sql: TransactionSql<Record<string, unknown>>) => {
+      const rows = await sql`
+        DELETE FROM push_subscriptions
+        WHERE endpoint = ${endpoint}
+          AND user_id = ${userId}::uuid
+      `;
+      return rows.count > 0;
+    };
+
+    if (tx) return exec(tx);
+    return this.db.withTransaction(ctx, exec);
+  }
+
+  /**
+   * Remove a Web Push subscription by ID.
+   */
+  async deletePushSubscriptionById(
+    ctx: TenantContext,
+    userId: string,
+    subscriptionId: string,
+    tx?: TransactionSql<Record<string, unknown>>
+  ): Promise<boolean> {
+    const exec = async (sql: TransactionSql<Record<string, unknown>>) => {
+      const rows = await sql`
+        DELETE FROM push_subscriptions
+        WHERE id = ${subscriptionId}::uuid
+          AND user_id = ${userId}::uuid
+      `;
+      return rows.count > 0;
+    };
+
+    if (tx) return exec(tx);
+    return this.db.withTransaction(ctx, exec);
+  }
+
+  /**
+   * List Web Push subscriptions for a user
+   */
+  async listPushSubscriptions(
+    ctx: TenantContext,
+    userId: string
+  ): Promise<PushSubscriptionRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      return tx<PushSubscriptionRow[]>`
+        SELECT
+          id, tenant_id, user_id, endpoint,
+          auth_key, p256dh_key, device_type,
+          user_agent, created_at
+        FROM push_subscriptions
+        WHERE user_id = ${userId}::uuid
+        ORDER BY created_at DESC
+      `;
+    });
+  }
+
+  /**
+   * Get all Web Push subscriptions for a user across all tenants.
+   * Used by the notification worker to send push notifications.
+   * Requires system context to bypass RLS.
+   */
+  async getPushSubscriptionsByUserId(
+    userId: string
+  ): Promise<PushSubscriptionRow[]> {
+    return this.db.withSystemContext(async (tx) => {
+      return tx<PushSubscriptionRow[]>`
+        SELECT
+          id, tenant_id, user_id, endpoint,
+          auth_key, p256dh_key, device_type,
+          user_agent, created_at
+        FROM push_subscriptions
+        WHERE user_id = ${userId}::uuid
+      `;
+    });
+  }
+
+  /**
+   * Remove a Web Push subscription by endpoint (system context).
+   * Used by the notification worker to clean up invalid subscriptions.
+   */
+  async deletePushSubscriptionByEndpoint(
+    endpoint: string
+  ): Promise<boolean> {
+    return this.db.withSystemContext(async (tx) => {
+      const rows = await tx`
+        DELETE FROM push_subscriptions
+        WHERE endpoint = ${endpoint}
+      `;
+      return rows.count > 0;
+    });
   }
 }

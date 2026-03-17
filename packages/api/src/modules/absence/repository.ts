@@ -162,6 +162,7 @@ export class AbsenceRepository {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const [row] = await tx<LeaveTypeRow[]>`
         UPDATE app.leave_types SET
+          code = COALESCE(${data.code ?? null}, code),
           name = COALESCE(${data.name ?? null}, name),
           description = COALESCE(${data.description ?? null}, description),
           is_paid = COALESCE(${data.isPaid ?? null}, is_paid),
@@ -216,6 +217,39 @@ export class AbsenceRepository {
         ORDER BY name
       `;
       return rows as LeavePolicyRow[];
+    });
+  }
+
+  async updateLeavePolicy(ctx: TenantContext, id: string, data: Partial<LeavePolicyRow>): Promise<LeavePolicyRow | null> {
+    return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      const [updated] = await tx<{ id: string }[]>`
+        UPDATE app.leave_policies SET
+          name = COALESCE(${data.name ?? null}, name),
+          description = COALESCE(${data.description ?? null}, description),
+          leave_type_id = COALESCE(${data.leaveTypeId ?? null}::uuid, leave_type_id),
+          default_balance = COALESCE(${data.annualAllowance ?? null}, default_balance),
+          max_carryover = COALESCE(${data.maxCarryover ?? null}, max_carryover),
+          effective_from = COALESCE(${data.effectiveFrom ?? null}, effective_from),
+          effective_to = ${data.effectiveTo === undefined ? tx`effective_to` : data.effectiveTo},
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND is_active = true
+        RETURNING id
+      `;
+
+      if (!updated) return null;
+
+      await this.writeOutbox(tx, ctx.tenantId, "leave_policy", id, "absence.leave_policy.updated", { policyId: id });
+
+      const [row] = await tx<LeavePolicyRow[]>`
+        SELECT
+          id, tenant_id, name, description, leave_type_id,
+          default_balance as annual_allowance,
+          max_carryover, effective_from, effective_to,
+          is_active, created_at, updated_at
+        FROM app.leave_policies
+        WHERE id = ${id}::uuid
+      `;
+      return row as LeavePolicyRow;
     });
   }
 

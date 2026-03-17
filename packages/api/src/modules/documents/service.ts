@@ -24,6 +24,8 @@ import type {
   UploadUrlResponse,
 } from "./schemas";
 import { getStorageService } from "../../lib/storage";
+import { scanBuffer, getVirusScanConfig } from "../../lib/virus-scan";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // Types
@@ -86,6 +88,102 @@ export class DocumentsService {
     private repository: DocumentsRepository,
     private db: DatabaseClient
   ) {}
+
+  // ===========================================================================
+  // Virus Scanning
+  // ===========================================================================
+
+  /**
+   * Scan a file for viruses before storing a document record.
+   *
+   * Retrieves the file from storage using its key and sends it to ClamAV
+   * for scanning. If ClamAV is unavailable, the upload proceeds in degraded
+   * mode with a warning logged. If a virus is detected, the file is deleted
+   * from storage and an error result is returned.
+   *
+   * @param fileKey - The storage key of the uploaded file
+   * @param context - Tenant context for logging
+   * @returns null if the file is clean (or degraded mode), ServiceResult error if infected
+   */
+  private async scanFileForViruses(
+    fileKey: string,
+    context: TenantContext
+  ): Promise<ServiceResult<never> | null> {
+    const virusConfig = getVirusScanConfig();
+    const scanLog = logger.child({
+      component: "virus-scan",
+      tenantId: context.tenantId,
+      userId: context.userId,
+    });
+
+    if (!virusConfig.enabled) {
+      scanLog.debug({ fileKey }, "Virus scanning disabled, skipping");
+      return null;
+    }
+
+    const storage = getStorageService();
+
+    // Retrieve file content from storage
+    let fileBuffer: Buffer | null;
+    try {
+      fileBuffer = await storage.getFile(fileKey);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      scanLog.warn(
+        { fileKey, error: message },
+        "Failed to retrieve file for virus scan, allowing upload in degraded mode"
+      );
+      return null;
+    }
+
+    if (!fileBuffer) {
+      scanLog.warn(
+        { fileKey },
+        "File not found in storage for virus scan, allowing upload in degraded mode"
+      );
+      return null;
+    }
+
+    // Scan the file
+    const result = await scanBuffer(fileBuffer, virusConfig);
+
+    if (result.degraded) {
+      scanLog.warn(
+        { fileKey, error: result.error },
+        "Virus scan ran in degraded mode (ClamAV unavailable), upload allowed"
+      );
+      return null;
+    }
+
+    if (!result.clean) {
+      scanLog.error(
+        { fileKey, virusName: result.virusName },
+        "Virus detected in uploaded file, rejecting and deleting from storage"
+      );
+
+      // Delete the infected file from storage
+      try {
+        await storage.delete(fileKey);
+      } catch (deleteErr) {
+        scanLog.error(
+          { fileKey, error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr) },
+          "Failed to delete infected file from storage"
+        );
+      }
+
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.VIRUS_DETECTED,
+          message: `The uploaded file was rejected: virus '${result.virusName}' detected. Please scan your file with antivirus software and try again.`,
+          details: { virusName: result.virusName },
+        },
+      };
+    }
+
+    scanLog.info({ fileKey }, "File passed virus scan");
+    return null;
+  }
 
   // ===========================================================================
   // Domain Event Emission
@@ -162,6 +260,12 @@ export class DocumentsService {
     data: CreateDocument,
     fileKey: string
   ): Promise<ServiceResult<DocumentResponse>> {
+    // Scan file for viruses before creating the document record
+    const scanError = await this.scanFileForViruses(fileKey, context);
+    if (scanError) {
+      return scanError;
+    }
+
     const result = await this.db.withTransaction(context, async (tx) => {
       const document = await this.repository.createDocument(tx, context, {
         ...data,
@@ -302,6 +406,12 @@ export class DocumentsService {
           details: { documentId },
         },
       };
+    }
+
+    // Scan file for viruses before creating the version record
+    const scanError = await this.scanFileForViruses(fileKey, context);
+    if (scanError) {
+      return scanError;
     }
 
     const result = await this.db.withTransaction(context, async (tx) => {

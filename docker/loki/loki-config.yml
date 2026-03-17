@@ -1,0 +1,92 @@
+# =============================================================================
+# Staffora Platform -- Loki Configuration
+# =============================================================================
+# Loki is a horizontally scalable, highly available log aggregation system
+# inspired by Prometheus. It indexes labels (not full text) for efficiency.
+#
+# This configuration is optimised for single-instance development/staging use.
+# For production HA deployment, see:
+#   https://grafana.com/docs/loki/latest/setup/install/helm/
+# =============================================================================
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+
+# ---------------------------------------------------------------------------
+# Ingestion and retention limits
+# ---------------------------------------------------------------------------
+limits_config:
+  # Maximum number of label names per series
+  max_label_names_per_series: 30
+  # Reject log lines older than 168h (7 days)
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Per-tenant ingestion rate (bytes/sec). 10 MB/s default.
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+  # Max streams per user
+  max_streams_per_user: 10000
+  # Max entries returned per query
+  max_entries_limit_per_query: 5000
+  # Max query lookback
+  max_query_lookback: 720h  # 30 days
+  # Retention period -- auto-delete logs older than this.
+  # Default: 720h (30 days). Override via LOKI_RETENTION_PERIOD env var.
+  retention_period: 720h
+
+# ---------------------------------------------------------------------------
+# Compactor -- merges index files for query performance and enforces retention
+# ---------------------------------------------------------------------------
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: filesystem
+
+# ---------------------------------------------------------------------------
+# Query performance
+# ---------------------------------------------------------------------------
+query_range:
+  align_queries_with_step: true
+  cache_results: true
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+analytics:
+  reporting_enabled: false

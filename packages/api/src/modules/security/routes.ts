@@ -3,7 +3,7 @@
  *
  * Core security management endpoints: audit log, users, roles,
  * permissions, role-permissions, and role assignments.
- * All routes delegate to SecurityService for business logic.
+ * All routes delegate to RbacSecurityService for business logic.
  */
 
 import { Elysia } from "elysia";
@@ -12,8 +12,8 @@ import { requireAuthContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorCodes } from "../../plugins/errors";
-import { SecurityRepository } from "./repository";
-import { SecurityService } from "./service";
+import { RbacRepository } from "./rbac.repository";
+import { RbacSecurityService } from "./rbac.service";
 import type { TenantContext } from "../../types/service-result";
 
 export const securityRoutes = new Elysia({ prefix: "/security" })
@@ -23,8 +23,8 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
   // ===========================================================================
   .derive((ctx) => {
     const { db, tenant, user, rbacService } = ctx as any;
-    const repository = new SecurityRepository(db);
-    const service = new SecurityService(repository, db);
+    const repository = new RbacRepository(db);
+    const service = new RbacSecurityService(repository, db);
     if (rbacService) {
       service.setRbacService(rbacService);
     }

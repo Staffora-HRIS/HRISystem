@@ -14,6 +14,7 @@ import type {
   PositionRow,
   EmployeeRow,
 } from "./repository";
+import type { PositionAssignmentRow } from "./repository.types";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
 import {
@@ -21,6 +22,7 @@ import {
   getValidTransitions as getValidEmployeeTransitions,
   EmployeeStates,
 } from "@staffora/shared/state-machines";
+import { calculateStatutoryNoticePeriod } from "@staffora/shared/utils";
 import type {
   CreateOrgUnit,
   UpdateOrgUnit,
@@ -45,6 +47,11 @@ import type {
   EmployeeListItem,
   HistoryDimension,
   HistoryRecord,
+  AssignEmployeePosition,
+  EmployeePositionAssignmentResponse,
+  EmployeePositionsListResponse,
+  RehireEmployee,
+  EmploymentRecordResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -69,8 +76,11 @@ type DomainEventType =
   | "hr.employee.transferred"
   | "hr.employee.promoted"
   | "hr.employee.terminated"
+  | "hr.employee.rehired"
   | "hr.employee.status_changed"
   | "hr.employee.ni_category_changed"
+  | "hr.employee.position_assigned"
+  | "hr.employee.position_ended"
   | "benefits.enrollment.ceased";
 
 // =============================================================================
@@ -1499,30 +1509,11 @@ export class HRService {
     }
 
     const employee = employeeResult.employee;
-    const hireDate = new Date(employee.hireDate);
     const referenceDate = employee.terminationDate
       ? new Date(employee.terminationDate)
       : new Date();
 
-    // Calculate months and years of service
-    const diffMs = referenceDate.getTime() - hireDate.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const monthsOfService = Math.floor(diffDays / 30.44); // average days per month
-    const yearsOfService = Math.floor(diffDays / 365.25);
-
-    // Statutory notice weeks (Employment Rights Act 1996, s.86)
-    let statutoryNoticeWeeks: number;
-    if (monthsOfService < 1) {
-      statutoryNoticeWeeks = 0;
-    } else if (yearsOfService < 2) {
-      statutoryNoticeWeeks = 1;
-    } else {
-      statutoryNoticeWeeks = Math.min(yearsOfService, 12);
-    }
-
-    const statutoryNoticeDays = statutoryNoticeWeeks * 7;
-
-    // Get current contractual notice period
+    // Get current contractual notice period from the active employment contract
     const contractRows = await this.db.withTransaction(context, async (tx) => {
       return tx`
         SELECT notice_period_days
@@ -1537,21 +1528,12 @@ export class HRService {
 
     const contractualNoticeDays = (contractRows[0] as any)?.noticePeriodDays ?? null;
 
-    // Compliance: contractual must be >= statutory (employer-to-employee notice)
-    const isCompliant = contractualNoticeDays === null
-      ? statutoryNoticeWeeks === 0 // no contract needed if < 1 month
-      : contractualNoticeDays >= statutoryNoticeDays;
-
-    let complianceMessage: string;
-    if (monthsOfService < 1) {
-      complianceMessage = "Employee has less than 1 month service — no statutory notice entitlement yet.";
-    } else if (contractualNoticeDays === null) {
-      complianceMessage = `No contractual notice period set. Statutory minimum is ${statutoryNoticeWeeks} week(s).`;
-    } else if (isCompliant) {
-      complianceMessage = `Contractual notice (${contractualNoticeDays} days) meets or exceeds statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks).`;
-    } else {
-      complianceMessage = `NON-COMPLIANT: Contractual notice (${contractualNoticeDays} days) is below statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks). Update the employment contract.`;
-    }
+    // Delegate calculation to the shared utility (UK Employment Rights Act 1996, s.86)
+    const notice = calculateStatutoryNoticePeriod({
+      hireDate: employee.hireDate,
+      referenceDate,
+      contractualNoticeDays,
+    });
 
     return {
       success: true,
@@ -1559,13 +1541,13 @@ export class HRService {
         employee_id: employeeId,
         hire_date: String(employee.hireDate),
         reference_date: referenceDate.toISOString().split("T")[0],
-        years_of_service: yearsOfService,
-        months_of_service: monthsOfService,
-        statutory_notice_weeks: statutoryNoticeWeeks,
-        statutory_notice_days: statutoryNoticeDays,
-        contractual_notice_days: contractualNoticeDays ?? null,
-        is_compliant: isCompliant,
-        compliance_message: complianceMessage,
+        years_of_service: notice.yearsOfService,
+        months_of_service: notice.monthsOfService,
+        statutory_notice_weeks: notice.statutoryNoticeWeeks,
+        statutory_notice_days: notice.statutoryNoticeDays,
+        contractual_notice_days: notice.contractualNoticeDays,
+        is_compliant: notice.isCompliant,
+        compliance_message: notice.complianceMessage,
       },
     };
   }

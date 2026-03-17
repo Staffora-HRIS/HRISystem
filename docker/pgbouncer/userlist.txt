@@ -1,0 +1,21 @@
+; =============================================================================
+; PgBouncer User List
+; =============================================================================
+; Format: "username" "password"
+;
+; Passwords can be:
+;   - Plain text (auth_type = plain)
+;   - MD5 hash: "md5" + md5(password + username) (auth_type = md5)
+;
+; For development, plain text passwords matching docker-compose defaults are
+; used.  In production, use MD5 hashes or auth_query to look up passwords
+; from pg_shadow dynamically.
+;
+; These credentials MUST match the PostgreSQL users created in init.sql.
+; =============================================================================
+
+; Superuser — used for migrations and admin operations
+"hris" "hris_dev_password"
+
+; Application user — NOBYPASSRLS, used by API and worker at runtime
+"hris_app" "hris_dev_password"

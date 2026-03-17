@@ -4,14 +4,17 @@
  * Tab navigation component with multiple variants
  */
 
-import { useState, createContext, useContext, type ReactNode } from "react";
+import { useState, createContext, useContext, useCallback, useId, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { useRovingTabindex } from "../../hooks/use-focus-trap";
 
 // Context
 interface TabsContextValue {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   variant: TabsVariant;
+  /** Unique ID prefix for ARIA linkage between tabs and panels. */
+  idPrefix: string;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -65,17 +68,18 @@ export function Tabs({
   className,
 }: TabsProps) {
   const [internalValue, setInternalValue] = useState(defaultValue || "");
-  
+  const idPrefix = useId();
+
   const activeTab = value !== undefined ? value : internalValue;
-  const setActiveTab = (tab: string) => {
+  const setActiveTab = useCallback((tab: string) => {
     if (value === undefined) {
       setInternalValue(tab);
     }
     onValueChange?.(tab);
-  };
+  }, [value, onValueChange]);
 
   return (
-    <TabsContext.Provider value={{ activeTab, setActiveTab, variant }}>
+    <TabsContext.Provider value={{ activeTab, setActiveTab, variant, idPrefix }}>
       <div className={cn("w-full", className)}>{children}</div>
     </TabsContext.Provider>
   );
@@ -83,6 +87,11 @@ export function Tabs({
 
 export function TabsList({ children, className }: TabsListProps) {
   const { variant } = useTabsContext();
+  const handleRovingKeyDown = useRovingTabindex({
+    orientation: "horizontal",
+    loop: true,
+    homeEnd: true,
+  });
 
   const variantClasses = {
     line: "border-b border-gray-200",
@@ -94,11 +103,13 @@ export function TabsList({ children, className }: TabsListProps) {
   return (
     <div
       role="tablist"
+      aria-orientation="horizontal"
       className={cn(
         "flex gap-1",
         variantClasses[variant],
         className
       )}
+      onKeyDown={handleRovingKeyDown}
     >
       {children}
     </div>
@@ -112,10 +123,17 @@ export function TabsTrigger({
   className,
   icon,
 }: TabsTriggerProps) {
-  const { activeTab, setActiveTab, variant } = useTabsContext();
+  const { activeTab, setActiveTab, variant, idPrefix } = useTabsContext();
   const isActive = activeTab === value;
 
-  const baseClasses = "inline-flex items-center justify-center gap-2 font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
+  const tabId = `${idPrefix}-tab-${value}`;
+  const panelId = `${idPrefix}-panel-${value}`;
+
+  const baseClasses = cn(
+    "inline-flex items-center justify-center gap-2 font-medium transition-colors",
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1",
+    "disabled:opacity-50 disabled:pointer-events-none"
+  );
 
   const variantClasses = {
     line: cn(
@@ -148,8 +166,10 @@ export function TabsTrigger({
     <button
       type="button"
       role="tab"
-      aria-selected={isActive ? "true" : "false"}
-      aria-controls={`panel-${value}`}
+      id={tabId}
+      aria-selected={isActive}
+      aria-controls={panelId}
+      tabIndex={isActive ? 0 : -1}
       disabled={disabled}
       onClick={() => setActiveTab(value)}
       className={cn(baseClasses, variantClasses[variant], className)}
@@ -161,7 +181,10 @@ export function TabsTrigger({
 }
 
 export function TabsContent({ value, children, className }: TabsContentProps) {
-  const { activeTab } = useTabsContext();
+  const { activeTab, idPrefix } = useTabsContext();
+
+  const tabId = `${idPrefix}-tab-${value}`;
+  const panelId = `${idPrefix}-panel-${value}`;
 
   if (activeTab !== value) {
     return null;
@@ -170,8 +193,10 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
   return (
     <div
       role="tabpanel"
-      id={`panel-${value}`}
-      className={cn("mt-4", className)}
+      id={panelId}
+      aria-labelledby={tabId}
+      tabIndex={0}
+      className={cn("mt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 rounded", className)}
     >
       {children}
     </div>

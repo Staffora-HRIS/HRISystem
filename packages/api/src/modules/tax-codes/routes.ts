@@ -2,10 +2,11 @@
  * Tax Codes Module - Elysia Routes
  *
  * API endpoints for employee tax code management:
- * - GET /tax-codes/employee/:employeeId - List tax codes for an employee
- * - GET /tax-codes/:id - Get a single tax code
- * - POST /tax-codes - Create a new tax code
- * - PUT /tax-codes/:id - Update an existing tax code
+ * - GET    /tax-codes/employee/:employeeId          - List tax codes for an employee
+ * - GET    /tax-codes/current/:employeeId           - Get the current tax code for an employee
+ * - GET    /tax-codes/:id                           - Get a single tax code by ID
+ * - POST   /tax-codes                               - Create a new tax code
+ * - PUT    /tax-codes/:id                           - Update an existing tax code
  *
  * Permission model:
  * - payroll:tax_codes: read, write
@@ -14,7 +15,8 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import type { AuditHelper } from "../../plugins/audit";
-import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { ErrorResponseSchema } from "../../lib/route-helpers";
+import { mapServiceError } from "../../lib/route-errors";
 import type { DatabaseClient } from "../../plugins/db";
 import { TaxCodeRepository } from "./repository";
 import { TaxCodeService } from "./service";
@@ -46,10 +48,6 @@ interface TaxCodePluginContext {
   error: (status: number, body: unknown) => never;
 }
 
-const taxCodeErrorStatusMap: Record<string, number> = {
-  EFFECTIVE_DATE_OVERLAP: 409,
-};
-
 /**
  * Tax Codes routes plugin
  */
@@ -73,18 +71,14 @@ export const taxCodeRoutes = new Elysia({
   .get(
     "/employee/:employeeId",
     async (ctx) => {
-      const { taxCodeService, params, tenantContext, error } = ctx as typeof ctx & TaxCodePluginContext;
+      const { taxCodeService, params, tenantContext, set, requestId } = ctx as typeof ctx & TaxCodePluginContext;
       const result = await taxCodeService.getTaxCodesByEmployee(
         tenantContext,
         params.employeeId
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(
-          result.error?.code || "INTERNAL_ERROR",
-          taxCodeErrorStatusMap
-        );
-        return error(status, { error: result.error });
+        return mapServiceError(result.error!, set, requestId);
       }
 
       return { items: result.data };
@@ -108,23 +102,60 @@ export const taxCodeRoutes = new Elysia({
   )
 
   // ===========================================================================
+  // GET /current/:employeeId - Get the current tax code for an employee
+  // ===========================================================================
+  .get(
+    "/current/:employeeId",
+    async (ctx) => {
+      const { taxCodeService, params, query, tenantContext, set, requestId } = ctx as typeof ctx & TaxCodePluginContext;
+      const asOfDate = query.as_of_date;
+      const result = await taxCodeService.getCurrentTaxCode(
+        tenantContext,
+        params.employeeId,
+        asOfDate
+      );
+
+      if (!result.success) {
+        return mapServiceError(result.error!, set, requestId);
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("payroll:tax_codes", "read")],
+      params: EmployeeIdParamsSchema,
+      query: t.Object({
+        as_of_date: t.Optional(t.String({ format: "date", pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
+      }),
+      response: {
+        200: TaxCodeResponseSchema,
+        404: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Payroll"],
+        summary: "Get current tax code for employee",
+        description:
+          "Get the currently effective tax code for an employee. Optionally accepts an as_of_date query parameter to check as of a specific date (defaults to today). Used by payroll calculation.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // ===========================================================================
   // GET /:id - Get a single tax code
   // ===========================================================================
   .get(
     "/:id",
     async (ctx) => {
-      const { taxCodeService, params, tenantContext, error } = ctx as typeof ctx & TaxCodePluginContext;
+      const { taxCodeService, params, tenantContext, set, requestId } = ctx as typeof ctx & TaxCodePluginContext;
       const result = await taxCodeService.getTaxCodeById(
         tenantContext,
         params.id
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(
-          result.error?.code || "INTERNAL_ERROR",
-          taxCodeErrorStatusMap
-        );
-        return error(status, { error: result.error });
+        return mapServiceError(result.error!, set, requestId);
       }
 
       return result.data;
@@ -159,7 +190,6 @@ export const taxCodeRoutes = new Elysia({
         tenantContext,
         audit,
         requestId,
-        error,
         set,
       } = ctx as typeof ctx & TaxCodePluginContext;
       const idempotencyKey = headers["idempotency-key"];
@@ -171,11 +201,7 @@ export const taxCodeRoutes = new Elysia({
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(
-          result.error?.code || "INTERNAL_ERROR",
-          taxCodeErrorStatusMap
-        );
-        return error(status, { error: result.error });
+        return mapServiceError(result.error!, set, requestId);
       }
 
       if (audit) {
@@ -205,7 +231,7 @@ export const taxCodeRoutes = new Elysia({
         tags: ["Payroll"],
         summary: "Create employee tax code",
         description:
-          "Create a new HMRC tax code record for an employee with effective dating. Prevents overlapping records.",
+          "Create a new HMRC tax code record for an employee with effective dating. Validates UK tax code format and prevents overlapping records.",
         security: [{ bearerAuth: [] }],
       },
     }
@@ -225,7 +251,7 @@ export const taxCodeRoutes = new Elysia({
         tenantContext,
         audit,
         requestId,
-        error,
+        set,
       } = ctx as typeof ctx & TaxCodePluginContext;
       const idempotencyKey = headers["idempotency-key"];
 
@@ -237,11 +263,7 @@ export const taxCodeRoutes = new Elysia({
       );
 
       if (!result.success) {
-        const status = mapErrorToStatus(
-          result.error?.code || "INTERNAL_ERROR",
-          taxCodeErrorStatusMap
-        );
-        return error(status, { error: result.error });
+        return mapServiceError(result.error!, set, requestId);
       }
 
       if (audit) {
@@ -271,7 +293,8 @@ export const taxCodeRoutes = new Elysia({
       detail: {
         tags: ["Payroll"],
         summary: "Update employee tax code",
-        description: "Update an existing tax code record. Validates cumulative/week1 consistency.",
+        description:
+          "Update an existing tax code record. Validates UK tax code format, cumulative/week1 consistency, and checks for effective date overlaps.",
         security: [{ bearerAuth: [] }],
       },
     }

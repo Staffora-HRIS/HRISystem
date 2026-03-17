@@ -164,6 +164,34 @@ export const CreatePayAssignmentSchema = t.Object({
 export type CreatePayAssignment = Static<typeof CreatePayAssignmentSchema>;
 
 /**
+ * Update employee pay assignment request (partial update).
+ *
+ * Common use cases:
+ * - End an assignment by setting effective_to
+ * - Change the pay schedule (reassign)
+ * - Adjust effective dates
+ */
+export const UpdatePayAssignmentSchema = t.Partial(
+  t.Object({
+    pay_schedule_id: UuidSchema,
+    effective_from: DateSchema,
+    effective_to: t.Union([DateSchema, t.Null()]),
+  })
+);
+
+export type UpdatePayAssignment = Static<typeof UpdatePayAssignmentSchema>;
+
+/**
+ * Assignment ID + Employee ID compound params for nested routes
+ */
+export const AssignmentIdParamsSchema = t.Object({
+  employeeId: UuidSchema,
+  assignmentId: UuidSchema,
+});
+
+export type AssignmentIdParams = Static<typeof AssignmentIdParamsSchema>;
+
+/**
  * Employee pay assignment response
  */
 export const PayAssignmentResponseSchema = t.Object({
@@ -174,6 +202,7 @@ export const PayAssignmentResponseSchema = t.Object({
   effective_from: t.String(),
   effective_to: t.Union([t.String(), t.Null()]),
   created_at: t.String(),
+  updated_at: t.String(),
   // Joined fields (optional, present in list queries)
   schedule_name: t.Optional(t.String()),
   schedule_frequency: t.Optional(PayFrequencySchema),
@@ -199,6 +228,20 @@ export const CreateNiCategorySchema = t.Object({
 export type CreateNiCategory = Static<typeof CreateNiCategorySchema>;
 
 /**
+ * Update NI category request (partial update)
+ */
+export const UpdateNiCategorySchema = t.Partial(
+  t.Object({
+    category_letter: NiCategoryLetterSchema,
+    effective_from: DateSchema,
+    effective_to: t.Union([DateSchema, t.Null()]),
+    notes: t.Union([t.String({ maxLength: 2000 }), t.Null()]),
+  })
+);
+
+export type UpdateNiCategory = Static<typeof UpdateNiCategorySchema>;
+
+/**
  * NI category response
  */
 export const NiCategoryResponseSchema = t.Object({
@@ -210,6 +253,7 @@ export const NiCategoryResponseSchema = t.Object({
   effective_to: t.Union([t.String(), t.Null()]),
   notes: t.Union([t.String(), t.Null()]),
   created_at: t.String(),
+  updated_at: t.String(),
 });
 
 export type NiCategoryResponse = Static<typeof NiCategoryResponseSchema>;

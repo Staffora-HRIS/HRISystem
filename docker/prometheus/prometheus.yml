@@ -1,0 +1,88 @@
+# =============================================================================
+# Staffora Platform — Prometheus Configuration
+# =============================================================================
+# Scrape configuration for the Staffora HRIS monitoring stack.
+#
+# Targets:
+#   - Staffora API (/metrics)        — application metrics
+#   - PostgreSQL Exporter (:9187)    — database metrics
+#   - Redis Exporter (:9121)         — cache/queue metrics
+#   - Prometheus self (:9090/metrics) — Prometheus internal metrics
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    cluster: "staffora"
+    environment: "development"
+
+# ---------------------------------------------------------------------------
+# Alert Rules
+# ---------------------------------------------------------------------------
+rule_files:
+  - "alert-rules.yml"
+
+# ---------------------------------------------------------------------------
+# Scrape Targets
+# ---------------------------------------------------------------------------
+scrape_configs:
+  # -------------------------------------------------------------------------
+  # Staffora API — Prometheus-compatible /metrics endpoint
+  # -------------------------------------------------------------------------
+  # Uses Docker DNS service discovery to scrape all API instances when
+  # horizontally scaled (e.g., --scale api=3). Docker's internal DNS
+  # resolver (127.0.0.11) returns all container IPs for the "api" service
+  # name, and dns_sd_configs re-resolves on each scrape interval.
+  # -------------------------------------------------------------------------
+  - job_name: "staffora-api"
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+    dns_sd_configs:
+      - names:
+          - "api"
+        type: "A"
+        port: 3000
+        refresh_interval: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: service
+        replacement: "staffora-api"
+      - target_label: component
+        replacement: "backend"
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL Exporter — pg_stat_* and replication metrics
+  # -------------------------------------------------------------------------
+  - job_name: "postgres"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "staffora-postgres"
+          component: "database"
+
+  # -------------------------------------------------------------------------
+  # Redis Exporter — memory, connections, commands, keyspace
+  # -------------------------------------------------------------------------
+  - job_name: "redis"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "staffora-redis"
+          component: "cache"
+
+  # -------------------------------------------------------------------------
+  # Prometheus self-monitoring
+  # -------------------------------------------------------------------------
+  - job_name: "prometheus"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+          component: "monitoring"

@@ -3,8 +3,10 @@
  *
  * Provides the API layer for employee HMRC tax code management:
  * - Effective-dated tax code records per employee
- * - Source tracking (HMRC notification vs manual entry)
+ * - Source tracking (HMRC notification, P45, P46, Starter Declaration, manual entry)
  * - Cumulative vs week1/month1 basis
+ * - UK HMRC tax code format validation
+ * - Current tax code lookup for payroll processing
  *
  * Usage:
  * ```typescript
@@ -37,6 +39,8 @@ export {
 // Export schemas
 export {
   TaxCodeSourceSchema,
+  TaxCodeStringSchema,
+  UK_TAX_CODE_REGEX,
   UuidSchema,
   DateSchema,
   PaginationQuerySchema,

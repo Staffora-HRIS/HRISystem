@@ -96,10 +96,19 @@ export const twoFactor = {
   },
 
   /**
-   * Verify 2FA code during login
+   * Verify 2FA TOTP code during login
    */
   verifyTotp: async (code: string) => {
     return authClient.twoFactor.verifyTotp({ code });
+  },
+
+  /**
+   * Verify a backup/recovery code during login.
+   * Uses Better Auth's built-in backup code verification endpoint
+   * (POST /two-factor/verify-backup-code).
+   */
+  verifyBackupCode: async (code: string) => {
+    return authClient.twoFactor.verifyBackupCode({ code });
   },
 
   /**

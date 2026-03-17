@@ -114,6 +114,18 @@ export const ErrorMessages: Record<ErrorCode, string> = {
     "This case has been closed and cannot be modified.",
   [ErrorCodes.RESTRICTED_ACCESS]:
     "You do not have access to view this case due to confidentiality restrictions.",
+
+  // Payroll Error Messages
+  [ErrorCodes.INVALID_TAX_CODE_FORMAT]:
+    "The tax code format is invalid. UK HMRC tax codes must follow patterns like 1257L, BR, D0, D1, NT, S1257L, C1257L, K100.",
+  [ErrorCodes.NO_CURRENT_TAX_CODE]:
+    "No current tax code was found for this employee. Please assign a tax code before processing payroll.",
+  [ErrorCodes.INVALID_PAYROLL_TRANSITION]:
+    "This payroll run status change is not allowed from the current status.",
+
+  // Documents Error Messages
+  [ErrorCodes.VIRUS_DETECTED]:
+    "The uploaded file has been flagged as potentially malicious and was rejected. Please scan your file with antivirus software and try again.",
 } as const;
 
 /**

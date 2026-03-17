@@ -11,6 +11,7 @@ import {
   NotificationsRepository,
   type NotificationRow,
   type PushTokenRow,
+  type PushSubscriptionRow,
   type PaginatedResult,
 } from "./repository";
 import type { ServiceResult, TenantContext } from "../../types/service-result";
@@ -21,6 +22,8 @@ import type {
   NotificationResponse,
   PushTokenResponse,
   RegisterPushToken,
+  WebPushSubscribe,
+  WebPushSubscriptionResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -59,6 +62,17 @@ function mapPushTokenToResponse(row: PushTokenRow): PushTokenResponse {
     expires_at: row.expiresAt?.toISOString() ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+  };
+}
+
+function mapPushSubscriptionToResponse(row: PushSubscriptionRow): WebPushSubscriptionResponse {
+  return {
+    id: row.id,
+    tenant_id: row.tenantId,
+    user_id: row.userId,
+    endpoint: row.endpoint,
+    device_type: row.deviceType,
+    created_at: row.createdAt.toISOString(),
   };
 }
 
@@ -398,5 +412,143 @@ export class NotificationsService {
     }
 
     return { success: true, data: { deleted: true } };
+  }
+
+  // ===========================================================================
+  // Web Push Subscription Operations
+  // ===========================================================================
+
+  /**
+   * Subscribe to Web Push notifications (VAPID).
+   * Creates or replaces the subscription for the given endpoint.
+   */
+  async subscribePush(
+    ctx: TenantContext,
+    userId: string,
+    data: WebPushSubscribe
+  ): Promise<ServiceResult<WebPushSubscriptionResponse>> {
+    const subscription = await this.db.withTransaction(ctx, async (tx) => {
+      const result = await this.repository.createPushSubscription(ctx, userId, data, tx);
+
+      // Write outbox event in same transaction
+      await tx`
+        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+        VALUES (
+          ${crypto.randomUUID()},
+          ${ctx.tenantId},
+          'push_subscription',
+          ${result.id},
+          'push_subscription.created',
+          ${JSON.stringify({
+            subscriptionId: result.id,
+            userId,
+            deviceType: data.device_type ?? "web",
+            actor: ctx.userId,
+          })}::jsonb,
+          now()
+        )
+      `;
+
+      return result;
+    });
+
+    return { success: true, data: mapPushSubscriptionToResponse(subscription) };
+  }
+
+  /**
+   * Unsubscribe from Web Push notifications by endpoint.
+   */
+  async unsubscribePush(
+    ctx: TenantContext,
+    userId: string,
+    endpoint: string
+  ): Promise<ServiceResult<{ deleted: boolean }>> {
+    const deleted = await this.db.withTransaction(ctx, async (tx) => {
+      const success = await this.repository.deletePushSubscription(ctx, userId, endpoint, tx);
+
+      if (success) {
+        // Write outbox event in same transaction
+        await tx`
+          INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+          VALUES (
+            ${crypto.randomUUID()},
+            ${ctx.tenantId},
+            'push_subscription',
+            ${userId},
+            'push_subscription.deleted',
+            ${JSON.stringify({ endpoint, userId, actor: ctx.userId })}::jsonb,
+            now()
+          )
+        `;
+      }
+
+      return success;
+    });
+
+    if (!deleted) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Push subscription not found for the given endpoint",
+        },
+      };
+    }
+
+    return { success: true, data: { deleted: true } };
+  }
+
+  /**
+   * Unsubscribe from Web Push notifications by subscription ID.
+   */
+  async unsubscribePushById(
+    ctx: TenantContext,
+    userId: string,
+    subscriptionId: string
+  ): Promise<ServiceResult<{ deleted: boolean }>> {
+    const deleted = await this.db.withTransaction(ctx, async (tx) => {
+      const success = await this.repository.deletePushSubscriptionById(ctx, userId, subscriptionId, tx);
+
+      if (success) {
+        // Write outbox event in same transaction
+        await tx`
+          INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+          VALUES (
+            ${crypto.randomUUID()},
+            ${ctx.tenantId},
+            'push_subscription',
+            ${subscriptionId},
+            'push_subscription.deleted',
+            ${JSON.stringify({ subscriptionId, userId, actor: ctx.userId })}::jsonb,
+            now()
+          )
+        `;
+      }
+
+      return success;
+    });
+
+    if (!deleted) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Push subscription not found",
+        },
+      };
+    }
+
+    return { success: true, data: { deleted: true } };
+  }
+
+  /**
+   * List Web Push subscriptions for the current user
+   */
+  async listPushSubscriptions(
+    ctx: TenantContext,
+    userId: string
+  ): Promise<WebPushSubscriptionResponse[]> {
+    const subscriptions = await this.repository.listPushSubscriptions(ctx, userId);
+    return subscriptions.map(mapPushSubscriptionToResponse);
   }
 }

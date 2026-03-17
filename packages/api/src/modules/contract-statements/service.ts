@@ -179,11 +179,11 @@ export class ContractStatementsService {
       // Build employee address string
       const employeeAddress = address
         ? [
-            address.streetLine1,
-            address.streetLine2,
+            address.addressLine1,
+            address.addressLine2,
             address.city,
-            address.stateProvince,
-            address.postalCode,
+            address.county,
+            address.postcode,
             address.country,
           ]
             .filter(Boolean)

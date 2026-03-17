@@ -1,6 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Play,
@@ -25,32 +24,41 @@ import {
   Input,
   Select,
   Badge,
-  DataTable,
   Spinner,
   toast,
 } from "~/components/ui";
-import { api, ApiError } from "~/lib/api-client";
-import { queryKeys } from "~/lib/query-client";
+import { ApiError } from "~/lib/api-client";
 import {
+  useReport,
   useDuplicateReport,
   useAddFavourite,
   useRemoveFavourite,
   useExportReport,
+  useExecuteReport,
+  useSetSchedule,
+  useRemoveSchedule,
 } from "../hooks";
+import { ScheduleReportDialog } from "../components/ScheduleReportDialog";
+import type {
+  ReportDefinition as SharedReportDefinition,
+  ReportExecutionResult,
+} from "../types";
 
-interface ReportDefinition {
-  id: string;
-  name: string;
-  description: string | null;
-  reportType: string;
-  status: string;
-  category: string | null;
+/** Local extension of the shared ReportDefinition that allows legacy config shapes. */
+interface ReportDefinition extends Omit<SharedReportDefinition, "config"> {
   config: {
     parameters?: ReportParameter[];
     columns?: ReportColumn[];
+    filters?: ReportFilterEntry[];
+    [key: string]: unknown;
   };
-  createdAt: string;
-  updatedAt: string;
+}
+
+interface ReportFilterEntry {
+  field_key: string;
+  is_parameter?: boolean;
+  parameter_label?: string | null;
+  [key: string]: unknown;
 }
 
 interface ReportParameter {
@@ -62,17 +70,13 @@ interface ReportParameter {
   defaultValue?: string;
 }
 
+/** Column shape used for local rendering -- may include alias or header from different sources. */
 interface ReportColumn {
-  id: string;
-  header: string;
-  field: string;
-}
-
-interface ReportExecutionResult {
-  columns: string[];
-  rows: (string | number)[][];
-  totalCount: number;
-  executionMs: number;
+  field_key?: string;
+  alias?: string;
+  header?: string;
+  id?: string;
+  field?: string;
 }
 
 export default function AdminReportPage() {
@@ -82,46 +86,44 @@ export default function AdminReportPage() {
 
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [isFavourited, setIsFavourited] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [hasResults, setHasResults] = useState(false);
-  const [reportData, setReportData] = useState<(string | number)[][]>([]);
-  const [reportColumns, setReportColumns] = useState<string[]>([]);
+  const [resultData, setResultData] = useState<ReportExecutionResult | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
 
-  // Fetch the report definition from the backend
+  // Fetch the report definition from the backend using the shared hook
   const {
-    data: report,
+    data: reportResponse,
     isLoading: isLoadingReport,
     isError: isReportError,
     error: reportFetchError,
     refetch: refetchReport,
-  } = useQuery({
-    queryKey: queryKeys.reports.report(reportId),
-    queryFn: () => api.get<ReportDefinition>(`/api/v1/reports/${reportId}`),
-    enabled: !!reportId,
-  });
+  } = useReport(reportId);
+
+  const report = reportResponse?.data as unknown as ReportDefinition | undefined;
 
   // Mutations
   const duplicateReport = useDuplicateReport();
   const addFavourite = useAddFavourite();
   const removeFavourite = useRemoveFavourite();
   const exportReport = useExportReport();
+  const executeReport = useExecuteReport(reportId);
+  const setSchedule = useSetSchedule(reportId);
+  const removeSchedule = useRemoveSchedule(reportId);
 
+  const isRunning = executeReport.isPending;
+
+  // Extract runtime parameters from filters that have is_parameter=true
   const reportParams = report?.config?.parameters ?? [];
-  const configColumns = report?.config?.columns?.map((c) => c.header) ?? [];
+  const parameterFilters = (report?.config?.filters ?? []).filter(
+    (f) => f.is_parameter
+  );
+  // Show the legacy parameters UI if defined, or the parameter filters
+  const hasParameters = reportParams.length > 0 || parameterFilters.length > 0;
 
-  // Build DataTable column definitions from whichever columns we have
-  const activeColumns = reportColumns.length > 0 ? reportColumns : configColumns;
-
-  const tableColumns = useMemo(() => {
-    return activeColumns.map((col, idx) => ({
-      id: col.toLowerCase().replace(/\s+/g, "_"),
-      header: col,
-      cell: ({ row }: { row: (string | number)[] }) => (
-        <span className={idx === 0 ? "font-medium" : ""}>{row[idx]}</span>
-      ),
-    }));
-  }, [activeColumns]);
+  // Use execution result columns when available
+  const resultColumns = resultData?.columns ?? [];
+  const resultRows = resultData?.rows ?? [];
 
   const handleParameterChange = (paramId: string, value: string) => {
     setParameters((prev) => ({ ...prev, [paramId]: value }));
@@ -129,43 +131,37 @@ export default function AdminReportPage() {
 
   const handleRunReport = async () => {
     if (!reportId) return;
-
-    setIsRunning(true);
     setReportError(null);
 
     try {
-      // Build query params from user-selected parameters
-      const queryParams: Record<string, string> = {};
+      // Build runtime parameters from user-selected values
+      const runtimeParams: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(parameters)) {
         if (value && value !== "all") {
-          queryParams[key] = value;
+          runtimeParams[key] = value;
         }
       }
 
-      const result = await api.get<ReportExecutionResult>(
-        `/api/v1/reports/${reportId}/execute`,
-        { params: queryParams }
-      );
+      const result = await executeReport.mutateAsync({
+        parameters: Object.keys(runtimeParams).length > 0 ? runtimeParams : undefined,
+      });
 
-      if (result.columns) {
-        setReportColumns(result.columns);
-      }
-      setReportData(result.rows ?? []);
-      setHasResults(true);
+      if (result) {
+        setResultData(result);
+        setHasResults(true);
 
-      if ((result.rows ?? []).length === 0) {
-        toast.info("Report completed with no results for the selected parameters.");
-      } else {
-        toast.success("Report generated successfully");
+        if ((result.rows ?? []).length === 0) {
+          toast.info("Report completed with no results for the selected parameters.");
+        } else {
+          toast.success("Report generated successfully");
+        }
       }
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Failed to generate report";
       setReportError(message);
       toast.error(message);
-      setReportData([]);
+      setResultData(null);
       setHasResults(false);
-    } finally {
-      setIsRunning(false);
     }
   };
 
@@ -179,20 +175,22 @@ export default function AdminReportPage() {
       toast.success(`Report exported as ${format.toUpperCase()}`);
     } catch {
       // Fallback to client-side CSV if server export fails
-      if (reportData.length === 0) {
+      if (resultRows.length === 0) {
         toast.info("No data to export. Run the report first.");
         return;
       }
-      const headerRow = activeColumns.join(",");
-      const dataRows = reportData.map((row) =>
-        row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")
+      const headerRow = resultColumns.map((c) => c.label).join(",");
+      const dataRows = resultRows.map((row) =>
+        resultColumns
+          .map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`)
+          .join(",")
       );
       const csv = [headerRow, ...dataRows].join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${reportId}-${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `${report?.name ?? reportId}-${new Date().toISOString().split("T")[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Exported as CSV (client-side fallback)");
@@ -327,15 +325,72 @@ export default function AdminReportPage() {
             <Star className={`h-4 w-4 mr-1 ${isFavourited ? "fill-yellow-400 text-yellow-500" : ""}`} />
             {isFavourited ? "Unfavourite" : "Favourite"}
           </Button>
-          <Button variant="outline" size="sm" disabled title="Coming soon">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowScheduleDialog(true)}
+          >
             <Calendar className="h-4 w-4 mr-1" />
-            Schedule
+            {report.isScheduled ? "Edit Schedule" : "Schedule"}
           </Button>
         </div>
       </div>
 
+      {/* Schedule Dialog */}
+      {report && (
+        <ScheduleReportDialog
+          open={showScheduleDialog}
+          onClose={() => setShowScheduleDialog(false)}
+          report={report as unknown as SharedReportDefinition}
+          onSave={async (data) => {
+            await setSchedule.mutateAsync(data);
+            await refetchReport();
+            toast.success(
+              report.isScheduled
+                ? "Report schedule updated"
+                : "Report schedule created"
+            );
+          }}
+          onRemove={
+            report.isScheduled
+              ? async () => {
+                  await removeSchedule.mutateAsync();
+                  await refetchReport();
+                  toast.success("Report schedule removed");
+                }
+              : undefined
+          }
+          loading={setSchedule.isPending || removeSchedule.isPending}
+        />
+      )}
+
+      {/* Schedule indicator */}
+      {report.isScheduled && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          <Calendar className="h-4 w-4" />
+          <span>
+            This report is scheduled to run{" "}
+            <strong>{report.scheduleFrequency ?? "periodically"}</strong>
+            {report.nextScheduledRun && (
+              <>
+                . Next run:{" "}
+                <strong>
+                  {new Date(report.nextScheduledRun).toLocaleString()}
+                </strong>
+              </>
+            )}
+          </span>
+          <button
+            className="ml-auto text-blue-600 underline hover:text-blue-800"
+            onClick={() => setShowScheduleDialog(true)}
+          >
+            Edit
+          </button>
+        </div>
+      )}
+
       {/* Parameters */}
-      {reportParams.length > 0 && (
+      {hasParameters && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -345,6 +400,7 @@ export default function AdminReportPage() {
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Legacy parameters */}
               {reportParams.map((param) => (
                 <div key={param.id}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -364,6 +420,20 @@ export default function AdminReportPage() {
                       onChange={(e) => handleParameterChange(param.id, e.target.value)}
                     />
                   )}
+                </div>
+              ))}
+              {/* Filter-based parameters from the report builder */}
+              {parameterFilters.map((filter) => (
+                <div key={filter.field_key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {filter.parameter_label ?? filter.field_key}
+                  </label>
+                  <Input
+                    type="text"
+                    value={parameters[filter.field_key] || ""}
+                    onChange={(e) => handleParameterChange(filter.field_key, e.target.value)}
+                    placeholder={`Enter ${filter.parameter_label ?? filter.field_key}...`}
+                  />
                 </div>
               ))}
             </div>
@@ -387,7 +457,7 @@ export default function AdminReportPage() {
       )}
 
       {/* No Parameters -- just a run button */}
-      {reportParams.length === 0 && (
+      {!hasParameters && (
         <div className="flex justify-end">
           <Button onClick={handleRunReport} disabled={isRunning}>
             {isRunning ? (
@@ -418,7 +488,7 @@ export default function AdminReportPage() {
       {/* Results */}
       {hasResults && !reportError && (
         <>
-          {reportData.length === 0 ? (
+          {resultRows.length === 0 ? (
             <Card>
               <CardBody className="text-center py-12">
                 <BarChart3 className="h-12 w-12 mx-auto text-gray-300 mb-4" />
@@ -431,15 +501,30 @@ export default function AdminReportPage() {
             </Card>
           ) : (
             <>
-              {/* Export Options */}
+              {/* Stats + Export Options */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-gray-500" />
-                  <span className="font-medium text-gray-700">
-                    {reportData.length} results found
+                <div className="flex items-center gap-3 text-sm text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <BarChart3 className="h-4 w-4" />
+                    {(resultData?.totalRows ?? resultRows.length).toLocaleString()} row{(resultData?.totalRows ?? resultRows.length) !== 1 ? "s" : ""}
                   </span>
+                  {resultData?.executionMs != null && (
+                    <span className="flex items-center gap-1 text-gray-400">
+                      <Clock className="h-3.5 w-3.5" />
+                      {resultData.executionMs}ms
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunReport}
+                    disabled={isRunning}
+                  >
+                    <Play className="h-3.5 w-3.5 mr-1" />
+                    Refresh
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -469,12 +554,54 @@ export default function AdminReportPage() {
 
               {/* Results Table */}
               <Card>
-                <CardBody className="p-0">
-                  <DataTable
-                    columns={tableColumns}
-                    data={reportData}
-                    totalCount={reportData.length}
-                  />
+                <CardBody className="p-0 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {resultColumns.map((col) => (
+                          <th
+                            key={col.key}
+                            className={`px-4 py-2.5 font-medium text-gray-500 uppercase tracking-wider text-xs whitespace-nowrap ${
+                              col.alignment === "right"
+                                ? "text-right"
+                                : col.alignment === "center"
+                                  ? "text-center"
+                                  : "text-left"
+                            }`}
+                          >
+                            {col.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {resultRows.slice(0, 200).map((row, rowIndex) => (
+                        <tr key={rowIndex} className="hover:bg-gray-50">
+                          {resultColumns.map((col, colIndex) => (
+                            <td
+                              key={col.key}
+                              className={`px-4 py-2 whitespace-nowrap text-gray-700 ${
+                                colIndex === 0 ? "font-medium" : ""
+                              } ${
+                                col.alignment === "right"
+                                  ? "text-right tabular-nums"
+                                  : col.alignment === "center"
+                                    ? "text-center"
+                                    : "text-left"
+                              }`}
+                            >
+                              {formatCellValue(row[col.key], col.dataType)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {resultRows.length > 200 && (
+                    <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500 text-center border-t">
+                      Showing first 200 of {(resultData?.totalRows ?? resultRows.length).toLocaleString()} rows. Export to see all data.
+                    </div>
+                  )}
                 </CardBody>
               </Card>
             </>
@@ -489,7 +616,7 @@ export default function AdminReportPage() {
             <BarChart3 className="h-12 w-12 mx-auto text-gray-300 mb-4" />
             <h3 className="font-medium text-gray-900 mb-2">Ready to Run</h3>
             <p className="text-gray-500">
-              {reportParams.length > 0
+              {hasParameters
                 ? 'Configure your parameters above and click "Run Report" to generate results.'
                 : 'Click "Run Report" to generate results.'}
             </p>
@@ -498,4 +625,45 @@ export default function AdminReportPage() {
       )}
     </div>
   );
+}
+
+// =============================================================================
+// Helper: Format cell values for display
+// =============================================================================
+
+function formatCellValue(value: unknown, dataType: string): string {
+  if (value === null || value === undefined) return "\u2014";
+  if (dataType === "date" && typeof value === "string") {
+    try {
+      return new Date(value).toLocaleDateString("en-GB");
+    } catch {
+      return String(value);
+    }
+  }
+  if (dataType === "datetime" && typeof value === "string") {
+    try {
+      return new Date(value).toLocaleString("en-GB");
+    } catch {
+      return String(value);
+    }
+  }
+  if (dataType === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (dataType === "currency" && typeof value === "number") {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+    }).format(value);
+  }
+  if (dataType === "percentage" && typeof value === "number") {
+    return `${value.toFixed(1)}%`;
+  }
+  if (
+    (dataType === "decimal" || dataType === "integer") &&
+    typeof value === "number"
+  ) {
+    return value.toLocaleString("en-GB");
+  }
+  return String(value);
 }

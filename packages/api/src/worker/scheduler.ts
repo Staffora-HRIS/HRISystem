@@ -3,17 +3,19 @@
  *
  * Runs periodic tasks like leave balance accruals, timesheet reminders,
  * report generation, and data cleanup.
+ *
+ * Connection pool strategy:
+ * - When launched via worker/index.ts, receives the shared postgres.js
+ *   singleton pool and Redis instance (no extra connections created).
+ * - When run as a standalone script (bottom of this file), creates its
+ *   own postgres.js pool with max=5 connections.
+ * See packages/api/src/plugins/db.ts for the full connection budget.
  */
 
 import postgres from "postgres";
 import Redis from "ioredis";
 import { getDatabaseUrl, getRedisUrl } from "../config/database";
 import { StreamKeys } from "../jobs/base";
-
-// FIX: Using centralized configuration to prevent password mismatch issues
-// All database defaults are now managed in src/config/database.ts
-const DB_URL = getDatabaseUrl();
-const REDIS_URL = getRedisUrl();
 
 // Stream keys for notifications
 const NOTIFICATIONS_STREAM = "staffora:notifications";
@@ -29,13 +31,24 @@ interface ScheduledJob {
 class Scheduler {
   private sql: postgres.Sql;
   private redis: Redis;
+  private ownsConnections: boolean;
   private running = false;
   private jobs: ScheduledJob[] = [];
   private checkInterval = 60000; // Check every minute
 
-  constructor() {
-    this.sql = postgres(DB_URL, { transform: postgres.toCamel });
-    this.redis = new Redis(REDIS_URL);
+  /**
+   * @param injectedSql  Reuse an existing postgres.js pool (e.g. the shared singleton from getDbClient())
+   * @param injectedRedis Reuse an existing Redis instance
+   */
+  constructor(injectedSql?: postgres.Sql, injectedRedis?: Redis) {
+    // Reuse injected connections if provided; otherwise create our own
+    this.ownsConnections = !injectedSql || !injectedRedis;
+    this.sql = injectedSql ?? postgres(getDatabaseUrl(), {
+      max: 5,
+      transform: postgres.toCamel,
+      connection: { search_path: "app,public" },
+    });
+    this.redis = injectedRedis ?? new Redis(getRedisUrl());
     this.registerJobs();
   }
 
@@ -90,6 +103,14 @@ class Scheduler {
       handler: this.checkWtrCompliance.bind(this),
     });
 
+    this.jobs.push({
+      name: "mandatory-training-reminders",
+      cronExpression: "0 9 * * 1", // 9 AM every Monday
+      lastRun: null,
+      nextRun: this.getNextRunTime("0 9 * * 1"),
+      handler: this.sendMandatoryTrainingReminders.bind(this),
+    });
+
     // Monthly jobs
     this.jobs.push({
       name: "birthday-notifications",
@@ -118,10 +139,18 @@ class Scheduler {
 
     this.jobs.push({
       name: "workflow-auto-escalation",
-      cronExpression: "*/15 * * * *", // Every 15 minutes
+      cronExpression: "*/10 * * * *", // Every 10 minutes
       lastRun: null,
-      nextRun: this.getNextRunTime("*/15 * * * *"),
+      nextRun: this.getNextRunTime("*/10 * * * *"),
       handler: this.escalateOverdueWorkflowSteps.bind(this),
+    });
+
+    this.jobs.push({
+      name: "case-sla-breach-check",
+      cronExpression: "*/10 * * * *", // Every 10 minutes
+      lastRun: null,
+      nextRun: this.getNextRunTime("*/10 * * * *"),
+      handler: this.checkCaseSlaBreaches.bind(this),
     });
 
     this.jobs.push({
@@ -130,6 +159,24 @@ class Scheduler {
       lastRun: null,
       nextRun: this.getNextRunTime("*/15 * * * *"),
       handler: this.runScheduledReports.bind(this),
+    });
+
+    // Daily usage analytics aggregation
+    this.jobs.push({
+      name: "tenant-usage-stats",
+      cronExpression: "30 2 * * *", // 2:30 AM daily (after session cleanup)
+      lastRun: null,
+      nextRun: this.getNextRunTime("30 2 * * *"),
+      handler: this.calculateTenantUsageStats.bind(this),
+    });
+
+    // Weekly data archival — archive old completed records
+    this.jobs.push({
+      name: "data-archival",
+      cronExpression: "0 4 * * 0", // 4 AM every Sunday
+      lastRun: null,
+      nextRun: this.getNextRunTime("0 4 * * 0"),
+      handler: this.runDataArchival.bind(this),
     });
   }
 
@@ -185,8 +232,12 @@ class Scheduler {
   async stop() {
     console.log("[Scheduler] Stopping...");
     this.running = false;
-    await this.redis.quit();
-    await this.sql.end();
+    // Only close connections we created ourselves; injected pools are
+    // owned by the caller (e.g. worker/index.ts manages their lifecycle).
+    if (this.ownsConnections) {
+      await this.redis.quit();
+      await this.sql.end();
+    }
   }
 
   // Simple cron parser — supports fixed values, wildcards (*), and step
@@ -687,6 +738,191 @@ class Scheduler {
     }
   }
 
+  /**
+   * Send reminders for overdue mandatory training assignments.
+   * Finds employees who have overdue mandatory courses and sends
+   * both in-app and email notifications. Also notifies HR admins
+   * with a summary of overdue training across the organisation.
+   */
+  private async sendMandatoryTrainingReminders(): Promise<void> {
+    console.log("[Job] Checking for overdue mandatory training...");
+
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // Find all overdue mandatory assignments
+      const overdue = await this.sql`
+        SELECT
+          a.id AS assignment_id,
+          a.tenant_id,
+          a.employee_id,
+          a.course_id,
+          a.due_date,
+          (CURRENT_DATE - a.due_date)::integer AS days_overdue,
+          c.name AS course_name,
+          e.user_id,
+          ep.first_name,
+          ep.last_name,
+          u.email
+        FROM app.assignments a
+        JOIN app.courses c ON c.id = a.course_id AND c.tenant_id = a.tenant_id
+        JOIN app.employees e ON e.id = a.employee_id AND e.tenant_id = a.tenant_id
+        LEFT JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.tenant_id = a.tenant_id
+        LEFT JOIN app.users u ON u.id = e.user_id
+        WHERE c.is_mandatory = true
+          AND a.assignment_type = 'required'
+          AND a.due_date < CURRENT_DATE
+          AND a.status NOT IN ('completed', 'expired')
+          AND e.status = 'active'
+        ORDER BY a.due_date ASC
+        LIMIT 1000
+      `;
+
+      if (overdue.length === 0) {
+        console.log("[Job] Mandatory training reminders complete — no overdue assignments");
+        return;
+      }
+
+      console.log(`[Job] Found ${overdue.length} overdue mandatory training assignment(s)`);
+
+      const payloads: Array<Record<string, unknown>> = [];
+
+      for (const row of overdue) {
+        const userId = row["userId"];
+        const email = row["email"];
+        const firstName = row["firstName"] || "Team Member";
+        const tenantId = row["tenantId"];
+        const courseName = row["courseName"] || "Mandatory Course";
+        const daysOverdue = row["daysOverdue"];
+
+        // In-app notification to the employee
+        if (userId) {
+          payloads.push({
+            id: crypto.randomUUID(),
+            type: "notification.in_app",
+            tenantId,
+            data: {
+              userId,
+              title: "Overdue Mandatory Training",
+              message: `Your mandatory training "${courseName}" is ${daysOverdue} day(s) overdue. Please complete it as soon as possible.`,
+              type: "mandatory_training_overdue",
+              actionUrl: "/employee/learning",
+              actionText: "Go to Learning",
+            },
+          });
+        }
+
+        // Email notification
+        if (email) {
+          payloads.push({
+            id: crypto.randomUUID(),
+            type: "notification.email",
+            tenantId,
+            data: {
+              to: email,
+              subject: `Overdue Mandatory Training - ${courseName}`,
+              template: "notification",
+              templateData: {
+                title: "Overdue Mandatory Training",
+                message: `Hi ${firstName}, your mandatory training "${courseName}" is ${daysOverdue} day(s) overdue. Please complete it at your earliest opportunity to remain compliant.`,
+                actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/employee/learning`,
+                actionText: "Complete Training",
+              },
+            },
+          });
+        }
+      }
+
+      await this.batchXAdd(NOTIFICATIONS_STREAM, payloads);
+
+      // Also build per-tenant summaries for HR admins
+      type OverdueRow = (typeof overdue)[number];
+      const byTenant = new Map<string, OverdueRow[]>();
+      for (const row of overdue) {
+        const tid = row["tenantId"] as string;
+        if (!byTenant.has(tid)) byTenant.set(tid, []);
+        byTenant.get(tid)!.push(row);
+      }
+
+      // Load HR admins across all affected tenants in one query
+      const tenantIds = [...byTenant.keys()];
+      const hrAdmins = await this.sql`
+        SELECT DISTINCT u.id AS user_id, u.email, ra.tenant_id
+        FROM app.users u
+        JOIN app.role_assignments ra ON ra.user_id = u.id
+        JOIN app.roles r ON r.id = ra.role_id
+        WHERE r.name IN ('HR Admin', 'HR Manager', 'System Admin')
+          AND u.status = 'active'
+          AND ra.tenant_id = ANY(${tenantIds}::uuid[])
+      `;
+
+      type AdminRow = (typeof hrAdmins)[number];
+      const adminsByTenant = new Map<string, AdminRow[]>();
+      for (const admin of hrAdmins) {
+        const tid = admin["tenantId"] as string;
+        if (!adminsByTenant.has(tid)) adminsByTenant.set(tid, []);
+        adminsByTenant.get(tid)!.push(admin);
+      }
+
+      const adminPayloads: Array<Record<string, unknown>> = [];
+
+      for (const [tenantId, tenantOverdue] of byTenant) {
+        const admins = adminsByTenant.get(tenantId) || [];
+        if (admins.length === 0) continue;
+
+        const summaryMessage = `There are ${tenantOverdue.length} overdue mandatory training assignment(s) across your organisation. Please review the compliance report.`;
+
+        for (const admin of admins) {
+          const adminUserId = admin["userId"];
+          const adminEmail = admin["email"];
+
+          if (adminUserId) {
+            adminPayloads.push({
+              id: crypto.randomUUID(),
+              type: "notification.in_app",
+              tenantId,
+              data: {
+                userId: adminUserId,
+                title: "Mandatory Training Compliance Alert",
+                message: summaryMessage,
+                type: "mandatory_training_compliance_alert",
+                actionUrl: "/admin/lms/compliance-report",
+                actionText: "View Report",
+                data: { overdueCount: tenantOverdue.length },
+              },
+            });
+          }
+
+          if (adminEmail) {
+            adminPayloads.push({
+              id: crypto.randomUUID(),
+              type: "notification.email",
+              tenantId,
+              data: {
+                to: adminEmail,
+                subject: `Mandatory Training Compliance Alert - ${tenantOverdue.length} Overdue`,
+                template: "notification",
+                templateData: {
+                  title: "Mandatory Training Compliance Alert",
+                  message: summaryMessage,
+                  actionUrl: `${process.env["APP_URL"] || "https://app.staffora.co.uk"}/admin/lms/compliance-report`,
+                  actionText: "View Compliance Report",
+                },
+              },
+            });
+          }
+        }
+      }
+
+      await this.batchXAdd(NOTIFICATIONS_STREAM, adminPayloads);
+
+      console.log(
+        `[Job] Mandatory training reminders complete — notified ${overdue.length} employee(s) and HR admins across ${byTenant.size} tenant(s)`
+      );
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
+    }
+  }
+
   private async generateBirthdayNotifications() {
     console.log("[Job] Generating birthday notifications...");
 
@@ -892,187 +1128,788 @@ class Scheduler {
   }
 
   /**
-   * Escalate overdue workflow steps based on their escalation config.
-   * Finds pending steps that have exceeded their escalateAfterHours threshold,
-   * reassigns them to the escalation target, and sends notifications.
+   * Auto-escalate overdue workflow tasks based on the workflow_slas table.
+   *
+   * Phase 1 — Detection:
+   *   Calls the DB function `app.check_workflow_task_slas()` which scans all
+   *   active tasks with SLA deadlines, creating 'warning' or 'breached'
+   *   rows in `workflow_sla_events` (deduplicated by task+sla+type).
+   *
+   * Phase 2 — Processing:
+   *   Picks up unprocessed SLA events and executes the configured
+   *   escalation action: notify, reassign, auto_approve, or auto_reject.
+   *   Each processed event is logged to `sla_escalation_log` and an outbox
+   *   event is written atomically.
    */
   private async escalateOverdueWorkflowSteps(): Promise<void> {
-    console.log("[Job] Starting workflow auto-escalation check...");
+    console.log("[Job] Starting workflow SLA escalation check...");
 
-    // Find pending workflow steps with escalation config that are overdue
-    const overdueSteps = await this.sql`
-      SELECT
-        ws.id AS step_id,
-        ws.instance_id,
-        ws.assignee_id,
-        ws.step_config,
-        ws.created_at,
-        ws.tenant_id,
-        wi.workflow_definition_id,
-        wi.entity_type,
-        wi.entity_id
-      FROM app.workflow_steps ws
-      JOIN app.workflow_instances wi ON wi.id = ws.instance_id
-      WHERE ws.status = 'pending'
-        AND ws.step_config::jsonb -> 'escalationConfig' IS NOT NULL
-        AND ws.created_at + (
-          (ws.step_config::jsonb -> 'escalationConfig' ->> 'escalateAfterHours')::int * interval '1 hour'
-        ) < now()
-        AND NOT EXISTS (
-          SELECT 1 FROM app.domain_outbox do
-          WHERE do.aggregate_id = ws.id::text
-            AND do.event_type = 'workflow.step.escalated'
-        )
-      LIMIT 50
-    `;
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // Phase 1 — detect breaches and create SLA events
+      const [checkResult] = await this.sql`SELECT * FROM app.check_workflow_task_slas()`;
+      const eventsCreated = checkResult?.eventsCreated ?? 0;
+      const warningsCreated = checkResult?.warningsCreated ?? 0;
+      const breachesCreated = checkResult?.breachesCreated ?? 0;
 
-    if (overdueSteps.length === 0) {
-      console.log("[Job] Workflow auto-escalation complete — no overdue steps");
-      return;
+      if (eventsCreated > 0) {
+        console.log(
+          `[Job] SLA check created ${eventsCreated} event(s): ${warningsCreated} warning(s), ${breachesCreated} breach(es)`
+        );
+      }
+
+      // Phase 2 — process unprocessed SLA events
+      const unprocessed = await this.sql`SELECT * FROM app.get_unprocessed_sla_events(50)`;
+
+      if (unprocessed.length === 0) {
+        console.log("[Job] Workflow SLA escalation complete — no unprocessed events");
+        return;
+      }
+
+      console.log(`[Job] Processing ${unprocessed.length} unprocessed SLA event(s)`);
+
+      const notificationPayloads: Array<Record<string, unknown>> = [];
+      let processedCount = 0;
+
+      for (const evt of unprocessed) {
+        try {
+          const action = evt.escalationAction as string;
+          const taskId = evt.taskId as string;
+          const tenantId = evt.tenantId as string;
+          const eventType = evt.eventType as string;
+          const slaId = evt.slaId as string;
+          const eventId = evt.id as string;
+          const escalationTargetUserId = evt.escalationTargetUserId as string | null;
+          const escalationTargetRoleId = evt.escalationTargetRoleId as string | null;
+
+          // Get current task details for context
+          const [task] = await this.sql`
+            SELECT wt.id, wt.assigned_to, wt.step_name, wt.instance_id,
+                   wt.sla_deadline, wt.tenant_id,
+                   wi.definition_id
+            FROM app.workflow_tasks wt
+            JOIN app.workflow_instances wi ON wi.id = wt.instance_id
+            WHERE wt.id = ${taskId}::uuid
+          `;
+
+          if (!task) {
+            // Task no longer exists — mark event as processed
+            await this.sql`SELECT app.mark_sla_event_processed(${eventId}::uuid, '{"success": false, "reason": "task_not_found"}'::jsonb)`;
+            continue;
+          }
+
+          // Skip tasks that have already been completed/cancelled since the event was created
+          const taskStatus = task.status as string;
+          if (["completed", "cancelled", "skipped"].includes(taskStatus)) {
+            await this.sql`SELECT app.mark_sla_event_processed(${eventId}::uuid, '{"success": true, "reason": "task_already_resolved"}'::jsonb)`;
+            continue;
+          }
+
+          const previousAssignee = task.assignedTo as string | null;
+          let newAssignee: string | null = null;
+          let actionDescription: string;
+
+          // Resolve the escalation target — prefer explicit user, then resolve
+          // from role members, then fall back to manager chain
+          const resolvedTarget = await this.resolveEscalationTarget(
+            escalationTargetUserId,
+            escalationTargetRoleId,
+            previousAssignee,
+            tenantId
+          );
+
+          if (eventType === "warning") {
+            // Warnings always just send a notification — no reassignment
+            actionDescription = "SLA warning notification sent";
+
+            const targetUserId = resolvedTarget || previousAssignee;
+            if (targetUserId) {
+              notificationPayloads.push({
+                id: crypto.randomUUID(),
+                type: "notification.in_app",
+                tenantId,
+                data: {
+                  userId: targetUserId,
+                  title: "SLA Warning: Task Approaching Deadline",
+                  message: `Task "${task.stepName || "Workflow task"}" is approaching its SLA deadline. Please take action soon.`,
+                  type: "sla_warning",
+                  data: { taskId, instanceId: task.instanceId },
+                },
+              });
+            }
+          } else if (eventType === "breached") {
+            // Breach — execute the configured escalation action
+            switch (action) {
+              case "notify": {
+                actionDescription = "SLA breach notification sent";
+                const targetUserId = resolvedTarget || previousAssignee;
+                if (targetUserId) {
+                  notificationPayloads.push({
+                    id: crypto.randomUUID(),
+                    type: "notification.in_app",
+                    tenantId,
+                    data: {
+                      userId: targetUserId,
+                      title: "SLA Breached: Immediate Action Required",
+                      message: `Task "${task.stepName || "Workflow task"}" has breached its SLA deadline.`,
+                      type: "sla_breach",
+                      data: { taskId, instanceId: task.instanceId },
+                    },
+                  });
+                }
+                break;
+              }
+
+              case "reassign": {
+                newAssignee = resolvedTarget;
+                if (newAssignee && newAssignee !== previousAssignee) {
+                  await this.sql`
+                    UPDATE app.workflow_tasks
+                    SET assigned_to = ${newAssignee}::uuid,
+                        status = 'escalated'
+                    WHERE id = ${taskId}::uuid
+                      AND status IN ('pending', 'assigned', 'in_progress')
+                  `;
+                  actionDescription = `Reassigned from ${previousAssignee || "unassigned"} to ${newAssignee}`;
+
+                  // Notify the new assignee
+                  notificationPayloads.push({
+                    id: crypto.randomUUID(),
+                    type: "notification.in_app",
+                    tenantId,
+                    data: {
+                      userId: newAssignee,
+                      title: "Workflow Task Escalated to You",
+                      message: `Task "${task.stepName || "Workflow task"}" has been escalated to you after SLA breach.`,
+                      type: "task_assigned",
+                      data: { taskId, instanceId: task.instanceId },
+                    },
+                  });
+
+                  // Also notify the previous assignee
+                  if (previousAssignee) {
+                    notificationPayloads.push({
+                      id: crypto.randomUUID(),
+                      type: "notification.in_app",
+                      tenantId,
+                      data: {
+                        userId: previousAssignee,
+                        title: "Task Escalated Due to SLA Breach",
+                        message: `Task "${task.stepName || "Workflow task"}" was reassigned due to SLA breach.`,
+                        type: "sla_breach",
+                        data: { taskId, instanceId: task.instanceId },
+                      },
+                    });
+                  }
+                } else {
+                  actionDescription = "Reassign requested but no valid target found — notification sent instead";
+                  if (previousAssignee) {
+                    notificationPayloads.push({
+                      id: crypto.randomUUID(),
+                      type: "notification.in_app",
+                      tenantId,
+                      data: {
+                        userId: previousAssignee,
+                        title: "SLA Breached: Immediate Action Required",
+                        message: `Task "${task.stepName || "Workflow task"}" has breached its SLA deadline.`,
+                        type: "sla_breach",
+                        data: { taskId, instanceId: task.instanceId },
+                      },
+                    });
+                  }
+                }
+                break;
+              }
+
+              case "auto_approve": {
+                await this.sql`
+                  UPDATE app.workflow_tasks
+                  SET status = 'completed',
+                      completion_action = 'approve',
+                      completion_comment = 'Auto-approved by SLA escalation policy',
+                      completed_at = now(),
+                      completed_by = ${previousAssignee}::uuid
+                  WHERE id = ${taskId}::uuid
+                    AND status IN ('pending', 'assigned', 'in_progress', 'escalated')
+                `;
+                actionDescription = "Auto-approved due to SLA breach";
+
+                if (previousAssignee) {
+                  notificationPayloads.push({
+                    id: crypto.randomUUID(),
+                    type: "notification.in_app",
+                    tenantId,
+                    data: {
+                      userId: previousAssignee,
+                      title: "Task Auto-Approved (SLA Breach)",
+                      message: `Task "${task.stepName || "Workflow task"}" was auto-approved after SLA breach.`,
+                      type: "sla_breach",
+                      data: { taskId, instanceId: task.instanceId },
+                    },
+                  });
+                }
+                break;
+              }
+
+              case "auto_reject": {
+                await this.sql`
+                  UPDATE app.workflow_tasks
+                  SET status = 'completed',
+                      completion_action = 'reject',
+                      completion_comment = 'Auto-rejected by SLA escalation policy',
+                      completed_at = now(),
+                      completed_by = ${previousAssignee}::uuid
+                  WHERE id = ${taskId}::uuid
+                    AND status IN ('pending', 'assigned', 'in_progress', 'escalated')
+                `;
+                actionDescription = "Auto-rejected due to SLA breach";
+
+                if (previousAssignee) {
+                  notificationPayloads.push({
+                    id: crypto.randomUUID(),
+                    type: "notification.in_app",
+                    tenantId,
+                    data: {
+                      userId: previousAssignee,
+                      title: "Task Auto-Rejected (SLA Breach)",
+                      message: `Task "${task.stepName || "Workflow task"}" was auto-rejected after SLA breach.`,
+                      type: "sla_breach",
+                      data: { taskId, instanceId: task.instanceId },
+                    },
+                  });
+                }
+                break;
+              }
+
+              default:
+                actionDescription = `Unknown action: ${action}`;
+            }
+          } else {
+            actionDescription = `Unknown event type: ${eventType}`;
+          }
+
+          // Write outbox event for the escalation (atomically traceable)
+          await this.sql`
+            INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+            VALUES (
+              ${crypto.randomUUID()},
+              ${tenantId},
+              'workflow_task',
+              ${taskId}::text,
+              ${'workflow.task.sla.' + eventType},
+              ${JSON.stringify({
+                taskId,
+                instanceId: task.instanceId,
+                slaId,
+                eventType,
+                action,
+                previousAssignee,
+                newAssignee,
+                reason: actionDescription,
+              })}::jsonb,
+              now()
+            )
+          `;
+
+          // Log the escalation to the audit table
+          await this.sql`
+            INSERT INTO app.sla_escalation_log (
+              id, tenant_id, entity_type, entity_id, action_taken,
+              previous_assignee_id, new_assignee_id, reason,
+              sla_id, sla_event_id, created_at
+            ) VALUES (
+              ${crypto.randomUUID()}, ${tenantId}, 'workflow_task', ${taskId}::uuid,
+              ${action}, ${previousAssignee}::uuid, ${newAssignee}::uuid,
+              ${actionDescription}, ${slaId}::uuid, ${eventId}::uuid, now()
+            )
+          `;
+
+          // Mark the event as processed
+          await this.sql`
+            SELECT app.mark_sla_event_processed(
+              ${eventId}::uuid,
+              ${JSON.stringify({ success: true, action, description: actionDescription })}::jsonb
+            )
+          `;
+
+          processedCount++;
+        } catch (err) {
+          console.error(`[Job] Failed to process SLA event ${evt.id}:`, err);
+
+          // Mark event as processed with error so we don't retry indefinitely
+          try {
+            await this.sql`
+              SELECT app.mark_sla_event_processed(
+                ${evt.id}::uuid,
+                ${JSON.stringify({
+                  success: false,
+                  error: err instanceof Error ? err.message : "Unknown error",
+                })}::jsonb
+              )
+            `;
+          } catch { /* swallow — don't let cleanup error mask the original */ }
+        }
+      }
+
+      // Batch-send all collected notifications
+      if (notificationPayloads.length > 0) {
+        await this.batchXAdd(NOTIFICATIONS_STREAM, notificationPayloads);
+      }
+
+      console.log(
+        `[Job] Workflow SLA escalation complete — processed ${processedCount}/${unprocessed.length} event(s), sent ${notificationPayloads.length} notification(s)`
+      );
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
+    }
+  }
+
+  /**
+   * Check case SLA breaches and auto-escalate.
+   *
+   * Finds active cases whose SLA resolution deadline has passed (or is
+   * approaching the warning threshold), updates their sla_status, bumps
+   * the escalation_level to the next tier, reassigns when configured,
+   * and sends notifications.
+   */
+  private async checkCaseSlaBreaches(): Promise<void> {
+    console.log("[Job] Starting case SLA breach check...");
+
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // -----------------------------------------------------------------------
+      // Step 1: Mark cases as 'warning' when approaching SLA deadline
+      // -----------------------------------------------------------------------
+      const warningResult = await this.sql`
+        UPDATE app.cases c
+        SET sla_status = 'warning',
+            updated_at = now()
+        FROM app.case_categories cc
+        WHERE c.category_id = cc.id
+          AND c.sla_status = 'within_sla'
+          AND c.status NOT IN ('resolved', 'closed', 'cancelled')
+          AND c.sla_resolution_due_at IS NOT NULL
+          AND c.sla_paused_at IS NULL
+          AND cc.sla_warning_threshold_percent IS NOT NULL
+          AND c.sla_resolution_due_at - (
+            (c.sla_resolution_due_at - c.created_at)
+            * (1.0 - cc.sla_warning_threshold_percent::numeric / 100.0)
+          ) < now()
+          AND c.sla_resolution_due_at > now()
+        RETURNING c.id, c.tenant_id, c.assigned_to, c.case_number, c.subject
+      `;
+
+      if (warningResult.length > 0) {
+        console.log(`[Job] Marked ${warningResult.length} case(s) as SLA warning`);
+
+        // Send warning notifications to assignees
+        const warningPayloads: Array<Record<string, unknown>> = [];
+        for (const c of warningResult) {
+          if (c.assignedTo) {
+            warningPayloads.push({
+              id: crypto.randomUUID(),
+              type: "notification.in_app",
+              tenantId: c.tenantId,
+              data: {
+                userId: c.assignedTo,
+                title: "SLA Warning: Case Approaching Deadline",
+                message: `Case ${c.caseNumber} "${c.subject}" is approaching its SLA resolution deadline. Please take action.`,
+                type: "sla_warning",
+                actionUrl: `/admin/cases/${c.id}`,
+                actionText: "View Case",
+              },
+            });
+          }
+        }
+        if (warningPayloads.length > 0) {
+          await this.batchXAdd(NOTIFICATIONS_STREAM, warningPayloads);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Step 2: Find cases that have breached their SLA but not yet escalated
+      // -----------------------------------------------------------------------
+      const breachedCases = await this.sql`
+        SELECT
+          c.id,
+          c.tenant_id,
+          c.case_number,
+          c.subject,
+          c.status,
+          c.assigned_to,
+          c.escalation_level,
+          c.sla_status,
+          c.sla_resolution_due_at,
+          c.category_id,
+          cc.assignment_config
+        FROM app.cases c
+        LEFT JOIN app.case_categories cc ON cc.id = c.category_id
+        WHERE c.sla_status IN ('within_sla', 'warning')
+          AND c.status NOT IN ('resolved', 'closed', 'cancelled')
+          AND c.sla_resolution_due_at IS NOT NULL
+          AND c.sla_paused_at IS NULL
+          AND c.sla_resolution_due_at < now()
+        ORDER BY c.sla_resolution_due_at ASC
+        LIMIT 100
+      `;
+
+      if (breachedCases.length === 0) {
+        console.log("[Job] Case SLA breach check complete — no breached cases");
+        return;
+      }
+
+      console.log(`[Job] Found ${breachedCases.length} case(s) with SLA breach — escalating`);
+
+      let escalatedCount = 0;
+      const notificationPayloads: Array<Record<string, unknown>> = [];
+
+      for (const c of breachedCases) {
+        try {
+          const caseId = c.id as string;
+          const tenantId = c.tenantId as string;
+          const currentLevel = c.escalationLevel as string;
+          const previousAssignee = c.assignedTo as string | null;
+          const caseNumber = c.caseNumber as string;
+          const subject = c.subject as string;
+
+          // Determine next escalation level
+          const nextLevel = this.getNextEscalationLevel(currentLevel);
+
+          // Try to find an escalation target:
+          // 1. From the category's assignment_config fallback_assignee_id
+          // 2. From the current assignee's manager chain
+          let newAssignee: string | null = null;
+
+          // Check category assignment config for fallback escalation target
+          const assignmentConfig = c.assignmentConfig as Record<string, unknown> | null;
+          if (assignmentConfig?.fallback_assignee_id) {
+            newAssignee = assignmentConfig.fallback_assignee_id as string;
+          }
+
+          // If no fallback target, try to find the manager of the current assignee
+          if (!newAssignee && previousAssignee) {
+            newAssignee = await this.findManagerOfUser(previousAssignee, tenantId);
+          }
+
+          // Update the case: mark as breached, bump escalation level, optionally reassign
+          await this.sql`
+            UPDATE app.cases
+            SET sla_status = 'breached',
+                escalation_level = ${nextLevel}::app.escalation_level,
+                escalated_at = now(),
+                assigned_to = COALESCE(${newAssignee}::uuid, assigned_to),
+                status = CASE WHEN status IN ('open', 'in_progress', 'pending_info') THEN 'escalated' ELSE status END,
+                updated_at = now()
+            WHERE id = ${caseId}::uuid
+          `;
+
+          const reason = `SLA breached — escalated from ${currentLevel} to ${nextLevel}`;
+
+          // Write outbox event
+          await this.sql`
+            INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+            VALUES (
+              ${crypto.randomUUID()}, ${tenantId}, 'case', ${caseId}::text,
+              'cases.sla.breached',
+              ${JSON.stringify({
+                caseId,
+                caseNumber,
+                previousLevel: currentLevel,
+                newLevel: nextLevel,
+                previousAssignee,
+                newAssignee,
+                reason,
+              })}::jsonb,
+              now()
+            )
+          `;
+
+          // Log escalation
+          await this.sql`
+            INSERT INTO app.sla_escalation_log (
+              id, tenant_id, entity_type, entity_id, action_taken,
+              previous_assignee_id, new_assignee_id, previous_level, new_level,
+              reason, created_at
+            ) VALUES (
+              ${crypto.randomUUID()}, ${tenantId}, 'case', ${caseId}::uuid,
+              'escalate_tier', ${previousAssignee}::uuid, ${newAssignee}::uuid,
+              ${currentLevel}, ${nextLevel}, ${reason}, now()
+            )
+          `;
+
+          // Notify the new assignee (if different from previous)
+          if (newAssignee && newAssignee !== previousAssignee) {
+            notificationPayloads.push({
+              id: crypto.randomUUID(),
+              type: "notification.in_app",
+              tenantId,
+              data: {
+                userId: newAssignee,
+                title: "Case Escalated to You (SLA Breach)",
+                message: `Case ${caseNumber} "${subject}" has been escalated to you after SLA breach (${nextLevel}).`,
+                type: "sla_breach",
+                actionUrl: `/admin/cases/${caseId}`,
+                actionText: "View Case",
+              },
+            });
+          }
+
+          // Notify the previous assignee
+          if (previousAssignee) {
+            notificationPayloads.push({
+              id: crypto.randomUUID(),
+              type: "notification.in_app",
+              tenantId,
+              data: {
+                userId: previousAssignee,
+                title: "Case SLA Breached",
+                message: `Case ${caseNumber} "${subject}" has breached its SLA and been escalated to ${nextLevel}.`,
+                type: "sla_breach",
+                actionUrl: `/admin/cases/${caseId}`,
+                actionText: "View Case",
+              },
+            });
+          }
+
+          escalatedCount++;
+        } catch (err) {
+          console.error(`[Job] Failed to escalate case ${c.id}:`, err);
+        }
+      }
+
+      // Batch-send all notifications
+      if (notificationPayloads.length > 0) {
+        await this.batchXAdd(NOTIFICATIONS_STREAM, notificationPayloads);
+      }
+
+      console.log(
+        `[Job] Case SLA breach check complete — escalated ${escalatedCount}/${breachedCases.length} case(s), sent ${notificationPayloads.length} notification(s)`
+      );
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Escalation Helper Methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve the best escalation target user ID.
+   *
+   * Priority order:
+   * 1. Explicit user target from SLA config
+   * 2. First active member of the target role
+   * 3. Manager of the current assignee (via reporting_lines)
+   *
+   * Returns null if no target can be resolved.
+   */
+  private async resolveEscalationTarget(
+    targetUserId: string | null,
+    targetRoleId: string | null,
+    currentAssigneeUserId: string | null,
+    tenantId: string
+  ): Promise<string | null> {
+    // 1. Explicit user target
+    if (targetUserId) {
+      return targetUserId;
     }
 
-    console.log(`[Job] Found ${overdueSteps.length} overdue workflow step(s) to escalate`);
-
-    let escalatedCount = 0;
-    for (const step of overdueSteps) {
-      try {
-        let escalationConfig: { escalateAfterHours: number; escalateTo: string } | null = null;
-        try {
-          const config = typeof step.stepConfig === "string" ? JSON.parse(step.stepConfig) : step.stepConfig;
-          escalationConfig = config?.escalationConfig ?? null;
-        } catch { continue; }
-
-        if (!escalationConfig?.escalateTo) continue;
-
-        // Reassign the step to the escalation target
-        await this.sql`
-          UPDATE app.workflow_steps
-          SET assignee_id = ${escalationConfig.escalateTo}::uuid,
-              updated_at = now()
-          WHERE id = ${step.stepId}::uuid
-        `;
-
-        // Write outbox event for the escalation
-        await this.sql`
-          INSERT INTO app.domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
-          VALUES (
-            ${crypto.randomUUID()},
-            ${step.tenantId},
-            'workflow_step',
-            ${step.stepId}::text,
-            'workflow.step.escalated',
-            ${JSON.stringify({
-              stepId: step.stepId,
-              instanceId: step.instanceId,
-              previousAssignee: step.assigneeId,
-              escalatedTo: escalationConfig.escalateTo,
-              reason: `Step exceeded ${escalationConfig.escalateAfterHours}h SLA threshold`,
-            })}::jsonb,
-            now()
-          )
-        `;
-
-        // Send notification to the escalation target
-        await this.redis.xadd(
-          NOTIFICATIONS_STREAM,
-          "*",
-          "payload",
-          JSON.stringify({
-            id: crypto.randomUUID(),
-            type: "notification.in_app",
-            tenantId: step.tenantId,
-            data: {
-              userId: escalationConfig.escalateTo,
-              title: "Workflow Step Escalated",
-              message: `A workflow step has been escalated to you after exceeding the ${escalationConfig.escalateAfterHours}h SLA.`,
-              type: "task_assigned",
-              data: { stepId: step.stepId, instanceId: step.instanceId },
-            },
-          }),
-          "attempt",
-          "1"
-        );
-
-        escalatedCount++;
-      } catch (err) {
-        console.error(`[Job] Failed to escalate workflow step ${step.stepId}:`, err);
+    // 2. Resolve from role — pick the first active user assigned to that role
+    if (targetRoleId) {
+      const [roleMember] = await this.sql`
+        SELECT ra.user_id
+        FROM app.role_assignments ra
+        JOIN app.users u ON u.id = ra.user_id
+        WHERE ra.role_id = ${targetRoleId}::uuid
+          AND ra.tenant_id = ${tenantId}::uuid
+          AND u.status = 'active'
+        ORDER BY ra.created_at ASC
+        LIMIT 1
+      `;
+      if (roleMember?.userId) {
+        return roleMember.userId as string;
       }
     }
 
-    console.log(`[Job] Workflow auto-escalation complete — escalated ${escalatedCount} step(s)`);
+    // 3. Fall back to the current assignee's manager
+    if (currentAssigneeUserId) {
+      return this.findManagerOfUser(currentAssigneeUserId, tenantId);
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the manager of a given user by traversing reporting_lines.
+   *
+   * Looks up the employee linked to the user_id, then finds their primary
+   * manager, and returns that manager's user_id.
+   */
+  private async findManagerOfUser(
+    userId: string,
+    tenantId: string
+  ): Promise<string | null> {
+    const [manager] = await this.sql`
+      SELECT mgr_emp.user_id AS manager_user_id
+      FROM app.employees emp
+      JOIN app.reporting_lines rl
+        ON rl.employee_id = emp.id
+        AND rl.tenant_id = emp.tenant_id
+        AND rl.is_primary = true
+        AND rl.effective_from <= CURRENT_DATE
+        AND (rl.effective_to IS NULL OR rl.effective_to > CURRENT_DATE)
+      JOIN app.employees mgr_emp
+        ON mgr_emp.id = rl.manager_id
+        AND mgr_emp.tenant_id = rl.tenant_id
+      WHERE emp.user_id = ${userId}::uuid
+        AND emp.tenant_id = ${tenantId}::uuid
+        AND emp.status = 'active'
+        AND mgr_emp.user_id IS NOT NULL
+      LIMIT 1
+    `;
+
+    return (manager?.managerUserId as string) ?? null;
+  }
+
+  /**
+   * Determine the next escalation level for a case.
+   * Returns the next tier up, capped at tier_4.
+   */
+  private getNextEscalationLevel(current: string): string {
+    const levels = ["none", "tier_1", "tier_2", "tier_3", "tier_4"];
+    const idx = levels.indexOf(current);
+    if (idx < 0 || idx >= levels.length - 1) {
+      return "tier_4"; // cap at highest tier
+    }
+    return levels[idx + 1]!;
   }
 
   /**
    * Detect and repair drift between Better Auth "user" table and app.users.
    * Runs hourly to catch any rows that diverged due to failed databaseHooks.
    * Repairs are applied in batches to avoid locking issues.
+   *
+   * Checks three categories of drift:
+   * 1. Missing rows  — user exists in app."user" but not in app.users
+   * 2. Drifted fields — email, name, status, mfaEnabled, or emailVerified differ
+   * 3. Orphaned rows  — user exists in app.users but not in app."user" (report only)
+   *
+   * The DB trigger (0192_user_table_sync_trigger.sql) provides a synchronous
+   * safety net, but this job catches anything that slipped through.
    */
   private async detectUserTableDrift(): Promise<void> {
     console.log("[Job] Starting user table drift detection...");
 
-    // Find users in Better Auth table missing from app.users
-    const missing = await this.sql`
-      SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled"
-      FROM app."user" ba
-      LEFT JOIN app.users au ON au.id = ba.id::uuid
-      WHERE au.id IS NULL
-      LIMIT 100
-    `;
+    let missingRepaired = 0;
+    let missingFailed = 0;
+    let driftRepaired = 0;
+    let driftFailed = 0;
+    let orphanedCount = 0;
 
-    if (missing.length > 0) {
-      console.warn(`[Job] Found ${missing.length} users in Better Auth missing from app.users — repairing`);
-      for (const row of missing) {
-        try {
-          await this.sql`
-            INSERT INTO app.users (id, email, name, status, mfa_enabled, created_at, updated_at)
-            VALUES (
-              ${row.id}::uuid, ${row.email}, ${row.name ?? row.email},
-              ${row.status ?? 'active'}, ${row.mfaEnabled ?? false}, now(), now()
-            )
-            ON CONFLICT (id) DO NOTHING
-          `;
-        } catch (err) {
-          console.error(`[Job] Failed to repair missing user ${row.id}:`, err);
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // ---- Phase 1: Find users in Better Auth table missing from app.users ----
+      const missing = await this.sql`
+        SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled",
+               COALESCE(ba."emailVerified", false) AS "emailVerified"
+        FROM app."user" ba
+        LEFT JOIN app.users au ON au.id = ba.id::uuid
+        WHERE au.id IS NULL
+        LIMIT 200
+      `;
+
+      if (missing.length > 0) {
+        console.warn(`[Job] Found ${missing.length} users in Better Auth missing from app.users — repairing`);
+        for (const row of missing) {
+          try {
+            await this.sql`
+              INSERT INTO app.users (id, email, email_verified, name, status, mfa_enabled, created_at, updated_at)
+              VALUES (
+                ${row.id}::uuid, ${row.email}, ${row.emailVerified ?? false},
+                ${row.name ?? row.email}, ${row.status ?? 'active'},
+                ${row.mfaEnabled ?? false}, now(), now()
+              )
+              ON CONFLICT (id) DO NOTHING
+            `;
+            missingRepaired++;
+          } catch (err) {
+            missingFailed++;
+            console.error(`[Job] Failed to repair missing user ${row.id}:`,
+              err instanceof Error ? err.message : String(err));
+          }
         }
       }
-    }
 
-    // Find users with drifted fields (email, name, status, mfa)
-    const drifted = await this.sql`
-      SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled"
-      FROM app."user" ba
-      JOIN app.users au ON au.id = ba.id::uuid
-      WHERE ba.email != au.email
-         OR ba.name IS DISTINCT FROM au.name
-         OR COALESCE(ba.status, 'active') != COALESCE(au.status, 'active')
-         OR COALESCE(ba."mfaEnabled", false) != COALESCE(au.mfa_enabled, false)
-      LIMIT 100
-    `;
+      // ---- Phase 2: Find users with drifted fields ----
+      const drifted = await this.sql`
+        SELECT ba.id, ba.email, ba.name, ba.status, ba."mfaEnabled",
+               COALESCE(ba."emailVerified", false) AS "emailVerified"
+        FROM app."user" ba
+        JOIN app.users au ON au.id = ba.id::uuid
+        WHERE ba.email != au.email
+           OR ba.name IS DISTINCT FROM au.name
+           OR COALESCE(ba.status, 'active') != COALESCE(au.status, 'active')
+           OR COALESCE(ba."mfaEnabled", false) != COALESCE(au.mfa_enabled, false)
+           OR COALESCE(ba."emailVerified", false) != COALESCE(au.email_verified, false)
+        LIMIT 200
+      `;
 
-    if (drifted.length > 0) {
-      console.warn(`[Job] Found ${drifted.length} users with drifted fields — repairing`);
-      for (const row of drifted) {
-        try {
-          await this.sql`
-            UPDATE app.users SET
-              email = ${row.email},
-              name = ${row.name ?? row.email},
-              status = ${row.status ?? 'active'},
-              mfa_enabled = ${row.mfaEnabled ?? false},
-              updated_at = now()
-            WHERE id = ${row.id}::uuid
-          `;
-        } catch (err) {
-          console.error(`[Job] Failed to repair drifted user ${row.id}:`, err);
+      if (drifted.length > 0) {
+        console.warn(`[Job] Found ${drifted.length} users with drifted fields — repairing`);
+        for (const row of drifted) {
+          try {
+            await this.sql`
+              UPDATE app.users SET
+                email = ${row.email},
+                name = ${row.name ?? row.email},
+                status = ${row.status ?? 'active'},
+                mfa_enabled = ${row.mfaEnabled ?? false},
+                email_verified = ${row.emailVerified ?? false},
+                updated_at = now()
+              WHERE id = ${row.id}::uuid
+            `;
+            driftRepaired++;
+          } catch (err) {
+            driftFailed++;
+            console.error(`[Job] Failed to repair drifted user ${row.id}:`,
+              err instanceof Error ? err.message : String(err));
+          }
         }
       }
+
+      // ---- Phase 3: Detect orphaned rows in app.users (report only) ----
+      const orphaned = await this.sql`
+        SELECT au.id::text AS id, au.email
+        FROM app.users au
+        LEFT JOIN app."user" ba ON ba.id = au.id::text
+        WHERE ba.id IS NULL
+        LIMIT 200
+      `;
+
+      orphanedCount = orphaned.length;
+      if (orphanedCount > 0) {
+        console.warn(
+          `[Job] Found ${orphanedCount} user(s) in app.users with no matching app."user" row. ` +
+          "These may be pre-BetterAuth legacy users. Sample IDs: " +
+          orphaned.slice(0, 5).map(r => `${r.id} (${r.email})`).join(", ")
+        );
+      }
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
     }
 
-    const totalRepaired = missing.length + drifted.length;
-    if (totalRepaired === 0) {
+    // ---- Summary ----
+    const totalRepaired = missingRepaired + driftRepaired;
+    const totalFailed = missingFailed + driftFailed;
+
+    if (totalRepaired === 0 && totalFailed === 0 && orphanedCount === 0) {
       console.log("[Job] User table drift detection complete — no drift found");
     } else {
-      console.warn(`[Job] User table drift detection complete — repaired ${totalRepaired} user(s)`);
+      console.log(
+        `[Job] User table drift detection complete — ` +
+        `repaired: ${totalRepaired}, failed: ${totalFailed}, orphaned: ${orphanedCount}`
+      );
     }
   }
 
@@ -1197,6 +2034,145 @@ class Scheduler {
     }
 
     console.log(`[Job] Scheduled report runner complete — ran ${successCount}/${dueSchedules.length} report(s)`);
+  }
+
+  /**
+   * Calculate daily usage stats for all active tenants.
+   * Collects active user counts, employee counts, and optionally
+   * API request counters from Redis (keyed by tenant).
+   */
+  private async calculateTenantUsageStats(): Promise<void> {
+    console.log("[Job] Starting tenant usage stats aggregation...");
+
+    // Yesterday's date — we aggregate stats for the previous full day
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split("T")[0]!;
+
+    await this.sql`SELECT app.enable_system_context()`;
+    try {
+      // Get all active tenants
+      const tenants = await this.sql<{ id: string; name: string }[]>`
+        SELECT id, name FROM app.tenants WHERE status = 'active'
+      `;
+
+      if (tenants.length === 0) {
+        console.log("[Job] Tenant usage stats complete — no active tenants");
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const tenant of tenants) {
+        try {
+          // Set tenant context for RLS-scoped queries
+          await this.sql`SELECT app.set_tenant_context(${tenant.id}::uuid, NULL::uuid)`;
+
+          // Count active users (users with sessions active yesterday)
+          const [activeUsersRow] = await this.sql<{ count: number }[]>`
+            SELECT COUNT(DISTINCT u.id)::integer AS count
+            FROM app.users u
+            JOIN app."session" s ON s."userId" = u.id::text
+            WHERE u.tenant_id = ${tenant.id}::uuid
+              AND s."expiresAt" >= ${dateStr}::date
+              AND s."createdAt" <= (${dateStr}::date + interval '1 day')
+          `;
+
+          // Count active employees
+          const [employeeCountRow] = await this.sql<{ count: number }[]>`
+            SELECT COUNT(*)::integer AS count
+            FROM app.employees
+            WHERE tenant_id = ${tenant.id}::uuid
+              AND status IN ('active', 'on_leave')
+          `;
+
+          // Try to read API request counter from Redis (set by rate limiter / metrics plugin)
+          let apiRequests = 0;
+          let storageBytes = 0;
+          const moduleUsage: Record<string, number> = {};
+
+          try {
+            const apiCountKey = `staffora:usage:api_requests:${tenant.id}:${dateStr}`;
+            const apiCountStr = await this.redis.get(apiCountKey);
+            if (apiCountStr) {
+              apiRequests = parseInt(apiCountStr, 10) || 0;
+            }
+
+            const storageKey = `staffora:usage:storage_bytes:${tenant.id}`;
+            const storageStr = await this.redis.get(storageKey);
+            if (storageStr) {
+              storageBytes = parseInt(storageStr, 10) || 0;
+            }
+
+            // Read per-module request counters
+            const moduleCountPattern = `staffora:usage:module:${tenant.id}:${dateStr}:*`;
+            const moduleKeys = await this.redis.keys(moduleCountPattern);
+            for (const key of moduleKeys) {
+              const moduleName = key.split(":").pop() || "unknown";
+              const countStr = await this.redis.get(key);
+              if (countStr) {
+                moduleUsage[moduleName] = parseInt(countStr, 10) || 0;
+              }
+            }
+          } catch {
+            // Redis counters are optional; continue with defaults
+          }
+
+          const activeUsers = Number(activeUsersRow?.count ?? 0);
+          const employeeCount = Number(employeeCountRow?.count ?? 0);
+
+          // Upsert the daily stats row
+          await this.sql`
+            INSERT INTO app.tenant_usage_stats (
+              id,
+              tenant_id,
+              period_start,
+              period_end,
+              active_users,
+              api_requests,
+              storage_bytes,
+              employee_count,
+              module_usage,
+              created_at
+            ) VALUES (
+              gen_random_uuid(),
+              ${tenant.id}::uuid,
+              ${dateStr}::date,
+              ${dateStr}::date,
+              ${activeUsers},
+              ${apiRequests},
+              ${storageBytes},
+              ${employeeCount},
+              ${JSON.stringify(moduleUsage)}::jsonb,
+              now()
+            )
+            ON CONFLICT (tenant_id, period_start, period_end)
+            DO UPDATE SET
+              active_users   = EXCLUDED.active_users,
+              api_requests   = EXCLUDED.api_requests,
+              storage_bytes  = EXCLUDED.storage_bytes,
+              employee_count = EXCLUDED.employee_count,
+              module_usage   = EXCLUDED.module_usage
+          `;
+
+          successCount++;
+        } catch (err) {
+          errorCount++;
+          console.error(
+            `[Job] Failed to calculate usage stats for tenant ${tenant.id} (${tenant.name}):`,
+            err
+          );
+        }
+      }
+
+      console.log(
+        `[Job] Tenant usage stats complete — ` +
+        `${successCount} succeeded, ${errorCount} failed out of ${tenants.length} tenants`
+      );
+    } finally {
+      await this.sql`SELECT app.disable_system_context()`;
+    }
   }
 
   private sleep(ms: number): Promise<void> {

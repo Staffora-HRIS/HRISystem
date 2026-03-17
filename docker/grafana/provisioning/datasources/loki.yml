@@ -1,0 +1,28 @@
+# =============================================================================
+# Grafana Datasource Provisioning -- Loki
+# =============================================================================
+# Auto-configures Loki as a datasource on first boot.
+# Used by docker-compose.logging.yml for log aggregation.
+#
+# Note: This file is only mounted when running with the logging stack.
+# Prometheus remains the default datasource for metrics.
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+      derivedFields:
+        # Link request IDs to trace view (if OpenTelemetry is configured)
+        - datasourceUid: ""
+          matcherRegex: '"requestId":"([a-f0-9-]+)"'
+          name: RequestID
+          url: ""

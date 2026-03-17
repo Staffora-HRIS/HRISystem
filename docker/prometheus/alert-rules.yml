@@ -1,0 +1,249 @@
+# =============================================================================
+# Staffora Platform — Prometheus Alert Rules
+# =============================================================================
+# Alerts for API health, infrastructure, and operational thresholds.
+# =============================================================================
+
+groups:
+  # ---------------------------------------------------------------------------
+  # API Health Alerts
+  # ---------------------------------------------------------------------------
+  - name: staffora_api_alerts
+    interval: 30s
+    rules:
+      # High error rate: >5% of requests returning 5xx over the last 5 minutes
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: staffora-api
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: >-
+            More than 5% of HTTP requests are returning 5xx errors.
+            Current error rate: {{ $value | humanizePercentage }}.
+          runbook: "Check API logs for stack traces. Verify database and Redis connectivity."
+
+      # High request latency: p95 above 2 seconds over 5 minutes
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: staffora-api
+        annotations:
+          summary: "High p95 request latency"
+          description: >-
+            95th percentile request latency is above 2 seconds.
+            Current p95: {{ $value | humanizeDuration }}.
+          runbook: "Check for slow database queries (pg_stat_statements). Review recent deployments."
+
+      # High request latency: p99 above 5 seconds over 5 minutes
+      - alert: CriticalLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: staffora-api
+        annotations:
+          summary: "Critical p99 request latency"
+          description: >-
+            99th percentile request latency is above 5 seconds.
+            Current p99: {{ $value | humanizeDuration }}.
+          runbook: "Immediate investigation required. Check connection pools, slow queries, and resource exhaustion."
+
+      # API instance is down
+      - alert: ApiDown
+        expr: up{job="staffora-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: staffora-api
+        annotations:
+          summary: "Staffora API is down"
+          description: "The Staffora API instance has been unreachable for more than 1 minute."
+          runbook: "Check container status: docker ps. Review API logs: docker logs staffora-api."
+
+      # High number of active requests (possible request pile-up)
+      - alert: HighActiveRequests
+        expr: http_active_requests > 50
+        for: 3m
+        labels:
+          severity: warning
+          service: staffora-api
+        annotations:
+          summary: "High number of concurrent requests"
+          description: >-
+            There are {{ $value }} active in-flight requests, indicating possible
+            request backlog or slow downstream dependencies.
+          runbook: "Check downstream service health (database, Redis). Look for blocking operations."
+
+      # High memory usage (>80% of container limit at 1GB = 800MB)
+      - alert: HighMemoryUsage
+        expr: process_memory_bytes{type="rss"} > 838860800
+        for: 5m
+        labels:
+          severity: warning
+          service: staffora-api
+        annotations:
+          summary: "High API memory usage"
+          description: >-
+            API process RSS is {{ $value | humanize1024 }}B, exceeding 800MB threshold.
+            Container limit is 1GB.
+          runbook: "Check for memory leaks. Review recent code changes. Consider increasing container memory limit."
+
+  # ---------------------------------------------------------------------------
+  # Database Alerts
+  # ---------------------------------------------------------------------------
+  - name: staffora_database_alerts
+    interval: 30s
+    rules:
+      # Database connection pool exhaustion
+      - alert: DbPoolExhaustion
+        expr: db_pool_active_connections > 80
+        for: 2m
+        labels:
+          severity: critical
+          service: staffora-postgres
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: >-
+            Active database connections ({{ $value }}) are approaching the max_connections
+            limit of 100. New connections may be refused.
+          runbook: "Check for connection leaks. Review long-running transactions. Consider increasing max_connections."
+
+      # Database connection pool high utilization (warning)
+      - alert: DbPoolHighUtilization
+        expr: db_pool_active_connections > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: staffora-postgres
+        annotations:
+          summary: "Database connection pool high utilization"
+          description: >-
+            Active database connections ({{ $value }}) are above 50% of the
+            max_connections limit.
+          runbook: "Monitor trend. Optimize queries. Consider connection pooling with PgBouncer."
+
+      # PostgreSQL exporter down
+      - alert: PostgresExporterDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: staffora-postgres
+        annotations:
+          summary: "PostgreSQL exporter is down"
+          description: "Cannot scrape PostgreSQL metrics. The exporter may be unreachable."
+          runbook: "Check postgres-exporter container: docker logs staffora-postgres-exporter."
+
+      # PostgreSQL too many dead tuples (needs vacuum)
+      - alert: PostgresHighDeadTuples
+        expr: pg_stat_user_tables_n_dead_tup > 100000
+        for: 10m
+        labels:
+          severity: warning
+          service: staffora-postgres
+        annotations:
+          summary: "High dead tuple count"
+          description: >-
+            Table has {{ $value }} dead tuples. Autovacuum may be falling behind.
+          runbook: "Check autovacuum settings. Run VACUUM ANALYZE on affected tables."
+
+  # ---------------------------------------------------------------------------
+  # Redis Alerts
+  # ---------------------------------------------------------------------------
+  - name: staffora_redis_alerts
+    interval: 30s
+    rules:
+      # Redis is disconnected
+      - alert: RedisDown
+        expr: redis_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: staffora-redis
+        annotations:
+          summary: "Redis is disconnected"
+          description: "The API cannot reach Redis. Sessions, caching, and job queues are affected."
+          runbook: "Check Redis container: docker logs staffora-redis. Verify network connectivity."
+
+      # Redis exporter down
+      - alert: RedisExporterDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: staffora-redis
+        annotations:
+          summary: "Redis exporter is down"
+          description: "Cannot scrape Redis metrics. The exporter may be unreachable."
+          runbook: "Check redis-exporter container: docker logs staffora-redis-exporter."
+
+      # Redis high memory usage (>75% of 1GB limit = 768MB)
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes > 805306368
+        for: 5m
+        labels:
+          severity: warning
+          service: staffora-redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: >-
+            Redis is using {{ $value | humanize1024 }}B of memory,
+            exceeding the 768MB threshold (container limit is 1GB).
+          runbook: "Review key expiration policies. Check for large keys. Consider increasing maxmemory."
+
+      # Redis high connected clients
+      - alert: RedisHighConnections
+        expr: redis_connected_clients > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: staffora-redis
+        annotations:
+          summary: "High number of Redis clients"
+          description: >-
+            {{ $value }} clients are connected to Redis. This may indicate
+            connection leaks or unexpected load.
+          runbook: "Check CLIENT LIST. Review application connection pooling settings."
+
+  # ---------------------------------------------------------------------------
+  # Outbox / Worker Queue Alerts
+  # ---------------------------------------------------------------------------
+  - name: staffora_queue_alerts
+    interval: 60s
+    rules:
+      # Outbox backlog growing (uses custom metric if available, otherwise DB pool as proxy)
+      # This alert fires if the API error rate is sustained AND connections are high,
+      # indicating the worker may not be processing events.
+      - alert: PossibleOutboxBacklog
+        expr: |
+          (
+            sum(rate(http_errors_total[10m])) > 0.1
+            and
+            db_pool_active_connections > 30
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: staffora-worker
+        annotations:
+          summary: "Possible domain outbox backlog"
+          description: >-
+            Sustained error rate with high DB connection usage suggests the
+            outbox processor may be falling behind.
+          runbook: "Check worker container: docker logs staffora-worker. Verify outbox table size."

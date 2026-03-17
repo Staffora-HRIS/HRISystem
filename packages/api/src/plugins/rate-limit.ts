@@ -38,6 +38,114 @@ function matchAuthRoute(path: string): { maxRequests: number; windowSeconds: num
   return null;
 }
 
+// =============================================================================
+// In-Memory Rate Limit Fallback (TODO-026)
+// =============================================================================
+
+/**
+ * In-memory rate limit store used as a fallback when Redis is unavailable.
+ * Implements a simple Map with TTL-based eviction and bounded capacity.
+ *
+ * This avoids adding external dependencies while providing basic rate limiting
+ * protection even when Redis is down.
+ */
+export class InMemoryRateLimitStore {
+  private store = new Map<string, { count: number; expiresAt: number }>();
+  private readonly maxEntries: number;
+  private lastEviction = 0;
+  private readonly evictionIntervalMs = 30_000; // evict stale entries every 30s
+
+  constructor(maxEntries: number = 10_000) {
+    this.maxEntries = maxEntries;
+  }
+
+  /**
+   * Increment a rate limit counter, matching the Redis-based interface.
+   */
+  incrementRateLimit(
+    key: string,
+    windowSeconds: number,
+    maxRequests: number
+  ): { count: number; exceeded: boolean } {
+    const now = Date.now();
+
+    // Periodic eviction of expired entries to prevent unbounded growth
+    if (now - this.lastEviction > this.evictionIntervalMs) {
+      this.evictExpired(now);
+      this.lastEviction = now;
+    }
+
+    const existing = this.store.get(key);
+
+    if (existing && existing.expiresAt > now) {
+      existing.count += 1;
+      return {
+        count: existing.count,
+        exceeded: existing.count > maxRequests,
+      };
+    }
+
+    // New window or expired entry
+    // If at capacity, evict expired entries first, then evict oldest if still full
+    if (this.store.size >= this.maxEntries) {
+      this.evictExpired(now);
+      if (this.store.size >= this.maxEntries) {
+        // FIFO eviction of oldest entry
+        const firstKey = this.store.keys().next().value;
+        if (firstKey !== undefined) this.store.delete(firstKey);
+      }
+    }
+
+    this.store.set(key, { count: 1, expiresAt: now + windowSeconds * 1000 });
+    return { count: 1, exceeded: 1 > maxRequests };
+  }
+
+  /**
+   * Remove all expired entries from the store.
+   */
+  private evictExpired(now: number): void {
+    for (const [key, entry] of this.store) {
+      if (entry.expiresAt <= now) {
+        this.store.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clear all entries (used in tests).
+   */
+  clear(): void {
+    this.store.clear();
+  }
+
+  /**
+   * Current number of entries (used in tests).
+   */
+  get size(): number {
+    return this.store.size;
+  }
+}
+
+// =============================================================================
+// Rate Limit Increment Interface
+// =============================================================================
+
+/**
+ * Interface for rate limit counter operations.
+ * Both Redis CacheClient and InMemoryRateLimitStore implement this.
+ */
+interface RateLimitCounter {
+  incrementRateLimit(
+    key: string,
+    windowSeconds: number,
+    maxRequests: number
+  ): Promise<{ count: number; exceeded: boolean }> | { count: number; exceeded: boolean };
+}
+
+// =============================================================================
+// Plugin
+// =============================================================================
+
 export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
   const { skipRoutes = [] } = options;
   const allSkipRoutes = [...DEFAULT_SKIP_ROUTES, ...skipRoutes];
@@ -65,6 +173,30 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
 
   const windowSeconds = Math.max(1, Math.floor(windowMs / 1000));
 
+  // In-memory fallback store, created lazily if Redis fails
+  const fallbackStore = new InMemoryRateLimitStore();
+
+  /**
+   * Try Redis-based rate limiting first; fall back to in-memory on failure.
+   */
+  async function incrementWithFallback(
+    cache: RateLimitCounter | undefined,
+    key: string,
+    windowSec: number,
+    max: number
+  ): Promise<{ count: number; exceeded: boolean }> {
+    if (cache) {
+      try {
+        return await cache.incrementRateLimit(key, windowSec, max);
+      } catch (error) {
+        console.warn("[RateLimit] Redis unavailable, falling back to in-memory store", error);
+      }
+    }
+
+    // Fallback to in-memory store
+    return fallbackStore.incrementRateLimit(key, windowSec, max);
+  }
+
   return new Elysia({ name: "rate-limit" }).onBeforeHandle(
     { as: "global" },
     async (ctx) => {
@@ -79,45 +211,41 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
       const shouldSkip = allSkipRoutes.some((pattern) => pattern.test(path));
       if (shouldSkip) return;
 
-      const cache = (ctx as any).cache as
-        | { incrementRateLimit?: (key: string, windowSeconds: number, maxRequests: number) => Promise<{ count: number; exceeded: boolean }> }
-        | undefined;
+      const cache = (ctx as any).cache as RateLimitCounter | undefined;
 
-      if (!cache?.incrementRateLimit) return;
-
-      const socketIp = (ctx as any).server?.requestIP?.(request)?.address as string | undefined;
+      // Resolve client IP: allow test override via _clientIp, otherwise use server socket IP
+      const overrideIp = (ctx as any)._clientIp as string | undefined;
+      const socketIp = overrideIp ?? ((ctx as any).server?.requestIP?.(request)?.address as string | undefined);
       const ip = getClientIp(request, socketIp) ?? "unknown";
 
       // Check auth-specific rate limiting first (uses IP-only keys)
       const authLimit = matchAuthRoute(path);
       if (authLimit) {
         const authKey = `auth:rate_limit:${ip}:${request.method}:${path}`;
-        try {
-          const { count, exceeded } = await cache.incrementRateLimit(
-            authKey,
-            authLimit.windowSeconds,
-            authLimit.maxRequests
-          );
+        const { count, exceeded } = await incrementWithFallback(
+          cache,
+          authKey,
+          authLimit.windowSeconds,
+          authLimit.maxRequests
+        );
 
-          set.headers["X-RateLimit-Limit"] = String(authLimit.maxRequests);
-          set.headers["X-RateLimit-Remaining"] = String(
-            Math.max(0, authLimit.maxRequests - count)
-          );
-          set.headers["X-RateLimit-Window"] = String(authLimit.windowSeconds);
+        set.headers["X-RateLimit-Limit"] = String(authLimit.maxRequests);
+        set.headers["X-RateLimit-Remaining"] = String(
+          Math.max(0, authLimit.maxRequests - count)
+        );
+        set.headers["X-RateLimit-Window"] = String(authLimit.windowSeconds);
 
-          if (exceeded) {
-            set.status = 429;
-            set.headers["Retry-After"] = String(authLimit.windowSeconds);
-            return createErrorResponse(
-              ErrorCodes.TOO_MANY_REQUESTS,
-              "Rate limit exceeded",
-              safeRequestId,
-              { maxRequests: authLimit.maxRequests, windowMs: authLimit.windowSeconds * 1000 }
-            );
-          }
-        } catch (error) {
-          console.warn("[RateLimit] Failed to apply auth rate limiting", error);
+        if (exceeded) {
+          set.status = 429;
+          set.headers["Retry-After"] = String(authLimit.windowSeconds);
+          return createErrorResponse(
+            ErrorCodes.TOO_MANY_REQUESTS,
+            "Rate limit exceeded",
+            safeRequestId,
+            { maxRequests: authLimit.maxRequests, windowMs: authLimit.windowSeconds * 1000 }
+          );
         }
+
         // Auth routes have their own rate limiting — skip generic to avoid double-counting
         return;
       }
@@ -129,32 +257,30 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
         const unauthKey = `unauth:rate_limit:${ip}:${request.method}:${path}`;
         const unauthMaxRequests = Math.min(maxRequests, 30); // stricter cap for unauthenticated
         const unauthWindowSeconds = Math.max(windowSeconds, 60);
-        try {
-          const { count, exceeded } = await cache.incrementRateLimit(
-            unauthKey,
-            unauthWindowSeconds,
-            unauthMaxRequests
-          );
+        const { count, exceeded } = await incrementWithFallback(
+          cache,
+          unauthKey,
+          unauthWindowSeconds,
+          unauthMaxRequests
+        );
 
-          set.headers["X-RateLimit-Limit"] = String(unauthMaxRequests);
-          set.headers["X-RateLimit-Remaining"] = String(
-            Math.max(0, unauthMaxRequests - count)
-          );
-          set.headers["X-RateLimit-Window"] = String(unauthWindowSeconds);
+        set.headers["X-RateLimit-Limit"] = String(unauthMaxRequests);
+        set.headers["X-RateLimit-Remaining"] = String(
+          Math.max(0, unauthMaxRequests - count)
+        );
+        set.headers["X-RateLimit-Window"] = String(unauthWindowSeconds);
 
-          if (exceeded) {
-            set.status = 429;
-            set.headers["Retry-After"] = String(unauthWindowSeconds);
-            return createErrorResponse(
-              ErrorCodes.TOO_MANY_REQUESTS,
-              "Rate limit exceeded",
-              safeRequestId,
-              { maxRequests: unauthMaxRequests, windowMs: unauthWindowSeconds * 1000 }
-            );
-          }
-        } catch (error) {
-          console.warn("[RateLimit] Failed to apply unauthenticated rate limiting", error);
+        if (exceeded) {
+          set.status = 429;
+          set.headers["Retry-After"] = String(unauthWindowSeconds);
+          return createErrorResponse(
+            ErrorCodes.TOO_MANY_REQUESTS,
+            "Rate limit exceeded",
+            safeRequestId,
+            { maxRequests: unauthMaxRequests, windowMs: unauthWindowSeconds * 1000 }
+          );
         }
+
         return; // Skip generic rate limiting for unauthenticated requests
       }
 
@@ -163,31 +289,28 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
       const endpoint = `${request.method}:${path}`;
       const key = CacheKeys.rateLimit(tenantId, userId, endpoint);
 
-      try {
-        const { count, exceeded } = await cache.incrementRateLimit(
-          key,
-          windowSeconds,
-          maxRequests
-        );
+      const { count, exceeded } = await incrementWithFallback(
+        cache,
+        key,
+        windowSeconds,
+        maxRequests
+      );
 
-        set.headers["X-RateLimit-Limit"] = String(maxRequests);
-        set.headers["X-RateLimit-Remaining"] = String(
-          Math.max(0, maxRequests - count)
-        );
-        set.headers["X-RateLimit-Window"] = String(windowSeconds);
+      set.headers["X-RateLimit-Limit"] = String(maxRequests);
+      set.headers["X-RateLimit-Remaining"] = String(
+        Math.max(0, maxRequests - count)
+      );
+      set.headers["X-RateLimit-Window"] = String(windowSeconds);
 
-        if (exceeded) {
-          set.status = 429;
-          set.headers["Retry-After"] = String(windowSeconds);
-          return createErrorResponse(
-            ErrorCodes.TOO_MANY_REQUESTS,
-            "Rate limit exceeded",
-            safeRequestId,
-            { maxRequests, windowMs }
-          );
-        }
-      } catch (error) {
-        console.warn("[RateLimit] Failed to apply rate limiting", error);
+      if (exceeded) {
+        set.status = 429;
+        set.headers["Retry-After"] = String(windowSeconds);
+        return createErrorResponse(
+          ErrorCodes.TOO_MANY_REQUESTS,
+          "Rate limit exceeded",
+          safeRequestId,
+          { maxRequests, windowMs }
+        );
       }
     }
   );

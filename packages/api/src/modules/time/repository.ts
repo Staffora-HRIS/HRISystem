@@ -129,6 +129,33 @@ export interface SwapRequestRow {
   updatedAt: Date;
 }
 
+export interface ApprovalChainRow {
+  id: string;
+  tenantId: string;
+  timesheetId: string;
+  level: number;
+  approverId: string;
+  approverName?: string;
+  status: string;
+  decidedAt: Date | null;
+  comments: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PendingApprovalRow {
+  chainId: string;
+  timesheetId: string;
+  employeeId: string;
+  employeeNumber: string;
+  periodStart: Date;
+  periodEnd: Date;
+  totalRegularHours: number;
+  totalOvertimeHours: number;
+  level: number;
+  submittedAt: Date;
+}
+
 // =============================================================================
 // Repository Class
 // =============================================================================
@@ -765,6 +792,291 @@ export class TimeRepository {
         activeEmployees: active?.count ?? 0,
       };
     });
+  }
+
+  // ===========================================================================
+  // Approval Chains
+  // ===========================================================================
+
+  async createApprovalChain(
+    ctx: TenantContext,
+    timesheetId: string,
+    approverIds: string[]
+  ): Promise<ApprovalChainRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      // Delete any existing chain entries for this timesheet (resubmission case)
+      await tx`
+        DELETE FROM app.timesheet_approval_chains
+        WHERE timesheet_id = ${timesheetId}::uuid
+      `;
+
+      const entries: ApprovalChainRow[] = [];
+
+      for (let i = 0; i < approverIds.length; i++) {
+        const level = i + 1;
+        const status = level === 1 ? "active" : "pending";
+        const id = crypto.randomUUID();
+
+        const [row] = await tx<ApprovalChainRow[]>`
+          INSERT INTO app.timesheet_approval_chains (
+            id, tenant_id, timesheet_id, level, approver_id, status
+          ) VALUES (
+            ${id}::uuid, ${ctx.tenantId}::uuid, ${timesheetId}::uuid,
+            ${level}, ${approverIds[i]}::uuid, ${status}
+          )
+          RETURNING *
+        `;
+
+        entries.push(row as ApprovalChainRow);
+      }
+
+      await this.writeOutbox(
+        tx,
+        ctx.tenantId,
+        "timesheet",
+        timesheetId,
+        "time.timesheet.approval_chain.created",
+        {
+          timesheetId,
+          levels: approverIds.length,
+          approverIds,
+        }
+      );
+
+      return entries;
+    });
+  }
+
+  async getApprovalChain(
+    ctx: TenantContext,
+    timesheetId: string
+  ): Promise<ApprovalChainRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      const rows = await tx<ApprovalChainRow[]>`
+        SELECT
+          ac.id, ac.tenant_id, ac.timesheet_id, ac.level,
+          ac.approver_id, ac.status, ac.decided_at, ac.comments,
+          ac.created_at, ac.updated_at,
+          u.name AS approver_name
+        FROM app.timesheet_approval_chains ac
+        JOIN app.users u ON ac.approver_id = u.id
+        WHERE ac.timesheet_id = ${timesheetId}::uuid
+        ORDER BY ac.level
+      `;
+      return rows as ApprovalChainRow[];
+    });
+  }
+
+  async getActiveChainEntry(
+    ctx: TenantContext,
+    timesheetId: string,
+    approverId: string
+  ): Promise<ApprovalChainRow | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<ApprovalChainRow[]>`
+        SELECT
+          ac.id, ac.tenant_id, ac.timesheet_id, ac.level,
+          ac.approver_id, ac.status, ac.decided_at, ac.comments,
+          ac.created_at, ac.updated_at
+        FROM app.timesheet_approval_chains ac
+        WHERE ac.timesheet_id = ${timesheetId}::uuid
+          AND ac.approver_id = ${approverId}::uuid
+          AND ac.status = 'active'
+      `;
+    });
+    return rows.length > 0 ? (rows[0] as ApprovalChainRow) : null;
+  }
+
+  async processChainDecision(
+    ctx: TenantContext,
+    timesheetId: string,
+    approverId: string,
+    decision: "approved" | "rejected",
+    comments?: string
+  ): Promise<{ action: string; level: number; timesheetStatus: string }> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      // Find the active chain entry for this approver
+      const [activeEntry] = await tx<ApprovalChainRow[]>`
+        SELECT * FROM app.timesheet_approval_chains
+        WHERE timesheet_id = ${timesheetId}::uuid
+          AND approver_id = ${approverId}::uuid
+          AND status = 'active'
+      `;
+
+      if (!activeEntry) {
+        throw new Error("No active approval chain entry found for this approver and timesheet");
+      }
+
+      // Get the max level
+      const [maxResult] = await tx<{ maxLevel: number }[]>`
+        SELECT MAX(level) AS max_level
+        FROM app.timesheet_approval_chains
+        WHERE timesheet_id = ${timesheetId}::uuid
+      `;
+      const maxLevel = maxResult?.maxLevel ?? activeEntry.level;
+
+      // Record the decision on this chain entry
+      await tx`
+        UPDATE app.timesheet_approval_chains
+        SET status = ${decision},
+            decided_at = now(),
+            comments = ${comments || null}
+        WHERE id = ${activeEntry.id}::uuid
+      `;
+
+      let action: string;
+      let timesheetStatus: string;
+
+      if (decision === "approved") {
+        // Record in the immutable approval history
+        await tx`
+          SELECT app.record_timesheet_approval(
+            ${timesheetId}::uuid, 'approve', ${approverId}::uuid,
+            ${comments || "Approved at level " + activeEntry.level}
+          )
+        `;
+
+        if (activeEntry.level < maxLevel) {
+          // Promote the next level to active
+          await tx`
+            UPDATE app.timesheet_approval_chains
+            SET status = 'active'
+            WHERE timesheet_id = ${timesheetId}::uuid
+              AND level = ${activeEntry.level + 1}
+              AND status = 'pending'
+          `;
+
+          action = "level_approved";
+          timesheetStatus = "submitted";
+        } else {
+          // Final level approved: approve the timesheet
+          await tx`
+            UPDATE app.timesheets
+            SET status = 'approved',
+                approved_at = now(),
+                approved_by = ${approverId}::uuid,
+                updated_at = now()
+            WHERE id = ${timesheetId}::uuid
+              AND status = 'submitted'
+          `;
+
+          action = "fully_approved";
+          timesheetStatus = "approved";
+        }
+
+        await this.writeOutbox(
+          tx,
+          ctx.tenantId,
+          "timesheet",
+          timesheetId,
+          action === "fully_approved"
+            ? "time.timesheet.approved"
+            : "time.timesheet.approval_chain.level_approved",
+          {
+            timesheetId,
+            approverId,
+            level: activeEntry.level,
+            decision,
+            action,
+          }
+        );
+      } else {
+        // Rejection: skip all remaining pending/active levels
+        await tx`
+          UPDATE app.timesheet_approval_chains
+          SET status = 'skipped',
+              decided_at = now(),
+              comments = ${"Skipped due to rejection at level " + activeEntry.level}
+          WHERE timesheet_id = ${timesheetId}::uuid
+            AND status IN ('pending', 'active')
+            AND level > ${activeEntry.level}
+        `;
+
+        // Record rejection in immutable approval history
+        await tx`
+          SELECT app.record_timesheet_approval(
+            ${timesheetId}::uuid, 'reject', ${approverId}::uuid,
+            ${comments || "Rejected at level " + activeEntry.level}
+          )
+        `;
+
+        // Reject the timesheet itself
+        await tx`
+          UPDATE app.timesheets
+          SET status = 'rejected',
+              rejected_at = now(),
+              rejected_by = ${approverId}::uuid,
+              rejection_reason = ${comments || "Rejected at approval level " + activeEntry.level},
+              updated_at = now()
+          WHERE id = ${timesheetId}::uuid
+            AND status = 'submitted'
+        `;
+
+        action = "rejected";
+        timesheetStatus = "rejected";
+
+        await this.writeOutbox(
+          tx,
+          ctx.tenantId,
+          "timesheet",
+          timesheetId,
+          "time.timesheet.rejected",
+          {
+            timesheetId,
+            approverId,
+            level: activeEntry.level,
+            decision,
+            comments,
+          }
+        );
+      }
+
+      return {
+        action,
+        level: activeEntry.level,
+        timesheetStatus,
+      };
+    });
+  }
+
+  async getPendingApprovals(
+    ctx: TenantContext,
+    approverId: string,
+    filters: { cursor?: string; limit?: number }
+  ): Promise<PaginatedResult<PendingApprovalRow>> {
+    const limit = filters.limit || 20;
+
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<PendingApprovalRow[]>`
+        SELECT
+          ac.id AS chain_id,
+          ac.timesheet_id,
+          t.employee_id,
+          e.employee_number,
+          t.period_start,
+          t.period_end,
+          t.total_regular_hours,
+          t.total_overtime_hours,
+          ac.level,
+          t.submitted_at
+        FROM app.timesheet_approval_chains ac
+        JOIN app.timesheets t ON ac.timesheet_id = t.id
+        JOIN app.employees e ON t.employee_id = e.id
+        WHERE ac.approver_id = ${approverId}::uuid
+          AND ac.status = 'active'
+          AND t.status = 'submitted'
+          AND ac.tenant_id = ${ctx.tenantId}::uuid
+          ${filters.cursor ? tx`AND ac.id < ${filters.cursor}::uuid` : tx``}
+        ORDER BY t.submitted_at, ac.id DESC
+        LIMIT ${limit + 1}
+      `;
+    });
+
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.chainId ?? null : null;
+
+    return { data: data as PendingApprovalRow[], cursor, hasMore };
   }
 
   private async writeOutbox(

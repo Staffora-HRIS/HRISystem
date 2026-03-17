@@ -271,6 +271,57 @@ export const TimesheetApprovalSchema = t.Object({
 export type TimesheetApproval = Static<typeof TimesheetApprovalSchema>;
 
 // =============================================================================
+// Approval Chain Schemas
+// =============================================================================
+
+export const ApprovalChainStatusSchema = t.Union([
+  t.Literal("pending"),
+  t.Literal("active"),
+  t.Literal("approved"),
+  t.Literal("rejected"),
+  t.Literal("skipped"),
+]);
+export type ApprovalChainStatus = Static<typeof ApprovalChainStatusSchema>;
+
+export const SubmitTimesheetWithChainSchema = t.Object({
+  approverIds: t.Array(UuidSchema, { minItems: 1, maxItems: 10 }),
+});
+export type SubmitTimesheetWithChain = Static<typeof SubmitTimesheetWithChainSchema>;
+
+export const ApprovalChainDecisionSchema = t.Object({
+  action: t.Union([t.Literal("approve"), t.Literal("reject")]),
+  comments: t.Optional(t.String({ maxLength: 500 })),
+});
+export type ApprovalChainDecision = Static<typeof ApprovalChainDecisionSchema>;
+
+export const ApprovalChainEntryResponseSchema = t.Object({
+  id: UuidSchema,
+  timesheetId: UuidSchema,
+  level: t.Number(),
+  approverId: UuidSchema,
+  approverName: t.Nullable(t.String()),
+  status: ApprovalChainStatusSchema,
+  decidedAt: t.Nullable(t.String()),
+  comments: t.Nullable(t.String()),
+  createdAt: t.String(),
+});
+export type ApprovalChainEntryResponse = Static<typeof ApprovalChainEntryResponseSchema>;
+
+export const ApprovalChainResponseSchema = t.Object({
+  timesheetId: UuidSchema,
+  totalLevels: t.Number(),
+  currentLevel: t.Nullable(t.Number()),
+  overallStatus: t.String(),
+  entries: t.Array(ApprovalChainEntryResponseSchema),
+});
+export type ApprovalChainResponse = Static<typeof ApprovalChainResponseSchema>;
+
+export const PendingApprovalsFiltersSchema = t.Object({
+  ...PaginationQuerySchema.properties,
+});
+export type PendingApprovalsFilters = Static<typeof PendingApprovalsFiltersSchema>;
+
+// =============================================================================
 // Params Schemas
 // =============================================================================
 

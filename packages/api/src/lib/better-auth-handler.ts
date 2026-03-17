@@ -9,14 +9,16 @@
  */
 
 import { Elysia } from "elysia";
-import { getBetterAuth } from "./better-auth";
-import { Pool } from "pg";
-import postgres from "postgres";
-import { getDatabaseUrl } from "../config/database";
+import { getBetterAuth, getPgPool } from "./better-auth";
 
 let lastDbReachabilityCheckAt = 0;
 let lastDbReachable: boolean | null = null;
 
+/**
+ * Check database reachability using the shared Better Auth pg Pool.
+ * Previously created a throwaway postgres.js pool per check, which
+ * leaked connections. Now uses the existing capped pg Pool singleton.
+ */
 async function isDatabaseReachable(): Promise<boolean> {
   const now = Date.now();
   if (lastDbReachable !== null && now - lastDbReachabilityCheckAt < 5_000) {
@@ -26,13 +28,8 @@ async function isDatabaseReachable(): Promise<boolean> {
   lastDbReachabilityCheckAt = now;
 
   try {
-    const sql = postgres(getDatabaseUrl(), {
-      max: 1,
-      connect_timeout: 1,
-      idle_timeout: 1,
-    });
-    await sql`SELECT 1 as ok`;
-    await sql.end({ timeout: 1 });
+    const pool = getPgPool();
+    await pool.query("SELECT 1 AS ok");
     lastDbReachable = true;
     return true;
   } catch {
@@ -174,28 +171,9 @@ async function buildBetterAuthRequest(ctx: { request: Request; body?: unknown })
 // Account Lockout Helpers
 // =============================================================================
 
-/**
- * Singleton pg Pool for lockout queries.
- * Reuses the same pool configuration as Better Auth (app schema search path).
- */
-let lockoutPool: Pool | null = null;
-
-function getLockoutPool(): Pool {
-  if (!lockoutPool) {
-    const databaseUrl =
-      process.env["DATABASE_APP_URL"] ||
-      process.env["DATABASE_URL"] ||
-      getDatabaseUrl();
-    lockoutPool = new Pool({
-      connectionString: databaseUrl,
-      max: 5,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      options: "-c search_path=app,public",
-    });
-  }
-  return lockoutPool;
-}
+// Lockout queries reuse the shared Better Auth pg Pool (getPgPool()) instead
+// of creating a separate Pool. This consolidates all pg-driver connections
+// into one capped pool (max=5). See connection budget in db.ts.
 
 /**
  * Check whether the sign-in request path matches the email/password sign-in endpoint.
@@ -232,7 +210,7 @@ function extractEmailFromBody(ctx: any): string | null {
  */
 async function getUserIdByEmail(email: string): Promise<string | null> {
   try {
-    const pool = getLockoutPool();
+    const pool = getPgPool();
     const result = await pool.query<{ id: string }>(
       `SELECT id FROM app."user" WHERE email = $1 LIMIT 1`,
       [email]
@@ -249,7 +227,7 @@ async function getUserIdByEmail(email: string): Promise<string | null> {
  */
 async function checkLockout(userId: string): Promise<{ isLocked: boolean; lockedUntil: Date | null }> {
   try {
-    const pool = getLockoutPool();
+    const pool = getPgPool();
     const lockResult = await pool.query<{ is_locked: boolean }>(
       `SELECT app.check_account_lockout($1::text) as is_locked`,
       [userId]
@@ -275,7 +253,7 @@ async function checkLockout(userId: string): Promise<{ isLocked: boolean; locked
  */
 async function recordFailedLogin(userId: string): Promise<void> {
   try {
-    const pool = getLockoutPool();
+    const pool = getPgPool();
     await pool.query(`SELECT app.record_failed_login($1::text)`, [userId]);
   } catch (error) {
     // Non-fatal: don't block auth flow if recording fails

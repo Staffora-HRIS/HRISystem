@@ -105,13 +105,16 @@ export class IdempotencyError extends Error {
  * Service for idempotency operations
  */
 export class IdempotencyService {
-  private readonly LOCK_TIMEOUT_MS = 30000; // 30 seconds
+  private readonly LOCK_TIMEOUT_MS: number;
   private readonly DEFAULT_TTL_HOURS = 48; // 48 hours
 
   constructor(
     private db: DatabaseClient,
     private cache: CacheClient
-  ) {}
+  ) {
+    const envTimeout = process.env["IDEMPOTENCY_LOCK_TIMEOUT_MS"];
+    this.LOCK_TIMEOUT_MS = envTimeout ? Number(envTimeout) : 30000; // default 30 seconds
+  }
 
   /**
    * Generate a cache key for idempotency lookup
@@ -257,7 +260,7 @@ export class IdempotencyService {
           processing = true,
           processing_started_at = now()
         WHERE app.idempotency_keys.processing = false
-           OR app.idempotency_keys.processing_started_at < now() - interval '30 seconds'
+           OR app.idempotency_keys.processing_started_at < now() - make_interval(secs => ${this.LOCK_TIMEOUT_MS / 1000})
       `;
     });
 

@@ -6,6 +6,39 @@
 
 import { t, type Static } from "elysia";
 
+// =============================================================================
+// Condition Rules Schemas (for conditional workflow branching)
+// =============================================================================
+
+export const ConditionOperatorSchema = t.Union([
+  t.Literal("field_equals"),
+  t.Literal("field_not_equals"),
+  t.Literal("field_greater_than"),
+  t.Literal("field_less_than"),
+  t.Literal("field_greater_than_or_equal"),
+  t.Literal("field_less_than_or_equal"),
+  t.Literal("field_contains"),
+  t.Literal("field_not_contains"),
+  t.Literal("field_in"),
+  t.Literal("field_not_in"),
+  t.Literal("field_is_empty"),
+  t.Literal("field_is_not_empty"),
+]);
+export type ConditionOperator = Static<typeof ConditionOperatorSchema>;
+
+export const ConditionSchema = t.Object({
+  field: t.String({ minLength: 1, maxLength: 200, description: "Dot-notation path to the field in context data" }),
+  operator: ConditionOperatorSchema,
+  value: t.Optional(t.Unknown({ description: "Value to compare against. Not required for field_is_empty/field_is_not_empty." })),
+});
+export type ConditionSchemaType = Static<typeof ConditionSchema>;
+
+export const ConditionRulesSchema = t.Object({
+  match: t.Union([t.Literal("all"), t.Literal("any")], { default: "all", description: "Combinator: 'all' = AND, 'any' = OR" }),
+  conditions: t.Array(ConditionSchema, { minItems: 1, description: "Array of conditions to evaluate" }),
+});
+export type ConditionRulesSchemaType = Static<typeof ConditionRulesSchema>;
+
 // Enums
 export const WorkflowStatusSchema = t.Union([
   t.Literal("draft"),
@@ -81,9 +114,11 @@ export const WorkflowStepConfigSchema = t.Object({
     operator: t.String(),
     value: t.Unknown(),
   }))),
+  conditionRules: t.Optional(ConditionRulesSchema),
   nextSteps: t.Optional(t.Array(t.Object({
     stepKey: t.String(),
     condition: t.Optional(t.String()),
+    conditionRules: t.Optional(ConditionRulesSchema),
   }))),
 });
 export type WorkflowStepConfig = Static<typeof WorkflowStepConfigSchema>;

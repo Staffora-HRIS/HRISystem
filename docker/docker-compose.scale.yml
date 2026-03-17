@@ -1,0 +1,83 @@
+# =============================================================================
+# Staffora Platform — Horizontal Scaling Override
+# =============================================================================
+#
+# This override file configures the API service for horizontal scaling with
+# pre-defined replica counts and production-tuned resource limits.
+#
+# Usage:
+#   # Start with 3 API instances behind nginx load balancer
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile production up -d
+#
+#   # Scale dynamically at runtime (overrides deploy.replicas)
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile production up -d --scale api=5
+#
+# Architecture:
+#   Client -> Nginx (least_conn LB) -> N x API instances (port 3000)
+#                                   -> PostgreSQL (via PgBouncer)
+#                                   -> Redis (shared cache/sessions)
+#
+# Prerequisites:
+#   - nginx service must be active (--profile production)
+#   - SSL certificates in docker/nginx/ssl/ (cert.pem, key.pem)
+#   - PgBouncer configured with sufficient max_client_conn for N instances
+#     (default 200 connections supports ~8 API instances at 25 connections each)
+#
+# Monitoring:
+#   Check load distribution: docker compose logs nginx | grep upstream=
+#   Check instance health:   docker compose ps api
+#   View per-instance metrics in Grafana (Prometheus scrapes all instances)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API Server — Scaled Configuration
+  # ---------------------------------------------------------------------------
+  api:
+    # Remove host port binding to avoid conflicts between replicas.
+    # All traffic routes through nginx on ports 80/443.
+    # NOTE: !reset requires Docker Compose v2.24+. If using an older version,
+    # remove the "ports:" line from docker-compose.yml's api service instead.
+    ports: !reset []
+    deploy:
+      replicas: ${API_REPLICAS:-3}
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      # Rolling update strategy for zero-downtime deployments.
+      # Updates one instance at a time, waiting for health checks to pass
+      # before proceeding to the next. Failed instances are rolled back.
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        order: start-first
+      # Restart policy for individual container failures.
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+
+  # ---------------------------------------------------------------------------
+  # Nginx — Production Load Balancer (required for scaled API)
+  # ---------------------------------------------------------------------------
+  nginx:
+    # Override depends_on to not require service_healthy (which doesn't work
+    # well with multiple replicas — Docker checks only one instance).
+    depends_on:
+      - api
+      - web
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M

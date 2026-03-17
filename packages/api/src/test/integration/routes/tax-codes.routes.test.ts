@@ -3,9 +3,13 @@
  *
  * Tests the tax codes module to verify:
  * - Tax code CRUD for employees
+ * - UK HMRC tax code format validation
  * - Cumulative/week1-month1 mutual exclusivity validation
- * - Effective date overlap prevention
+ * - Effective date overlap prevention (create and update)
  * - Date range validation
+ * - Current tax code lookup for payroll processing
+ * - Expanded source types (hmrc, manual, p45, p46, starter_declaration)
+ * - Notes field support
  * - RLS tenant isolation
  * - Outbox events emitted atomically
  */
@@ -99,6 +103,10 @@ describe("Tax Codes Routes Integration", () => {
   const ctxA = () => ({ tenantId: tenant.id, userId: user.id });
   const ctxB = () => ({ tenantId: tenantB.id, userId: userB.id });
 
+  // ===========================================================================
+  // Tax Code CRUD
+  // ===========================================================================
+
   describe("Tax Code CRUD", () => {
     it("should create a tax code for an employee", async () => {
       if (skip) return;
@@ -113,6 +121,22 @@ describe("Tax Codes Routes Integration", () => {
       expect(result.success).toBe(true);
       expect(result.data!.tax_code).toBe("1257L");
       expect(result.data!.is_cumulative).toBe(true);
+      expect(result.data!.source).toBe("manual");
+    });
+
+    it("should create a tax code with notes", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id,
+        tax_code: "BR",
+        effective_from: "2040-04-06",
+        effective_to: "2040-12-31",
+        source: "p45",
+        notes: "Tax code from P45 received 2026-04-01",
+      });
+      expect(result.success).toBe(true);
+      expect(result.data!.notes).toBe("Tax code from P45 received 2026-04-01");
+      expect(result.data!.source).toBe("p45");
     });
 
     it("should get tax code by ID", async () => {
@@ -149,7 +173,181 @@ describe("Tax Codes Routes Integration", () => {
       expect(result.success).toBe(true);
       expect(result.data!.tax_code).toBe("D1");
     });
+
+    it("should update a tax code with notes", async () => {
+      if (skip) return;
+      const created = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "NT", effective_from: "2041-01-01", effective_to: "2041-06-30",
+      });
+      const result = await service.updateTaxCode(ctxA(), created.data!.id, {
+        notes: "Updated per HMRC P6 notice dated 2026-04-10",
+      });
+      expect(result.success).toBe(true);
+      expect(result.data!.notes).toBe("Updated per HMRC P6 notice dated 2026-04-10");
+    });
   });
+
+  // ===========================================================================
+  // Tax Code Format Validation
+  // ===========================================================================
+
+  describe("UK Tax Code Format Validation", () => {
+    it("should accept standard tax codes: 1257L", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L", effective_from: "2042-01-01", effective_to: "2042-06-30",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept Scottish tax codes: S1257L", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "S1257L", effective_from: "2042-07-01", effective_to: "2042-12-31",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept Welsh tax codes: C1257L", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "C1257L", effective_from: "2043-01-01", effective_to: "2043-06-30",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept K codes: K100", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "K100", effective_from: "2043-07-01", effective_to: "2043-12-31",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept fixed rate codes: BR, D0, D1, NT", async () => {
+      if (skip) return;
+      for (const code of ["BR", "D0", "D1", "NT"]) {
+        const from = `20${44 + ["BR", "D0", "D1", "NT"].indexOf(code)}-01-01`;
+        const to = `20${44 + ["BR", "D0", "D1", "NT"].indexOf(code)}-06-30`;
+        const result = await service.createTaxCode(ctxA(), {
+          employee_id: user.id, tax_code: code, effective_from: from, effective_to: to,
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it("should accept 0T code", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "0T", effective_from: "2048-01-01", effective_to: "2048-06-30",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject invalid tax code format", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "INVALID",
+        effective_from: "2049-01-01",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe("INVALID_TAX_CODE_FORMAT");
+    });
+
+    it("should reject invalid tax code format on update", async () => {
+      if (skip) return;
+      const created = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2050-01-01", effective_to: "2050-06-30",
+      });
+      const result = await service.updateTaxCode(ctxA(), created.data!.id, {
+        tax_code: "ZZZZZ",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe("INVALID_TAX_CODE_FORMAT");
+    });
+  });
+
+  // ===========================================================================
+  // Source Types
+  // ===========================================================================
+
+  describe("Source Types", () => {
+    it("should accept p45 source", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2051-01-01", effective_to: "2051-06-30",
+        source: "p45",
+      });
+      expect(result.success).toBe(true);
+      expect(result.data!.source).toBe("p45");
+    });
+
+    it("should accept starter_declaration source", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2051-07-01", effective_to: "2051-12-31",
+        source: "starter_declaration",
+      });
+      expect(result.success).toBe(true);
+      expect(result.data!.source).toBe("starter_declaration");
+    });
+
+    it("should accept hmrc source", async () => {
+      if (skip) return;
+      const result = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2052-01-01", effective_to: "2052-06-30",
+        source: "hmrc",
+      });
+      expect(result.success).toBe(true);
+      expect(result.data!.source).toBe("hmrc");
+    });
+  });
+
+  // ===========================================================================
+  // Get Current Tax Code
+  // ===========================================================================
+
+  describe("Get Current Tax Code", () => {
+    it("should return the current tax code for an employee", async () => {
+      if (skip) return;
+      // Create a tax code effective from well in the past with no end date (open-ended)
+      await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2020-01-01",
+        source: "manual",
+      });
+      const result = await service.getCurrentTaxCode(ctxA(), user.id);
+      expect(result.success).toBe(true);
+      expect(result.data!.tax_code).toBe("1257L");
+    });
+
+    it("should return the current tax code as of a specific date", async () => {
+      if (skip) return;
+      await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "BR",
+        effective_from: "2053-01-01", effective_to: "2053-06-30",
+      });
+      const result = await service.getCurrentTaxCode(ctxA(), user.id, "2053-03-15");
+      expect(result.success).toBe(true);
+      expect(result.data!.tax_code).toBe("BR");
+    });
+
+    it("should return NO_CURRENT_TAX_CODE when no tax code is effective", async () => {
+      if (skip) return;
+      // Use tenant B's user who has no tax codes
+      const result = await serviceB.getCurrentTaxCode(ctxB(), userB.id, "2025-01-01");
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe("NO_CURRENT_TAX_CODE");
+    });
+  });
+
+  // ===========================================================================
+  // Validation Rules
+  // ===========================================================================
 
   describe("Validation Rules", () => {
     it("should reject cumulative and week1_month1 both true", async () => {
@@ -174,7 +372,7 @@ describe("Tax Codes Routes Integration", () => {
       expect(result.error?.code).toBe("VALIDATION_ERROR");
     });
 
-    it("should reject overlapping tax codes", async () => {
+    it("should reject overlapping tax codes on create", async () => {
       if (skip) return;
       await service.createTaxCode(ctxA(), {
         employee_id: user.id, tax_code: "1257L",
@@ -187,14 +385,38 @@ describe("Tax Codes Routes Integration", () => {
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe("EFFECTIVE_DATE_OVERLAP");
     });
+
+    it("should reject overlapping tax codes on update when dates change", async () => {
+      if (skip) return;
+      // Create two non-overlapping records
+      await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2054-01-01", effective_to: "2054-06-30",
+      });
+      const second = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "BR",
+        effective_from: "2054-07-01", effective_to: "2054-12-31",
+      });
+      // Try to move the second record's dates to overlap with the first
+      const result = await service.updateTaxCode(ctxA(), second.data!.id, {
+        effective_from: "2054-03-01",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe("EFFECTIVE_DATE_OVERLAP");
+    });
   });
+
+  // ===========================================================================
+  // RLS Tenant Isolation
+  // ===========================================================================
 
   describe("RLS Tenant Isolation", () => {
     it("should not allow tenant B to read tenant A tax codes", async () => {
       if (skip) return;
       const created = await service.createTaxCode(ctxA(), {
-        employee_id: user.id, tax_code: "RLS-TEST",
+        employee_id: user.id, tax_code: "1257L",
         effective_from: "2032-04-06", effective_to: "2032-12-31",
+        notes: "RLS test record",
       });
       const result = await serviceB.getTaxCodeById(ctxB(), created.data!.id);
       expect(result.success).toBe(false);
@@ -202,11 +424,15 @@ describe("Tax Codes Routes Integration", () => {
     });
   });
 
+  // ===========================================================================
+  // Outbox Events
+  // ===========================================================================
+
   describe("Outbox Events", () => {
     it("should emit domain event on tax code creation", async () => {
       if (skip) return;
       const created = await service.createTaxCode(ctxA(), {
-        employee_id: user.id, tax_code: "OB-1257L",
+        employee_id: user.id, tax_code: "1257L",
         effective_from: "2033-04-06", effective_to: "2033-12-31",
       });
       expect(created.success).toBe(true);
@@ -217,6 +443,23 @@ describe("Tax Codes Routes Integration", () => {
         WHERE aggregate_type = 'employee_tax_code' AND aggregate_id = ${created.data!.id}::uuid
       `;
       expect(outbox.some(e => e.event_type === "payroll.tax_code.created")).toBe(true);
+    });
+
+    it("should emit domain event on tax code update", async () => {
+      if (skip) return;
+      const created = await service.createTaxCode(ctxA(), {
+        employee_id: user.id, tax_code: "1257L",
+        effective_from: "2055-01-01", effective_to: "2055-06-30",
+      });
+      await service.updateTaxCode(ctxA(), created.data!.id, { tax_code: "BR" });
+
+      await setTenantContext(db, tenant.id, user.id);
+      const outbox = await db<Record<string, unknown>[]>`
+        SELECT event_type FROM app.domain_outbox
+        WHERE aggregate_type = 'employee_tax_code' AND aggregate_id = ${created.data!.id}::uuid
+        ORDER BY created_at DESC
+      `;
+      expect(outbox.some(e => e.event_type === "payroll.tax_code.updated")).toBe(true);
     });
   });
 });
