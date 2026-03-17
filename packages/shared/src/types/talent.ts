@@ -12,6 +12,7 @@ import type {
   TenantScopedEntity,
   Money,
 } from "./common";
+import type { CandidateStage } from "../state-machines/recruitment";
 
 // =============================================================================
 // Requisition Types
@@ -144,17 +145,6 @@ export type CandidateSource =
   | "internal"
   | "other";
 
-/** Candidate stage */
-export type CandidateStage =
-  | "new"
-  | "screening"
-  | "interview"
-  | "assessment"
-  | "offer"
-  | "hired"
-  | "rejected"
-  | "withdrawn";
-
 /**
  * Candidate record.
  */
@@ -170,7 +160,7 @@ export interface Candidate extends TenantScopedEntity {
   /** Phone */
   phone?: string;
   /** Current stage */
-  stage: CandidateStage;
+  stage: string;
   /** Source */
   source: CandidateSource;
   /** Source details */

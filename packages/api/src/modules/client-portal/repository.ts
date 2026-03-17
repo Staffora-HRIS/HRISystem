@@ -72,12 +72,11 @@ export interface PortalTicket {
   category: string;
   priority: string;
   status: string;
-  createdById: string;
+  createdBy: string;
   createdByName?: string;
-  assigneeId: string | null;
-  assigneeName?: string | null;
-  slaResponseDueAt: Date | null;
-  slaResolutionDueAt: Date | null;
+  assignedTo: string | null;
+  assignedToName?: string | null;
+  slaDueAt: Date | null;
   firstResponseAt: Date | null;
   resolvedAt: Date | null;
   closedAt: Date | null;
@@ -90,8 +89,9 @@ export interface PortalTicketMessage {
   ticketId: string;
   authorId: string;
   authorName?: string;
-  content: string;
+  message: string;
   isInternalNote: boolean;
+  attachments: unknown[];
   createdAt: Date;
 }
 
@@ -100,14 +100,20 @@ export interface PortalDocument {
   tenantId: string;
   title: string;
   description: string | null;
-  documentType: string;
+  category: string;
   fileName: string | null;
   fileSize: number | null;
   mimeType: string | null;
-  storageUrl: string | null;
+  storagePath: string | null;
   version: number;
-  requiresAcknowledgement: boolean;
+  previousVersionId: string | null;
+  isPublished: boolean;
   publishedAt: Date | null;
+  publishedBy: string | null;
+  visibility: string;
+  downloadCount: number;
+  requiresAcknowledgement: boolean;
+  createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -128,10 +134,17 @@ export interface NewsArticle {
   slug: string;
   summary: string | null;
   content: string;
-  authorId: string;
-  authorName?: string;
-  status: string;
+  category: string | null;
+  severity: string | null;
+  isPinned: boolean;
+  isPublished: boolean;
   publishedAt: Date | null;
+  publishedBy: string | null;
+  coverImageUrl: string | null;
+  tags: string[];
+  viewCount: number;
+  createdBy: string;
+  createdByName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -139,59 +152,76 @@ export interface NewsArticle {
 export interface PortalLicense {
   id: string;
   tenantId: string;
-  tier: string;
+  planTier: string;
+  employeeLimit: number;
+  storageLimitGb: number;
+  adminLimit: number;
   status: string;
-  seatCount: number;
-  seatsUsed: number;
-  monthlyPriceGbp: number;
-  billingCycleDay: number;
+  trialEndsAt: Date | null;
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
-  trialEndsAt: Date | null;
-  cancelledAt: Date | null;
+  autoRenew: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface LicenseModule {
   moduleKey: string;
-  moduleName: string;
-  enabled: boolean;
+  isEnabled: boolean;
+  pricePerMonth: number | null;
+  pricePerYear: number | null;
+  addedAt: Date;
 }
 
 export interface PortalInvoice {
   id: string;
   tenantId: string;
   invoiceNumber: string;
-  status: string;
-  issuedAt: Date;
-  dueAt: Date;
-  paidAt: Date | null;
-  subtotalGbp: number;
-  vatGbp: number;
-  totalGbp: number;
+  licenseId: string | null;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
   currency: string;
+  status: string;
+  dueDate: Date;
+  paidAt: Date | null;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+  pdfUrl: string | null;
+  notes: string | null;
   createdAt: Date;
 }
 
 export interface InvoiceLine {
   id: string;
+  tenantId: string;
   invoiceId: string;
   description: string;
+  moduleKey: string | null;
   quantity: number;
-  unitPriceGbp: number;
-  totalGbp: number;
+  unitPrice: number;
+  lineTotal: number;
+  createdAt: Date;
 }
 
 export interface PaymentMethod {
   id: string;
   tenantId: string;
   type: string;
-  last4: string | null;
-  expiryMonth: number | null;
-  expiryYear: number | null;
-  brand: string | null;
   isDefault: boolean;
+  cardLastFour: string | null;
+  cardBrand: string | null;
+  cardExpMonth: number | null;
+  cardExpYear: number | null;
+  bankName: string | null;
+  accountLastFour: string | null;
+  billingEmail: string | null;
+  billingAddress: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // =============================================================================
@@ -441,12 +471,12 @@ export class ClientPortalRepository {
           SELECT
             t.*,
             cu.first_name || ' ' || cu.last_name as created_by_name,
-            au.first_name || ' ' || au.last_name as assignee_name
+            au.first_name || ' ' || au.last_name as assigned_to_name
           FROM app.portal_tickets t
-          LEFT JOIN app.portal_users cu ON cu.id = t.created_by_id
-          LEFT JOIN app.portal_users au ON au.id = t.assignee_id
+          LEFT JOIN app.portal_users cu ON cu.id = t.created_by
+          LEFT JOIN app.portal_users au ON au.id = t.assigned_to
           WHERE t.tenant_id = ${ctx.tenantId}::uuid
-            AND t.created_by_id = ${ctx.userId}::uuid
+            AND t.created_by = ${ctx.userId}::uuid
             ${filters.status ? tx`AND t.status = ${filters.status}` : tx``}
             ${filters.priority ? tx`AND t.priority = ${filters.priority}` : tx``}
             ${filters.category ? tx`AND t.category = ${filters.category}` : tx``}
@@ -489,15 +519,15 @@ export class ClientPortalRepository {
           SELECT
             t.*,
             cu.first_name || ' ' || cu.last_name as created_by_name,
-            au.first_name || ' ' || au.last_name as assignee_name
+            au.first_name || ' ' || au.last_name as assigned_to_name
           FROM app.portal_tickets t
-          LEFT JOIN app.portal_users cu ON cu.id = t.created_by_id
-          LEFT JOIN app.portal_users au ON au.id = t.assignee_id
+          LEFT JOIN app.portal_users cu ON cu.id = t.created_by
+          LEFT JOIN app.portal_users au ON au.id = t.assigned_to
           WHERE t.tenant_id = ${ctx.tenantId}::uuid
             ${filters.status ? tx`AND t.status = ${filters.status}` : tx``}
             ${filters.priority ? tx`AND t.priority = ${filters.priority}` : tx``}
             ${filters.category ? tx`AND t.category = ${filters.category}` : tx``}
-            ${filters.assigneeId ? tx`AND t.assignee_id = ${filters.assigneeId}::uuid` : tx``}
+            ${filters.assigneeId ? tx`AND t.assigned_to = ${filters.assigneeId}::uuid` : tx``}
             ${filters.search ? tx`AND (t.subject ILIKE ${"%" + filters.search + "%"} OR t.ticket_number ILIKE ${"%" + filters.search + "%"})` : tx``}
             ${pagination.cursor ? tx`AND t.created_at < (SELECT created_at FROM app.portal_tickets WHERE id = ${pagination.cursor}::uuid)` : tx``}
           ORDER BY
@@ -530,10 +560,10 @@ export class ClientPortalRepository {
           SELECT
             t.*,
             cu.first_name || ' ' || cu.last_name as created_by_name,
-            au.first_name || ' ' || au.last_name as assignee_name
+            au.first_name || ' ' || au.last_name as assigned_to_name
           FROM app.portal_tickets t
-          LEFT JOIN app.portal_users cu ON cu.id = t.created_by_id
-          LEFT JOIN app.portal_users au ON au.id = t.assignee_id
+          LEFT JOIN app.portal_users cu ON cu.id = t.created_by
+          LEFT JOIN app.portal_users au ON au.id = t.assigned_to
           WHERE t.id = ${id}::uuid AND t.tenant_id = ${ctx.tenantId}::uuid
         `;
       }
@@ -558,14 +588,14 @@ export class ClientPortalRepository {
       return tx`
         INSERT INTO app.portal_tickets (
           id, tenant_id, ticket_number, subject, description,
-          category, priority, status, created_by_id,
-          sla_response_due_at, sla_resolution_due_at,
+          category, priority, status, created_by,
+          sla_due_at,
           created_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.ticketNumber},
           ${data.subject}, ${data.description},
           ${data.category}, ${data.priority}, 'open', ${ctx.userId}::uuid,
-          ${data.slaResponseDueAt}, ${data.slaResolutionDueAt},
+          ${data.slaResponseDueAt},
           now(), now()
         )
         RETURNING *
@@ -599,9 +629,9 @@ export class ClientPortalRepository {
           status = COALESCE(${data.status ?? null}, status),
           priority = COALESCE(${data.priority ?? null}, priority),
           category = COALESCE(${data.category ?? null}, category),
-          assignee_id = CASE
+          assigned_to = CASE
             WHEN ${data.assigneeId !== undefined} THEN ${data.assigneeId ?? null}::uuid
-            ELSE assignee_id
+            ELSE assigned_to
           END,
           first_response_at = CASE
             WHEN first_response_at IS NULL AND ${data.status ?? null} IS NOT NULL AND ${data.status ?? null} != 'open'
@@ -641,7 +671,7 @@ export class ClientPortalRepository {
     const exec = async (tx: TransactionSql) => {
       return tx`
         INSERT INTO app.portal_ticket_messages (
-          id, tenant_id, ticket_id, author_id, content, is_internal_note, created_at
+          id, tenant_id, ticket_id, author_id, message, is_internal_note, created_at
         ) VALUES (
           gen_random_uuid(), ${ctx.tenantId}::uuid, ${ticketId}::uuid,
           ${ctx.userId}::uuid, ${data.content}, ${data.isInternalNote}, now()
@@ -695,7 +725,7 @@ export class ClientPortalRepository {
   ): Promise<void> {
     const exec = async (tx: TransactionSql) => {
       await tx`
-        INSERT INTO app.portal_ticket_activity (
+        INSERT INTO app.portal_ticket_activity_log (
           id, tenant_id, ticket_id, actor_id, action,
           old_value, new_value, created_at
         ) VALUES (
@@ -734,8 +764,8 @@ export class ClientPortalRepository {
           SELECT *
           FROM app.portal_documents
           WHERE tenant_id = ${ctx.tenantId}::uuid
-            AND (published_at IS NOT NULL AND published_at <= now())
-            ${filters.documentType ? tx`AND document_type = ${filters.documentType}` : tx``}
+            AND is_published = true
+            ${filters.documentType ? tx`AND category = ${filters.documentType}` : tx``}
             ${filters.search ? tx`AND (title ILIKE ${"%" + filters.search + "%"} OR description ILIKE ${"%" + filters.search + "%"})` : tx``}
             ${pagination.cursor ? tx`AND created_at < (SELECT created_at FROM app.portal_documents WHERE id = ${pagination.cursor}::uuid)` : tx``}
           ORDER BY created_at DESC
@@ -789,9 +819,10 @@ export class ClientPortalRepository {
     const exec = async (tx: TransactionSql) => {
       return tx`
         INSERT INTO app.portal_documents (
-          id, tenant_id, title, description, document_type,
-          file_name, file_size, mime_type, storage_url,
-          version, requires_acknowledgement, published_at,
+          id, tenant_id, title, description, category,
+          file_name, file_size, mime_type, storage_path,
+          version, requires_acknowledgement, is_published,
+          published_at, published_by, created_by,
           created_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.tenantId}::uuid,
@@ -799,7 +830,10 @@ export class ClientPortalRepository {
           ${data.fileName ?? null}, ${data.fileSize ?? null},
           ${data.mimeType ?? null}, ${data.storageUrl ?? null},
           1, ${data.requiresAcknowledgement ?? false},
+          ${!!data.publishedAt},
           ${data.publishedAt ? new Date(data.publishedAt) : null},
+          ${data.publishedAt ? ctx.userId : null}::uuid,
+          ${ctx.userId}::uuid,
           now(), now()
         )
         RETURNING *
@@ -837,12 +871,13 @@ export class ClientPortalRepository {
         UPDATE app.portal_documents SET
           title = COALESCE(${data.title ?? null}, title),
           description = COALESCE(${data.description ?? null}, description),
-          document_type = COALESCE(${data.documentType ?? null}, document_type),
+          category = COALESCE(${data.documentType ?? null}, category),
           file_name = COALESCE(${data.fileName ?? null}, file_name),
           file_size = COALESCE(${data.fileSize ?? null}, file_size),
           mime_type = COALESCE(${data.mimeType ?? null}, mime_type),
-          storage_url = COALESCE(${data.storageUrl ?? null}, storage_url),
+          storage_path = COALESCE(${data.storageUrl ?? null}, storage_path),
           requires_acknowledgement = COALESCE(${data.requiresAcknowledgement ?? null}, requires_acknowledgement),
+          is_published = COALESCE(${data.publishedAt !== undefined ? !!data.publishedAt : null}, is_published),
           published_at = COALESCE(${data.publishedAt ? new Date(data.publishedAt) : null}, published_at),
           version = version + 1,
           updated_at = now()
@@ -945,9 +980,9 @@ export class ClientPortalRepository {
             n.*,
             u.first_name || ' ' || u.last_name as author_name
           FROM app.portal_news n
-          LEFT JOIN app.portal_users u ON u.id = n.author_id
+          LEFT JOIN app.portal_users u ON u.id = n.created_by
           WHERE n.tenant_id = ${ctx.tenantId}::uuid
-            AND n.status = 'published'
+            AND n.is_published = true
             AND (n.published_at IS NULL OR n.published_at <= now())
             ${filters.search ? tx`AND (n.title ILIKE ${"%" + filters.search + "%"} OR n.summary ILIKE ${"%" + filters.search + "%"})` : tx``}
             ${pagination.cursor ? tx`AND n.published_at < (SELECT published_at FROM app.portal_news WHERE id = ${pagination.cursor}::uuid)` : tx``}
@@ -980,7 +1015,7 @@ export class ClientPortalRepository {
             n.*,
             u.first_name || ' ' || u.last_name as author_name
           FROM app.portal_news n
-          LEFT JOIN app.portal_users u ON u.id = n.author_id
+          LEFT JOIN app.portal_users u ON u.id = n.created_by
           WHERE n.slug = ${slug}
             AND n.tenant_id = ${ctx.tenantId}::uuid
         `;
@@ -1005,12 +1040,13 @@ export class ClientPortalRepository {
       return tx`
         INSERT INTO app.portal_news (
           id, tenant_id, title, slug, summary, content,
-          author_id, status, published_at, created_at, updated_at
+          created_by, is_published, published_at, published_by, created_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.tenantId}::uuid,
           ${data.title}, ${data.slug}, ${data.summary ?? null}, ${data.content},
-          ${ctx.userId}::uuid, ${data.status ?? "draft"},
+          ${ctx.userId}::uuid, ${data.status === "published"},
           ${data.publishedAt ? new Date(data.publishedAt) : data.status === "published" ? new Date() : null},
+          ${data.status === "published" ? ctx.userId : null}::uuid,
           now(), now()
         )
         RETURNING *
@@ -1047,7 +1083,7 @@ export class ClientPortalRepository {
           slug = COALESCE(${data.slug ?? null}, slug),
           summary = COALESCE(${data.summary ?? null}, summary),
           content = COALESCE(${data.content ?? null}, content),
-          status = COALESCE(${data.status ?? null}, status),
+          is_published = COALESCE(${data.status !== undefined ? data.status === "published" : null}, is_published),
           published_at = COALESCE(
             ${data.publishedAt ? new Date(data.publishedAt) : null},
             CASE WHEN ${data.status ?? null} = 'published' AND published_at IS NULL THEN now() ELSE published_at END
@@ -1085,7 +1121,7 @@ export class ClientPortalRepository {
   async markNewsRead(userId: string, newsId: string): Promise<void> {
     await this.db.withSystemContext(async (tx: TransactionSql) => {
       await tx`
-        INSERT INTO app.portal_news_reads (
+        INSERT INTO app.portal_news_read_status (
           id, user_id, news_id, read_at
         ) VALUES (
           gen_random_uuid(), ${userId}::uuid, ${newsId}::uuid, now()
@@ -1106,10 +1142,10 @@ export class ClientPortalRepository {
           SELECT COUNT(*) as count
           FROM app.portal_news n
           WHERE n.tenant_id = ${ctx.tenantId}::uuid
-            AND n.status = 'published'
+            AND n.is_published = true
             AND (n.published_at IS NULL OR n.published_at <= now())
             AND NOT EXISTS (
-              SELECT 1 FROM app.portal_news_reads r
+              SELECT 1 FROM app.portal_news_read_status r
               WHERE r.news_id = n.id AND r.user_id = ${userId}::uuid
             )
         `;
@@ -1145,18 +1181,20 @@ export class ClientPortalRepository {
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
         return tx`
-          SELECT module_key, module_name, enabled
+          SELECT module_key, is_enabled, price_per_month, price_per_year, added_at
           FROM app.portal_license_modules
           WHERE license_id = ${licenseId}::uuid
             AND tenant_id = ${ctx.tenantId}::uuid
-          ORDER BY module_name ASC
+          ORDER BY module_key ASC
         `;
       }
     );
     return rows.map((r: any) => ({
       moduleKey: r.moduleKey,
-      moduleName: r.moduleName,
-      enabled: r.enabled,
+      isEnabled: r.isEnabled,
+      pricePerMonth: r.pricePerMonth != null ? Number(r.pricePerMonth) : null,
+      pricePerYear: r.pricePerYear != null ? Number(r.pricePerYear) : null,
+      addedAt: r.addedAt,
     }));
   }
 
@@ -1174,8 +1212,8 @@ export class ClientPortalRepository {
           SELECT * FROM app.portal_invoices
           WHERE tenant_id = ${ctx.tenantId}::uuid
             ${filters.status ? tx`AND status = ${filters.status}` : tx``}
-            ${pagination.cursor ? tx`AND issued_at < (SELECT issued_at FROM app.portal_invoices WHERE id = ${pagination.cursor}::uuid)` : tx``}
-          ORDER BY issued_at DESC
+            ${pagination.cursor ? tx`AND created_at < (SELECT created_at FROM app.portal_invoices WHERE id = ${pagination.cursor}::uuid)` : tx``}
+          ORDER BY created_at DESC
           LIMIT ${limit + 1}
         `;
       }
@@ -1224,11 +1262,14 @@ export class ClientPortalRepository {
     );
     return rows.map((r: any) => ({
       id: r.id,
+      tenantId: r.tenantId,
       invoiceId: r.invoiceId,
       description: r.description,
+      moduleKey: r.moduleKey ?? null,
       quantity: Number(r.quantity),
-      unitPriceGbp: Number(r.unitPriceGbp),
-      totalGbp: Number(r.totalGbp),
+      unitPrice: Number(r.unitPrice),
+      lineTotal: Number(r.lineTotal),
+      createdAt: r.createdAt,
     }));
   }
 
@@ -1251,11 +1292,17 @@ export class ClientPortalRepository {
       id: r.id,
       tenantId: r.tenantId,
       type: r.type,
-      last4: r.last4,
-      expiryMonth: r.expiryMonth != null ? Number(r.expiryMonth) : null,
-      expiryYear: r.expiryYear != null ? Number(r.expiryYear) : null,
-      brand: r.brand,
       isDefault: r.isDefault,
+      cardLastFour: r.cardLastFour ?? null,
+      cardBrand: r.cardBrand ?? null,
+      cardExpMonth: r.cardExpMonth != null ? Number(r.cardExpMonth) : null,
+      cardExpYear: r.cardExpYear != null ? Number(r.cardExpYear) : null,
+      bankName: r.bankName ?? null,
+      accountLastFour: r.accountLastFour ?? null,
+      billingEmail: r.billingEmail ?? null,
+      billingAddress: r.billingAddress ?? null,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     };
   }
 
@@ -1438,21 +1485,21 @@ export class ClientPortalRepository {
               SELECT COUNT(*) FROM app.portal_tickets
               WHERE tenant_id = ${ctx.tenantId}::uuid
                 AND status NOT IN ('resolved', 'closed')
-                ${!isAdmin ? tx`AND created_by_id = ${userId}::uuid` : tx``}
+                ${!isAdmin ? tx`AND created_by = ${userId}::uuid` : tx``}
             ) as open_tickets,
             (
               SELECT COUNT(*) FROM app.portal_tickets
               WHERE tenant_id = ${ctx.tenantId}::uuid
                 AND status = 'awaiting_client'
-                ${!isAdmin ? tx`AND created_by_id = ${userId}::uuid` : tx``}
+                ${!isAdmin ? tx`AND created_by = ${userId}::uuid` : tx``}
             ) as awaiting_client_tickets,
             (
               SELECT COUNT(*) FROM app.portal_news n
               WHERE n.tenant_id = ${ctx.tenantId}::uuid
-                AND n.status = 'published'
+                AND n.is_published = true
                 AND (n.published_at IS NULL OR n.published_at <= now())
                 AND NOT EXISTS (
-                  SELECT 1 FROM app.portal_news_reads r
+                  SELECT 1 FROM app.portal_news_read_status r
                   WHERE r.news_id = n.id AND r.user_id = ${userId}::uuid
                 )
             ) as unread_news,
@@ -1460,7 +1507,7 @@ export class ClientPortalRepository {
               SELECT COUNT(*) FROM app.portal_documents d
               WHERE d.tenant_id = ${ctx.tenantId}::uuid
                 AND d.requires_acknowledgement = true
-                AND d.published_at IS NOT NULL AND d.published_at <= now()
+                AND d.is_published = true
                 AND NOT EXISTS (
                   SELECT 1 FROM app.portal_document_acknowledgements a
                   WHERE a.document_id = d.id AND a.user_id = ${userId}::uuid
@@ -1501,7 +1548,7 @@ export class ClientPortalRepository {
           SELECT id, ticket_number, subject, status, priority, updated_at
           FROM app.portal_tickets
           WHERE tenant_id = ${ctx.tenantId}::uuid
-            ${!isAdmin ? tx`AND created_by_id = ${userId}::uuid` : tx``}
+            ${!isAdmin ? tx`AND created_by = ${userId}::uuid` : tx``}
           ORDER BY updated_at DESC
           LIMIT ${limit}
         `;
@@ -1531,12 +1578,11 @@ export class ClientPortalRepository {
       category: row.category,
       priority: row.priority,
       status: row.status,
-      createdById: row.createdById,
+      createdBy: row.createdBy,
       createdByName: row.createdByName ?? undefined,
-      assigneeId: row.assigneeId ?? null,
-      assigneeName: row.assigneeName ?? null,
-      slaResponseDueAt: row.slaResponseDueAt ?? null,
-      slaResolutionDueAt: row.slaResolutionDueAt ?? null,
+      assignedTo: row.assignedTo ?? null,
+      assignedToName: row.assignedToName ?? null,
+      slaDueAt: row.slaDueAt ?? null,
       firstResponseAt: row.firstResponseAt ?? null,
       resolvedAt: row.resolvedAt ?? null,
       closedAt: row.closedAt ?? null,
@@ -1551,8 +1597,9 @@ export class ClientPortalRepository {
       ticketId: row.ticketId,
       authorId: row.authorId,
       authorName: row.authorName ?? undefined,
-      content: row.content,
+      message: row.message,
       isInternalNote: row.isInternalNote,
+      attachments: row.attachments ?? [],
       createdAt: row.createdAt,
     };
   }
@@ -1563,14 +1610,20 @@ export class ClientPortalRepository {
       tenantId: row.tenantId,
       title: row.title,
       description: row.description ?? null,
-      documentType: row.documentType,
+      category: row.category,
       fileName: row.fileName ?? null,
       fileSize: row.fileSize != null ? Number(row.fileSize) : null,
       mimeType: row.mimeType ?? null,
-      storageUrl: row.storageUrl ?? null,
+      storagePath: row.storagePath ?? null,
       version: Number(row.version),
-      requiresAcknowledgement: row.requiresAcknowledgement ?? false,
+      previousVersionId: row.previousVersionId ?? null,
+      isPublished: row.isPublished ?? false,
       publishedAt: row.publishedAt ?? null,
+      publishedBy: row.publishedBy ?? null,
+      visibility: row.visibility ?? "all_clients",
+      downloadCount: Number(row.downloadCount ?? 0),
+      requiresAcknowledgement: row.requiresAcknowledgement ?? false,
+      createdBy: row.createdBy ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -1584,10 +1637,17 @@ export class ClientPortalRepository {
       slug: row.slug,
       summary: row.summary ?? null,
       content: row.content,
-      authorId: row.authorId,
-      authorName: row.authorName ?? undefined,
-      status: row.status,
+      category: row.category ?? null,
+      severity: row.severity ?? null,
+      isPinned: row.isPinned ?? false,
+      isPublished: row.isPublished ?? false,
       publishedAt: row.publishedAt ?? null,
+      publishedBy: row.publishedBy ?? null,
+      coverImageUrl: row.coverImageUrl ?? null,
+      tags: row.tags ?? [],
+      viewCount: Number(row.viewCount ?? 0),
+      createdBy: row.createdBy,
+      createdByName: row.authorName ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -1597,16 +1657,15 @@ export class ClientPortalRepository {
     return {
       id: row.id,
       tenantId: row.tenantId,
-      tier: row.tier,
+      planTier: row.planTier,
+      employeeLimit: Number(row.employeeLimit),
+      storageLimitGb: Number(row.storageLimitGb),
+      adminLimit: Number(row.adminLimit),
       status: row.status,
-      seatCount: Number(row.seatCount),
-      seatsUsed: Number(row.seatsUsed),
-      monthlyPriceGbp: Number(row.monthlyPriceGbp),
-      billingCycleDay: Number(row.billingCycleDay),
+      trialEndsAt: row.trialEndsAt ?? null,
       currentPeriodStart: row.currentPeriodStart,
       currentPeriodEnd: row.currentPeriodEnd,
-      trialEndsAt: row.trialEndsAt ?? null,
-      cancelledAt: row.cancelledAt ?? null,
+      autoRenew: row.autoRenew ?? false,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -1617,14 +1676,21 @@ export class ClientPortalRepository {
       id: row.id,
       tenantId: row.tenantId,
       invoiceNumber: row.invoiceNumber,
-      status: row.status,
-      issuedAt: row.issuedAt,
-      dueAt: row.dueAt,
-      paidAt: row.paidAt ?? null,
-      subtotalGbp: Number(row.subtotalGbp),
-      vatGbp: Number(row.vatGbp),
-      totalGbp: Number(row.totalGbp),
+      licenseId: row.licenseId ?? null,
+      periodStart: row.periodStart ?? null,
+      periodEnd: row.periodEnd ?? null,
+      subtotal: Number(row.subtotal),
+      taxRate: Number(row.taxRate),
+      taxAmount: Number(row.taxAmount),
+      total: Number(row.total),
       currency: row.currency ?? "GBP",
+      status: row.status,
+      dueDate: row.dueDate,
+      paidAt: row.paidAt ?? null,
+      paymentMethod: row.paymentMethod ?? null,
+      paymentReference: row.paymentReference ?? null,
+      pdfUrl: row.pdfUrl ?? null,
+      notes: row.notes ?? null,
       createdAt: row.createdAt,
     };
   }

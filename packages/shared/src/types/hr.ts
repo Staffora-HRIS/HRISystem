@@ -587,8 +587,6 @@ export interface Job extends TenantScopedEntity {
   wtrStatus: "subject_to_wtr" | "opted_out";
   /** UK Standard Occupational Classification (SOC) code */
   socCode?: string;
-  /** SOC code */
-  socCode?: string;
   /** Whether job is active */
   isActive: boolean;
 }
