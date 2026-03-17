@@ -14,6 +14,9 @@ type Pages = {
   "/": {
     params: {};
   };
+  "/healthz": {
+    params: {};
+  };
   "/login": {
     params: {};
   };
@@ -263,7 +266,11 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations" | "/*";
+    page: "/" | "/healthz" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/manager" | "/manager/team" | "/manager/approvals" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations" | "/*";
+  };
+  "routes/healthz.tsx": {
+    id: "routes/healthz";
+    page: "/healthz";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -597,6 +604,7 @@ type RouteFiles = {
 
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
+  "routes/healthz": typeof import("./app/routes/healthz.tsx");
   "routes/home": typeof import("./app/routes/home.tsx");
   "routes/(auth)/layout": typeof import("./app/routes/(auth)/layout.tsx");
   "routes/(auth)/login/route": typeof import("./app/routes/(auth)/login/route.tsx");

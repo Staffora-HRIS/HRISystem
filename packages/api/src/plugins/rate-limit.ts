@@ -118,7 +118,8 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
         } catch (error) {
           console.warn("[RateLimit] Failed to apply auth rate limiting", error);
         }
-        // Auth routes still fall through to generic rate limiting below
+        // Auth routes have their own rate limiting — skip generic to avoid double-counting
+        return;
       }
 
       // Unauthenticated endpoint rate limiting — stricter IP-only limits

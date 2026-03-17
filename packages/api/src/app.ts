@@ -117,7 +117,11 @@ const config = {
   corsOrigins: process.env["CORS_ORIGIN"]?.split(",").map(s => s.trim()) || [
     "http://localhost:5173",
   ],
+  maxBodySize: Number(process.env["MAX_BODY_SIZE"]) || 10 * 1024 * 1024, // 10MB default
 } as const;
+
+/** Pre-compiled regex for dev CORS origin check (avoid re-compiling on every request) */
+const DEV_LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 /**
  * Application start time for uptime calculation
@@ -137,7 +141,7 @@ export const app = new Elysia()
             // In development, allow strict localhost/127.0.0.1 origins with any port
             const origin = request.headers.get("origin");
             if (!origin) return true;
-            if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            if (DEV_LOCALHOST_REGEX.test(origin)) {
               return true;
             }
             return config.corsOrigins.includes(origin);
@@ -226,6 +230,21 @@ export const app = new Elysia()
 
   // Core infrastructure plugins (order matters!)
   .use(errorsPlugin())
+
+  // Request body size limit (pre-computed at startup, not per-request)
+  .onBeforeHandle({ as: "global" }, ({ request, set }) => {
+    const contentLength = request.headers.get("content-length");
+    if (contentLength && Number(contentLength) > config.maxBodySize) {
+      set.status = 413;
+      return {
+        error: {
+          code: "PAYLOAD_TOO_LARGE",
+          message: `Request body exceeds maximum size of ${Math.floor(config.maxBodySize / 1024 / 1024)}MB`,
+        },
+      };
+    }
+  })
+
   .use(dbPlugin())
   .use(cachePlugin())
 

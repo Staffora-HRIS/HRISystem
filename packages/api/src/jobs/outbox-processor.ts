@@ -305,20 +305,21 @@ export async function startOutboxPolling(
 
   let isRunning = true;
   // Backpressure: limit concurrent Redis publishes to prevent overwhelming the server
-  const MAX_CONCURRENT = 10;
+  const MAX_CONCURRENT = 5;
   // Adaptive polling: back off when idle, reset when events found
   let consecutiveEmpty = 0;
 
+  const isDebugEnabled = process.env["NODE_ENV"] !== "production";
   const log = {
     info: (msg: string, data?: Record<string, unknown>) =>
-      console.log(`[OutboxPoller] ${msg}`, data ? JSON.stringify(data) : ""),
+      console.log(`[OutboxPoller] ${msg}`, data ?? ""),
     warn: (msg: string, data?: Record<string, unknown>) =>
-      console.warn(`[OutboxPoller] ${msg}`, data ? JSON.stringify(data) : ""),
+      console.warn(`[OutboxPoller] ${msg}`, data ?? ""),
     error: (msg: string, error?: unknown, data?: Record<string, unknown>) =>
-      console.error(`[OutboxPoller] ${msg}`, error, data ? JSON.stringify(data) : ""),
+      console.error(`[OutboxPoller] ${msg}`, error, data ?? ""),
     debug: (msg: string, data?: Record<string, unknown>) => {
-      if (process.env["NODE_ENV"] !== "production") {
-        console.debug(`[OutboxPoller] ${msg}`, data ? JSON.stringify(data) : "");
+      if (isDebugEnabled) {
+        console.debug(`[OutboxPoller] ${msg}`, data ?? "");
       }
     },
   };

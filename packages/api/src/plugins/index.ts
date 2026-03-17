@@ -40,7 +40,7 @@ export type { SecurityHeadersOptions, ContentSecurityPolicy } from "./security-h
 export { tenantPlugin, requireTenant, requireTenantContext, hasTenant, TenantService, TenantError, TenantErrorCodes, resolveTenant, resolveTenantWithFallback } from "./tenant";
 export type { Tenant, TenantContext as TenantCtx, TenantSource, TenantResolutionOptions } from "./tenant";
 
-export { authPlugin, requireAuth, requireAuthContext, requireMfa, requireCsrf, generateCsrfToken, validateCsrfToken, AuthService, AuthError, AuthErrorCodes } from "./auth-better";
+export { authPlugin, requireAuth, requireAuthContext, requireMfa, requireAdminMfa, requireCsrf, generateCsrfToken, validateCsrfToken, AuthService, AuthError, AuthErrorCodes } from "./auth-better";
 export type { User, Session, AuthContext, UnauthContext, AuthState, UserWithTenants, AuthPluginOptions } from "./auth-better";
 
 export { rbacPlugin, requirePermission, requireAnyPermission, requireAllPermissions, requirePermissionWithScope, hasPermission, RbacService, RbacError, RbacErrorCodes } from "./rbac";

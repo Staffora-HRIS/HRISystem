@@ -1,6 +1,9 @@
 import { type RouteConfig, index, layout, prefix, route } from "@react-router/dev/routes";
 
 export default [
+  // Health check (no auth, used by Docker/load balancers)
+  route("healthz", "routes/healthz.tsx"),
+
   // Root index - redirects to dashboard or login
   index("routes/home.tsx"),
 

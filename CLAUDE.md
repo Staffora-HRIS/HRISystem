@@ -38,7 +38,6 @@ bun run dev           # All packages
 bun run dev:api       # API only (with watch)
 bun run dev:web       # Frontend only (HRIS app)
 bun run dev:worker    # Background worker only
-bun run dev:website   # Marketing website only
 
 # Database migrations
 bun run migrate       # Run pending migrations (alias for migrate:up)
@@ -93,13 +92,12 @@ Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 - `packages/api` (@staffora/api): Elysia.js backend with plugins pattern
 - `packages/web` (@staffora/web): React Router v7 framework mode HRIS frontend (uses **vitest**, not bun test)
 - `packages/shared` (@staffora/shared): Shared types, schemas, error codes, state machines, utilities
-- `Website` (@staffora/website): React Router v7 marketing/landing site (staffora.co.uk public pages)
 
 ### Backend Layers (packages/api)
 - `src/app.ts`: Main Elysia entry point — registers plugins then mounts all module routes
 - `src/worker.ts`: Background job processor entry point
 - `src/plugins/`: Elysia plugins (see plugin registration order below)
-- `src/modules/`: Feature modules (71 modules) — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`. Core modules (hr, time, absence, talent, lms, cases, onboarding, benefits, documents, succession, analytics, competencies, recruitment) plus extensive UK compliance modules (right-to-work, ssp, statutory-leave, pension, warnings, etc.) and GDPR modules (dsar, data-erasure, data-breach, consent, privacy-notices, data-retention)
+- `src/modules/`: Feature modules (72 modules) — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`, `index.ts`. Core modules (hr, time, absence, talent, lms, cases, onboarding, benefits, documents, succession, analytics, competencies, recruitment) plus extensive UK compliance modules (right-to-work, ssp, statutory-leave, pension, warnings, etc.) and GDPR modules (dsar, data-erasure, data-breach, consent, privacy-notices, data-retention)
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
 - `src/db/`: Database migration runner (`migrate.ts`)
@@ -140,7 +138,7 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql` (highest is 0181, ~233 files total). Numbers 0076–0079 have duplicates from parallel feature branches; this is a known quirk — new migrations should use the next available number after the highest existing one. There is also a non-numbered `fix_schema_migrations_filenames.sql`. All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql` (highest is 0189, ~228 files). Some numbers (0076–0079, 0187) have duplicates from parallel feature branches — this is a known quirk. New migrations should use the next available number after the highest existing one. There is also a non-numbered `fix_schema_migrations_filenames.sql`. All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
 
 Two database roles:
 - `hris` — Superuser/admin (used for migrations)
@@ -169,6 +167,31 @@ await db.withTransaction(ctx, async (tx) => {
   return emp;
 });
 ```
+
+## Authentication (Better Auth — Mandatory)
+
+**All authentication MUST use Better Auth (https://better-auth.com/).** No custom auth systems, no custom session tables, no alternative auth libraries.
+
+### Dual-Table Architecture
+Better Auth manages its own tables (`app."user"`, `app."session"`, `app."account"`, `app."verification"`, `app."twoFactor"`) with camelCase text IDs. The legacy `app.users` table (UUID IDs, snake_case) is kept in sync via `databaseHooks` in `src/lib/better-auth.ts`.
+
+When creating users **outside** Better Auth's API (e.g., bootstrap scripts, direct SQL), you MUST create records in ALL THREE tables atomically:
+1. `app.users` — Legacy table (UUID id, snake_case)
+2. `app."user"` — Better Auth canonical user (text id, camelCase)
+3. `app."account"` — Better Auth credential record (providerId='credential', password hash)
+
+When using Better Auth's API (`auth.api.signUpEmail()`), the `databaseHooks` handle `app.users` sync automatically.
+
+### Key Files
+- `src/lib/better-auth.ts` — Server config, password hashing (bcrypt legacy + scrypt new), databaseHooks
+- `src/lib/better-auth-handler.ts` — Elysia HTTP handler at `/api/auth/*`
+- `src/plugins/auth-better.ts` — Session resolution, CSRF, auth guards (`requireAuth`, `requireMfa`, `requireCsrf`)
+- `src/modules/auth/routes.ts` — Staffora-specific endpoints (`/auth/me`, `/auth/switch-tenant`, MFA backup codes)
+
+### Password Configuration
+- Minimum length: 12 characters
+- Legacy bcrypt hashes supported alongside Better Auth's scrypt default
+- Email verification required in production (`requireEmailVerification: true` when `NODE_ENV=production`)
 
 ## Critical Patterns (Non-Negotiable)
 
@@ -267,10 +290,10 @@ Import paths available from the shared package:
 
 ## Known Gotchas
 
-- **TypeBox version split**: `packages/api` uses `@sinclair/typebox@^0.34` while `packages/shared` uses `@sinclair/typebox@^0.32`. When writing schemas that cross package boundaries, be aware of API differences between versions.
+- **Better Auth custom verify has NO fallback**: When you provide a custom `password.verify` function, Better Auth uses ONLY that function. It does NOT fall back to its default scrypt verifier. Our `verifyPassword` in `better-auth.ts` handles both bcrypt (legacy) and scrypt (new) explicitly.
+- **Better Auth databaseHooks don't fire for direct SQL**: If you INSERT into `app."user"` via raw SQL (not Better Auth's API), the `databaseHooks` in `better-auth.ts` won't trigger. You must manually sync `app.users` in that case.
 - **Web tests use vitest, not bun test**: `packages/web` uses vitest (`bun run test:web`), while `packages/api` and `packages/shared` use bun's built-in test runner (`bun test`).
 - **Migration file naming**: Use 4-digit padding (`0182_`, not `182_`). Check the highest existing migration number before creating a new one.
-- **`Website/` directory uses capital W**: The marketing site workspace is `Website/` (not `website/`) in the repo root.
 
 ## Common Workflows
 
@@ -306,71 +329,64 @@ Use these agents (defined in `.claude/agents/`, all swarm-enabled) for domain-sp
 
 ## Documentation (`Docs/`)
 
-Detailed documentation is organized in `Docs/` with subfolder READMEs for AI context loading:
+Detailed documentation is organized in `Docs/` with subfolder READMEs for AI context loading (190+ files, 21 directories):
 
 ```
 Docs/
 ├── README.md                  ← Documentation portal: folder map, quick links, audience guides
-├── system-documentation.md    ← Complete system reference (consolidated from .claude/)
+├── system-documentation.md    ← Complete system reference (consolidated)
+├── DOC_MAP.md                 ← Visual navigation map of all documentation
+├── DOC_HEALTH_REPORT.md       ← Documentation health scoring
+├── DOC_TODO.md                ← Gap analysis and improvement backlog
 ├── guides/                    ← Setup, deployment, frontend usage
-│   ├── README.md
-│   ├── GETTING_STARTED.md
-│   ├── DEPLOYMENT.md
-│   └── FRONTEND.md
+│   ├── GETTING_STARTED.md, DEPLOYMENT.md, FRONTEND.md
 ├── architecture/              ← System design and internals
-│   ├── README.md
-│   ├── ARCHITECTURE.md        # Mermaid diagrams, request flow, data flow
+│   ├── ARCHITECTURE.md        # System overview, plugin chain, request flow
+│   ├── diagrams.md            # 20 Mermaid diagrams for all subsystems
 │   ├── DATABASE.md            # Schema, migrations, RLS, table catalog
+│   ├── database-guide.md      # Database deep-dive (queries, roles, performance)
 │   ├── WORKER_SYSTEM.md       # Background jobs, Redis Streams, outbox
+│   ├── worker-system.md       # Worker system deep-dive
 │   ├── PERMISSIONS_SYSTEM.md  # Permission model and RBAC details
-│   ├── architecture-map.md    # High-level architecture map
-│   ├── repository-map.md      # Repository layout reference
-│   └── permissions-v2-migration-guide.md
+│   ├── architecture-map.md, repository-map.md, permissions-v2-migration-guide.md
 ├── api/                       ← API surface and contracts
-│   ├── README.md
 │   ├── API_REFERENCE.md       # All 200+ endpoints by module
 │   └── ERROR_CODES.md         # Error codes with messages by module
+├── modules/                   ← Module catalog
+│   └── README.md              # All 72 backend modules documented
+├── frontend/                  ← Frontend documentation
+│   ├── README.md              # Frontend architecture overview
+│   ├── routes.md              # Complete route map (160 routes)
+│   ├── components.md          # Component library documentation
+│   └── data-fetching.md       # React Query and API patterns
+├── testing/                   ← Testing documentation
+│   ├── README.md              # Testing guide and infrastructure
+│   └── test-matrix.md         # Test coverage matrix
+├── security/                  ← Security documentation
+│   └── README.md              # Auth, RBAC, RLS, OWASP mitigations
+├── integrations/              ← Integration documentation
+│   └── README.md              # S3, email, Firebase, Redis, BetterAuth
+├── ai-agents/                 ← AI development documentation
+│   └── README.md              # Agent system, skills, memory
+├── troubleshooting/           ← Troubleshooting guide
+│   └── README.md              # Common issues, debug procedures
 ├── patterns/                  ← Reusable design patterns
-│   ├── README.md              # Pattern summary: RLS, dating, outbox, RBAC
 │   ├── STATE_MACHINES.md      # 5 state machines with Mermaid diagrams
 │   └── SECURITY.md            # RLS, auth, RBAC, audit, idempotency
 ├── operations/                ← Production readiness
-│   ├── README.md
-│   ├── production-checklist.md
-│   └── production-readiness-report.md
+│   ├── production-checklist.md, production-readiness-report.md
 ├── devops/                    ← Infrastructure & CI/CD
-│   ├── README.md
-│   ├── devops-status-report.md
-│   └── devops-tasks.md
+│   ├── docker-guide.md        # Docker development deep-dive
+│   ├── ci-cd.md               # CI/CD pipeline documentation
+│   ├── devops-status-report.md, devops-tasks.md
 ├── compliance/                ← UK regulations & GDPR
-│   ├── README.md
 │   └── uk-hr-compliance-report.md
 ├── checklists/                ← Engineering quality checklists
-│   ├── README.md
-│   ├── enterprise-engineering-checklist.md
-│   └── devops-master-checklist.md
-├── audit/                     ← System audit reports
-│   ├── README.md
-│   └── (18 audit files)
-├── issues/                    ← Known issues by category
-│   ├── README.md
-│   ├── architecture-*.md      # Architecture issues (8 files)
-│   ├── compliance-*.md        # Compliance issues (12 files)
-│   ├── security-*.md          # Security issues (8 files)
-│   └── tech-debt-*.md         # Technical debt (10 files)
+│   ├── enterprise-engineering-checklist.md, devops-master-checklist.md
+├── audit/                     ← System audit reports (21 files)
+├── issues/                    ← Known issues by category (40 files)
 ├── project-management/        ← Roadmaps, sprints, risk register
-│   ├── kanban-board.md
-│   ├── risk-register.md
-│   ├── roadmap.md
-│   ├── sprint-plan-phase1.md
-│   ├── sprint-plan-phase2.md
-│   ├── sprint-plan-phase3.md
-│   └── engineering-todo.md
 ├── project-analysis/          ← Requirements & implementation status
-│   ├── README.md
-│   ├── master_requirements.md
-│   ├── implementation_status.md
-│   └── tickets.md
 └── archive/                   ← Superseded documentation
     ├── README.md
     └── (archived duplicates)

@@ -179,4 +179,3 @@ pnpm-lock.yaml
 *.old
 .vercel
 .netlify
-/Docs

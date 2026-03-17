@@ -1,0 +1,806 @@
+└─ HRISystem
+   ├─ audit
+   │  ├─ MASTER_TODO.md
+   │  │  ├─ line 473: TODO -001 through TODO-022 (all CRITICAL items)
+   │  │  ├─ line 478: TODO -023 through TODO-064 (all HIGH items)
+   │  │  ├─ line 483: TODO -065 through TODO-162 (MEDIUM items)
+   │  │  └─ line 488: TODO -163 through TODO-263 (LOW items)
+   │  ├─ implementation-plans.md
+   │  │  ├─ line 131: [ ] All mutating requests without a valid CSRF token return 403
+   │  │  ├─ line 132: [ ] `CSRF_SECRET` is used to validate token HMAC
+   │  │  ├─ line 133: [ ] Better Auth's `/api/auth/*` routes are exempt (handled internally)
+   │  │  ├─ line 134: [ ] Health/readiness endpoints are exempt
+   │  │  ├─ line 135: [ ] Existing integration tests pass (they must supply valid CSRF tokens)
+   │  │  ├─ line 246: [ ] SIGTERM triggers graceful shutdown with log output
+   │  │  ├─ line 247: [ ] SIGINT triggers graceful shutdown (Ctrl+C in development)
+   │  │  ├─ line 248: [ ] Database connections are closed before exit
+   │  │  ├─ line 249: [ ] Redis connections are closed before exit
+   │  │  ├─ line 250: [ ] In-flight requests have 10 seconds to complete
+   │  │  ├─ line 251: [ ] Force exit after drain timeout
+   │  │  ├─ line 326: [ ] API crashes on startup in production if `DATABASE_APP_URL` is not set
+   │  │  ├─ line 327: [ ] Startup log confirms connected role is `hris_app` with `NOBYPASSRLS`
+   │  │  ├─ line 328: [ ] Only one PostgreSQL driver (`postgres` / postgres.js) is used -- `pg` removed from dependencies
+   │  │  ├─ line 329: [ ] All connections go through the managed connection pool
+   │  │  ├─ line 330: [ ] RLS integration tests pass
+   │  │  ├─ line 427: [ ] Account locks after 10 consecutive failed login attempts
+   │  │  ├─ line 428: [ ] Locked account returns `ACCOUNT_LOCKED` error with unlock time
+   │  │  ├─ line 429: [ ] Auto-unlock after 30 minutes
+   │  │  ├─ line 430: [ ] Permanent lock after 20 consecutive failures (requires admin unlock)
+   │  │  ├─ line 431: [ ] Successful login resets failure counter
+   │  │  ├─ line 432: [ ] Admin can unlock accounts via API
+   │  │  ├─ line 433: [ ] Login form displays lockout message
+   │  │  ├─ line 538: [ ] All POST/PUT/PATCH/DELETE requests include `X-CSRF-Token` header
+   │  │  ├─ line 539: [ ] CSRF token is fetched from `/api/auth/csrf` and cached
+   │  │  ├─ line 540: [ ] 403 responses trigger token re-fetch on next request
+   │  │  ├─ line 541: [ ] Logout clears CSRF token cache
+   │  │  ├─ line 542: [ ] No CSRF header sent on GET requests
+   │  │  ├─ line 651: [ ] RTW checks can be created with type (manual List A/B, online, IDVT)
+   │  │  ├─ line 652: [ ] Check status workflow: pending -> verified -> expired
+   │  │  ├─ line 653: [ ] Employee cannot transition from `pending` to `active` without verified RTW
+   │  │  ├─ line 654: [ ] Expiring checks appear in dashboard at 30/60/90 day thresholds
+   │  │  ├─ line 655: [ ] Domain events emitted for expiry alerts
+   │  │  ├─ line 656: [ ] RLS enforces tenant isolation on RTW data
+   │  │  ├─ line 781: [ ] SSP calculated automatically when sick leave is recorded
+   │  │  ├─ line 782: [ ] 3 waiting days before SSP payment begins
+   │  │  ├─ line 783: [ ] PIW linking for sickness within 8 weeks of previous PIW
+   │  │  ├─ line 784: [ ] 28-week maximum SSP tracked per PIW
+   │  │  ├─ line 785: [ ] LEL check prevents SSP for low-earning employees
+   │  │  ├─ line 786: [ ] Fit notes tracked with self-cert vs medical cert distinction
+   │  │  ├─ line 787: [ ] SSP rates configurable and version-dated
+   │  │  ├─ line 870: [ ] Leave policies for UK (`country_code = 'GBR'`) warn if balance < 28
+   │  │  ├─ line 871: [ ] Pro-rata minimum calculated from employee FTE/contracted days
+   │  │  ├─ line 872: [ ] Bank holiday treatment configurable per policy
+   │  │  ├─ line 873: [ ] Compliance report shows all non-compliant UK employees
+   │  │  ├─ line 874: [ ] Override flag allows saving below-minimum policies with explicit acknowledgement
+   │  │  ├─ line 1004: [ ] DSAR requests can be created with automatic 30-day deadline
+   │  │  ├─ line 1005: [ ] Identity verification step before data compilation
+   │  │  ├─ line 1006: [ ] Data compiled from all employee-related tables
+   │  │  ├─ line 1007: [ ] Export as structured JSON
+   │  │  ├─ line 1008: [ ] Deadline extension up to 2 additional months with reason
+   │  │  ├─ line 1009: [ ] Approaching-deadline alerts at 7 and 3 days
+   │  │  ├─ line 1010: [ ] Audit trail for all DSAR operations
+   │  │  ├─ line 1134: [ ] Employees assessed and categorised correctly by age and earnings
+   │  │  ├─ line 1135: [ ] Eligible jobholders auto-enrolled with opt-out window
+   │  │  ├─ line 1136: [ ] Opt-out processed within 1-month window
+   │  │  ├─ line 1137: [ ] Minimum contributions enforced (8% total: 5% employee + 3% employer)
+   │  │  ├─ line 1138: [ ] Qualifying earnings band applied to contribution calculation
+   │  │  ├─ line 1139: [ ] 3-yearly re-enrolment scheduling
+   │  │  ├─ line 1140: [ ] Compliance dashboard shows enrolment status across workforce
+   │  │  ├─ line 1251: [ ] SMP calculated correctly (6 weeks at 90% average earnings + 33 weeks at statutory rate)
+   │  │  ├─ line 1252: [ ] Qualifying service checked (26 weeks by 15th week before EWC)
+   │  │  ├─ line 1253: [ ] KIT days tracked (max 10)
+   │  │  ├─ line 1254: [ ] Compulsory maternity leave enforced (2 weeks minimum)
+   │  │  ├─ line 1255: [ ] Paternity leave constrained to 2 weeks within 56 days of birth
+   │  │  ├─ line 1256: [ ] SPL booking with curtailment notice tracking
+   │  │  ├─ line 1257: [ ] Pay calculations available for all family leave types
+   │  │  ├─ line 1328: [ ] Leave approval writes outbox event in same transaction
+   │  │  ├─ line 1329: [ ] Leave balance ledger updated on approval
+   │  │  ├─ line 1330: [ ] Manager can only approve subordinates' leave
+   │  │  ├─ line 1331: [ ] Rejection does not affect leave balance
+   │  │  ├─ line 1332: [ ] Audit trail captures who approved/rejected and when
+   │  │  ├─ line 1401: [ ] `TenantContext` defined in one place, imported everywhere
+   │  │  ├─ line 1402: [ ] `ServiceResult` defined in one place, imported everywhere
+   │  │  ├─ line 1403: [ ] `ErrorCodes` in API bridges from `@staffora/shared/errors`
+   │  │  ├─ line 1404: [ ] State machine transitions use `@staffora/shared/state-machines`
+   │  │  ├─ line 1405: [ ] No duplicate type definitions in service files
+   │  │  ├─ line 1406: [ ] Full test suite passes
+   │  │  ├─ line 1468: [ ] Migration runner has a `validate` command
+   │  │  ├─ line 1469: [ ] Irreversible migrations marked with `-- IRREVERSIBLE` comment
+   │  │  ├─ line 1470: [ ] No migration number gaps or duplicates
+   │  │  ├─ line 1471: [ ] CI test verifies migration integrity
+   │  │  ├─ line 1472: [ ] `fix_schema_migrations_filenames.sql` check in migration runner
+   │  │  ├─ line 1569: [ ] All production log output is structured JSON
+   │  │  ├─ line 1570: [ ] Request ID included in all log entries
+   │  │  ├─ line 1571: [ ] Tenant ID and user ID included where available
+   │  │  ├─ line 1572: [ ] Sensitive fields redacted from logs
+   │  │  ├─ line 1573: [ ] Log level configurable via `LOG_LEVEL` env var
+   │  │  ├─ line 1574: [ ] DB query parameter logging removed or redacted
+   │  │  ├─ line 1575: [ ] No `console.log` in production code paths (except startup banner)
+   │  │  ├─ line 1647: [ ] `GET /metrics` returns Prometheus exposition format
+   │  │  ├─ line 1648: [ ] Request count and duration tracked per route
+   │  │  ├─ line 1649: [ ] Database connection pool metrics exposed
+   │  │  ├─ line 1650: [ ] Prometheus configured to scrape API and worker
+   │  │  ├─ line 1651: [ ] Grafana dashboard with basic panels (request rate, error rate, latency, pool size)
+   │  │  ├─ line 1754: [ ] Auth E2E test suite passes in CI
+   │  │  ├─ line 1755: [ ] All auth flows tested with real HTTP requests via `app.handle()`
+   │  │  ├─ line 1756: [ ] CSRF token lifecycle tested end-to-end
+   │  │  ├─ line 1757: [ ] Session creation and revocation tested
+   │  │  ├─ line 1758: [ ] Invalid credential handling tested
+   │  │  ├─ line 1844: [ ] At least 5 route test files make real HTTP calls
+   │  │  ├─ line 1845: [ ] Tests verify HTTP status codes
+   │  │  ├─ line 1846: [ ] Tests verify response body structure
+   │  │  ├─ line 1847: [ ] Tests verify RBAC enforcement
+   │  │  ├─ line 1848: [ ] Tests verify input validation
+   │  │  ├─ line 1849: [ ] All tests pass in CI
+   │  │  ├─ line 1939: [ ] Notifications API: list, mark read, dismiss, unread count
+   │  │  ├─ line 1940: [ ] Equipment API: CRUD, assign, return, employee equipment list
+   │  │  ├─ line 1941: [ ] Geofence API: zone CRUD, location validation
+   │  │  ├─ line 1942: [ ] All endpoints have auth guards and permission checks
+   │  │  ├─ line 1943: [ ] RLS enforced on all operations
+   │  │  ├─ line 1944: [ ] Modules registered in app.ts
+   │  │  ├─ line 2009: [ ] Leave approval logic centralized in absence module
+   │  │  ├─ line 2010: [ ] Manager service delegates to absence module
+   │  │  ├─ line 2011: [ ] Column names verified against migration
+   │  │  ├─ line 2012: [ ] Outbox event emitted on approval/rejection
+   │  │  └─ line 2013: [ ] Leave balance updated on approval
+   │  └─ technical-debt-report.md
+   │     └─ line 32: XXX ` comments were found in production code. This is clean.
+   ├─ issues
+   │  ├─ architecture-001-no-graceful-shutdown.md
+   │  │  ├─ line 21: [ ] `SIGTERM` handler stops accepting new requests and drains in-flight requests
+   │  │  ├─ line 22: [ ] `SIGINT` handler triggers the same graceful shutdown
+   │  │  ├─ line 23: [ ] Database connection pool closed on shutdown
+   │  │  ├─ line 24: [ ] Redis connections closed on shutdown
+   │  │  ├─ line 25: [ ] `unhandledRejection` and `uncaughtException` logged with request IDs
+   │  │  ├─ line 26: [ ] Configurable drain timeout (default: 30 seconds)
+   │  │  └─ line 27: [ ] Health endpoint returns `503 Service Unavailable` during shutdown
+   │  ├─ architecture-002-single-points-of-failure.md
+   │  │  ├─ line 26: [ ] PostgreSQL replication configured (primary + at least 1 replica)
+   │  │  ├─ line 27: [ ] Automatic failover mechanism (Patroni or pg_auto_failover)
+   │  │  ├─ line 28: [ ] Redis Sentinel or Cluster deployed
+   │  │  ├─ line 29: [ ] API server supports multiple instances behind load balancer
+   │  │  ├─ line 30: [ ] Worker instances use consumer groups for parallel processing
+   │  │  ├─ line 31: [ ] Database backups pushed to offsite storage (S3)
+   │  │  └─ line 32: [ ] Recovery time objective (RTO) documented and tested
+   │  ├─ architecture-003-connection-pool-exhaustion.md
+   │  │  ├─ line 24: [ ] All connection pools have explicit max connection limits
+   │  │  ├─ line 25: [ ] Total max connections across all pools documented and within PostgreSQL limits
+   │  │  ├─ line 26: [ ] Connection pool exhaustion produces clear error messages (not timeouts)
+   │  │  ├─ line 27: [ ] Monitoring for connection pool utilization added
+   │  │  └─ line 28: [ ] Scheduler uses the main connection pool or has explicit limits
+   │  ├─ architecture-004-audit-logging-outside-transactions.md
+   │  │  ├─ line 21: [ ] All mutating route handlers use `logInTransaction()` within the business transaction
+   │  │  ├─ line 22: [ ] `audit.log()` documented as only for non-transactional events
+   │  │  ├─ line 23: [ ] Audit failure within a transaction causes the business write to roll back
+   │  │  └─ line 24: [ ] Integration test verifies audit atomicity (audit fails -> business write rolls back)
+   │  ├─ architecture-005-tenant-cache-race-window.md
+   │  │  ├─ line 21: [ ] Tenant cache TTL reduced to 60 seconds or less
+   │  │  ├─ line 22: [ ] Tenant status change triggers immediate cache invalidation
+   │  │  ├─ line 23: [ ] Integration test verifies suspended tenant is blocked within 60 seconds
+   │  │  └─ line 24: [ ] Cache invalidation logged for audit trail
+   │  ├─ architecture-006-dashboard-inline-sql.md
+   │  │  ├─ line 23: [ ] Dashboard module refactored with `schemas.ts`, `service.ts`, `repository.ts`
+   │  │  ├─ line 24: [ ] SQL extracted from routes into repository layer
+   │  │  ├─ line 25: [ ] Redis caching added for stats queries (30-60 second TTL)
+   │  │  ├─ line 26: [ ] Error handling for individual subquery failures
+   │  │  └─ line 27: [ ] Performance test verifying cached response time
+   │  ├─ architecture-007-redis-keys-command.md
+   │  │  ├─ line 19: [ ] `KEYS` command replaced with `SCAN` or Set-based tracking
+   │  │  ├─ line 20: [ ] Cache invalidation does not block Redis for other operations
+   │  │  └─ line 21: [ ] Performance test verifying invalidation completes within acceptable time with many keys
+   │  ├─ architecture-008-dual-user-tables.md
+   │  │  ├─ line 23: [ ] Single user table or database view consolidating both
+   │  │  ├─ line 24: [ ] Sync failure cannot cause auth/RBAC mismatches
+   │  │  ├─ line 25: [ ] User data changes are atomic (no partial sync states)
+   │  │  └─ line 26: [ ] Migration path from dual tables to unified approach documented
+   │  ├─ compliance-001-right-to-work.md
+   │  │  ├─ line 25: [ ] `right_to_work_checks` table created with check_type, check_date, document_type, status, expiry, next_check_date
+   │  │  ├─ line 26: [ ] Verification workflow blocks employee activation until verified
+   │  │  ├─ line 27: [ ] Automated alerts at 30/60/90 days before expiry wired into notification worker
+   │  │  ├─ line 28: [ ] List A / List B document classification supported
+   │  │  ├─ line 29: [ ] Repeat check scheduling for time-limited permissions
+   │  │  ├─ line 30: [ ] Share code recording for online checks
+   │  │  └─ line 31: [ ] Audit trail for all verification actions
+   │  ├─ compliance-002-ssp-calculations.md
+   │  │  ├─ line 29: [ ] SSP calculation engine created with current statutory rates
+   │  │  ├─ line 30: [ ] 3-day waiting period correctly applied to new PIWs
+   │  │  ├─ line 31: [ ] PIW linking rule: absences within 8 weeks linked as continuous
+   │  │  ├─ line 32: [ ] Lower earnings limit check prevents SSP for ineligible employees
+   │  │  ├─ line 33: [ ] 28-week maximum tracked per PIW
+   │  │  ├─ line 34: [ ] Fit note tracking with 7-day self-certification threshold
+   │  │  ├─ line 35: [ ] SSP1 form generation when 28 weeks exhausted
+   │  │  └─ line 36: [ ] SSP rates configurable for annual updates
+   │  ├─ compliance-003-family-leave.md
+   │  │  ├─ line 29: [ ] Maternity leave entitlement with SMP calculation and qualifying check (26 weeks by 15th week before EWC)
+   │  │  ├─ line 30: [ ] Paternity leave with SPP and timing constraints
+   │  │  ├─ line 31: [ ] Shared parental leave with curtailment and booking tracking
+   │  │  ├─ line 32: [ ] Adoption leave mirroring maternity
+   │  │  ├─ line 33: [ ] Parental bereavement with statutory 2-week entitlement
+   │  │  ├─ line 34: [ ] Unpaid parental leave with per-child tracking
+   │  │  ├─ line 35: [ ] KIT/SPLIT day tracking and limits
+   │  │  ├─ line 36: [ ] Return to work date calculations
+   │  │  └─ line 37: [ ] All statutory rates configurable for annual updates
+   │  ├─ compliance-004-pension-auto-enrolment.md
+   │  │  ├─ line 30: [ ] Eligibility assessment engine: age 22-SPA, earnings above GBP 10,000/year
+   │  │  ├─ line 31: [ ] Automatic enrolment triggered when criteria met
+   │  │  ├─ line 32: [ ] 1-month opt-out window tracked with refund processing
+   │  │  ├─ line 33: [ ] Qualifying earnings band calculation (lower/upper limits)
+   │  │  ├─ line 34: [ ] Minimum contribution rates enforced (3% employer, 5% employee)
+   │  │  ├─ line 35: [ ] 3-yearly re-enrolment scheduled job
+   │  │  ├─ line 36: [ ] Postponement period tracking (up to 3 months)
+   │  │  ├─ line 37: [ ] Contribution rates configurable for annual threshold updates
+   │  │  └─ line 38: [ ] TPR declaration data export
+   │  ├─ compliance-005-holiday-entitlement.md
+   │  │  ├─ line 28: [ ] Validation prevents creating leave policies below 28 days FTE for UK employees
+   │  │  ├─ line 29: [ ] Warning displayed when configuring policies near statutory minimum
+   │  │  ├─ line 30: [ ] Pro-rata automatically calculated: `Math.min(5.6 * days_per_week, 28)`
+   │  │  ├─ line 31: [ ] Bank holiday treatment configurable: included in entitlement or additional
+   │  │  ├─ line 32: [ ] 52-week reference period holiday pay calculation (including regular overtime, commission, bonuses)
+   │  │  ├─ line 33: [ ] Carryover rules split: 4-week tier (restricted) vs 1.6-week tier (employer configurable)
+   │  │  └─ line 34: [ ] Sickness/maternity carryover protection for the 4-week tier
+   │  ├─ compliance-006-hmrc-integration.md
+   │  │  ├─ line 26: [ ] Tax code field added to employee records with validation
+   │  │  ├─ line 27: [ ] Payroll data export API endpoint (hours, absence, SSP/SMP/SPP entitlements)
+   │  │  ├─ line 28: [ ] P45/P60/P11D document upload and storage via documents module
+   │  │  ├─ line 29: [ ] Payroll integration webhook for employee data changes
+   │  │  ├─ line 30: [ ] NI category letter tracking
+   │  │  └─ line 31: [ ] Student loan deduction type tracking
+   │  ├─ compliance-007-data-protection-breach-notification.md
+   │  │  ├─ line 26: [ ] Breach incident tracking table and workflow created
+   │  │  ├─ line 27: [ ] 72-hour countdown from discovery with escalating notifications
+   │  │  ├─ line 28: [ ] Data scope assessment: number of affected individuals, types of data compromised
+   │  │  ├─ line 29: [ ] ICO notification template with required fields (nature of breach, categories of data, approximate number of individuals, likely consequences, measures taken)
+   │  │  ├─ line 30: [ ] Employee notification workflow for high-risk breaches
+   │  │  ├─ line 31: [ ] Breach log maintained for regulatory audits
+   │  │  └─ line 32: [ ] Integration with case management for investigation tracking
+   │  ├─ compliance-008-flexible-working-requests.md
+   │  │  ├─ line 26: [ ] `flexible_working_requests` table created with request details, proposed changes, business case
+   │  │  ├─ line 27: [ ] Formal workflow: submitted -> under_consideration -> approved/refused/withdrawn
+   │  │  ├─ line 28: [ ] 2-month response deadline tracked with notifications at 7, 14, 30, 45, 56 days
+   │  │  ├─ line 29: [ ] Request count per employee per rolling 12-month period enforced (max 2)
+   │  │  ├─ line 30: [ ] 8 statutory grounds for refusal available as structured reasons
+   │  │  ├─ line 31: [ ] Appeal workflow with different decision maker requirement
+   │  │  └─ line 32: [ ] Day-one eligibility (no minimum service requirement)
+   │  ├─ compliance-009-employment-contracts.md
+   │  │  ├─ line 26: [ ] Contract template system with statutory minimum field validation
+   │  │  ├─ line 27: [ ] Auto-generation of day-one written statement triggered by employee creation
+   │  │  ├─ line 28: [ ] Template includes: employer name, employee name, start date, job title, place of work, pay, hours, holiday, notice periods, probation
+   │  │  ├─ line 29: [ ] Acknowledgement/signature tracking (date, method)
+   │  │  ├─ line 30: [ ] Contract change notification with 1-month deadline
+   │  │  ├─ line 31: [ ] Statutory minimum notice period calculation based on service length (1 week per year, up to 12 weeks)
+   │  │  └─ line 32: [ ] Validation that contractual notice meets statutory minimum
+   │  ├─ compliance-010-gender-pay-gap-reporting.md
+   │  │  ├─ line 26: [ ] Mean hourly pay gap calculation (percentage difference)
+   │  │  ├─ line 27: [ ] Median hourly pay gap calculation
+   │  │  ├─ line 28: [ ] Mean bonus gap calculation
+   │  │  ├─ line 29: [ ] Median bonus gap calculation
+   │  │  ├─ line 30: [ ] Proportion of men/women receiving bonuses
+   │  │  ├─ line 31: [ ] Pay quartile distribution by gender
+   │  │  ├─ line 32: [ ] Report exportable for publication
+   │  │  └─ line 33: [ ] Snapshot date configurable (default: 5 April each year)
+   │  ├─ compliance-011-equality-diversity.md
+   │  │  ├─ line 28: [ ] Voluntary diversity monitoring fields added (ethnicity, disability, religion, sexual orientation)
+   │  │  ├─ line 29: [ ] Explicit consent recording for diversity data collection
+   │  │  ├─ line 30: [ ] "Prefer not to say" option for all protected characteristics
+   │  │  ├─ line 31: [ ] Data accessible only for aggregated reporting (not individual records in normal HR views)
+   │  │  ├─ line 32: [ ] Diversity dashboard with anonymised statistics
+   │  │  ├─ line 33: [ ] Reasonable adjustment request and tracking module
+   │  │  └─ line 34: [ ] Field-level permissions restrict access to diversity data
+   │  ├─ compliance-012-disciplinary-grievance-acas.md
+   │  │  ├─ line 31: [ ] ACAS-compliant workflow stages: investigation -> hearing -> outcome -> appeal
+   │  │  ├─ line 32: [ ] Hearing scheduling with minimum notice periods
+   │  │  ├─ line 33: [ ] "Right to be accompanied" notification and tracking
+   │  │  ├─ line 34: [ ] Warning register: verbal, written, final warning with expiry dates
+   │  │  ├─ line 35: [ ] Sanction recording linked to case outcome
+   │  │  ├─ line 36: [ ] Appeal process with different decision maker requirement
+   │  │  ├─ line 37: [ ] Investigation assignment and evidence collection workflow
+   │  │  ├─ line 38: [ ] Informal vs formal procedure distinction
+   │  │  └─ line 39: [ ] Notification templates for each stage
+   │  ├─ security-001-csrf-token-validation.md
+   │  │  ├─ line 21: [ ] CSRF tokens are generated server-side and bound to the user session
+   │  │  ├─ line 22: [ ] `requireCsrf()` validates the token value, not just its presence
+   │  │  ├─ line 23: [ ] `CSRF_SECRET` is used in token generation/validation
+   │  │  ├─ line 24: [ ] Invalid or missing tokens return 403 with clear error message
+   │  │  └─ line 25: [ ] Integration tests verify CSRF validation end-to-end
+   │  ├─ security-002-frontend-csrf-tokens-not-sent.md
+   │  │  ├─ line 21: [ ] CSRF token fetched from backend on authentication
+   │  │  ├─ line 22: [ ] `X-CSRF-Token` header added to all POST/PUT/PATCH/DELETE requests in `buildHeaders()`
+   │  │  ├─ line 23: [ ] Token cached and refreshed on session change
+   │  │  └─ line 24: [ ] Integration test verifies CSRF tokens flow end-to-end
+   │  ├─ security-003-email-verification-disabled.md
+   │  │  ├─ line 21: [ ] `requireEmailVerification: true` in production configuration
+   │  │  ├─ line 22: [ ] Verification email sent with time-limited token on registration
+   │  │  ├─ line 23: [ ] Unverified users cannot access tenant-scoped data
+   │  │  ├─ line 24: [ ] Verification status visible in user management UI
+   │  │  └─ line 25: [ ] Re-send verification email endpoint available
+   │  ├─ security-004-account-lockout-missing.md
+   │  │  ├─ line 24: [ ] Failed login attempts tracked per user account in database
+   │  │  ├─ line 25: [ ] Account locked after configurable threshold (default: 10 attempts)
+   │  │  ├─ line 26: [ ] Locked account returns `ACCOUNT_LOCKED` error with appropriate message
+   │  │  ├─ line 27: [ ] Lockout notification sent to user's verified email
+   │  │  ├─ line 28: [ ] Admin can unlock accounts via management UI
+   │  │  ├─ line 29: [ ] Auto-unlock after configurable cooldown period (default: 30 minutes)
+   │  │  └─ line 30: [ ] Integration test verifies lockout behavior
+   │  ├─ security-005-password-policy-weak.md
+   │  │  ├─ line 21: [ ] Minimum password length increased to 12 characters
+   │  │  ├─ line 22: [ ] `isStrongPassword()` enforced during registration and password change
+   │  │  ├─ line 23: [ ] Clear error messages for password policy violations
+   │  │  └─ line 24: [ ] Existing users prompted to update weak passwords on next login
+   │  ├─ security-006-gdpr-dsar-endpoint.md
+   │  │  ├─ line 24: [ ] DSAR request endpoint created (`POST /api/v1/gdpr/dsar`)
+   │  │  ├─ line 25: [ ] Data export aggregates: employees, contacts, addresses, identifiers, compensation, leave, performance, documents
+   │  │  ├─ line 26: [ ] Export format: structured JSON and CSV
+   │  │  ├─ line 27: [ ] 30-day deadline tracking with notifications at 7, 14, 21 days
+   │  │  ├─ line 28: [ ] Identity verification before data release
+   │  │  ├─ line 29: [ ] DSAR requests logged in audit trail
+   │  │  └─ line 30: [ ] Admin dashboard for DSAR request management
+   │  ├─ security-007-data-erasure-missing.md
+   │  │  ├─ line 26: [ ] Anonymisation function replaces PII fields with hashed/anonymised values
+   │  │  ├─ line 27: [ ] Configurable per-tenant retention periods by data category
+   │  │  ├─ line 28: [ ] Automated scheduled job for retention enforcement
+   │  │  ├─ line 29: [ ] Manual erasure request workflow with admin approval
+   │  │  ├─ line 30: [ ] Legal hold flag prevents erasure of held records
+   │  │  ├─ line 31: [ ] Audit trail records all erasure operations
+   │  │  └─ line 32: [ ] Erasure respects legal obligations (e.g., 6-year tax record retention)
+   │  ├─ security-008-request-body-size-limit.md
+   │  │  ├─ line 21: [ ] Global body size limit of 10MB configured in Elysia
+   │  │  ├─ line 22: [ ] File upload endpoints allow up to 50MB
+   │  │  ├─ line 23: [ ] Oversized requests return 413 with clear error message
+   │  │  └─ line 24: [ ] Integration test verifies body size enforcement
+   │  ├─ tech-debt-001-shared-package-unused.md
+   │  │  ├─ line 25: [ ] `TenantContext` imported from `@staffora/shared` in all API modules
+   │  │  ├─ line 26: [ ] `ServiceResult<T>` imported from shared or API types (not redefined in tests)
+   │  │  ├─ line 27: [ ] Error codes imported from `@staffora/shared/errors` in API modules
+   │  │  ├─ line 28: [ ] State machines imported from `@staffora/shared/state-machines` in API services
+   │  │  ├─ line 29: [ ] Frontend uses shared error codes for error message display
+   │  │  └─ line 30: [ ] No duplicate type definitions between shared and API packages
+   │  ├─ tech-debt-002-dual-postgresql-drivers.md
+   │  │  ├─ line 22: [ ] Better Auth configured to use postgres.js connection
+   │  │  ├─ line 23: [ ] `pg` package removed from dependencies
+   │  │  ├─ line 24: [ ] `@types/pg` removed from dev dependencies
+   │  │  ├─ line 25: [ ] All database connections go through a single pool
+   │  │  └─ line 26: [ ] Auth flow integration tests pass with the unified driver
+   │  ├─ tech-debt-003-dependency-version-mismatches.md
+   │  │  ├─ line 24: [ ] `@sinclair/typebox` aligned to `^0.34.x` in all packages
+   │  │  ├─ line 25: [ ] `better-auth` aligned to `^1.5.4` in all packages
+   │  │  ├─ line 26: [ ] `vitest` and `@vitest/coverage-v8` at matching major versions
+   │  │  ├─ line 27: [ ] `bun install` runs without warnings
+   │  │  └─ line 28: [ ] All tests pass after version alignment
+   │  ├─ tech-debt-004-hollow-tests.md
+   │  │  ├─ line 22: [ ] `employee-lifecycle.test.ts` rewritten to use real database CRUD and state machine triggers
+   │  │  ├─ line 23: [ ] Top 5 service test files converted to test real service classes
+   │  │  ├─ line 24: [ ] Remaining service tests have runtime assertions verifying extracted logic matches real service
+   │  │  └─ line 25: [ ] No test file creates local copies of business logic without validation
+   │  ├─ tech-debt-005-select-star-usage.md
+   │  │  ├─ line 24: [ ] All `SELECT *` replaced with explicit column lists in all repository files
+   │  │  ├─ line 25: [ ] Column lists verified against actual migration schemas
+   │  │  ├─ line 26: [ ] ESLint or grep-based CI rule prevents new `SELECT *` usage
+   │  │  └─ line 27: [ ] No performance regression (explicit columns should improve performance)
+   │  ├─ tech-debt-006-services-missing-error-handling.md
+   │  │  ├─ line 29: [ ] All 11 services without error handling have try/catch blocks
+   │  │  ├─ line 30: [ ] Database errors mapped to appropriate error codes from `@staffora/shared/errors`
+   │  │  ├─ line 31: [ ] Business logic validation returns `ServiceResult` error objects
+   │  │  ├─ line 32: [ ] No uncaught promise rejections from service methods
+   │  │  └─ line 33: [ ] Error handling pattern documented and consistent
+   │  ├─ tech-debt-007-large-god-classes.md
+   │  │  ├─ line 27: [ ] `hr/service.ts` split into `employee.service.ts`, `org-unit.service.ts`, `position.service.ts`
+   │  │  ├─ line 28: [ ] `hr/repository.ts` split into matching repository files
+   │  │  ├─ line 29: [ ] `benefits/routes.ts` split into route group files
+   │  │  ├─ line 30: [ ] No production file exceeds 1,000 lines
+   │  │  └─ line 31: [ ] All existing tests pass after refactoring
+   │  ├─ tech-debt-008-unused-dependencies.md
+   │  │  ├─ line 24: [ ] `@better-auth/infra` removed from Website package
+   │  │  ├─ line 25: [ ] `otpauth` verified as necessary or removed
+   │  │  ├─ line 26: [ ] `bun install` runs cleanly after removals
+   │  │  └─ line 27: [ ] All tests pass after dependency cleanup
+   │  ├─ tech-debt-009-frontend-error-boundaries.md
+   │  │  ├─ line 21: [ ] Reusable `RouteErrorBoundary` component created
+   │  │  ├─ line 22: [ ] Error boundary added to `(admin)/layout.tsx`
+   │  │  ├─ line 23: [ ] Error boundary added to `(app)/layout.tsx`
+   │  │  ├─ line 24: [ ] Error boundary added to `(auth)/layout.tsx`
+   │  │  ├─ line 25: [ ] Error message shows user-friendly text with retry option
+   │  │  ├─ line 26: [ ] Error details logged for debugging
+   │  │  └─ line 27: [ ] Tests verify error boundary rendering
+   │  └─ tech-debt-010-n-plus-one-query-patterns.md
+   │     ├─ line 20: [ ] Loop-based inserts refactored to batch INSERT statements
+   │     ├─ line 21: [ ] Performance test verifying improvement for 50+ row inserts
+   │     └─ line 22: [ ] All existing tests pass after refactoring
+   ├─ migrations
+   │  └─ README.md
+   │     └─ line 12: XXX _description.sql
+   └─ project-management
+      ├─ kanban-board.md
+      │  └─ line 159: TODO -- Next Up
+      ├─ sprint-plan-phase1.md
+      │  ├─ line 21: [ ] Server generates CSRF tokens using HMAC-SHA256 with `CSRF_SECRET`, bound to session ID
+      │  ├─ line 22: [ ] `/api/auth/csrf` endpoint returns a signed token
+      │  ├─ line 23: [ ] `requireCsrf()` recomputes HMAC and validates on every mutating request
+      │  ├─ line 24: [ ] Frontend `api-client.ts` fetches CSRF token and includes `X-CSRF-Token` header on all POST/PUT/PATCH/DELETE
+      │  ├─ line 25: [ ] Integration test verifies: valid token passes, invalid token returns 403, missing token returns 403
+      │  ├─ line 37: [ ] Track failed login attempts per account in database or Redis
+      │  ├─ line 38: [ ] Lock account after 10 consecutive failed attempts
+      │  ├─ line 39: [ ] Implement exponential backoff (increasing delay after 3 failures)
+      │  ├─ line 40: [ ] Send notification email to user on account lockout
+      │  ├─ line 41: [ ] Admin can unlock accounts via API
+      │  ├─ line 42: [ ] Auto-unlock after configurable timeout (default 30 minutes)
+      │  ├─ line 43: [ ] Integration test covers: lockout trigger, locked login rejection, admin unlock, auto-unlock
+      │  ├─ line 54: [ ] Set `requireEmailVerification: true` in production config
+      │  ├─ line 55: [ ] Verification email flow works with time-limited tokens
+      │  ├─ line 56: [ ] Unverified users cannot access tenant-scoped data
+      │  ├─ line 57: [ ] Development mode can optionally bypass verification for DX
+      │  ├─ line 67: [ ] Global body size limit of 10MB configured in Elysia
+      │  ├─ line 68: [ ] File upload endpoints have appropriate higher limits if needed
+      │  ├─ line 69: [ ] Requests exceeding limit return 413 Payload Too Large
+      │  ├─ line 70: [ ] Test verifies oversized requests are rejected
+      │  ├─ line 80: [ ] Production mode crashes on startup if `DATABASE_URL` or `DB_PASSWORD` is not set
+      │  ├─ line 81: [ ] `validateSecrets()` extended to validate database credentials
+      │  ├─ line 82: [ ] Development mode still works with defaults for DX
+      │  ├─ line 83: [ ] No hardcoded password in `db.ts` production path
+      │  ├─ line 95: [ ] Minimum password length increased to 12
+      │  ├─ line 96: [ ] `isStrongPassword()` from shared package wired into Better Auth password validation
+      │  ├─ line 97: [ ] Existing users with shorter passwords prompted to change on next login (informational, not blocking)
+      │  ├─ line 117: [ ] `SIGTERM` and `SIGINT` handlers added to `app.ts`
+      │  ├─ line 118: [ ] Handlers drain in-flight requests with a configurable timeout (default 30s)
+      │  ├─ line 119: [ ] Database connection pool closed gracefully
+      │  ├─ line 120: [ ] Redis connections closed gracefully
+      │  ├─ line 121: [ ] `unhandledRejection` and `uncaughtException` handlers log error and exit safely
+      │  ├─ line 122: [ ] Pattern matches the existing worker implementation
+      │  ├─ line 132: [ ] `docker/postgres/init.sql` creates `hris_app` role with `NOBYPASSRLS`
+      │  ├─ line 133: [ ] All necessary schema grants applied to `hris_app`
+      │  ├─ line 134: [ ] Docker compose configured to use `hris_app` for API and worker connections
+      │  ├─ line 135: [ ] `hris` role used only for migration runner
+      │  ├─ line 136: [ ] Separate `DATABASE_URL` variables for migration vs runtime connections
+      │  ├─ line 137: [ ] Verified: API queries return only current tenant's data
+      │  ├─ line 138: [ ] Verified: `withSystemContext()` still works for admin operations
+      │  ├─ line 152: [ ] Better Auth configured to use postgres.js adapter instead of separate `pg` Pool
+      │  ├─ line 153: [ ] `pg` and `@types/pg` removed from dependencies
+      │  ├─ line 154: [ ] Scheduler connection pool limited and documented
+      │  ├─ line 155: [ ] Total pool size documented and aligned with PostgreSQL `max_connections`
+      │  ├─ line 156: [ ] Connection pool monitoring added to health check endpoint
+      │  ├─ line 169: [ ] Tenant cache TTL reduced to 60 seconds
+      │  ├─ line 170: [ ] Tenant status change triggers immediate cache invalidation
+      │  ├─ line 171: [ ] Test verifies suspended tenant is blocked within seconds
+      │  ├─ line 181: [ ] `KEYS` replaced with iterative `SCAN` in `invalidateTenantCache()`
+      │  ├─ line 182: [ ] No `KEYS` usage remains in production code
+      │  ├─ line 183: [ ] Performance improvement verified with large key count
+      │  ├─ line 193: [ ] All mutation routes use `logInTransaction()` instead of `audit.log()`
+      │  ├─ line 194: [ ] Audit writes share the same transaction handle as business writes
+      │  ├─ line 195: [ ] Linting rule or code review checklist prevents out-of-transaction audit writes
+      │  ├─ line 196: [ ] Test verifies audit record rolled back when business write fails
+      │  ├─ line 217: [ ] GitHub Actions workflow builds Docker images for API, worker, and web
+      │  ├─ line 218: [ ] Images pushed to container registry (GHCR or ECR)
+      │  ├─ line 219: [ ] Staging deployment triggered automatically on merge to main
+      │  ├─ line 220: [ ] Production deployment gated behind manual approval
+      │  ├─ line 221: [ ] Rollback mechanism documented (previous image tag)
+      │  ├─ line 222: [ ] Environment-specific configuration via GitHub Environments
+      │  ├─ line 234: [ ] Pino logger integrated into API and worker
+      │  ├─ line 235: [ ] JSON output format with fields: timestamp, level, requestId, tenantId, userId, module
+      │  ├─ line 236: [ ] Request ID from `errorsPlugin` propagated through logger context
+      │  ├─ line 237: [ ] All `console.log` calls replaced with structured logger calls
+      │  ├─ line 238: [ ] Log level configurable via `LOG_LEVEL` env var
+      │  ├─ line 239: [ ] Sensitive data (passwords, tokens) never logged
+      │  ├─ line 251: [ ] Sentry SDK integrated into API server
+      │  ├─ line 252: [ ] `errorsPlugin` captures unhandled errors to Sentry
+      │  ├─ line 253: [ ] Source maps uploaded for meaningful stack traces
+      │  ├─ line 254: [ ] Environment, release, and user context attached to events
+      │  ├─ line 255: [ ] `SENTRY_DSN` env var configurable (optional -- disabled when absent)
+      │  ├─ line 267: [ ] CodeQL or Semgrep SAST action added to CI
+      │  ├─ line 268: [ ] Dependency audit step (npm audit / Snyk) added
+      │  ├─ line 269: [ ] Container image scanning (Trivy) after Docker build
+      │  ├─ line 270: [ ] High/critical findings fail the build
+      │  ├─ line 271: [ ] Results uploaded as SARIF for GitHub Security tab
+      │  ├─ line 281: [ ] `/metrics` endpoint on API server exposing Prometheus-compatible metrics
+      │  ├─ line 282: [ ] Metrics include: request count, request duration histogram, error rate, active connections, DB pool stats
+      │  ├─ line 283: [ ] Metrics scoped by route pattern and status code
+      │  ├─ line 284: [ ] Endpoint excluded from auth/tenant plugins (publicly accessible like health checks)
+      │  ├─ line 295: [ ] Backup script pushes compressed dumps to S3 after each backup
+      │  ├─ line 296: [ ] S3 bucket, region, and credentials configurable via env vars
+      │  ├─ line 297: [ ] Backup verification: restore to temp database and run sanity query
+      │  ├─ line 298: [ ] Retention policy applies to both local and S3 copies
+      │  ├─ line 299: [ ] Alert on backup failure (email or webhook)
+      │  ├─ line 309: [ ] CI uses explicit Bun version matching `packageManager` field in `package.json`
+      │  ├─ line 310: [ ] Redis health check includes authentication: `redis-cli -a $REDIS_PASSWORD ping`
+      │  ├─ line 311: [ ] CI Redis service configured with password matching dev/prod config
+      │  ├─ line 324: [ ] All HIGH-severity security findings resolved (CSRF, email verification, account lockout)
+      │  ├─ line 325: [ ] API server has graceful shutdown
+      │  ├─ line 326: [ ] Production connects as `hris_app` role (RLS enforced)
+      │  ├─ line 327: [ ] Database connection pools consolidated and bounded
+      │  ├─ line 328: [ ] Deployment pipeline builds and pushes Docker images
+      │  ├─ line 329: [ ] Structured logging operational
+      │  ├─ line 330: [ ] Error tracking (Sentry) capturing unhandled errors
+      │  ├─ line 331: [ ] Security scanning in CI
+      │  ├─ line 332: [ ] Backups pushed to offsite storage
+      │  └─ line 333: [ ] All new features have integration tests
+      ├─ sprint-plan-phase2.md
+      │  ├─ line 21: [ ] `@sinclair/typebox` aligned to `^0.34.11` in `packages/shared/package.json`
+      │  ├─ line 22: [ ] `better-auth` aligned to `^1.5.4` in `packages/web/package.json`
+      │  ├─ line 23: [ ] `vitest` and `@vitest/coverage-v8` aligned to matching major versions in `packages/web`
+      │  ├─ line 24: [ ] `@better-auth/infra` removed from `Website/package.json` (zero imports)
+      │  ├─ line 25: [ ] `bun install` succeeds with no peer dependency warnings
+      │  ├─ line 26: [ ] All tests pass after version alignment
+      │  ├─ line 39: [ ] All API modules import error codes from `@staffora/shared/errors` instead of defining locally
+      │  ├─ line 40: [ ] Error messages sourced from `@staffora/shared/errors/messages`
+      │  ├─ line 41: [ ] Duplicate error code definitions removed from module files
+      │  ├─ line 42: [ ] All tests pass with shared error codes
+      │  ├─ line 54: [ ] Employee lifecycle state machine imported from `@staffora/shared` in HR service
+      │  ├─ line 55: [ ] Case state machine imported from `@staffora/shared` in Cases service
+      │  ├─ line 56: [ ] Leave request state machine imported from `@staffora/shared` in Absence service
+      │  ├─ line 57: [ ] Performance cycle state machine imported from `@staffora/shared` in Talent service
+      │  ├─ line 58: [ ] Workflow state machine imported from `@staffora/shared` in Workflows service
+      │  ├─ line 59: [ ] Local state machine definitions removed
+      │  ├─ line 60: [ ] All state machine tests still pass
+      │  ├─ line 74: [ ] `TenantContext` interface defined in `@staffora/shared` and imported by all modules
+      │  ├─ line 75: [ ] `ServiceResult<T>` type defined in `@staffora/shared` and imported by services and tests
+      │  ├─ line 76: [ ] Local type definitions removed from module files
+      │  ├─ line 77: [ ] All tests pass with shared types
+      │  ├─ line 88: [ ] `packages/api/src/modules/dashboard/repository.ts` created with SQL queries
+      │  ├─ line 89: [ ] `packages/api/src/modules/dashboard/service.ts` created with business logic
+      │  ├─ line 90: [ ] `packages/api/src/modules/dashboard/schemas.ts` created with TypeBox validation
+      │  ├─ line 91: [ ] Routes.ts delegates to service layer
+      │  ├─ line 92: [ ] Redis caching added for dashboard stats (60s TTL)
+      │  ├─ line 93: [ ] No inline SQL remains in routes.ts
+      │  ├─ line 116: [ ] Priority services wrapped with try/catch: `hr`, `benefits`, `workflows`, `recruitment`, `documents`
+      │  ├─ line 117: [ ] DB operations return `ServiceResult` with error codes on failure
+      │  ├─ line 118: [ ] Business validation errors return appropriate error codes from `@staffora/shared`
+      │  ├─ line 119: [ ] Unexpected errors caught, logged with structured logger, and re-thrown as internal errors
+      │  ├─ line 120: [ ] At least 5 of the 11 zero-error-handling services fixed this sprint
+      │  ├─ line 134: [ ] All 28 `SELECT *` instances replaced with explicit column lists
+      │  ├─ line 135: [ ] Column lists verified against migration schemas
+      │  ├─ line 136: [ ] No `SELECT *` in any repository file
+      │  ├─ line 137: [ ] All route and service tests pass
+      │  ├─ line 151: [ ] `hr/service.ts` split into: `employee.service.ts`, `org-unit.service.ts`, `position.service.ts`, `contract.service.ts`
+      │  ├─ line 152: [ ] `hr/repository.ts` split into matching repository files
+      │  ├─ line 153: [ ] `hr/service.ts` becomes a facade that delegates to sub-services
+      │  ├─ line 154: [ ] All existing routes continue to work without path changes
+      │  ├─ line 155: [ ] All HR tests pass
+      │  ├─ line 166: [ ] Reusable `RouteErrorBoundary` component created
+      │  ├─ line 167: [ ] Error boundary added to `(admin)/layout.tsx`
+      │  ├─ line 168: [ ] Error boundary added to `(app)/layout.tsx`
+      │  ├─ line 169: [ ] Error boundary added to `(auth)/layout.tsx`
+      │  ├─ line 170: [ ] Error boundary shows meaningful error message and retry option
+      │  ├─ line 171: [ ] Navigation remains functional when a route errors
+      │  ├─ line 184: [ ] `packages/api/src/lib/pagination.ts` created with cursor-based pagination utility
+      │  ├─ line 185: [ ] Handles forward/backward pagination, limit capping, cursor encoding/decoding
+      │  ├─ line 186: [ ] At least 3 modules refactored to use shared helper (HR, Absence, Time)
+      │  ├─ line 187: [ ] TypeBox schemas for pagination query params shared
+      │  ├─ line 199: [ ] `packages/web/src/App.tsx` deleted (legacy under-construction page)
+      │  ├─ line 200: [ ] `migrations/fix_schema_migrations_filenames.sql` documented as applied and archived
+      │  ├─ line 201: [ ] Duplicate `ServiceResult` definitions removed from test files
+      │  ├─ line 202: [ ] Unused dependencies verified and removed
+      │  ├─ line 223: [ ] Migration creates `right_to_work_checks` table with: employee_id, check_type (manual/online/IDVT), check_date, document_type (List A/B), document_reference, expiry_date, share_code, status (pending/verified/expired/failed), verified_by, next_check_date
+      │  ├─ line 224: [ ] RLS enabled on new table
+      │  ├─ line 225: [ ] API endpoints: create check, update status, list checks, get expiring
+      │  ├─ line 226: [ ] Employee status cannot transition from `pending` to `active` without a verified RTW check
+      │  ├─ line 227: [ ] Integration test verifies: RTW check creation, status gate on employee activation
+      │  ├─ line 239: [ ] Scheduler job checks for expiring RTW documents daily
+      │  ├─ line 240: [ ] Alerts generated at 90, 60, and 30 days before expiry
+      │  ├─ line 241: [ ] Notifications sent to HR admins and the relevant employee's manager
+      │  ├─ line 242: [ ] Expired RTW flags employee record with warning status
+      │  ├─ line 243: [ ] Dashboard widget shows RTW documents expiring within 90 days
+      │  ├─ line 254: [ ] Validation in `AbsenceService.createLeavePolicy()` rejects `default_balance < 28` for country_code `GBR` (full-time)
+      │  ├─ line 255: [ ] Pro-rata calculation: `Math.min(5.6 * days_per_week, 28)` applied for part-time
+      │  ├─ line 256: [ ] Warning displayed in UI when creating policies below statutory minimum
+      │  ├─ line 257: [ ] Compliance report endpoint lists employees with below-minimum entitlement
+      │  ├─ line 258: [ ] Integration test verifies: minimum enforcement, pro-rata calculation
+      │  ├─ line 269: [ ] Tenant or policy level setting: `bank_holiday_treatment` (included_in_entitlement / additional_to_entitlement)
+      │  ├─ line 270: [ ] Entitlement calculations adjusted based on setting
+      │  ├─ line 271: [ ] Default: additional_to_entitlement (most common UK approach)
+      │  ├─ line 272: [ ] Setting visible in leave policy configuration UI
+      │  ├─ line 293: [ ] SSP calculation service with current statutory rate
+      │  ├─ line 294: [ ] 3 waiting days before payment begins
+      │  ├─ line 295: [ ] Linking of periods of incapacity (PIWs within 8 weeks)
+      │  ├─ line 296: [ ] Lower earnings limit (LEL) check against employee compensation
+      │  ├─ line 297: [ ] 28-week maximum tracking per period of incapacity
+      │  ├─ line 298: [ ] Fit note tracking: self-certification (days 1-7) vs medical certificate (day 8+)
+      │  ├─ line 299: [ ] SSP rates configurable and versioned by tax year
+      │  ├─ line 300: [ ] Integration tests for: waiting days, PIW linking, LEL check, 28-week max
+      │  ├─ line 311: [ ] Contract template system with statutory required fields
+      │  ├─ line 312: [ ] PDF generation of day-one written statement from employee/contract/compensation data
+      │  ├─ line 313: [ ] Validation that all statutory terms are present before generation
+      │  ├─ line 314: [ ] Auto-trigger on employee creation (domain event handler)
+      │  ├─ line 315: [ ] Document stored in documents module with type `contract`
+      │  ├─ line 316: [ ] Acknowledgement/signature tracking
+      │  ├─ line 328: [ ] Function calculates statutory minimum notice based on continuous service length
+      │  ├─ line 329: [ ] Validation that `notice_period_days` >= statutory minimum on contract save
+      │  ├─ line 330: [ ] Warning if contractual notice is below statutory minimum
+      │  ├─ line 340: [ ] DSAR request endpoint with deadline tracking (30 days, extendable by 2 months)
+      │  ├─ line 341: [ ] Data compilation function aggregates data across: employees, contacts, addresses, identifiers, compensation, leave, performance, documents
+      │  ├─ line 342: [ ] Export as structured JSON
+      │  ├─ line 343: [ ] Identity verification step required before data release
+      │  ├─ line 344: [ ] DSAR request logged in audit trail
+      │  ├─ line 345: [ ] Integration test verifies data compilation completeness
+      │  ├─ line 366: [ ] Test creates employees via real SQL
+      │  ├─ line 367: [ ] Status transitions executed through service or API calls
+      │  ├─ line 368: [ ] Employee status history verified in database
+      │  ├─ line 369: [ ] Outbox events verified in database
+      │  ├─ line 370: [ ] State machine constraints enforced (invalid transitions rejected)
+      │  ├─ line 371: [ ] Full lifecycle: pending -> active -> on_leave -> active -> terminated
+      │  ├─ line 381: [ ] `TestApiClient` class created in test helpers
+      │  ├─ line 382: [ ] Handles: login, session cookies, CSRF token fetching, tenant header, idempotency key generation
+      │  ├─ line 383: [ ] Methods: `get()`, `post()`, `put()`, `patch()`, `delete()` with proper headers
+      │  ├─ line 384: [ ] Response includes parsed JSON body, status code, and headers
+      │  ├─ line 385: [ ] Example test demonstrating usage against HR module
+      │  ├─ line 395: [ ] Absence routes test uses `app.handle()` with authenticated sessions
+      │  ├─ line 396: [ ] Cases routes test uses `app.handle()` with authenticated sessions
+      │  ├─ line 397: [ ] Time routes test uses `app.handle()` with authenticated sessions
+      │  ├─ line 398: [ ] Tests verify RBAC: unauthorized user gets 403
+      │  ├─ line 399: [ ] Tests verify tenant isolation: cross-tenant request returns empty/404
+      │  ├─ line 400: [ ] Tests verify idempotency: duplicate requests return cached response
+      │  ├─ line 412: [ ] E2E test covers full auth flow via HTTP
+      │  ├─ line 413: [ ] Registration creates user and sends verification
+      │  ├─ line 414: [ ] Login returns session cookie
+      │  ├─ line 415: [ ] Authenticated request succeeds with valid session
+      │  ├─ line 416: [ ] Unauthenticated request fails with 401
+      │  ├─ line 417: [ ] CSRF token required and validated on mutations
+      │  ├─ line 427: [ ] HR service test imports and tests the real HrService class
+      │  ├─ line 428: [ ] Cases service test imports and tests the real CasesService class
+      │  ├─ line 429: [ ] Absence service test imports and tests the real AbsenceService class
+      │  ├─ line 430: [ ] Tests use mock repository (in-memory) but real service logic
+      │  ├─ line 431: [ ] If Bun segfault persists on Windows, add CI-only flag and document workaround
+      │  ├─ line 445: [ ] All dependency version mismatches resolved
+      │  ├─ line 446: [ ] `@staffora/shared` error codes, state machines, and types imported in production code
+      │  ├─ line 447: [ ] Dashboard module refactored to service/repository pattern
+      │  ├─ line 448: [ ] At least 5 services have proper error handling
+      │  ├─ line 449: [ ] All `SELECT *` replaced with explicit column lists
+      │  ├─ line 450: [ ] HR service/repository split into sub-modules
+      │  ├─ line 451: [ ] Route-level error boundaries in frontend
+      │  ├─ line 452: [ ] Right to Work verification workflow operational
+      │  ├─ line 453: [ ] UK holiday minimum enforcement (28 days) active
+      │  ├─ line 454: [ ] SSP calculation engine functional
+      │  ├─ line 455: [ ] DSAR handling workflow implemented
+      │  ├─ line 456: [ ] Hollow E2E test rewritten with real DB operations
+      │  ├─ line 457: [ ] TestApiClient utility available for HTTP-level testing
+      │  ├─ line 458: [ ] At least 3 route tests converted to real HTTP
+      │  └─ line 459: [ ] Auth flow E2E test passing
+      └─ sprint-plan-phase3.md
+         ├─ line 21: [ ] Migration creates maternity-specific tracking fields (EWC, MATB1 date, KIT days used)
+         ├─ line 22: [ ] Qualifying service check: 26 weeks continuous service by 15th week before EWC
+         ├─ line 23: [ ] SMP calculation: 6 weeks at 90% average weekly earnings, 33 weeks at statutory rate (or 90% AWE if lower)
+         ├─ line 24: [ ] 52-week reference period for average earnings calculation
+         ├─ line 25: [ ] Compulsory maternity leave enforcement (2 weeks from birth)
+         ├─ line 26: [ ] KIT day tracking (maximum 10 days)
+         ├─ line 27: [ ] Return-to-work date calculation
+         ├─ line 28: [ ] Leave balance adjusted automatically
+         ├─ line 29: [ ] Integration tests for qualifying criteria, SMP tiers, KIT day limits
+         ├─ line 40: [ ] Paternity leave type with 2-week entitlement (1 or 2 consecutive weeks)
+         ├─ line 41: [ ] SPP at statutory rate
+         ├─ line 42: [ ] Qualifying criteria: 26 weeks continuous employment by 15th week before EWC
+         ├─ line 43: [ ] Timing constraint: must be taken within 56 days of birth/placement
+         ├─ line 44: [ ] Expected date tracking for advance booking
+         ├─ line 45: [ ] Integration tests for entitlement, timing constraints
+         ├─ line 56: [ ] Dedicated parental bereavement leave type with 2-week statutory minimum
+         ├─ line 57: [ ] SPBP at statutory rate
+         ├─ line 58: [ ] No qualifying period (available from day one)
+         ├─ line 59: [ ] Can be taken as 2 consecutive weeks or 2 separate weeks within 56 weeks
+         ├─ line 60: [ ] Sensitive handling: minimal approval workflow
+         ├─ line 81: [ ] SPL calculation: 52 weeks minus maternity/adoption leave taken = available SPL
+         ├─ line 82: [ ] ShPP: 39 weeks minus SMP/SAP weeks taken = available ShPP weeks
+         ├─ line 83: [ ] Curtailment notice tracking (mother must curtail maternity leave/SMP)
+         ├─ line 84: [ ] Booking notice periods (8 weeks before each block)
+         ├─ line 85: [ ] Up to 3 booking requests (employer can reject discontinuous leave)
+         ├─ line 86: [ ] SPLIT (Shared Parental Leave In Touch) day tracking (20 days)
+         ├─ line 87: [ ] Both parents can book from the same pool
+         ├─ line 88: [ ] Integration tests for curtailment, booking, ShPP calculation
+         ├─ line 99: [ ] Adoption leave entitlement mirroring maternity provisions
+         ├─ line 100: [ ] SAP calculation matching SMP (6 weeks 90% AWE + 33 weeks statutory)
+         ├─ line 101: [ ] Qualifying criteria: 26 weeks continuous service by matching week
+         ├─ line 102: [ ] Matching certificate tracking
+         ├─ line 103: [ ] KIT day allowance (10 days)
+         ├─ line 113: [ ] Per-child leave tracking (not just per-employee)
+         ├─ line 114: [ ] 1-week block minimum enforcement
+         ├─ line 115: [ ] 4-week annual cap per child
+         ├─ line 116: [ ] 18-week lifetime cap per child
+         ├─ line 117: [ ] Child age validation (up to 18)
+         ├─ line 138: [ ] Eligibility assessment engine checking age and earnings thresholds
+         ├─ line 139: [ ] Worker categories: eligible jobholder, non-eligible jobholder, entitled worker
+         ├─ line 140: [ ] Assessment runs automatically on: hire, age milestone, pay change
+         ├─ line 141: [ ] Postponement period tracking (up to 3 months)
+         ├─ line 142: [ ] Qualifying earnings band calculation (current: GBP 6,240 to GBP 50,270)
+         ├─ line 143: [ ] Thresholds configurable and versioned by tax year
+         ├─ line 144: [ ] Integration tests for each worker category
+         ├─ line 154: [ ] Automatic enrolment triggered for eligible jobholders
+         ├─ line 155: [ ] Opt-out window management (1 month from enrolment date)
+         ├─ line 156: [ ] Opt-in handling for non-eligible workers who request it
+         ├─ line 157: [ ] Minimum contribution rate enforcement: 5% employee + 3% employer = 8% total
+         ├─ line 158: [ ] Contribution calculated on qualifying earnings (between lower and upper thresholds)
+         ├─ line 159: [ ] Opt-out refund processing within opt-out window
+         ├─ line 160: [ ] Domain events emitted for enrolment, opt-out, contribution changes
+         ├─ line 170: [ ] 3-yearly re-enrolment processing for opted-out employees
+         ├─ line 171: [ ] Re-enrolment date calculation and tracking
+         ├─ line 172: [ ] Re-enrolment notification to employees
+         ├─ line 173: [ ] TPR declaration of compliance data export
+         ├─ line 174: [ ] Audit trail for all pension-related decisions
+         ├─ line 195: [ ] Payroll export endpoint generating structured data per pay period
+         ├─ line 196: [ ] Export includes: employee details, hours worked, absence records, SSP/SMP/SPP entitlements
+         ├─ line 197: [ ] Configurable pay period alignment (weekly, monthly, 4-weekly)
+         ├─ line 198: [ ] CSV and JSON export formats
+         ├─ line 199: [ ] Delta export (changes since last export) for incremental sync
+         ├─ line 200: [ ] Audit trail of all payroll exports
+         ├─ line 210: [ ] Tax code field added to employee record with effective dating
+         ├─ line 211: [ ] Tax code format validation (e.g., 1257L, BR, D0, NT)
+         ├─ line 212: [ ] Tax code change history tracked
+         ├─ line 213: [ ] P45 starter declaration tracking for new employees
+         ├─ line 214: [ ] NI category letter storage
+         ├─ line 224: [ ] Document types for P45, P60, P11D in documents module
+         ├─ line 225: [ ] Upload endpoint for payroll-system-generated documents
+         ├─ line 226: [ ] Automatic association with employee and tax year
+         ├─ line 227: [ ] Employee self-service access via portal
+         ├─ line 228: [ ] Retention policy: minimum 6 years after end of tax year
+         ├─ line 239: [ ] 52-week reference period calculation engine
+         ├─ line 240: [ ] Includes: base pay, regular overtime, commission, allowances
+         ├─ line 241: [ ] Excludes weeks with zero pay (extends lookback)
+         ├─ line 242: [ ] Capped at 104-week total lookback
+         ├─ line 243: [ ] Average weekly pay calculated for holiday pay rate
+         ├─ line 244: [ ] Integration with payroll export data
+         ├─ line 264: [ ] Configurable retention schedules per data category (e.g., 6 years post-employment for tax records)
+         ├─ line 265: [ ] Anonymisation function replacing PII with anonymised values (name, address, identifiers)
+         ├─ line 266: [ ] Scheduled job runs daily to identify records past retention period
+         ├─ line 267: [ ] Legal hold mechanism prevents anonymisation of data under litigation
+         ├─ line 268: [ ] Audit trail of all anonymisation operations
+         ├─ line 269: [ ] Employee records anonymised, not deleted (preserves aggregate analytics)
+         ├─ line 279: [ ] Breach incident creation endpoint with: description, affected data scope, discovery date
+         ├─ line 280: [ ] 72-hour countdown timer from discovery to ICO notification deadline
+         ├─ line 281: [ ] Risk assessment: likelihood and severity of harm to individuals
+         ├─ line 282: [ ] Notification templates: ICO report, affected individual notification
+         ├─ line 283: [ ] Breach register for ongoing tracking and annual review
+         ├─ line 284: [ ] Dashboard alerts for active breach incidents
+         ├─ line 294: [ ] Employee privacy notice template system
+         ├─ line 295: [ ] Delivery tracking: when notice was provided to each employee
+         ├─ line 296: [ ] Acknowledgement recording with timestamp
+         ├─ line 297: [ ] Version tracking: when privacy notice is updated, re-acknowledgement required
+         ├─ line 298: [ ] Portal integration for employee self-service acknowledgement
+         ├─ line 308: [ ] `onAfterHandle` hook automatically logs read access to sensitive entities
+         ├─ line 309: [ ] Sensitive routes identified by pattern (employee, compensation, identifiers)
+         ├─ line 310: [ ] Audit log includes: who accessed, what data, when, IP address
+         ├─ line 311: [ ] No performance degradation for non-sensitive routes
+         ├─ line 312: [ ] Configurable via `FEATURE_AUDIT_READS` env var
+         ├─ line 331: [ ] Disciplinary case category with ACAS stages: investigation -> hearing -> outcome -> appeal
+         ├─ line 332: [ ] Hearing scheduling with minimum notice period tracking
+         ├─ line 333: [ ] Right to be accompanied notification
+         ├─ line 334: [ ] Sanction tracking: verbal warning, written warning, final warning, dismissal
+         ├─ line 335: [ ] Warning register with configurable expiry dates
+         ├─ line 336: [ ] Appeal workflow ensuring different decision maker
+         ├─ line 337: [ ] Investigation assignment and evidence collection
+         ├─ line 347: [ ] Flexible working request form with proposed changes
+         ├─ line 348: [ ] Available from day one (April 2024 change)
+         ├─ line 349: [ ] 2-month response deadline tracking
+         ├─ line 350: [ ] Maximum 2 requests per 12-month rolling period
+         ├─ line 351: [ ] 8 statutory grounds for refusal available for manager response
+         ├─ line 352: [ ] Appeal process
+         ├─ line 353: [ ] Request state machine: submitted -> under_consideration -> approved/refused -> appeal
+         ├─ line 363: [ ] Report calculating: mean/median gender hourly pay gap
+         ├─ line 364: [ ] Bonus pay gap (mean/median)
+         ├─ line 365: [ ] Proportion of males/females in each pay quartile
+         ├─ line 366: [ ] Proportion receiving bonus pay by gender
+         ├─ line 367: [ ] Snapshot date configurable (default: 5 April each year)
+         ├─ line 368: [ ] Export in format suitable for GOV.UK submission
+         ├─ line 388: [ ] Dashboard showing: RTW check status, expiring documents, SSP claims, pension enrolment status
+         ├─ line 389: [ ] Holiday entitlement compliance check (all UK employees >= 28 days)
+         ├─ line 390: [ ] DSAR request status tracker
+         ├─ line 391: [ ] Data retention compliance status
+         ├─ line 392: [ ] Exportable compliance summary report
+         ├─ line 401: [ ] Bradford Factor calculation per employee
+         ├─ line 402: [ ] Absence trends by department, type, and period
+         ├─ line 403: [ ] Cost of absence calculation
+         ├─ line 404: [ ] Return-to-work interview tracking
+         ├─ line 405: [ ] Trigger alerts for employees exceeding absence thresholds
+         ├─ line 411: [ ] Headcount report by department, location, employment type
+         ├─ line 412: [ ] Turnover rate calculation (monthly, quarterly, annual)
+         ├─ line 413: [ ] New starter report
+         ├─ line 414: [ ] Leaver analysis (reasons, tenure distribution)
+         ├─ line 415: [ ] FTE vs headcount breakdown
+         ├─ line 432: [ ] Prometheus + Grafana deployed via Docker Compose production profile
+         ├─ line 433: [ ] API and worker metrics scraped
+         ├─ line 434: [ ] Dashboards: request rate/latency, error rate, DB pool usage, Redis memory, queue depth
+         ├─ line 435: [ ] Alerts configured: high error rate (>5%), queue backlog (>100), connection pool exhaustion
+         ├─ line 436: [ ] Uptime monitoring endpoint with external checker
+         ├─ line 447: [ ] PostgreSQL WAL archiving configured
+         ├─ line 448: [ ] Point-in-time recovery documented and tested
+         ├─ line 449: [ ] Streaming replication to read replica operational
+         ├─ line 450: [ ] Failover procedure documented
+         ├─ line 451: [ ] RTO target: < 15 minutes; RPO target: < 5 minutes
+         ├─ line 459: [ ] RTO/RPO targets defined per service
+         ├─ line 460: [ ] Runbooks for: application crash, database corruption, data centre failure, security breach
+         ├─ line 461: [ ] Backup restore tested and documented
+         ├─ line 462: [ ] Communication plan for incidents
+         ├─ line 463: [ ] Quarterly DR drill schedule established
+         ├─ line 472: [ ] Production Docker Compose with: resource limits, restart policies, log rotation
+         ├─ line 473: [ ] SSL/TLS certificate provisioning (Let's Encrypt or manual)
+         ├─ line 474: [ ] Production nginx configuration validated
+         ├─ line 475: [ ] Environment variables documented with production defaults
+         ├─ line 476: [ ] Secrets rotation procedure documented
+         ├─ line 477: [ ] Pre-launch checklist completed
+         ├─ line 489: [ ] All family leave types implemented (maternity, paternity, SPL, adoption, bereavement, unpaid parental)
+         ├─ line 490: [ ] Pension auto-enrolment engine operational
+         ├─ line 491: [ ] Payroll data export interface functional
+         ├─ line 492: [ ] Tax code management in place
+         ├─ line 493: [ ] GDPR: data retention, breach notification, privacy notices complete
+         ├─ line 494: [ ] ACAS-compliant disciplinary workflow
+         ├─ line 495: [ ] Flexible working request system
+         ├─ line 496: [ ] Gender pay gap reporting
+         ├─ line 497: [ ] Holiday pay 52-week reference period calculation
+         ├─ line 498: [ ] Compliance dashboard functional
+         ├─ line 499: [ ] Monitoring stack deployed (Prometheus + Grafana)
+         ├─ line 500: [ ] Database replication and PITR configured
+         ├─ line 501: [ ] Disaster recovery plan documented and tested
+         └─ line 502: [ ] Production environment ready for launch

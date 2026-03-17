@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Copy only the package files needed for API and its workspace dependency (shared).
 # We create a trimmed workspace config so bun install resolves only what the API needs,
-# avoiding installation of packages/web and Website dependencies entirely.
+# avoiding installation of packages/web dependencies entirely.
 COPY bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
@@ -43,7 +43,8 @@ COPY packages/shared ./packages/shared
 
 # Build the application
 WORKDIR /app/packages/api
-RUN bun build src/app.ts --outdir dist --target bun
+ENV NODE_ENV=production
+RUN bun build src/app.ts --outdir dist --target bun --define "process.env.NODE_ENV='production'"
 
 # =============================================================================
 # Stage 3: Production dependencies only
@@ -104,6 +105,18 @@ ENV PORT=3000
 # Health check using Bun's native fetch (no need for curl/wget)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD bun -e "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+# Build metadata
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+ARG VERSION=unknown
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/Staffora-HRIS/HRISystem" \
+      org.opencontainers.image.vendor="Staffora" \
+      org.opencontainers.image.title="staffora-api" \
+      org.opencontainers.image.description="Staffora HRIS Platform API"
 
 # Start the API server (worker overrides this via docker-compose command)
 CMD ["bun", "./dist/app.js"]

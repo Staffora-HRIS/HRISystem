@@ -4,15 +4,13 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*",
-    "Website"
+    "packages/*"
   ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:api": "bun run --filter @staffora/api dev",
     "dev:web": "bun run --filter @staffora/web dev",
     "dev:worker": "bun run --filter @staffora/api dev:worker",
-    "dev:website": "bun run --filter @staffora/website dev",
     "build": "bun run --filter '*' build",
     "build:api": "bun run --filter @staffora/api build",
     "build:web": "bun run --filter @staffora/web build",

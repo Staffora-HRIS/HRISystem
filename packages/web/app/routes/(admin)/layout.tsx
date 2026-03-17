@@ -21,15 +21,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const hasLegacySession = cookies.includes("session=");
   const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
 
-  if (process.env["NODE_ENV"] !== "production") {
-    console.log("[web][(admin) layout] cookieCheck", {
-      hasSessionToken,
-      hasSessionData,
-      hasLegacySession,
-      cookieLength: cookies.length,
-    });
-  }
-
   // If not authenticated, redirect to login
   if (!hasSession) {
     const url = new URL(request.url);
