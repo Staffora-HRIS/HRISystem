@@ -54,7 +54,7 @@ jobs:
         run: docker build -t staffora-${{ matrix.name }}:scan -f ${{ matrix.dockerfile }} .
 
       - name: Scan ${{ matrix.name }} image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: 'staffora-${{ matrix.name }}:scan'
           format: 'table'
@@ -62,7 +62,7 @@ jobs:
           exit-code: '0'
 
       - name: Scan ${{ matrix.name }} image (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: 'staffora-${{ matrix.name }}:scan'
           format: 'sarif'
