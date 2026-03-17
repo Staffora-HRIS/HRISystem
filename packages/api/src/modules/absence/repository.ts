@@ -99,7 +99,7 @@ export class AbsenceRepository {
           min_notice_days, color, is_active
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.code}, ${data.name},
-          ${(data as Record<string, unknown>).category || "other"}, ${data.description || null}, ${data.isPaid ?? true},
+          ${((data as Record<string, unknown>).category as string) || "other"}, ${data.description || null}, ${data.isPaid ?? true},
           ${data.requiresApproval ?? true}, ${data.requiresAttachment ?? false},
           ${data.maxConsecutiveDays || null}, ${data.minNoticeDays ?? 0},
           ${data.color || null}, true
@@ -188,14 +188,12 @@ export class AbsenceRepository {
       const id = crypto.randomUUID();
       const [row] = await tx<LeavePolicyRow[]>`
         INSERT INTO app.leave_policies (
-          id, tenant_id, name, description, leave_type_id, annual_allowance,
-          max_carryover, accrual_frequency, effective_from, effective_to,
-          eligible_after_months, applies_to, is_active
+          id, tenant_id, name, description, leave_type_id, default_balance,
+          max_carryover, effective_from, effective_to, is_active
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.name}, ${data.description || null},
-          ${data.leaveTypeId}::uuid, ${data.annualAllowance}, ${data.maxCarryover ?? 0},
-          ${data.accrualFrequency || null}, ${data.effectiveFrom}, ${data.effectiveTo || null},
-          ${data.eligibleAfterMonths ?? 0}, ${data.appliesTo ? JSON.stringify(data.appliesTo) : null}::jsonb, true
+          ${data.leaveTypeId}::uuid, ${data.annualAllowance ?? 0}, ${data.maxCarryover ?? 0},
+          ${data.effectiveFrom}, ${data.effectiveTo || null}, true
         )
         RETURNING *
       `;
@@ -209,9 +207,10 @@ export class AbsenceRepository {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<LeavePolicyRow[]>`
         SELECT
-          id, tenant_id, name, description, leave_type_id, annual_allowance,
-          max_carryover, accrual_frequency, effective_from, effective_to,
-          eligible_after_months, applies_to, is_active, created_at, updated_at
+          id, tenant_id, name, description, leave_type_id,
+          default_balance as annual_allowance,
+          max_carryover, effective_from, effective_to,
+          is_active, created_at, updated_at
         FROM app.leave_policies
         WHERE tenant_id = ${ctx.tenantId}::uuid AND is_active = true
         ORDER BY name
@@ -290,8 +289,8 @@ export class AbsenceRepository {
       return tx<LeaveRequestRow[]>`
         SELECT
           id, tenant_id, employee_id, leave_type_id, start_date, end_date,
-          start_half_day, end_half_day, total_days, reason, contact_info,
-          status, submitted_at, approved_at, approved_by_id, rejection_reason,
+          start_half_day, end_half_day, duration as total_days, reason,
+          status, submitted_at, approved_at, approved_by as approved_by_id, rejection_reason,
           created_at, updated_at
         FROM app.leave_requests
         WHERE tenant_id = ${ctx.tenantId}::uuid
@@ -318,8 +317,8 @@ export class AbsenceRepository {
       return tx<LeaveRequestRow[]>`
         SELECT
           id, tenant_id, employee_id, leave_type_id, start_date, end_date,
-          start_half_day, end_half_day, total_days, reason, contact_info,
-          status, submitted_at, approved_at, approved_by_id, rejection_reason,
+          start_half_day, end_half_day, duration as total_days, reason,
+          status, submitted_at, approved_at, approved_by as approved_by_id, rejection_reason,
           created_at, updated_at
         FROM app.leave_requests
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
@@ -334,6 +333,7 @@ export class AbsenceRepository {
         UPDATE app.leave_requests SET
           status = 'pending',
           submitted_at = now(),
+          submitted_by = ${ctx.userId || null}::uuid,
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'draft'
         RETURNING *
@@ -391,7 +391,7 @@ export class AbsenceRepository {
       if (row) {
         await tx`
           INSERT INTO app.leave_request_approvals (id, tenant_id, request_id, actor_id, action, comment)
-          VALUES (${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid, ${id}::uuid, ${approverId}::uuid, 'reject', ${reason || null})
+          VALUES (${crypto.randomUUID()}::uuid, ${ctx.tenantId}::uuid, ${id}::uuid, ${approverId}::uuid, 'reject', ${reason || "Rejected"})
         `;
 
         await this.writeOutbox(tx, ctx.tenantId, "leave_request", id, "absence.request.denied", {
