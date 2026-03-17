@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   Users,
@@ -7,7 +8,7 @@ import {
   FileText,
   AlertTriangle,
   Clock,
-  MoreHorizontal,
+  Edit,
   Download,
 } from "lucide-react";
 import {
@@ -19,9 +20,14 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { invalidationPatterns } from "~/lib/query-client";
 
 interface EmployeeContract {
   id: string;
@@ -91,7 +97,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -134,10 +140,38 @@ function mapToContract(emp: EmployeeRaw): EmployeeContract {
 export default function ContractsPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [contractTypeFilter, setContractTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [editingContract, setEditingContract] = useState<EmployeeContract | null>(null);
+  const [editContractType, setEditContractType] = useState("");
+  const [editEmploymentType, setEditEmploymentType] = useState("");
+  const [editEffectiveFrom, setEditEffectiveFrom] = useState("");
+
+  // Update contract mutation (uses employee contract endpoint)
+  const updateContractMutation = useMutation({
+    mutationFn: (data: { employeeId: string; contractType: string; employmentType: string; effectiveFrom: string }) =>
+      api.put(`/hr/employees/${data.employeeId}/contract`, {
+        effective_from: data.effectiveFrom,
+        contract_type: data.contractType,
+        employment_type: data.employmentType,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-contracts"] });
+      invalidationPatterns.employee(editingContract?.employeeId).forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      toast.success("Contract updated successfully");
+      setEditingContract(null);
+    },
+    onError: (err) => {
+      toast.error("Failed to update contract", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-contracts", search, contractTypeFilter],
@@ -261,16 +295,22 @@ export default function ContractsPage() {
       id: "actions",
       header: "",
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/admin/hr/employees/${row.employeeId}`);
-          }}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Edit contract"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingContract(row);
+              setEditContractType(row.contractType);
+              setEditEmploymentType(row.contractType === "full_time" || row.contractType === "part_time" ? row.contractType : "full_time");
+              setEditEffectiveFrom(new Date().toISOString().split("T")[0]);
+            }}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -410,6 +450,68 @@ export default function ContractsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Edit Contract Modal */}
+      {editingContract && (
+        <Modal open onClose={() => setEditingContract(null)} size="md">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">
+              Edit Contract: {editingContract.employeeName || editingContract.employeeNumber}
+            </h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Select
+                label="Contract Type"
+                value={editContractType}
+                onChange={(e) => setEditContractType(e.target.value)}
+                options={[
+                  { value: "permanent", label: "Permanent" },
+                  { value: "fixed_term", label: "Fixed Term" },
+                  { value: "contractor", label: "Contractor" },
+                  { value: "intern", label: "Intern" },
+                  { value: "temporary", label: "Temporary" },
+                ]}
+              />
+              <Select
+                label="Employment Type"
+                value={editEmploymentType}
+                onChange={(e) => setEditEmploymentType(e.target.value)}
+                options={[
+                  { value: "full_time", label: "Full Time" },
+                  { value: "part_time", label: "Part Time" },
+                ]}
+              />
+              <Input
+                label="Effective From"
+                type="date"
+                required
+                value={editEffectiveFrom}
+                onChange={(e) => setEditEffectiveFrom(e.target.value)}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setEditingContract(null)} disabled={updateContractMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!editContractType || !editEmploymentType || !editEffectiveFrom || updateContractMutation.isPending}
+              loading={updateContractMutation.isPending}
+              onClick={() =>
+                updateContractMutation.mutate({
+                  employeeId: editingContract.employeeId,
+                  contractType: editContractType,
+                  employmentType: editEmploymentType,
+                  effectiveFrom: editEffectiveFrom,
+                })
+              }
+            >
+              {updateContractMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

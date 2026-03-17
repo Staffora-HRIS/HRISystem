@@ -140,7 +140,7 @@ export function Calendar({
           <h2 className="text-lg font-semibold min-w-48 text-center">
             {view === "month"
               ? `${MONTHS[viewDate.getMonth()]} ${viewDate.getFullYear()}`
-              : `Week of ${weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+              : `Week of ${weekDays[0].toLocaleDateString("en-GB", { month: "short", day: "numeric" })}`}
           </h2>
           <Button variant="ghost" size="sm" onClick={nextPeriod} aria-label="Next">
             <ChevronRight className="h-4 w-4" />
@@ -291,7 +291,7 @@ export function Calendar({
                         <div className="font-medium truncate">{event.title}</div>
                         {!event.allDay && (
                           <div className="text-xs opacity-75">
-                            {new Date(event.start).toLocaleTimeString("en-US", {
+                            {new Date(event.start).toLocaleTimeString("en-GB", {
                               hour: "numeric",
                               minute: "2-digit",
                             })}

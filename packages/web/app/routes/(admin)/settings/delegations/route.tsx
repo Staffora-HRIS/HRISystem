@@ -81,7 +81,7 @@ const STATUS_BADGE_VARIANTS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "No end date";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",

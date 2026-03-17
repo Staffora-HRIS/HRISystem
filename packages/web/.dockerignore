@@ -1,0 +1,15 @@
+# Staffora Web - Docker build context exclusions
+node_modules
+.react-router
+coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__
+__mocks__
+.env
+.env.*
+*.md
+.git
+.gitignore

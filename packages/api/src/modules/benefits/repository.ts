@@ -85,7 +85,7 @@ export interface DependentRow extends Row {
   relationship: string;
   dateOfBirth: Date;
   gender: string | null;
-  ssnLastFour: string | null;
+  idLastFour: string | null;
   disabled: boolean;
   fullTimeStudent: boolean;
   isActive: boolean;
@@ -470,7 +470,7 @@ export class BenefitsRepository {
     const result = await this.db.withTransaction(context, async (tx) => {
       const rows = await tx<DependentRow[]>`
         SELECT id, tenant_id, employee_id, first_name, middle_name, last_name,
-               relationship, date_of_birth, gender, ssn_last_four,
+               relationship, date_of_birth, gender, id_last_four,
                disabled, full_time_student, is_active, created_at, updated_at
         FROM app.benefit_dependents
         WHERE employee_id = ${employeeId}::uuid
@@ -490,7 +490,7 @@ export class BenefitsRepository {
     const result = await this.db.withTransaction(context, async (tx) => {
       const rows = await tx<DependentRow[]>`
         SELECT id, tenant_id, employee_id, first_name, middle_name, last_name,
-               relationship, date_of_birth, gender, ssn_last_four,
+               relationship, date_of_birth, gender, id_last_four,
                disabled, full_time_student, is_active, created_at, updated_at
         FROM app.benefit_dependents
         WHERE id = ${id}::uuid
@@ -510,7 +510,7 @@ export class BenefitsRepository {
     const rows = await tx<DependentRow[]>`
       INSERT INTO app.benefit_dependents (
         tenant_id, employee_id, first_name, middle_name, last_name,
-        relationship, date_of_birth, gender, ssn_last_four,
+        relationship, date_of_birth, gender, id_last_four,
         disabled, full_time_student
       )
       VALUES (
@@ -522,12 +522,12 @@ export class BenefitsRepository {
         ${data.relationship},
         ${data.date_of_birth}::date,
         ${data.gender || null}::app.gender,
-        ${data.ssn_last_four || null},
+        ${data.id_last_four || null},
         ${data.disabled || false},
         ${data.full_time_student || false}
       )
       RETURNING id, tenant_id, employee_id, first_name, middle_name, last_name,
-                relationship, date_of_birth, gender, ssn_last_four,
+                relationship, date_of_birth, gender, id_last_four,
                 disabled, full_time_student, is_active, created_at, updated_at
     `;
 
@@ -554,7 +554,7 @@ export class BenefitsRepository {
         updated_at = now()
       WHERE id = ${id}::uuid
       RETURNING id, tenant_id, employee_id, first_name, middle_name, last_name,
-                relationship, date_of_birth, gender, ssn_last_four,
+                relationship, date_of_birth, gender, id_last_four,
                 disabled, full_time_student, is_active, created_at, updated_at
     `;
 

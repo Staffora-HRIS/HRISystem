@@ -92,7 +92,7 @@ export function DatePicker({
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString("en-GB", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -302,7 +302,7 @@ export function DateRangePicker({
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return date.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
   };
 
   const daysInMonth = getDaysInMonth(viewDate);

@@ -1,0 +1,275 @@
+# =============================================================================
+# Staffora Platform - Release Automation
+# =============================================================================
+#
+# Triggered when a version tag (v*) is pushed. Creates a GitHub Release
+# with auto-generated release notes, builds production Docker images,
+# and optionally triggers production deployment.
+#
+# Usage:
+#   git tag v1.2.3
+#   git push origin v1.2.3
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository }}/api
+  WEB_IMAGE: ghcr.io/${{ github.repository }}/web
+
+jobs:
+  # ===========================================================================
+  # Job 1: Validate the release
+  # ===========================================================================
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version info
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Check if this is a pre-release (contains - like v1.0.0-beta.1)
+          if [[ "$VERSION" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "Release version: ${VERSION}"
+          echo "Pre-release: $([ "$VERSION" == *-* ] && echo 'yes' || echo 'no')"
+
+  # ===========================================================================
+  # Job 2: Run full test suite
+  # ===========================================================================
+  test:
+    name: Test Suite
+    needs: validate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hris
+          POSTGRES_PASSWORD: hris_dev_password
+          POSTGRES_DB: hris
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hris"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Redis password
+        run: |
+          redis-cli CONFIG SET requirepass staffora_redis_ci
+          redis-cli -a staffora_redis_ci --no-auth-warning ping
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+
+      - run: bun install --frozen-lockfile
+
+      - name: Type checking
+        run: bun run typecheck
+
+      - name: Linting
+        run: bun run lint
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Initialize database schema
+        run: PGPASSWORD=hris_dev_password psql -h localhost -U hris -d hris -f docker/postgres/init.sql
+        env:
+          PGCLIENTENCODING: UTF8
+
+      - name: Run migrations
+        run: bun run migrate:up
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: hris
+          DB_USER: hris
+          DB_PASSWORD: hris_dev_password
+
+      - name: Run API tests
+        run: bun run test:api
+        env:
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: '5432'
+          TEST_DB_NAME: hris
+          TEST_DB_USER: hris_app
+          TEST_DB_PASSWORD: hris_app_dev_password
+          TEST_DB_ADMIN_USER: hris
+          TEST_DB_ADMIN_PASSWORD: hris_dev_password
+          TEST_REDIS_HOST: localhost
+          TEST_REDIS_PORT: '6379'
+          TEST_REDIS_PASSWORD: staffora_redis_ci
+          REDIS_URL: redis://:staffora_redis_ci@localhost:6379
+          BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+          SESSION_SECRET: test-session-secret-32-characters-long
+          CSRF_SECRET: test-csrf-secret-that-is-32-chars
+
+      - name: Run shared package tests
+        run: bun test packages/shared
+
+      - name: Run frontend tests
+        run: bun run test:web -- --run
+
+  # ===========================================================================
+  # Job 3: Build and push release images
+  # ===========================================================================
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: packages/api/Dockerfile
+            image_env: API_IMAGE
+          - name: web
+            dockerfile: packages/web/Dockerfile
+            image_env: WEB_IMAGE
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env[matrix.image_env] }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+
+  # ===========================================================================
+  # Job 4: Create GitHub Release
+  # ===========================================================================
+  release:
+    name: Create Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from ${PREV_TAG} to HEAD"
+            CHANGES=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "No previous tag found, using all commits"
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -50)
+          fi
+
+          # Write to file for the release body
+          cat > release-notes.md << 'NOTES_EOF'
+          ## What's Changed
+
+          ${CHANGES}
+
+          ## Docker Images
+
+          - **API**: `ghcr.io/${{ github.repository }}/api:${{ needs.validate.outputs.version }}`
+          - **Web**: `ghcr.io/${{ github.repository }}/web:${{ needs.validate.outputs.version }}`
+
+          ## Deployment
+
+          To deploy this release:
+          ```bash
+          # Pull the release images
+          docker pull ghcr.io/${{ github.repository }}/api:${{ needs.validate.outputs.version }}
+          docker pull ghcr.io/${{ github.repository }}/web:${{ needs.validate.outputs.version }}
+
+          # Or trigger production deployment from Actions tab
+          ```
+          NOTES_EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Staffora ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          body: |
+            ## Docker Images
+
+            | Service | Image |
+            |---------|-------|
+            | API | `ghcr.io/${{ github.repository }}/api:${{ needs.validate.outputs.version }}` |
+            | Web | `ghcr.io/${{ github.repository }}/web:${{ needs.validate.outputs.version }}` |
+
+            ## Deployment
+
+            Deploy via the **Deploy** workflow (Actions tab) or pull images directly:
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}/api:${{ needs.validate.outputs.version }}
+            docker pull ghcr.io/${{ github.repository }}/web:${{ needs.validate.outputs.version }}
+            ```

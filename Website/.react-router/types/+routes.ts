@@ -14,6 +14,100 @@ type Pages = {
   "/": {
     params: {};
   };
+  "/login": {
+    params: {};
+  };
+  "/forgot-password": {
+    params: {};
+  };
+  "/reset-password": {
+    params: {};
+  };
+  "/portal/dashboard": {
+    params: {};
+  };
+  "/portal/tickets": {
+    params: {};
+  };
+  "/portal/tickets/new": {
+    params: {};
+  };
+  "/portal/tickets/:ticketId": {
+    params: {
+      "ticketId": string;
+    };
+  };
+  "/portal/documents": {
+    params: {};
+  };
+  "/portal/documents/:documentId": {
+    params: {
+      "documentId": string;
+    };
+  };
+  "/portal/news": {
+    params: {};
+  };
+  "/portal/news/:slug": {
+    params: {
+      "slug": string;
+    };
+  };
+  "/portal/billing": {
+    params: {};
+  };
+  "/portal/billing/invoices": {
+    params: {};
+  };
+  "/portal/billing/invoices/:invoiceId": {
+    params: {
+      "invoiceId": string;
+    };
+  };
+  "/portal/admin/tickets": {
+    params: {};
+  };
+  "/portal/admin/tickets/:ticketId": {
+    params: {
+      "ticketId": string;
+    };
+  };
+  "/portal/admin/users": {
+    params: {};
+  };
+  "/portal/admin/users/invite": {
+    params: {};
+  };
+  "/portal/admin/users/:userId": {
+    params: {
+      "userId": string;
+    };
+  };
+  "/portal/admin/documents": {
+    params: {};
+  };
+  "/portal/admin/documents/upload": {
+    params: {};
+  };
+  "/portal/admin/documents/:documentId": {
+    params: {
+      "documentId": string;
+    };
+  };
+  "/portal/admin/news": {
+    params: {};
+  };
+  "/portal/admin/news/new": {
+    params: {};
+  };
+  "/portal/admin/news/:newsId": {
+    params: {
+      "newsId": string;
+    };
+  };
+  "/portal/admin/billing": {
+    params: {};
+  };
   "/features": {
     params: {};
   };
@@ -37,7 +131,115 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/features" | "/pricing" | "/about" | "/contact" | "/legal/terms" | "/legal/privacy";
+    page: "/" | "/login" | "/forgot-password" | "/reset-password" | "/portal/dashboard" | "/portal/tickets" | "/portal/tickets/new" | "/portal/tickets/:ticketId" | "/portal/documents" | "/portal/documents/:documentId" | "/portal/news" | "/portal/news/:slug" | "/portal/billing" | "/portal/billing/invoices" | "/portal/billing/invoices/:invoiceId" | "/portal/admin/tickets" | "/portal/admin/tickets/:ticketId" | "/portal/admin/users" | "/portal/admin/users/invite" | "/portal/admin/users/:userId" | "/portal/admin/documents" | "/portal/admin/documents/upload" | "/portal/admin/documents/:documentId" | "/portal/admin/news" | "/portal/admin/news/new" | "/portal/admin/news/:newsId" | "/portal/admin/billing" | "/features" | "/pricing" | "/about" | "/contact" | "/legal/terms" | "/legal/privacy";
+  };
+  "routes/auth/login.tsx": {
+    id: "routes/auth/login";
+    page: "/login";
+  };
+  "routes/auth/forgot-password.tsx": {
+    id: "routes/auth/forgot-password";
+    page: "/forgot-password";
+  };
+  "routes/auth/reset-password.tsx": {
+    id: "routes/auth/reset-password";
+    page: "/reset-password";
+  };
+  "routes/portal/portal-layout.tsx": {
+    id: "routes/portal/portal-layout";
+    page: "/portal/dashboard" | "/portal/tickets" | "/portal/tickets/new" | "/portal/tickets/:ticketId" | "/portal/documents" | "/portal/documents/:documentId" | "/portal/news" | "/portal/news/:slug" | "/portal/billing" | "/portal/billing/invoices" | "/portal/billing/invoices/:invoiceId" | "/portal/admin/tickets" | "/portal/admin/tickets/:ticketId" | "/portal/admin/users" | "/portal/admin/users/invite" | "/portal/admin/users/:userId" | "/portal/admin/documents" | "/portal/admin/documents/upload" | "/portal/admin/documents/:documentId" | "/portal/admin/news" | "/portal/admin/news/new" | "/portal/admin/news/:newsId" | "/portal/admin/billing";
+  };
+  "routes/portal/dashboard.tsx": {
+    id: "routes/portal/dashboard";
+    page: "/portal/dashboard";
+  };
+  "routes/portal/tickets/index.tsx": {
+    id: "routes/portal/tickets/index";
+    page: "/portal/tickets";
+  };
+  "routes/portal/tickets/new.tsx": {
+    id: "routes/portal/tickets/new";
+    page: "/portal/tickets/new";
+  };
+  "routes/portal/tickets/detail.tsx": {
+    id: "routes/portal/tickets/detail";
+    page: "/portal/tickets/:ticketId";
+  };
+  "routes/portal/documents/index.tsx": {
+    id: "routes/portal/documents/index";
+    page: "/portal/documents";
+  };
+  "routes/portal/documents/detail.tsx": {
+    id: "routes/portal/documents/detail";
+    page: "/portal/documents/:documentId";
+  };
+  "routes/portal/news/index.tsx": {
+    id: "routes/portal/news/index";
+    page: "/portal/news";
+  };
+  "routes/portal/news/detail.tsx": {
+    id: "routes/portal/news/detail";
+    page: "/portal/news/:slug";
+  };
+  "routes/portal/billing/index.tsx": {
+    id: "routes/portal/billing/index";
+    page: "/portal/billing";
+  };
+  "routes/portal/billing/invoices.tsx": {
+    id: "routes/portal/billing/invoices";
+    page: "/portal/billing/invoices";
+  };
+  "routes/portal/billing/invoice-detail.tsx": {
+    id: "routes/portal/billing/invoice-detail";
+    page: "/portal/billing/invoices/:invoiceId";
+  };
+  "routes/portal/admin/tickets.tsx": {
+    id: "routes/portal/admin/tickets";
+    page: "/portal/admin/tickets";
+  };
+  "routes/portal/admin/ticket-detail.tsx": {
+    id: "routes/portal/admin/ticket-detail";
+    page: "/portal/admin/tickets/:ticketId";
+  };
+  "routes/portal/admin/users/index.tsx": {
+    id: "routes/portal/admin/users/index";
+    page: "/portal/admin/users";
+  };
+  "routes/portal/admin/users/invite.tsx": {
+    id: "routes/portal/admin/users/invite";
+    page: "/portal/admin/users/invite";
+  };
+  "routes/portal/admin/users/detail.tsx": {
+    id: "routes/portal/admin/users/detail";
+    page: "/portal/admin/users/:userId";
+  };
+  "routes/portal/admin/documents/index.tsx": {
+    id: "routes/portal/admin/documents/index";
+    page: "/portal/admin/documents";
+  };
+  "routes/portal/admin/documents/upload.tsx": {
+    id: "routes/portal/admin/documents/upload";
+    page: "/portal/admin/documents/upload";
+  };
+  "routes/portal/admin/documents/detail.tsx": {
+    id: "routes/portal/admin/documents/detail";
+    page: "/portal/admin/documents/:documentId";
+  };
+  "routes/portal/admin/news/index.tsx": {
+    id: "routes/portal/admin/news/index";
+    page: "/portal/admin/news";
+  };
+  "routes/portal/admin/news/new.tsx": {
+    id: "routes/portal/admin/news/new";
+    page: "/portal/admin/news/new";
+  };
+  "routes/portal/admin/news/detail.tsx": {
+    id: "routes/portal/admin/news/detail";
+    page: "/portal/admin/news/:newsId";
+  };
+  "routes/portal/admin/billing.tsx": {
+    id: "routes/portal/admin/billing";
+    page: "/portal/admin/billing";
   };
   "routes/marketing-layout.tsx": {
     id: "routes/marketing-layout";
@@ -75,6 +277,33 @@ type RouteFiles = {
 
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
+  "routes/auth/login": typeof import("./app/routes/auth/login.tsx");
+  "routes/auth/forgot-password": typeof import("./app/routes/auth/forgot-password.tsx");
+  "routes/auth/reset-password": typeof import("./app/routes/auth/reset-password.tsx");
+  "routes/portal/portal-layout": typeof import("./app/routes/portal/portal-layout.tsx");
+  "routes/portal/dashboard": typeof import("./app/routes/portal/dashboard.tsx");
+  "routes/portal/tickets/index": typeof import("./app/routes/portal/tickets/index.tsx");
+  "routes/portal/tickets/new": typeof import("./app/routes/portal/tickets/new.tsx");
+  "routes/portal/tickets/detail": typeof import("./app/routes/portal/tickets/detail.tsx");
+  "routes/portal/documents/index": typeof import("./app/routes/portal/documents/index.tsx");
+  "routes/portal/documents/detail": typeof import("./app/routes/portal/documents/detail.tsx");
+  "routes/portal/news/index": typeof import("./app/routes/portal/news/index.tsx");
+  "routes/portal/news/detail": typeof import("./app/routes/portal/news/detail.tsx");
+  "routes/portal/billing/index": typeof import("./app/routes/portal/billing/index.tsx");
+  "routes/portal/billing/invoices": typeof import("./app/routes/portal/billing/invoices.tsx");
+  "routes/portal/billing/invoice-detail": typeof import("./app/routes/portal/billing/invoice-detail.tsx");
+  "routes/portal/admin/tickets": typeof import("./app/routes/portal/admin/tickets.tsx");
+  "routes/portal/admin/ticket-detail": typeof import("./app/routes/portal/admin/ticket-detail.tsx");
+  "routes/portal/admin/users/index": typeof import("./app/routes/portal/admin/users/index.tsx");
+  "routes/portal/admin/users/invite": typeof import("./app/routes/portal/admin/users/invite.tsx");
+  "routes/portal/admin/users/detail": typeof import("./app/routes/portal/admin/users/detail.tsx");
+  "routes/portal/admin/documents/index": typeof import("./app/routes/portal/admin/documents/index.tsx");
+  "routes/portal/admin/documents/upload": typeof import("./app/routes/portal/admin/documents/upload.tsx");
+  "routes/portal/admin/documents/detail": typeof import("./app/routes/portal/admin/documents/detail.tsx");
+  "routes/portal/admin/news/index": typeof import("./app/routes/portal/admin/news/index.tsx");
+  "routes/portal/admin/news/new": typeof import("./app/routes/portal/admin/news/new.tsx");
+  "routes/portal/admin/news/detail": typeof import("./app/routes/portal/admin/news/detail.tsx");
+  "routes/portal/admin/billing": typeof import("./app/routes/portal/admin/billing.tsx");
   "routes/marketing-layout": typeof import("./app/routes/marketing-layout.tsx");
   "routes/home": typeof import("./app/routes/home.tsx");
   "routes/features": typeof import("./app/routes/features.tsx");

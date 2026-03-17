@@ -94,10 +94,10 @@ describe("Audit Plugin", () => {
 
   describe("PII Handling", () => {
     it("should handle PII redaction for sensitive fields", () => {
-      const sensitiveFields = ["ssn", "bankAccount", "salary", "dateOfBirth"];
+      const sensitiveFields = ["niNumber", "bankAccount", "salary", "dateOfBirth"];
       const data = {
         firstName: "John",
-        ssn: "123-45-6789",
+        niNumber: "AB123456C",
         bankAccount: "1234567890",
         salary: 75000,
       };
@@ -110,7 +110,7 @@ describe("Audit Plugin", () => {
       );
 
       expect(redacted.firstName).toBe("John");
-      expect(redacted.ssn).toBe("[REDACTED]");
+      expect(redacted.niNumber).toBe("[REDACTED]");
       expect(redacted.bankAccount).toBe("[REDACTED]");
       expect(redacted.salary).toBe("[REDACTED]");
     });

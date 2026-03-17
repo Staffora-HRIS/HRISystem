@@ -609,7 +609,7 @@ describe("AnalyticsService", () => {
       });
 
       it("should pass filters to all repository calls", async () => {
-        const filters = { org_unit_id: "ou1", currency: "USD" };
+        const filters = { org_unit_id: "ou1", currency: "GBP" };
         await service.getCompensationDashboard(ctx, filters);
 
         expect(repository.getCompensationSummary).toHaveBeenCalledWith(ctx, filters);

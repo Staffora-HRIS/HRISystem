@@ -1,0 +1,48 @@
+# =============================================================================
+# Staffora Platform - Code Ownership
+# =============================================================================
+#
+# These owners are automatically requested for review when a pull request
+# modifies files matching the specified patterns.
+#
+# Order matters: later entries take precedence over earlier ones.
+# =============================================================================
+
+# Default owners for everything
+*                                   @staffora/engineering
+
+# Infrastructure & DevOps
+.github/                            @staffora/devops
+docker/                             @staffora/devops
+*.Dockerfile                        @staffora/devops
+docker-compose*.yml                 @staffora/devops
+
+# Database & Migrations (require senior review)
+migrations/                         @staffora/backend @staffora/database
+docker/postgres/                    @staffora/database
+
+# Backend API
+packages/api/                       @staffora/backend
+packages/api/src/plugins/           @staffora/backend-senior
+packages/api/src/modules/           @staffora/backend
+
+# Security-sensitive areas (require security review)
+packages/api/src/plugins/auth*.ts   @staffora/security
+packages/api/src/plugins/rbac.ts    @staffora/security
+packages/api/src/lib/better-auth.ts @staffora/security
+packages/api/src/modules/security/  @staffora/security
+
+# Frontend
+packages/web/                       @staffora/frontend
+packages/web/app/routes/            @staffora/frontend
+
+# Shared package (changes affect all consumers)
+packages/shared/                    @staffora/backend @staffora/frontend
+
+# Marketing site
+Website/                            @staffora/frontend
+
+# Configuration (high impact)
+CLAUDE.md                           @staffora/engineering
+package.json                        @staffora/engineering
+tsconfig*.json                      @staffora/engineering

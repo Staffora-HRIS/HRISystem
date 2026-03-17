@@ -15,7 +15,8 @@ import {
   isValidPhone,
   isValidSlug,
   isValidEmployeeNumber,
-  isValidSSN,
+  isValidNINO,
+  isValidUKPostcode,
   truncate,
 } from "../../utils/validation";
 
@@ -420,53 +421,108 @@ describe("Validation Utilities", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // SSN Validation
+  // National Insurance Number (NINO) Validation
   // ---------------------------------------------------------------------------
-  describe("isValidSSN", () => {
-    test("accepts valid SSN with dashes", () => {
-      expect(isValidSSN("123-45-6789")).toBe(true);
+  describe("isValidNINO", () => {
+    test("accepts valid NINO without spaces", () => {
+      expect(isValidNINO("AB123456C")).toBe(true);
     });
 
-    test("accepts valid SSN without dashes", () => {
-      expect(isValidSSN("123456789")).toBe(true);
+    test("accepts valid NINO with spaces", () => {
+      expect(isValidNINO("AB 12 34 56 C")).toBe(true);
     });
 
-    test("rejects area number 000", () => {
-      expect(isValidSSN("000-12-3456")).toBe(false);
+    test("accepts valid NINO in lowercase", () => {
+      expect(isValidNINO("ab123456c")).toBe(true);
     });
 
-    test("rejects area number 666", () => {
-      expect(isValidSSN("666-12-3456")).toBe(false);
+    test("accepts all valid suffix letters", () => {
+      expect(isValidNINO("AB123456A")).toBe(true);
+      expect(isValidNINO("AB123456B")).toBe(true);
+      expect(isValidNINO("AB123456C")).toBe(true);
+      expect(isValidNINO("AB123456D")).toBe(true);
     });
 
-    test("rejects area number 900-999", () => {
-      expect(isValidSSN("900-12-3456")).toBe(false);
-      expect(isValidSSN("999-12-3456")).toBe(false);
+    test("rejects invalid prefixes (BG, GB, NK, KN, TN, NT, ZZ)", () => {
+      expect(isValidNINO("BG123456A")).toBe(false);
+      expect(isValidNINO("GB123456A")).toBe(false);
+      expect(isValidNINO("NK123456A")).toBe(false);
+      expect(isValidNINO("KN123456A")).toBe(false);
+      expect(isValidNINO("TN123456A")).toBe(false);
+      expect(isValidNINO("NT123456A")).toBe(false);
+      expect(isValidNINO("ZZ123456A")).toBe(false);
     });
 
-    test("rejects group number 00", () => {
-      expect(isValidSSN("123-00-6789")).toBe(false);
+    test("rejects invalid first letter (D, F, I, Q, U, V)", () => {
+      expect(isValidNINO("DA123456A")).toBe(false);
+      expect(isValidNINO("FA123456A")).toBe(false);
+      expect(isValidNINO("IA123456A")).toBe(false);
+      expect(isValidNINO("QA123456A")).toBe(false);
+      expect(isValidNINO("UA123456A")).toBe(false);
+      expect(isValidNINO("VA123456A")).toBe(false);
     });
 
-    test("rejects serial number 0000", () => {
-      expect(isValidSSN("123-45-0000")).toBe(false);
+    test("rejects invalid suffix letter", () => {
+      expect(isValidNINO("AB123456E")).toBe(false);
+      expect(isValidNINO("AB123456Z")).toBe(false);
     });
 
-    test("rejects non-numeric", () => {
-      expect(isValidSSN("abc-de-fghi")).toBe(false);
+    test("rejects wrong length", () => {
+      expect(isValidNINO("AB12345C")).toBe(false);
+      expect(isValidNINO("AB1234567C")).toBe(false);
     });
 
-    test("rejects too short", () => {
-      expect(isValidSSN("12345")).toBe(false);
-    });
-
-    test("rejects too long", () => {
-      expect(isValidSSN("1234567890")).toBe(false);
+    test("rejects non-alphanumeric", () => {
+      expect(isValidNINO("AB-12-34-56-C")).toBe(false);
     });
 
     test("rejects empty/null", () => {
-      expect(isValidSSN("")).toBe(false);
-      expect(isValidSSN(null as unknown as string)).toBe(false);
+      expect(isValidNINO("")).toBe(false);
+      expect(isValidNINO(null as unknown as string)).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // UK Postcode Validation
+  // ---------------------------------------------------------------------------
+  describe("isValidUKPostcode", () => {
+    test("accepts valid UK postcodes with space", () => {
+      expect(isValidUKPostcode("SW1A 1AA")).toBe(true);
+      expect(isValidUKPostcode("EC1A 1BB")).toBe(true);
+      expect(isValidUKPostcode("W1A 0AX")).toBe(true);
+      expect(isValidUKPostcode("M1 1AE")).toBe(true);
+      expect(isValidUKPostcode("B33 8TH")).toBe(true);
+      expect(isValidUKPostcode("CR2 6XH")).toBe(true);
+      expect(isValidUKPostcode("DN55 1PT")).toBe(true);
+    });
+
+    test("accepts valid UK postcodes without space", () => {
+      expect(isValidUKPostcode("SW1A1AA")).toBe(true);
+      expect(isValidUKPostcode("EC1A1BB")).toBe(true);
+    });
+
+    test("accepts lowercase postcodes", () => {
+      expect(isValidUKPostcode("sw1a 1aa")).toBe(true);
+    });
+
+    test("accepts BFPO postcodes", () => {
+      expect(isValidUKPostcode("BFPO1")).toBe(true);
+      expect(isValidUKPostcode("BFPO1234")).toBe(true);
+    });
+
+    test("rejects US zip codes", () => {
+      expect(isValidUKPostcode("12345")).toBe(false);
+      expect(isValidUKPostcode("12345-6789")).toBe(false);
+    });
+
+    test("rejects invalid formats", () => {
+      expect(isValidUKPostcode("INVALID")).toBe(false);
+      expect(isValidUKPostcode("123 ABC")).toBe(false);
+    });
+
+    test("rejects empty/null", () => {
+      expect(isValidUKPostcode("")).toBe(false);
+      expect(isValidUKPostcode(null as unknown as string)).toBe(false);
     });
   });
 

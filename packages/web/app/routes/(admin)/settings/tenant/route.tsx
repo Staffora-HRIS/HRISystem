@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -75,9 +76,9 @@ const DATE_FORMATS = [
 ];
 
 const CURRENCIES = [
-  { value: "USD", label: "US Dollar (USD)" },
-  { value: "EUR", label: "Euro (EUR)" },
   { value: "GBP", label: "British Pound (GBP)" },
+  { value: "EUR", label: "Euro (EUR)" },
+  { value: "USD", label: "US Dollar (USD)" },
   { value: "JPY", label: "Japanese Yen (JPY)" },
   { value: "CAD", label: "Canadian Dollar (CAD)" },
   { value: "AUD", label: "Australian Dollar (AUD)" },

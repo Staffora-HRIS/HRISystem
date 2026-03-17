@@ -1,6 +1,7 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Edit,
@@ -31,6 +32,42 @@ import {
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { queryKeys, invalidationPatterns } from "~/lib/query-client";
+
+interface EmployeeDocument {
+  id: string;
+  name: string;
+  fileName: string;
+  category: string;
+  status: string;
+  fileSize: number;
+  mimeType: string;
+  version: number;
+  expiresAt: string | null;
+  createdAt: string;
+  uploadedByName?: string;
+}
+
+interface DocumentListResponse {
+  items: EmployeeDocument[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+interface HistoryRecord {
+  id: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  data: Record<string, unknown>;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+interface HistoryResponse {
+  employeeId: string;
+  dimension: string;
+  records: HistoryRecord[];
+}
 
 interface EmployeeDetail {
   id: string;
@@ -86,7 +123,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -95,9 +132,9 @@ function formatDate(dateString: string | null): string {
 
 function formatCurrency(amount: string | null, currency: string | null): string {
   if (!amount) return "-";
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: currency || "USD",
+    currency: currency || "GBP",
   }).format(parseFloat(amount));
 }
 
@@ -113,6 +150,68 @@ function calculateTenure(hireDate: string): string {
   return `${months} month${months !== 1 ? "s" : ""}`;
 }
 
+function EditEmployeeModal({
+  employee,
+  onClose,
+  onSave,
+  isPending,
+}: {
+  employee: EmployeeDetail;
+  onClose: () => void;
+  onSave: (data: { firstName: string; lastName: string; email: string; workPhone: string }) => void;
+  isPending: boolean;
+}) {
+  const [firstName, setFirstName] = useState(employee.firstName);
+  const [lastName, setLastName] = useState(employee.lastName);
+  const [email, setEmail] = useState(employee.email);
+  const [workPhone, setWorkPhone] = useState(employee.workPhone || "");
+
+  return (
+    <Modal open onClose={onClose} size="lg">
+      <ModalHeader>
+        <h3 className="text-lg font-semibold">Edit Employee</h3>
+      </ModalHeader>
+      <ModalBody>
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="First Name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
+          <Input
+            label="Last Name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Input
+            label="Work Phone"
+            value={workPhone}
+            onChange={(e) => setWorkPhone(e.target.value)}
+          />
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button
+          disabled={!firstName || !lastName || isPending}
+          loading={isPending}
+          onClick={() => onSave({ firstName, lastName, email, workPhone })}
+        >
+          {isPending ? "Saving..." : "Save Changes"}
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
 export default function AdminEmployeeDetailsPage() {
   const { employeeId } = useParams();
   const navigate = useNavigate();
@@ -121,10 +220,52 @@ export default function AdminEmployeeDetailsPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "personal" | "employment" | "compensation" | "documents" | "history">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
 
+  const qc = useQueryClient();
+
   const { data: employee, isLoading, error } = useQuery({
     queryKey: ["admin-employee", employeeId],
     queryFn: () => api.get<EmployeeDetail>(`/hr/employees/${employeeId}`),
     enabled: !!employeeId,
+  });
+
+  // Fetch documents for this employee
+  const { data: documentsData, isLoading: documentsLoading } = useQuery({
+    queryKey: queryKeys.employees.documents(employeeId!),
+    queryFn: () => api.get<DocumentListResponse>(`/documents?employee_id=${employeeId}`),
+    enabled: !!employeeId && activeTab === "documents",
+  });
+
+  // Fetch employment history (position dimension covers promotions/transfers)
+  const [historyDimension, setHistoryDimension] = useState<string>("position");
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["admin-employee-history", employeeId, historyDimension],
+    queryFn: () => api.get<HistoryResponse>(`/hr/employees/${employeeId}/history/${historyDimension}`),
+    enabled: !!employeeId && activeTab === "history",
+  });
+
+  // Edit employee mutation
+  const editMutation = useMutation({
+    mutationFn: (data: { firstName: string; lastName: string; email: string; workPhone: string }) => {
+      const today = new Date().toISOString().split("T")[0];
+      return api.put(`/hr/employees/${employeeId}/personal`, {
+        effective_from: today,
+        first_name: data.firstName,
+        last_name: data.lastName,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-employee", employeeId] });
+      invalidationPatterns.employee(employeeId).forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      toast.success("Employee updated successfully");
+      setShowEditModal(false);
+    },
+    onError: (err) => {
+      toast.error("Failed to update employee", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
   });
 
   if (isLoading) {
@@ -168,7 +309,7 @@ export default function AdminEmployeeDetailsPage() {
           </Button>
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-xl font-bold">
-              {employee.firstName[0]}{employee.lastName[0]}
+              {(employee.firstName ?? "?")[0]}{(employee.lastName ?? "?")[0]}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -450,7 +591,7 @@ export default function AdminEmployeeDetailsPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Currency</p>
-                <p className="font-medium">{employee.currency || "USD"}</p>
+                <p className="font-medium">{employee.currency || "GBP"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pay Frequency</p>
@@ -465,52 +606,141 @@ export default function AdminEmployeeDetailsPage() {
 
       {activeTab === "documents" && (
         <Card>
-          <CardBody className="text-center py-12">
-            <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">No documents</h3>
-            <p className="text-gray-500">Employee documents will appear here.</p>
+          <CardHeader>
+            <h3 className="font-semibold">Documents</h3>
+          </CardHeader>
+          <CardBody>
+            {documentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              </div>
+            ) : (documentsData?.items ?? []).length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">No documents</h3>
+                <p className="text-gray-500">No documents have been uploaded for this employee.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {(documentsData?.items ?? []).map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText className="h-5 w-5 shrink-0 text-gray-400" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{doc.name}</p>
+                        <p className="text-sm text-gray-500">
+                          {doc.fileName} &middot; {(doc.fileSize / 1024).toFixed(1)} KB
+                          {doc.uploadedByName ? ` &middot; Uploaded by ${doc.uploadedByName}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={doc.status === "active" ? "success" : "secondary"}>
+                        {doc.status}
+                      </Badge>
+                      {doc.expiresAt && (
+                        <span className="text-xs text-gray-500">
+                          Expires {new Date(doc.expiresAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardBody>
         </Card>
       )}
 
       {activeTab === "history" && (
         <Card>
-          <CardBody className="text-center py-12">
-            <Clock className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">Employment History</h3>
-            <p className="text-gray-500">Position changes, promotions, and other events will appear here.</p>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Employment History</h3>
+              <div className="flex gap-2">
+                {(["position", "compensation", "contract", "personal", "manager", "status"] as const).map((dim) => (
+                  <button
+                    key={dim}
+                    onClick={() => setHistoryDimension(dim)}
+                    className={`px-3 py-1 text-xs font-medium rounded-full capitalize transition-colors ${
+                      historyDimension === dim
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {dim}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardBody>
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              </div>
+            ) : (historyData?.records ?? []).length === 0 ? (
+              <div className="text-center py-12">
+                <Clock className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">No history records</h3>
+                <p className="text-gray-500">
+                  No {historyDimension} history records found for this employee.
+                </p>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" aria-hidden="true" />
+                <div className="space-y-6">
+                  {(historyData?.records ?? []).map((record) => (
+                    <div key={record.id} className="relative flex gap-4 pl-10">
+                      <div className="absolute left-2.5 top-1 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium text-gray-900">
+                            Effective {formatDate(record.effectiveFrom)}
+                          </span>
+                          {record.effectiveTo && (
+                            <span className="text-sm text-gray-500">
+                              to {formatDate(record.effectiveTo)}
+                            </span>
+                          )}
+                          {!record.effectiveTo && (
+                            <Badge variant="success" size="sm">Current</Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {Object.entries(record.data).map(([key, value]) => (
+                            <div key={key}>
+                              <p className="text-xs text-gray-500 capitalize">
+                                {key.replace(/_/g, " ")}
+                              </p>
+                              <p className="text-sm text-gray-900">
+                                {value != null ? String(value) : "-"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Recorded {new Date(record.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}
 
       {/* Edit Modal */}
       {showEditModal && (
-        <Modal open onClose={() => setShowEditModal(false)} size="lg">
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">Edit Employee</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="First Name" defaultValue={employee.firstName} />
-              <Input label="Last Name" defaultValue={employee.lastName} />
-              <Input label="Email" type="email" defaultValue={employee.email} />
-              <Input label="Work Phone" defaultValue={employee.workPhone || ""} />
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                toast.success("Employee updated successfully");
-                setShowEditModal(false);
-              }}
-            >
-              Save Changes
-            </Button>
-          </ModalFooter>
-        </Modal>
+        <EditEmployeeModal
+          employee={employee}
+          onClose={() => setShowEditModal(false)}
+          onSave={(data) => editMutation.mutate(data)}
+          isPending={editMutation.isPending}
+        />
       )}
     </div>
   );

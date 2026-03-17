@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   Users,
@@ -7,9 +8,9 @@ import {
   Heart,
   Clock,
   Ban,
-  MoreHorizontal,
   ArrowLeft,
   Download,
+  Plus,
 } from "lucide-react";
 import {
   Card,
@@ -20,9 +21,14 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
 
 interface BenefitEnrollment {
   id: string;
@@ -87,15 +93,50 @@ const COVERAGE_LABELS: Record<string, string> = {
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return "-";
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: "USD",
+    currency: "GBP",
   }).format(amount);
+}
+
+const COVERAGE_OPTIONS = [
+  { value: "employee_only", label: "Employee Only" },
+  { value: "employee_spouse", label: "Employee + Spouse" },
+  { value: "employee_children", label: "Employee + Children" },
+  { value: "family", label: "Family" },
+];
+
+const ENROLLMENT_TYPE_OPTIONS = [
+  { value: "new_hire", label: "New Hire" },
+  { value: "open_enrollment", label: "Open Enrollment" },
+  { value: "life_event", label: "Life Event" },
+];
+
+interface CreateEnrollmentForm {
+  employeeId: string;
+  planId: string;
+  coverageLevel: string;
+  effectiveFrom: string;
+  enrollmentType: string;
+}
+
+const initialEnrollmentForm: CreateEnrollmentForm = {
+  employeeId: "",
+  planId: "",
+  coverageLevel: "employee_only",
+  effectiveFrom: new Date().toISOString().split("T")[0],
+  enrollmentType: "new_hire",
+};
+
+interface PlanOption {
+  id: string;
+  name: string;
+  category: string;
 }
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -105,10 +146,13 @@ function formatDate(dateString: string | null): string {
 export default function BenefitsEnrollmentsPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [planTypeFilter, setPlanTypeFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [enrollForm, setEnrollForm] = useState<CreateEnrollmentForm>(initialEnrollmentForm);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-benefit-enrollments", search, statusFilter, planTypeFilter],
@@ -122,7 +166,109 @@ export default function BenefitsEnrollmentsPage() {
     },
   });
 
+  // Fetch plans for the enrollment form dropdown
+  const { data: plansData } = useQuery({
+    queryKey: ["admin-benefit-plans-options"],
+    queryFn: () => api.get<{ items: PlanOption[] }>("/benefits/plans"),
+    enabled: showCreateModal,
+  });
+
+  const planOptions = plansData?.items ?? [];
+
+  // Create enrollment mutation
+  const createEnrollmentMutation = useMutation({
+    mutationFn: (data: {
+      employee_id: string;
+      plan_id: string;
+      coverage_level: string;
+      effective_from: string;
+      enrollment_type?: string;
+    }) => api.post("/benefits/enrollments", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-benefit-enrollments"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.benefits.enrollments() });
+      toast.success("Employee enrolled successfully");
+      setShowCreateModal(false);
+      setEnrollForm(initialEnrollmentForm);
+    },
+    onError: () => {
+      toast.error("Failed to create enrollment", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  // Bulk approve pending enrollments
+  const bulkApproveMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          api.put(`/benefits/enrollments/${id}`, { status: "active" })
+        )
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        throw new Error(`${failed} of ${ids.length} activations failed`);
+      }
+      return results;
+    },
+    onSuccess: (_data, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-benefit-enrollments"] });
+      toast.success(`${ids.length} enrollment${ids.length > 1 ? "s" : ""} activated`);
+      setSelectedIds(new Set());
+    },
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-benefit-enrollments"] });
+      toast.error("Some activations failed", {
+        message: error instanceof Error ? error.message : "Please try again.",
+      });
+      setSelectedIds(new Set());
+    },
+  });
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleCreateEnrollment = () => {
+    if (!enrollForm.employeeId.trim()) {
+      toast.warning("Please enter an employee ID");
+      return;
+    }
+    if (!enrollForm.planId) {
+      toast.warning("Please select a plan");
+      return;
+    }
+    if (!enrollForm.effectiveFrom) {
+      toast.warning("Please select an effective date");
+      return;
+    }
+    createEnrollmentMutation.mutate({
+      employee_id: enrollForm.employeeId.trim(),
+      plan_id: enrollForm.planId,
+      coverage_level: enrollForm.coverageLevel,
+      effective_from: enrollForm.effectiveFrom,
+      enrollment_type: enrollForm.enrollmentType || undefined,
+    });
+  };
+
   const enrollments = data?.items ?? [];
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkActivate = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    bulkApproveMutation.mutate(ids);
+  };
 
   const stats = useMemo(() => ({
     total: enrollments.length,
@@ -223,24 +369,23 @@ export default function BenefitsEnrollmentsPage() {
       ),
     },
     {
-      id: "actions",
+      id: "select",
       header: "",
-      cell: () => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            toast.info("Coming Soon", {
-              message: "Enrollment detail view will be available in a future update.",
-            });
-          }}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      ),
+      cell: ({ row }) => {
+        if (row.status !== "pending") return null;
+        return (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(row.id)}
+            onChange={() => toggleSelect(row.id)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select enrollment for ${row.employeeName || "employee"}`}
+            className="rounded border-gray-300"
+          />
+        );
+      },
     },
-  ], [toast]);
+  ], [selectedIds, toggleSelect]);
 
   return (
     <div className="space-y-6">
@@ -259,17 +404,33 @@ export default function BenefitsEnrollmentsPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          onClick={() =>
-            toast.info("Coming Soon", {
-              message: "Enrollment export will be available in a future update.",
-            })
-          }
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              onClick={handleBulkActivate}
+              disabled={bulkApproveMutation.isPending}
+            >
+              {bulkApproveMutation.isPending
+                ? "Activating..."
+                : `Activate ${selectedIds.size} Selected`}
+            </Button>
+          )}
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Enroll Employee
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              toast.info("Coming Soon", {
+                message: "Enrollment export will be available in a future update.",
+              })
+            }
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -385,6 +546,99 @@ export default function BenefitsEnrollmentsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Enroll Employee Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setEnrollForm(initialEnrollmentForm);
+          }}
+          size="md"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Enroll Employee in Benefit Plan</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee UUID"
+                required
+                value={enrollForm.employeeId}
+                onChange={(e) =>
+                  setEnrollForm({ ...enrollForm, employeeId: e.target.value })
+                }
+              />
+              <Select
+                label="Benefit Plan"
+                required
+                value={enrollForm.planId}
+                onChange={(e) =>
+                  setEnrollForm({ ...enrollForm, planId: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select a plan" },
+                  ...planOptions.map((p) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.category})`,
+                  })),
+                ]}
+              />
+              <Select
+                label="Coverage Level"
+                required
+                value={enrollForm.coverageLevel}
+                onChange={(e) =>
+                  setEnrollForm({ ...enrollForm, coverageLevel: e.target.value })
+                }
+                options={COVERAGE_OPTIONS}
+              />
+              <Input
+                label="Effective From"
+                type="date"
+                required
+                value={enrollForm.effectiveFrom}
+                onChange={(e) =>
+                  setEnrollForm({ ...enrollForm, effectiveFrom: e.target.value })
+                }
+              />
+              <Select
+                label="Enrollment Type"
+                value={enrollForm.enrollmentType}
+                onChange={(e) =>
+                  setEnrollForm({ ...enrollForm, enrollmentType: e.target.value })
+                }
+                options={ENROLLMENT_TYPE_OPTIONS}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setEnrollForm(initialEnrollmentForm);
+              }}
+              disabled={createEnrollmentMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateEnrollment}
+              disabled={
+                !enrollForm.employeeId.trim() ||
+                !enrollForm.planId ||
+                !enrollForm.effectiveFrom ||
+                createEnrollmentMutation.isPending
+              }
+            >
+              {createEnrollmentMutation.isPending ? "Enrolling..." : "Enroll Employee"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

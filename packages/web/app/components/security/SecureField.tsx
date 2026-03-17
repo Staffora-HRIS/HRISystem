@@ -221,9 +221,9 @@ function formatDisplayValue(value: any, meta: FieldMetadata | null): string {
 
   if (meta?.dataType === "currency") {
     if (typeof value === "number") {
-      return new Intl.NumberFormat("en-US", {
+      return new Intl.NumberFormat("en-GB", {
         style: "currency",
-        currency: "USD",
+        currency: "GBP",
       }).format(value);
     }
   }

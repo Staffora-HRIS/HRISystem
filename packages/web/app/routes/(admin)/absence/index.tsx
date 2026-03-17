@@ -1,11 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { Calendar, Settings, FileText, Clock, CheckCircle, XCircle } from "lucide-react";
-import { Card, CardBody, StatCard } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { useToast } from "~/components/ui/toast";
-import { api } from "~/lib/api-client";
+import {
+  Card,
+  CardBody,
+  StatCard,
+  Badge,
+  Button,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Textarea,
+  useToast,
+} from "~/components/ui";
+import { api, ApiError } from "~/lib/api-client";
 
 interface LeaveRequest {
   id: string;
@@ -23,6 +33,70 @@ interface LeaveRequest {
 
 export default function AbsenceAdminPage() {
   const toast = useToast();
+  const queryClient = useQueryClient();
+
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "approve" | "reject";
+    request: LeaveRequest;
+  } | null>(null);
+  const [actionComments, setActionComments] = useState("");
+
+  // Approve mutation
+  const approveMutation = useMutation({
+    mutationFn: (data: { id: string; comments?: string }) =>
+      api.post(`/absence/requests/${data.id}/approve`, {
+        action: "approve",
+        comments: data.comments || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-leave-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-absence-stats"] });
+      toast.success("Leave request approved");
+      setConfirmAction(null);
+      setActionComments("");
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to approve leave request";
+      toast.error(message);
+    },
+  });
+
+  // Reject mutation
+  const rejectMutation = useMutation({
+    mutationFn: (data: { id: string; comments?: string }) =>
+      api.post(`/absence/requests/${data.id}/approve`, {
+        action: "reject",
+        comments: data.comments || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-leave-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-absence-stats"] });
+      toast.success("Leave request rejected");
+      setConfirmAction(null);
+      setActionComments("");
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to reject leave request";
+      toast.error(message);
+    },
+  });
+
+  function handleConfirmAction() {
+    if (!confirmAction) return;
+    const payload = {
+      id: confirmAction.request.id,
+      comments: actionComments.trim() || undefined,
+    };
+    if (confirmAction.type === "approve") {
+      approveMutation.mutate(payload);
+    } else {
+      rejectMutation.mutate(payload);
+    }
+  }
+
+  const actionPending = approveMutation.isPending || rejectMutation.isPending;
 
   const { data: requestsData, isLoading } = useQuery({
     queryKey: ["admin-leave-requests"],
@@ -147,10 +221,22 @@ export default function AbsenceAdminPage() {
                       <td className="px-6 py-4 text-sm text-gray-500">{request.totalDays}</td>
                       <td className="px-6 py-4">{getStatusBadge(request.status)}</td>
                       <td className="px-6 py-4 text-right space-x-2">
-                        <Button variant="outline" size="sm" className="text-green-600" onClick={() => toast.info("Coming Soon", { message: "Leave request approval will be available in a future update." })}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-green-600"
+                          onClick={() => setConfirmAction({ type: "approve", request })}
+                          aria-label={`Approve leave request for ${request.employeeName || "employee"}`}
+                        >
                           <CheckCircle className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-600" onClick={() => toast.info("Coming Soon", { message: "Leave request rejection will be available in a future update." })}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600"
+                          onClick={() => setConfirmAction({ type: "reject", request })}
+                          aria-label={`Reject leave request for ${request.employeeName || "employee"}`}
+                        >
                           <XCircle className="h-4 w-4" />
                         </Button>
                       </td>
@@ -162,6 +248,95 @@ export default function AbsenceAdminPage() {
           )}
         </CardBody>
       </Card>
+      {/* Approve/Reject Confirmation Modal */}
+      <Modal
+        open={confirmAction !== null}
+        onClose={() => {
+          if (!actionPending) {
+            setConfirmAction(null);
+            setActionComments("");
+          }
+        }}
+      >
+        <ModalHeader
+          title={
+            confirmAction?.type === "approve"
+              ? "Approve Leave Request"
+              : "Reject Leave Request"
+          }
+        />
+        <ModalBody>
+          {confirmAction && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+                <p className="text-sm">
+                  <span className="font-medium">Employee:</span>{" "}
+                  {confirmAction.request.employeeName || "Unknown"}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Type:</span>{" "}
+                  {confirmAction.request.leaveTypeName || "Leave"}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Dates:</span>{" "}
+                  {new Date(confirmAction.request.startDate).toLocaleDateString()} -{" "}
+                  {new Date(confirmAction.request.endDate).toLocaleDateString()}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Days:</span>{" "}
+                  {confirmAction.request.totalDays}
+                </p>
+                {confirmAction.request.reason && (
+                  <p className="text-sm">
+                    <span className="font-medium">Reason:</span>{" "}
+                    {confirmAction.request.reason}
+                  </p>
+                )}
+              </div>
+              <Textarea
+                label="Comments (optional)"
+                placeholder={
+                  confirmAction.type === "approve"
+                    ? "Add any comments for the approval..."
+                    : "Provide a reason for rejection..."
+                }
+                value={actionComments}
+                onChange={(e) => setActionComments(e.target.value)}
+                rows={3}
+                id="action-comments"
+              />
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!actionPending) {
+                setConfirmAction(null);
+                setActionComments("");
+              }
+            }}
+            disabled={actionPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={confirmAction?.type === "approve" ? "primary" : "danger"}
+            onClick={handleConfirmAction}
+            disabled={actionPending}
+            loading={actionPending}
+          >
+            {actionPending
+              ? confirmAction?.type === "approve"
+                ? "Approving..."
+                : "Rejecting..."
+              : confirmAction?.type === "approve"
+                ? "Approve"
+                : "Reject"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

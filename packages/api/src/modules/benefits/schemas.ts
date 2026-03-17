@@ -218,7 +218,7 @@ export const CreateDependent = Type.Object({
     Type.Literal("other"),
     Type.Literal("prefer_not_to_say"),
   ])),
-  ssn_last_four: Type.Optional(Type.String({ minLength: 4, maxLength: 4 })),
+  id_last_four: Type.Optional(Type.String({ minLength: 4, maxLength: 4 })),
   disabled: Type.Optional(Type.Boolean()),
   full_time_student: Type.Optional(Type.Boolean()),
 });

@@ -1,0 +1,132 @@
+# =============================================================================
+# Staffora Platform - Migration File Validation
+# =============================================================================
+#
+# Validates that new migration files follow project conventions:
+#   - 4-digit prefix naming (e.g., 0188_description.sql)
+#   - New tables include tenant_id column
+#   - New tables have RLS enabled
+#   - New tables have tenant isolation policies
+# =============================================================================
+
+name: Migration Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-migrations:
+    name: Validate Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find new migration files
+        id: migrations
+        run: |
+          # Get migration files changed in this PR
+          CHANGED=$(git diff --name-only origin/main...HEAD -- 'migrations/*.sql' 2>/dev/null || echo "")
+          echo "changed<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$CHANGED" ]; then
+            echo "No migration files changed"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Migration files changed:"
+            echo "$CHANGED"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate migration naming
+        if: steps.migrations.outputs.has_changes == 'true'
+        run: |
+          ERRORS=0
+          echo "## Migration Validation" >> $GITHUB_STEP_SUMMARY
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            BASENAME=$(basename "$file")
+
+            # Check 4-digit prefix naming convention
+            if ! echo "$BASENAME" | grep -qE '^[0-9]{4}_[a-z0-9_]+\.sql$'; then
+              echo "::error file=${file}::Migration file '${BASENAME}' does not follow naming convention: NNNN_description.sql (4-digit prefix, lowercase, underscores)"
+              echo "- :x: **${BASENAME}**: Bad naming convention" >> $GITHUB_STEP_SUMMARY
+              ERRORS=$((ERRORS + 1))
+            else
+              echo "- :white_check_mark: **${BASENAME}**: Naming OK" >> $GITHUB_STEP_SUMMARY
+            fi
+          done <<< "${{ steps.migrations.outputs.changed }}"
+
+          if [ $ERRORS -gt 0 ]; then
+            echo ""
+            echo "::error::${ERRORS} migration file(s) have naming issues"
+            exit 1
+          fi
+
+      - name: Check RLS compliance
+        if: steps.migrations.outputs.has_changes == 'true'
+        run: |
+          WARNINGS=0
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### RLS Compliance Check" >> $GITHUB_STEP_SUMMARY
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ ! -f "$file" ] && continue
+
+            CONTENT=$(cat "$file")
+            BASENAME=$(basename "$file")
+
+            # Check if this migration creates a new table
+            if echo "$CONTENT" | grep -qiE 'CREATE\s+TABLE'; then
+              TABLES=$(echo "$CONTENT" | grep -ioE 'CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?app\.[a-z_]+' | grep -ioE 'app\.[a-z_]+' || true)
+
+              for TABLE in $TABLES; do
+                TABLE_NAME=$(echo "$TABLE" | sed 's/app\.//')
+
+                # Skip known system tables that don't need RLS
+                case "$TABLE_NAME" in
+                  schema_migrations|domain_outbox) continue ;;
+                esac
+
+                # Check for tenant_id column
+                if ! echo "$CONTENT" | grep -qi "tenant_id"; then
+                  echo "::warning file=${file}::Table ${TABLE} may be missing tenant_id column"
+                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing \`tenant_id\`" >> $GITHUB_STEP_SUMMARY
+                  WARNINGS=$((WARNINGS + 1))
+                fi
+
+                # Check for RLS enable
+                if ! echo "$CONTENT" | grep -qiE "ENABLE\s+ROW\s+LEVEL\s+SECURITY"; then
+                  echo "::warning file=${file}::Table ${TABLE} may be missing ENABLE ROW LEVEL SECURITY"
+                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing RLS" >> $GITHUB_STEP_SUMMARY
+                  WARNINGS=$((WARNINGS + 1))
+                fi
+
+                # Check for tenant isolation policy
+                if ! echo "$CONTENT" | grep -qi "tenant_isolation"; then
+                  echo "::warning file=${file}::Table ${TABLE} may be missing tenant_isolation policy"
+                  echo "- :warning: **${BASENAME}**: Table \`${TABLE}\` may be missing tenant isolation policy" >> $GITHUB_STEP_SUMMARY
+                  WARNINGS=$((WARNINGS + 1))
+                fi
+              done
+            fi
+          done <<< "${{ steps.migrations.outputs.changed }}"
+
+          if [ $WARNINGS -eq 0 ]; then
+            echo "- :white_check_mark: All tables have proper RLS configuration" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> **${WARNINGS} warning(s)** — Review RLS compliance for new tables" >> $GITHUB_STEP_SUMMARY
+          fi

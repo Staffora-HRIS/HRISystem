@@ -53,12 +53,12 @@ export function Navbar() {
 
           {/* Desktop CTA */}
           <div className="hidden items-center gap-3 lg:flex">
-            <a
-              href="https://app.staffora.co.uk/login"
+            <Link
+              to="/login"
               className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition"
             >
               Sign In
-            </a>
+            </Link>
             <Link
               to="/pricing"
               className="cursor-pointer rounded-full bg-gradient-cta px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/25 hover:shadow-accent-500/40 transition-all hover:-translate-y-0.5"
@@ -98,12 +98,13 @@ export function Navbar() {
               </Link>
             ))}
             <div className="border-t border-gray-200 pt-4 mt-4 space-y-2">
-              <a
-                href="https://app.staffora.co.uk/login"
+              <Link
+                to="/login"
+                onClick={() => setMobileOpen(false)}
                 className="block rounded-lg px-4 py-3 text-base font-medium text-gray-600 hover:bg-gray-50"
               >
                 Sign In
-              </a>
+              </Link>
               <Link
                 to="/pricing"
                 onClick={() => setMobileOpen(false)}

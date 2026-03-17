@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { CacheKeys } from "./cache";
 import { createErrorResponse, ErrorCodes } from "./errors";
+import { getClientIp } from "../lib/client-ip";
 
 export interface RateLimitPluginOptions {
   enabled?: boolean;
@@ -37,19 +38,6 @@ function matchAuthRoute(path: string): { maxRequests: number; windowSeconds: num
   return null;
 }
 
-function getClientIp(request: Request): string | null {
-  const forwarded = request.headers.get("X-Forwarded-For");
-  if (forwarded) {
-    const ips = forwarded.split(",").map((ip) => ip.trim());
-    return ips[0] || null;
-  }
-
-  const realIp = request.headers.get("X-Real-IP");
-  if (realIp) return realIp;
-
-  return null;
-}
-
 export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
   const { skipRoutes = [] } = options;
   const allSkipRoutes = [...DEFAULT_SKIP_ROUTES, ...skipRoutes];
@@ -69,7 +57,7 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
   const enabled =
     typeof options.enabled === "boolean"
       ? options.enabled
-      : !isTestRun && process.env["FEATURE_RATE_LIMIT_ENABLED"] === "true";
+      : !isTestRun && process.env["FEATURE_RATE_LIMIT_ENABLED"] !== "false";
 
   if (!enabled) {
     return new Elysia({ name: "rate-limit" });
@@ -97,7 +85,8 @@ export function rateLimitPlugin(options: RateLimitPluginOptions = {}) {
 
       if (!cache?.incrementRateLimit) return;
 
-      const ip = getClientIp(request) ?? "unknown";
+      const socketIp = (ctx as any).server?.requestIP?.(request)?.address as string | undefined;
+      const ip = getClientIp(request, socketIp) ?? "unknown";
 
       // Check auth-specific rate limiting first (uses IP-only keys)
       const authLimit = matchAuthRoute(path);

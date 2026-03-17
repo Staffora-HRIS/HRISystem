@@ -14,6 +14,7 @@ import { type DatabaseClient } from "./db";
 import { type CacheClient, CacheTTL, CacheKeys } from "./cache";
 import { type User, type Session, AuthError } from "./auth-better";
 import { type Tenant } from "./tenant";
+import { type SoDViolation } from "../modules/security/permission-resolution.service";
 
 // =============================================================================
 // Types
@@ -413,6 +414,235 @@ export class RbacService {
     // In production, consider using a more targeted approach
     await this.cache.invalidateTenantCache(tenantId);
   }
+
+  // ===========================================================================
+  // Data Scope Resolution
+  // ===========================================================================
+
+  /**
+   * Resolve the set of employee IDs a user can access for a given resource.
+   * Calls the DB function `app.resolve_user_data_scope()` and caches
+   * the result for 15 minutes (CacheTTL.PERMISSIONS).
+   */
+  async resolveDataScope(
+    tenantId: string,
+    userId: string,
+    resource: string = "employees"
+  ): Promise<string[]> {
+    const cacheKey = `scope:${tenantId}:${userId}:${resource}`;
+    const cached = await this.cache.get<string[]>(cacheKey);
+    if (cached) return cached;
+
+    const rows = await this.db.withSystemContext(async (tx) => {
+      return await tx<{ employeeId: string }[]>`
+        SELECT employee_id FROM app.resolve_user_data_scope(
+          ${tenantId}::uuid, ${userId}::uuid, ${resource}
+        )
+      `;
+    });
+
+    const ids = rows.map((r) => r.employeeId);
+    await this.cache.set(cacheKey, ids, CacheTTL.PERMISSIONS);
+    return ids;
+  }
+
+  /**
+   * Check whether a specific employee is within a user's data scope.
+   * Uses `resolveDataScope` internally.
+   */
+  async isEmployeeInScope(
+    tenantId: string,
+    userId: string,
+    employeeId: string,
+    resource: string = "employees"
+  ): Promise<boolean> {
+    const scopedIds = await this.resolveDataScope(tenantId, userId, resource);
+    return scopedIds.includes(employeeId);
+  }
+
+  // ===========================================================================
+  // Separation of Duties
+  // ===========================================================================
+
+  /**
+   * Check separation-of-duties rules for the given user, resource, and action.
+   * Calls `app.check_separation_of_duties()` DB function.
+   * Returns the list of violations and whether any are blocking.
+   */
+  async checkSeparationOfDuties(
+    tenantId: string,
+    userId: string,
+    resource: string,
+    action: string,
+    context: Record<string, unknown> = {}
+  ): Promise<{ violations: SoDViolation[]; blocked: boolean }> {
+    const rows = await this.db.withSystemContext(async (tx) => {
+      return await tx`
+        SELECT rule_id, rule_name, violation_type, enforcement, details
+        FROM app.check_separation_of_duties(
+          ${tenantId}::uuid, ${userId}::uuid, ${resource}, ${action}, ${JSON.stringify(context)}::jsonb
+        )
+      `;
+    });
+
+    const violations: SoDViolation[] = rows.map((r: any) => ({
+      ruleId: r.ruleId,
+      ruleName: r.ruleName,
+      violationType: r.violationType,
+      enforcement: r.enforcement,
+      details: r.details,
+    }));
+
+    return {
+      violations,
+      blocked: violations.some((v) => v.enforcement === "block"),
+    };
+  }
+
+  // ===========================================================================
+  // Field-Level Permissions
+  // ===========================================================================
+
+  /**
+   * Batch field permission check.
+   * Returns a Map of field name to the effective permission level
+   * ('edit' | 'view' | 'hidden'). Results are cached per entity per user
+   * for 15 minutes (CacheTTL.PERMISSIONS).
+   */
+  async getFieldPermissions(
+    tenantId: string,
+    userId: string,
+    entityName: string,
+    fieldNames?: string[]
+  ): Promise<Map<string, "edit" | "view" | "hidden">> {
+    const cacheKey = `fperms:${tenantId}:${userId}:${entityName}`;
+    const cached = await this.cache.get<Record<string, string>>(cacheKey);
+    if (cached) {
+      const map = new Map<string, "edit" | "view" | "hidden">();
+      for (const [k, v] of Object.entries(cached)) {
+        map.set(k, v as "edit" | "view" | "hidden");
+      }
+      return map;
+    }
+
+    const rows = await this.db.withSystemContext(async (tx) => {
+      return await tx<{ fieldName: string; permission: string }[]>`
+        SELECT fr.field_name,
+               COALESCE(
+                 (SELECT rfp.permission FROM app.role_field_permissions rfp
+                  JOIN app.role_assignments ra ON ra.role_id = rfp.role_id
+                  WHERE ra.user_id = ${userId}::uuid
+                    AND ra.effective_from <= now()
+                    AND (ra.effective_to IS NULL OR ra.effective_to > now())
+                    AND rfp.field_id = fr.id
+                  ORDER BY CASE rfp.permission WHEN 'edit' THEN 1 WHEN 'view' THEN 2 WHEN 'hidden' THEN 3 END
+                  LIMIT 1),
+                 fr.default_permission
+               ) as permission
+        FROM app.field_registry fr
+        WHERE fr.entity_name = ${entityName}
+          AND (fr.tenant_id = ${tenantId}::uuid OR fr.tenant_id IS NULL)
+          ${fieldNames ? tx`AND fr.field_name = ANY(${fieldNames})` : tx``}
+      `;
+    });
+
+    const map = new Map<string, "edit" | "view" | "hidden">();
+    for (const row of rows) {
+      map.set(row.fieldName, row.permission as "edit" | "view" | "hidden");
+    }
+
+    // Cache the result
+    await this.cache.set(cacheKey, Object.fromEntries(map), CacheTTL.PERMISSIONS);
+    return map;
+  }
+
+  // ===========================================================================
+  // Scope Cache Invalidation
+  // ===========================================================================
+
+  /**
+   * Invalidate the data scope cache for a user.
+   * Call this when role assignments change so that
+   * `resolveDataScope` re-queries the database.
+   */
+  async invalidateScopeCache(tenantId: string, userId: string): Promise<void> {
+    // Delete all resource-specific scope keys for this user.
+    // The keys follow the pattern  scope:{tenantId}:{userId}:*
+    // We also delete field-permission keys since role changes affect those too.
+    const scopePattern = `scope:${tenantId}:${userId}`;
+    const fpermsPattern = `fperms:${tenantId}:${userId}`;
+
+    // Best-effort: delete known common resource keys
+    const commonResources = [
+      "employees",
+      "leave_requests",
+      "timesheets",
+      "cases",
+      "documents",
+    ];
+    const keysToDelete = commonResources.map(
+      (r) => `${scopePattern}:${r}`
+    );
+
+    // Also attempt pattern-based scan for any other resource keys
+    try {
+      const redis = this.cache.client;
+      if (redis && typeof redis.keys === "function") {
+        // Use SCAN via keys helper if available
+        const prefix =
+          (process.env["REDIS_KEY_PREFIX"] || "staffora:") + scopePattern;
+        const fprefix =
+          (process.env["REDIS_KEY_PREFIX"] || "staffora:") + fpermsPattern;
+
+        let cursor = "0";
+        do {
+          const [nextCursor, foundKeys] = await redis.scan(
+            cursor,
+            "MATCH",
+            `${prefix}:*`,
+            "COUNT",
+            50
+          );
+          cursor = nextCursor;
+          for (const k of foundKeys) {
+            const stripped = k.replace(
+              process.env["REDIS_KEY_PREFIX"] || "staffora:",
+              ""
+            );
+            if (!keysToDelete.includes(stripped)) {
+              keysToDelete.push(stripped);
+            }
+          }
+        } while (cursor !== "0");
+
+        // Also scan fperms keys
+        cursor = "0";
+        do {
+          const [nextCursor, foundKeys] = await redis.scan(
+            cursor,
+            "MATCH",
+            `${fprefix}:*`,
+            "COUNT",
+            50
+          );
+          cursor = nextCursor;
+          for (const k of foundKeys) {
+            const stripped = k.replace(
+              process.env["REDIS_KEY_PREFIX"] || "staffora:",
+              ""
+            );
+            if (!keysToDelete.includes(stripped)) {
+              keysToDelete.push(stripped);
+            }
+          }
+        } while (cursor !== "0");
+      }
+    } catch {
+      // Fall through to deleting known keys if scan fails
+    }
+
+    await Promise.all(keysToDelete.map((k) => this.cache.del(k)));
+  }
 }
 
 // =============================================================================
@@ -678,4 +908,90 @@ export async function hasPermission(
     mfaVerified
   );
   return result.allowed;
+}
+
+// =============================================================================
+// Enhanced Permission Guard with Data Scope & SoD
+// =============================================================================
+
+/**
+ * Options for the enhanced permission guard.
+ */
+export interface RequirePermissionWithScopeOptions {
+  /** Route param name containing the target employee ID to check against data scope */
+  targetEmployeeIdParam?: string;
+  /** Whether to run separation-of-duties checks */
+  checkSoD?: boolean;
+}
+
+/**
+ * Enhanced permission guard that also checks data scope and separation of duties.
+ *
+ * Usage:
+ * ```ts
+ * app.get('/employees/:employeeId',
+ *   ({ user }) => getEmployee(),
+ *   {
+ *     beforeHandle: [
+ *       requirePermissionWithScope('employees', 'read', {
+ *         targetEmployeeIdParam: 'employeeId',
+ *         checkSoD: true,
+ *       })
+ *     ]
+ *   }
+ * );
+ * ```
+ */
+export function requirePermissionWithScope(
+  resource: string,
+  action: string,
+  options?: RequirePermissionWithScopeOptions
+) {
+  return async (ctx: any) => {
+    // First check base permission (auth, tenant, permission key)
+    await requirePermission(resource, action)(ctx);
+
+    const { user, tenant, rbacService, params, set } = ctx as any;
+
+    // Check data scope if a target employee param is specified
+    if (options?.targetEmployeeIdParam) {
+      const targetId = params?.[options.targetEmployeeIdParam];
+      if (targetId) {
+        const inScope = await rbacService.isEmployeeInScope(
+          tenant.id,
+          user.id,
+          targetId,
+          resource
+        );
+        if (!inScope) {
+          set.status = 403;
+          throw new RbacError(
+            "PERMISSION_DENIED",
+            "Target employee is not within your data scope",
+            403
+          );
+        }
+      }
+    }
+
+    // Check separation of duties if requested
+    if (options?.checkSoD) {
+      const sod = await rbacService.checkSeparationOfDuties(
+        tenant.id,
+        user.id,
+        resource,
+        action
+      );
+      if (sod.blocked) {
+        set.status = 403;
+        throw new RbacError(
+          "PERMISSION_DENIED",
+          `Separation of duties violation: ${sod.violations[0]?.details}`,
+          403
+        );
+      }
+      // Attach non-blocking violations to context for downstream handlers
+      (ctx as any).sodViolations = sod.violations;
+    }
+  };
 }

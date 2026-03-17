@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase,
   Plus,
@@ -23,6 +24,27 @@ import {
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { invalidationPatterns } from "~/lib/query-client";
+
+interface CreatePositionFormState {
+  title: string;
+  code: string;
+  orgUnitId: string;
+  jobGrade: string;
+  minSalary: string;
+  maxSalary: string;
+  headcount: string;
+}
+
+const INITIAL_POSITION_FORM: CreatePositionFormState = {
+  title: "",
+  code: "",
+  orgUnitId: "",
+  jobGrade: "",
+  minSalary: "",
+  maxSalary: "",
+  headcount: "1",
+};
 
 interface Position {
   id: string;
@@ -53,19 +75,23 @@ interface PositionListResponse {
 
 function formatSalary(amount: number | null, currency: string): string {
   if (amount == null) return "-";
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: currency || "USD",
+    currency: currency || "GBP",
     maximumFractionDigits: 0,
   }).format(amount);
 }
 
 export default function AdminPositionsPage() {
   const toast = useToast();
+  const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [posForm, setPosForm] = useState<CreatePositionFormState>(INITIAL_POSITION_FORM);
+  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [editForm, setEditForm] = useState<CreatePositionFormState>(INITIAL_POSITION_FORM);
 
   const { data: positionsData, isLoading } = useQuery({
     queryKey: ["admin-positions", search, departmentFilter],
@@ -82,6 +108,62 @@ export default function AdminPositionsPage() {
     queryKey: ["admin-org-units-for-positions"],
     queryFn: () =>
       api.get<{ items: { id: string; name: string }[] }>("/hr/org-units?limit=100"),
+  });
+
+  // Create position mutation
+  const createPositionMutation = useMutation({
+    mutationFn: (data: CreatePositionFormState) =>
+      api.post("/hr/positions", {
+        title: data.title,
+        code: data.code.toUpperCase(),
+        org_unit_id: data.orgUnitId,
+        ...(data.jobGrade ? { job_grade: data.jobGrade } : {}),
+        ...(data.minSalary ? { min_salary: Number(data.minSalary) } : {}),
+        ...(data.maxSalary ? { max_salary: Number(data.maxSalary) } : {}),
+        headcount: Number(data.headcount) || 1,
+      }),
+    onSuccess: () => {
+      invalidationPatterns.organization().forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      qc.invalidateQueries({ queryKey: ["admin-positions"] });
+      toast.success("Position created successfully");
+      setShowCreateModal(false);
+      setPosForm(INITIAL_POSITION_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to create position", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
+  });
+
+  // Update position mutation
+  const updatePositionMutation = useMutation({
+    mutationFn: (data: { id: string; form: CreatePositionFormState }) =>
+      api.put(`/hr/positions/${data.id}`, {
+        title: data.form.title,
+        code: data.form.code.toUpperCase(),
+        org_unit_id: data.form.orgUnitId,
+        ...(data.form.jobGrade ? { job_grade: data.form.jobGrade } : {}),
+        ...(data.form.minSalary ? { min_salary: Number(data.form.minSalary) } : {}),
+        ...(data.form.maxSalary ? { max_salary: Number(data.form.maxSalary) } : {}),
+        headcount: Number(data.form.headcount) || 1,
+      }),
+    onSuccess: () => {
+      invalidationPatterns.organization().forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      qc.invalidateQueries({ queryKey: ["admin-positions"] });
+      toast.success("Position updated successfully");
+      setEditingPosition(null);
+      setEditForm(INITIAL_POSITION_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to update position", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
   });
 
   const positions = positionsData?.items ?? [];
@@ -176,8 +258,25 @@ export default function AdminPositionsPage() {
     {
       id: "actions",
       header: "",
-      cell: () => (
-        <Button variant="ghost" size="sm" onClick={() => toast.info("Coming Soon", { message: "Position editing will be available in a future update." })}>
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Edit position ${row.title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditingPosition(row);
+            setEditForm({
+              title: row.title,
+              code: row.code,
+              orgUnitId: row.orgUnitId || "",
+              jobGrade: row.jobGrade || "",
+              minSalary: row.minSalary != null ? String(row.minSalary) : "",
+              maxSalary: row.maxSalary != null ? String(row.maxSalary) : "",
+              headcount: String(row.headcount),
+            });
+          }}
+        >
           <Edit className="h-4 w-4" />
         </Button>
       ),
@@ -291,40 +390,151 @@ export default function AdminPositionsPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <Modal open onClose={() => setShowCreateModal(false)} size="lg">
+        <Modal open onClose={() => { setShowCreateModal(false); setPosForm(INITIAL_POSITION_FORM); }} size="lg">
           <ModalHeader>
             <h3 className="text-lg font-semibold">Create Position</h3>
           </ModalHeader>
           <ModalBody>
             <div className="space-y-4">
-              <Input label="Title" placeholder="Enter position title" required />
-              <Input label="Position Code" placeholder="Enter position code" />
+              <Input
+                label="Title"
+                placeholder="Enter position title"
+                required
+                value={posForm.title}
+                onChange={(e) => setPosForm((f) => ({ ...f, title: e.target.value }))}
+              />
+              <Input
+                label="Position Code"
+                placeholder="Enter position code (e.g., SWE01)"
+                required
+                value={posForm.code}
+                onChange={(e) => setPosForm((f) => ({ ...f, code: e.target.value }))}
+              />
               <Select
                 label="Department"
+                value={posForm.orgUnitId}
+                onChange={(e) => setPosForm((f) => ({ ...f, orgUnitId: e.target.value }))}
                 options={[
                   { value: "", label: "Select department" },
                   ...(departments?.items.map((d) => ({ value: d.id, label: d.name })) ?? []),
                 ]}
               />
-              <Input label="Job Grade" placeholder="e.g., L5, Senior" />
+              <Input
+                label="Job Grade"
+                placeholder="e.g., L5, Senior"
+                value={posForm.jobGrade}
+                onChange={(e) => setPosForm((f) => ({ ...f, jobGrade: e.target.value }))}
+              />
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Min Salary" type="number" placeholder="0" />
-                <Input label="Max Salary" type="number" placeholder="0" />
+                <Input
+                  label="Min Salary"
+                  type="number"
+                  placeholder="0"
+                  value={posForm.minSalary}
+                  onChange={(e) => setPosForm((f) => ({ ...f, minSalary: e.target.value }))}
+                />
+                <Input
+                  label="Max Salary"
+                  type="number"
+                  placeholder="0"
+                  value={posForm.maxSalary}
+                  onChange={(e) => setPosForm((f) => ({ ...f, maxSalary: e.target.value }))}
+                />
               </div>
-              <Input label="Target Headcount" type="number" defaultValue="1" />
+              <Input
+                label="Target Headcount"
+                type="number"
+                value={posForm.headcount}
+                onChange={(e) => setPosForm((f) => ({ ...f, headcount: e.target.value }))}
+              />
             </div>
           </ModalBody>
           <ModalFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setPosForm(INITIAL_POSITION_FORM); }} disabled={createPositionMutation.isPending}>
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                toast.success("Position created successfully");
-                setShowCreateModal(false);
-              }}
+              disabled={!posForm.title || !posForm.code || !posForm.orgUnitId || createPositionMutation.isPending}
+              loading={createPositionMutation.isPending}
+              onClick={() => createPositionMutation.mutate(posForm)}
             >
-              Create Position
+              {createPositionMutation.isPending ? "Creating..." : "Create Position"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Edit Position Modal */}
+      {editingPosition && (
+        <Modal open onClose={() => { setEditingPosition(null); setEditForm(INITIAL_POSITION_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Edit Position: {editingPosition.title}</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Title"
+                placeholder="Enter position title"
+                required
+                value={editForm.title}
+                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+              />
+              <Input
+                label="Position Code"
+                placeholder="Enter position code (e.g., SWE01)"
+                required
+                value={editForm.code}
+                onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+              />
+              <Select
+                label="Department"
+                value={editForm.orgUnitId}
+                onChange={(e) => setEditForm((f) => ({ ...f, orgUnitId: e.target.value }))}
+                options={[
+                  { value: "", label: "Select department" },
+                  ...(departments?.items.map((d) => ({ value: d.id, label: d.name })) ?? []),
+                ]}
+              />
+              <Input
+                label="Job Grade"
+                placeholder="e.g., L5, Senior"
+                value={editForm.jobGrade}
+                onChange={(e) => setEditForm((f) => ({ ...f, jobGrade: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Min Salary"
+                  type="number"
+                  placeholder="0"
+                  value={editForm.minSalary}
+                  onChange={(e) => setEditForm((f) => ({ ...f, minSalary: e.target.value }))}
+                />
+                <Input
+                  label="Max Salary"
+                  type="number"
+                  placeholder="0"
+                  value={editForm.maxSalary}
+                  onChange={(e) => setEditForm((f) => ({ ...f, maxSalary: e.target.value }))}
+                />
+              </div>
+              <Input
+                label="Target Headcount"
+                type="number"
+                value={editForm.headcount}
+                onChange={(e) => setEditForm((f) => ({ ...f, headcount: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setEditingPosition(null); setEditForm(INITIAL_POSITION_FORM); }} disabled={updatePositionMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!editForm.title || !editForm.code || !editForm.orgUnitId || updatePositionMutation.isPending}
+              loading={updatePositionMutation.isPending}
+              onClick={() => updatePositionMutation.mutate({ id: editingPosition.id, form: editForm })}
+            >
+              {updatePositionMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </ModalFooter>
         </Modal>

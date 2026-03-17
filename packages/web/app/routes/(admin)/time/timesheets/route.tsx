@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -65,11 +66,19 @@ export default function TimesheetsPage() {
     ),
   });
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   const approveMutation = useMutation({
     mutationFn: (timesheetId: string) =>
       api.post(`/time/timesheets/${timesheetId}/approve`, { action: "approve" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
+      toast.success("Timesheet approved");
+    },
+    onError: () => {
+      toast.error("Failed to approve timesheet", {
+        message: "Please try again.",
+      });
     },
   });
 
@@ -78,10 +87,75 @@ export default function TimesheetsPage() {
       api.post(`/time/timesheets/${timesheetId}/approve`, { action: "reject", comments: reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
+      toast.success("Timesheet rejected");
+    },
+    onError: () => {
+      toast.error("Failed to reject timesheet", {
+        message: "Please try again.",
+      });
+    },
+  });
+
+  // Bulk approve mutation
+  const bulkApproveMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          api.post(`/time/timesheets/${id}/approve`, { action: "approve" })
+        )
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        throw new Error(`${failed} of ${ids.length} approvals failed`);
+      }
+      return results;
+    },
+    onSuccess: (_data, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
+      toast.success(`${ids.length} timesheet${ids.length > 1 ? "s" : ""} approved`);
+      setSelectedIds(new Set());
+    },
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-timesheets"] });
+      toast.error("Some approvals failed", {
+        message: error instanceof Error ? error.message : "Please try again.",
+      });
+      setSelectedIds(new Set());
     },
   });
 
   const timesheets = data?.items || [];
+
+  const submittedTimesheets = timesheets.filter((t) => t.status === "submitted");
+  const allSubmittedSelected =
+    submittedTimesheets.length > 0 &&
+    submittedTimesheets.every((t) => selectedIds.has(t.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSubmittedSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(submittedTimesheets.map((t) => t.id)));
+    }
+  };
+
+  const handleBulkApprove = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    bulkApproveMutation.mutate(ids);
+  };
 
   const handleReject = (timesheetId: string) => {
     const reason = prompt("Enter rejection reason:");
@@ -114,6 +188,17 @@ export default function TimesheetsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Timesheets</h1>
           <p className="text-gray-600">Review and approve employee timesheets</p>
         </div>
+        {selectedIds.size > 0 && (
+          <Button
+            onClick={handleBulkApprove}
+            disabled={bulkApproveMutation.isPending}
+          >
+            <Check className="h-4 w-4 mr-2" />
+            {bulkApproveMutation.isPending
+              ? "Approving..."
+              : `Approve ${selectedIds.size} Selected`}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Timesheet export will be available in a future update." })}>
           <Download className="h-4 w-4 mr-2" />
           Export
@@ -203,6 +288,16 @@ export default function TimesheetsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSubmittedSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all submitted timesheets"
+                        className="rounded border-gray-300"
+                        disabled={submittedTimesheets.length === 0}
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Employee
                     </th>
@@ -229,6 +324,17 @@ export default function TimesheetsPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {timesheets.map((timesheet) => (
                     <tr key={timesheet.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 w-10">
+                        {timesheet.status === "submitted" && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(timesheet.id)}
+                            onChange={() => toggleSelect(timesheet.id)}
+                            aria-label={`Select timesheet for ${timesheet.employeeName || "employee"}`}
+                            className="rounded border-gray-300"
+                          />
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">
                           {timesheet.employeeName || "Unknown"}

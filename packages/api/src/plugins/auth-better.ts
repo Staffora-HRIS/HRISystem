@@ -6,6 +6,8 @@
  */
 
 import { Elysia } from "elysia";
+import { createHmac, timingSafeEqual } from "crypto";
+import { isValidUUID } from "@staffora/shared/utils";
 import { getBetterAuth } from "../lib/better-auth";
 import type { DatabaseClient } from "./db";
 import type { CacheClient } from "./cache";
@@ -123,6 +125,10 @@ export class AuthService {
    * Get user with tenant associations
    */
   async getUserWithTenants(userId: string): Promise<UserWithTenants | null> {
+    if (!isValidUUID(userId)) {
+      return null;
+    }
+
     const result = await this.db.query<{
       id: string;
       email: string;
@@ -242,9 +248,7 @@ export class AuthService {
       // Fallback to user's primary tenant
       if (!userId) return null;
 
-      // Validate userId is a valid UUID format before querying to prevent SQL errors
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(userId)) {
+      if (!isValidUUID(userId)) {
         console.warn(`[AuthService.getSessionTenant] Invalid UUID format for userId: ${userId}`);
         return null;
       }
@@ -607,23 +611,135 @@ export function requireMfa() {
     });
 }
 
+// =============================================================================
+// CSRF Token Utilities
+// =============================================================================
+
+/** Default CSRF token max age: 8 hours in milliseconds */
+const CSRF_TOKEN_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Get the CSRF signing secret.
+ * Prefers CSRF_SECRET, falls back to SESSION_SECRET.
+ */
+function getCsrfSecret(): string {
+  return (
+    process.env["CSRF_SECRET"] ||
+    process.env["SESSION_SECRET"] ||
+    process.env["BETTER_AUTH_SECRET"] ||
+    ""
+  );
+}
+
+/**
+ * Generate an HMAC-SHA256 signed CSRF token bound to a session.
+ *
+ * Token format: `{sessionId}.{timestamp_base36}.{hmac_hex}`
+ *
+ * The HMAC covers both the session ID and the timestamp, so tampering
+ * with either component invalidates the token.
+ */
+export async function generateCsrfToken(sessionId: string): Promise<string> {
+  const secret = getCsrfSecret();
+  const timestamp = Date.now().toString(36);
+  const payload = `${sessionId}.${timestamp}`;
+  const hmac = createHmac("sha256", secret).update(payload).digest("hex");
+  return `${payload}.${hmac}`;
+}
+
+/**
+ * Validate an HMAC-SHA256 signed CSRF token.
+ *
+ * Checks:
+ * 1. Token has correct format (three dot-separated parts)
+ * 2. Session ID in token matches the expected session
+ * 3. Token has not expired (default 8 hours)
+ * 4. HMAC signature is valid (constant-time comparison)
+ *
+ * @param token - The CSRF token from the X-CSRF-Token header
+ * @param sessionId - The session ID to validate against
+ * @param maxAgeMs - Maximum token age in milliseconds (default 8 hours)
+ * @returns true if token is valid
+ */
+export async function validateCsrfToken(
+  token: string,
+  sessionId: string,
+  maxAgeMs: number = CSRF_TOKEN_MAX_AGE_MS
+): Promise<boolean> {
+  if (!token) return false;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+
+  const [tokenSessionId, timestampStr, providedHmac] = parts;
+
+  // Verify session ID matches
+  if (tokenSessionId !== sessionId) return false;
+
+  // Verify timestamp is valid and not expired
+  const timestamp = parseInt(timestampStr, 36);
+  if (isNaN(timestamp) || timestamp <= 0) return false;
+
+  const age = Date.now() - timestamp;
+  if (age < 0 || age >= maxAgeMs) return false;
+
+  // Recompute HMAC and compare using constant-time comparison
+  const secret = getCsrfSecret();
+  const payload = `${tokenSessionId}.${timestampStr}`;
+  const expectedHmac = createHmac("sha256", secret).update(payload).digest("hex");
+
+  // Constant-time comparison to prevent timing attacks
+  try {
+    const a = Buffer.from(providedHmac, "utf-8");
+    const b = Buffer.from(expectedHmac, "utf-8");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * CSRF protection guard
  *
  * Validates that mutating requests (POST, PUT, PATCH, DELETE) include
- * a CSRF token header. Better Auth handles its own CSRF for its auth
- * endpoints, but application routes must be protected explicitly.
+ * a valid HMAC-signed CSRF token in the X-CSRF-Token header.
+ * The token must be bound to the current session and not expired.
+ *
+ * Better Auth handles its own CSRF for its auth endpoints, but
+ * application routes must be protected explicitly.
  */
 export function requireCsrf() {
   return new Elysia({ name: "require-csrf" })
-    .derive(({ request, set }) => {
+    .derive(async ({ request, set, ...ctx }) => {
       if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
         const csrfToken = request.headers.get("X-CSRF-Token");
         if (!csrfToken) {
           set.status = 403;
           throw new AuthError(
-            "CSRF_REQUIRED",
+            AuthErrorCodes.CSRF_INVALID,
             "CSRF token is required for mutating requests",
+            403
+          );
+        }
+
+        // Session is required to validate CSRF tokens
+        const session = (ctx as any).session as Session | null;
+        if (!session) {
+          set.status = 403;
+          throw new AuthError(
+            AuthErrorCodes.CSRF_INVALID,
+            "CSRF token validation requires an authenticated session",
+            403
+          );
+        }
+
+        const isValid = await validateCsrfToken(csrfToken, session.id);
+        if (!isValid) {
+          set.status = 403;
+          throw new AuthError(
+            AuthErrorCodes.CSRF_INVALID,
+            "Invalid or expired CSRF token",
             403
           );
         }

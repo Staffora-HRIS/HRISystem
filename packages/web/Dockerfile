@@ -35,6 +35,9 @@ ENV VITE_API_URL=${VITE_API_URL}
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
+# Copy root package.json (needed for bun --filter workspace resolution)
+COPY package.json ./
+
 # Copy source code needed for building
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   Clock,
@@ -9,9 +9,21 @@ import {
   LayoutGrid,
   List,
 } from "lucide-react";
-import { Card, CardBody, StatCard } from "~/components/ui/card";
+import {
+  Card,
+  CardBody,
+  StatCard,
+  Button,
+  Badge,
+  Input,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
+} from "~/components/ui";
 import { Spinner } from "~/components/ui/spinner";
-import { Button, Badge, useToast } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
 
 type Schedule = {
@@ -33,7 +45,13 @@ type SchedulesResponse = {
 export default function ManagerSchedulesPage() {
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
 
   const {
     data,
@@ -43,6 +61,57 @@ export default function ManagerSchedulesPage() {
     queryKey: ["time", "schedules"],
     queryFn: () => api.get<SchedulesResponse>("/time/schedules", { params: { limit: 20 } }),
   });
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      name?: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string;
+    }) => {
+      const { id, ...body } = payload;
+      return api.put(`/time/schedules/${id}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["time", "schedules"] });
+      toast.success("Schedule updated successfully");
+      setEditingSchedule(null);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to update schedule";
+      toast.error(message);
+    },
+  });
+
+  function handleEditSchedule(schedule: Schedule) {
+    setEditName(schedule.name);
+    setEditDescription(schedule.description || "");
+    setEditStartDate(schedule.startDate.split("T")[0]);
+    setEditEndDate(schedule.endDate.split("T")[0]);
+    setEditingSchedule(schedule);
+  }
+
+  function handleSaveSchedule() {
+    if (!editingSchedule || !editName.trim()) {
+      toast.error("Schedule name is required");
+      return;
+    }
+    updateScheduleMutation.mutate({
+      id: editingSchedule.id,
+      name: editName.trim(),
+      description: editDescription.trim() || undefined,
+      startDate: editStartDate,
+      endDate: editEndDate,
+    });
+  }
+
+  function handleCloseEditModal() {
+    if (!updateScheduleMutation.isPending) {
+      setEditingSchedule(null);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -163,8 +232,8 @@ export default function ManagerSchedulesPage() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <h3 className="font-semibold">
-                Week of {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
-                {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                Week of {weekDays[0].toLocaleDateString("en-GB", { month: "short", day: "numeric" })} -{" "}
+                {weekDays[6].toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" })}
               </h3>
               <Button variant="outline" size="sm" onClick={nextWeek}>
                 <ChevronRight className="h-4 w-4" />
@@ -174,7 +243,7 @@ export default function ManagerSchedulesPage() {
               {weekDays.map((day) => (
                 <div key={day.toISOString()} className="text-center">
                   <div className="text-xs text-gray-500 mb-1">
-                    {day.toLocaleDateString("en-US", { weekday: "short" })}
+                    {day.toLocaleDateString("en-GB", { weekday: "short" })}
                   </div>
                   <div className={`text-sm font-medium p-2 rounded-lg ${
                     day.toDateString() === new Date().toDateString()
@@ -232,9 +301,9 @@ export default function ManagerSchedulesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => toast.info("Coming Soon", { message: "Schedule detail view will be available in a future update." })}
+                      onClick={() => handleEditSchedule(schedule)}
                     >
-                      View
+                      Edit
                     </Button>
                   </div>
                 </CardBody>
@@ -243,6 +312,63 @@ export default function ManagerSchedulesPage() {
           )}
         </div>
       )}
+
+      {/* Edit Schedule Modal */}
+      <Modal open={editingSchedule !== null} onClose={handleCloseEditModal} size="lg">
+        <ModalHeader title="Edit Schedule" />
+        <ModalBody>
+          <div className="space-y-4">
+            <Input
+              label="Schedule Name"
+              placeholder="e.g. Morning Shift"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              required
+              id="edit-schedule-name"
+            />
+            <Textarea
+              label="Description"
+              placeholder="Describe this schedule..."
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={3}
+              id="edit-schedule-description"
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Start Date"
+                type="date"
+                value={editStartDate}
+                onChange={(e) => setEditStartDate(e.target.value)}
+                id="edit-schedule-start"
+              />
+              <Input
+                label="End Date"
+                type="date"
+                value={editEndDate}
+                onChange={(e) => setEditEndDate(e.target.value)}
+                id="edit-schedule-end"
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={handleCloseEditModal}
+            disabled={updateScheduleMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveSchedule}
+            disabled={!editName.trim() || updateScheduleMutation.isPending}
+            loading={updateScheduleMutation.isPending}
+          >
+            {updateScheduleMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

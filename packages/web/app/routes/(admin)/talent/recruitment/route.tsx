@@ -1,7 +1,8 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Plus, Users, MapPin, Calendar, Building, Search, BarChart3 } from "lucide-react";
+import { ArrowLeft, Plus, Users, MapPin, Calendar, Building, Search, BarChart3, X } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -35,11 +36,34 @@ interface RequisitionStats {
   totalFilled: number;
 }
 
+interface RequisitionFormData {
+  title: string;
+  openings: string;
+  priority: string;
+  employmentType: string;
+  jobDescription: string;
+  location: string;
+  deadline: string;
+}
+
+const initialReqForm: RequisitionFormData = {
+  title: "",
+  openings: "1",
+  priority: "3",
+  employmentType: "",
+  jobDescription: "",
+  location: "",
+  deadline: "",
+};
+
 export default function RecruitmentPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<RequisitionFormData>(initialReqForm);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-requisitions", statusFilter, search],
@@ -58,6 +82,41 @@ export default function RecruitmentPage() {
     queryKey: ["admin-requisition-stats"],
     queryFn: () => api.get<RequisitionStats>("/recruitment/requisitions/stats"),
   });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post("/recruitment/requisitions", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-requisitions"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-requisition-stats"] });
+      toast.success("Requisition created successfully");
+      setShowCreateModal(false);
+      setFormData(initialReqForm);
+    },
+    onError: () => {
+      toast.error("Failed to create requisition", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreateRequisition = () => {
+    if (!formData.title.trim()) {
+      toast.warning("Please enter a job title");
+      return;
+    }
+    const payload: Record<string, unknown> = {
+      title: formData.title.trim(),
+      openings: Number(formData.openings) || 1,
+      priority: Number(formData.priority) || 3,
+    };
+    if (formData.employmentType) payload.employmentType = formData.employmentType;
+    if (formData.jobDescription.trim()) payload.jobDescription = formData.jobDescription.trim();
+    if (formData.location.trim()) payload.location = formData.location.trim();
+    if (formData.deadline) payload.deadline = formData.deadline;
+
+    createMutation.mutate(payload);
+  };
 
   const requisitions = data?.requisitions || [];
 
@@ -107,7 +166,7 @@ export default function RecruitmentPage() {
           <Users className="h-4 w-4 mr-2" />
           View Candidates
         </Button>
-        <Button onClick={() => toast.info("Coming Soon", { message: "The requisition creation form will be available in a future update." })}>
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Requisition
         </Button>
@@ -162,7 +221,7 @@ export default function RecruitmentPage() {
             <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">No requisitions found</h3>
             <p className="text-gray-500 mb-4">Create your first job requisition to start recruiting.</p>
-            <Button onClick={() => toast.info("Coming Soon", { message: "The requisition creation form will be available in a future update." })}>
+            <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
               New Requisition
             </Button>
@@ -233,17 +292,126 @@ export default function RecruitmentPage() {
                   >
                     View Candidates
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toast.info("Coming Soon", { message: "Requisition detail view will be available in a future update." })}
-                  >
-                    View
-                  </Button>
                 </div>
               </CardBody>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Create Requisition Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowCreateModal(false); }}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Create Requisition">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Create Requisition</h3>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="req-title" className="block text-sm font-medium text-gray-700 mb-1">Job Title *</label>
+                <input
+                  id="req-title"
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Senior Software Engineer"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="req-openings" className="block text-sm font-medium text-gray-700 mb-1">Openings</label>
+                  <input
+                    id="req-openings"
+                    type="number"
+                    min={1}
+                    value={formData.openings}
+                    onChange={(e) => setFormData({ ...formData, openings: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="req-priority" className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    id="req-priority"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="1">Urgent</option>
+                    <option value="2">High</option>
+                    <option value="3">Normal</option>
+                    <option value="4">Low</option>
+                    <option value="5">Lowest</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="req-type" className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
+                  <select
+                    id="req-type"
+                    value={formData.employmentType}
+                    onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Not specified</option>
+                    <option value="full_time">Full-time</option>
+                    <option value="part_time">Part-time</option>
+                    <option value="contract">Contract</option>
+                    <option value="temporary">Temporary</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="req-deadline" className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
+                  <input
+                    id="req-deadline"
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="req-location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  id="req-location"
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="London, UK"
+                />
+              </div>
+              <div>
+                <label htmlFor="req-desc" className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
+                <textarea
+                  id="req-desc"
+                  value={formData.jobDescription}
+                  onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Describe the role..."
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 p-6 border-t">
+              <Button variant="outline" className="flex-1" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleCreateRequisition}
+                disabled={!formData.title.trim() || createMutation.isPending}
+              >
+                {createMutation.isPending ? "Creating..." : "Create Requisition"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

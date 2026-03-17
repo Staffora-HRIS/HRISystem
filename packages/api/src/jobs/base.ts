@@ -12,6 +12,7 @@
  */
 
 import Redis from "ioredis";
+import { retry } from "@staffora/shared/utils";
 import { getDbClient, closeDbClient, type DatabaseClient } from "../plugins/db";
 import { getCacheClient, closeCacheClient, type CacheClient } from "../plugins/cache";
 
@@ -571,11 +572,16 @@ export class BaseWorker {
     await this.cache.connect();
     console.log("[Worker] Connected to cache");
 
-    // Verify database connection
-    const dbHealth = await this.db.healthCheck();
-    if (dbHealth.status !== "up") {
-      throw new Error("Database connection failed");
-    }
+    // Verify database connection with retry + exponential backoff
+    await retry(
+      async () => {
+        const dbHealth = await this.db.healthCheck();
+        if (dbHealth.status !== "up") {
+          throw new Error("Database health check returned status: " + dbHealth.status);
+        }
+      },
+      { maxRetries: 4, baseDelay: 2000, maxDelay: 32000 }
+    );
     console.log("[Worker] Database connection verified");
   }
 
