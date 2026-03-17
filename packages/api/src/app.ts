@@ -131,6 +131,7 @@ import { benefitsExchangeRoutes } from "./modules/benefits-exchange";
 import { dataImportRoutes } from "./modules/data-import";
 import { calendarSyncRoutes } from "./modules/calendar-sync";
 import { dataArchivalRoutes } from "./modules/data-archival";
+import { eSignaturesRoutes } from "./modules/e-signatures";
 import { ssoAdminRoutes, ssoPublicRoutes } from "./modules/sso";
 /**
  * Environment configuration with validation
@@ -248,6 +249,7 @@ export const app = new Elysia()
           { name: "Reports", description: "Reporting & Analytics endpoints" },
           { name: "Security", description: "Security & RBAC endpoints" },
           { name: "Data Import", description: "CSV/Excel bulk data import endpoints" },
+          { name: "SSO", description: "Enterprise SSO (SAML/OIDC) configuration and login endpoints" },
         ],
       },
       path: "/docs",
@@ -510,6 +512,8 @@ export const app = new Elysia()
     api
       // Auth routes (before other modules)
       .use(authRoutes)
+      // SSO public routes (no auth required - provider discovery & login initiation)
+      .use(ssoPublicRoutes)
       // Tenant + Security (used by frontend hooks)
       .use(tenantRoutes)
       .use(securityRoutes)
@@ -546,6 +550,8 @@ export const app = new Elysia()
       .use(documentsRoutes)
       // Bulk Document Generation
       .use(bulkDocumentGenerationRoutes)
+      // E-Signature Requests
+      .use(eSignaturesRoutes)
       // Succession Planning
       .use(successionRoutes)
       // Analytics
@@ -637,6 +643,8 @@ export const app = new Elysia()
       .use(reportsRoutes)
       // Integrations
       .use(integrationsRoutes)
+      // SSO Admin (SAML/OIDC configuration management)
+      .use(ssoAdminRoutes)
       // Policy Distribution (read receipts)
       // Lookup Values (tenant-configurable dropdowns)
       .use(lookupValuesRoutes)

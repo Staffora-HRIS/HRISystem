@@ -52,7 +52,10 @@ export const StafforaLineChart = React.memo(function StafforaLineChart({
   className,
   style,
   ariaLabel,
-  onDataPointClick,
+  // onDataPointClick is accepted via props but not wired to Line onClick
+  // due to Recharts v3 CurveMouseEventHandler signature mismatch.
+  // The BarChart and PieChart components support click handling.
+  onDataPointClick: _onDataPointClick,
   curveType = "monotone",
   strokeWidth = 2,
   showDots = true,

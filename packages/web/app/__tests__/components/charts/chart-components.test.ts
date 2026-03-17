@@ -8,24 +8,29 @@
 import { describe, it, expect } from "vitest";
 
 describe("Chart component exports", () => {
-  it("should export StafforaBarChart", async () => {
+  it("should export StafforaBarChart as a React.memo component", async () => {
     const mod = await import("~/components/charts");
-    expect(typeof mod.StafforaBarChart).toBe("function");
+    // React.memo wraps the function, so typeof is "object"
+    expect(mod.StafforaBarChart).toBeDefined();
+    expect(typeof mod.StafforaBarChart).toBe("object");
   });
 
-  it("should export StafforaLineChart", async () => {
+  it("should export StafforaLineChart as a React.memo component", async () => {
     const mod = await import("~/components/charts");
-    expect(typeof mod.StafforaLineChart).toBe("function");
+    expect(mod.StafforaLineChart).toBeDefined();
+    expect(typeof mod.StafforaLineChart).toBe("object");
   });
 
-  it("should export StafforaAreaChart", async () => {
+  it("should export StafforaAreaChart as a React.memo component", async () => {
     const mod = await import("~/components/charts");
-    expect(typeof mod.StafforaAreaChart).toBe("function");
+    expect(mod.StafforaAreaChart).toBeDefined();
+    expect(typeof mod.StafforaAreaChart).toBe("object");
   });
 
-  it("should export StafforaPieChart", async () => {
+  it("should export StafforaPieChart as a React.memo component", async () => {
     const mod = await import("~/components/charts");
-    expect(typeof mod.StafforaPieChart).toBe("function");
+    expect(mod.StafforaPieChart).toBeDefined();
+    expect(typeof mod.StafforaPieChart).toBe("object");
   });
 
   it("should export useChartTheme hook", async () => {

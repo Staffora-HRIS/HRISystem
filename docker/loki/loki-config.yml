@@ -62,8 +62,9 @@ limits_config:
   # Max query lookback
   max_query_lookback: 720h  # 30 days
   # Retention period -- auto-delete logs older than this.
-  # Default: 720h (30 days). Override via LOKI_RETENTION_PERIOD env var.
-  retention_period: 720h
+  # Default: 720h (30 days). Override via LOKI_RETENTION_PERIOD env var
+  # (set in docker-compose.logging.yml, with -config.expand-env=true).
+  retention_period: ${LOKI_RETENTION_PERIOD:-720h}
 
 # ---------------------------------------------------------------------------
 # Compactor -- merges index files for query performance and enforces retention

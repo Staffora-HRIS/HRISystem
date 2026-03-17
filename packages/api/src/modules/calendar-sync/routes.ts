@@ -13,7 +13,7 @@
  * - GET    /calendar/ical/:token        — Serve iCal feed (.ics)
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import {
   ErrorResponseSchema,
   DeleteSuccessSchema,

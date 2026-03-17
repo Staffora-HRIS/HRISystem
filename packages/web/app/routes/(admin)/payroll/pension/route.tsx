@@ -689,7 +689,7 @@ export default function PensionManagementPage() {
             ) : schemes.length === 0 ? (
               <Card>
                 <CardBody className="py-12 text-center">
-                  <Building2 className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+                  <Building2 className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400" />
                   <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
                     No pension schemes
                   </h3>
@@ -889,7 +889,7 @@ export default function PensionManagementPage() {
             ) : enrolments.length === 0 ? (
               <Card>
                 <CardBody className="py-12 text-center">
-                  <UserCheck className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+                  <UserCheck className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400" />
                   <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
                     No enrolments found
                   </h3>

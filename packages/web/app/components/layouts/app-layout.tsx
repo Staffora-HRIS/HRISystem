@@ -8,7 +8,7 @@
  * - Mobile responsive design
  */
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode, type KeyboardEvent } from "react";
 import { Link, useLocation, NavLink } from "react-router";
 import { cn } from "../../lib/utils";
 import { useTheme } from "../../lib/theme";
@@ -148,18 +148,85 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
 
-  // Keyboard support for dropdown menus
+  // Refs for focus restoration on dropdown close
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const tenantMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const tenantMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close handlers that restore focus to the trigger button
+  const closeUserMenu = useCallback(() => {
+    setUserMenuOpen(false);
+    // Restore focus to trigger on next frame after menu is removed from DOM
+    requestAnimationFrame(() => userMenuTriggerRef.current?.focus());
+  }, []);
+
+  const closeTenantMenu = useCallback(() => {
+    setTenantMenuOpen(false);
+    requestAnimationFrame(() => tenantMenuTriggerRef.current?.focus());
+  }, []);
+
+  // Keyboard support for dropdown menus: Escape closes and restores focus
   useEffect(() => {
     if (!userMenuOpen && !tenantMenuOpen) return;
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        setUserMenuOpen(false);
-        setTenantMenuOpen(false);
+        if (userMenuOpen) closeUserMenu();
+        if (tenantMenuOpen) closeTenantMenu();
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [userMenuOpen, tenantMenuOpen]);
+  }, [userMenuOpen, tenantMenuOpen, closeUserMenu, closeTenantMenu]);
+
+  // Auto-focus first menu item when dropdown opens
+  useEffect(() => {
+    if (userMenuOpen && userMenuRef.current) {
+      const firstItem = userMenuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
+      firstItem?.focus();
+    }
+  }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (tenantMenuOpen && tenantMenuRef.current) {
+      const firstItem = tenantMenuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
+      firstItem?.focus();
+    }
+  }, [tenantMenuOpen]);
+
+  // Arrow key navigation within dropdown menus
+  const handleMenuKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    const menu = e.currentTarget;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault();
+        const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[next].focus();
+        break;
+      }
+      case "ArrowUp": {
+        e.preventDefault();
+        const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[prev].focus();
+        break;
+      }
+      case "Home": {
+        e.preventDefault();
+        items[0].focus();
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        items[items.length - 1].focus();
+        break;
+      }
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -270,6 +337,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {hasMutipleTenants && (
               <div className="relative">
                 <button
+                  ref={tenantMenuTriggerRef}
                   type="button"
                   onClick={() => setTenantMenuOpen(!tenantMenuOpen)}
                   aria-expanded={tenantMenuOpen}
@@ -284,10 +352,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <>
                     <div
                       className="fixed inset-0 z-10"
-                      onClick={() => setTenantMenuOpen(false)}
+                      onClick={closeTenantMenu}
                     />
                     <div
+                      ref={tenantMenuRef}
                       role="menu"
+                      aria-label="Select tenant"
+                      onKeyDown={handleMenuKeyDown}
                       className="absolute right-0 z-20 mt-2 w-56 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10"
                     >
                       {tenants.map((t) => (
@@ -295,9 +366,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                           key={t.id}
                           type="button"
                           role="menuitem"
+                          tabIndex={-1}
                           onClick={() => {
                             switchTenant(t.id);
-                            setTenantMenuOpen(false);
+                            closeTenantMenu();
                           }}
                           disabled={isSwitchingTenant}
                           className={cn(
