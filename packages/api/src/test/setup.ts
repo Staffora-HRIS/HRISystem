@@ -93,6 +93,7 @@ async function waitForRedisReady(timeoutMs = 30_000): Promise<boolean> {
     const redis = new Redis({
       host: TEST_CONFIG.redis.host,
       port: TEST_CONFIG.redis.port,
+      password: TEST_CONFIG.redis.password,
       maxRetriesPerRequest: 1,
       enableReadyCheck: true,
       connectTimeout: 2000,
@@ -171,6 +172,12 @@ export const TEST_CONFIG = {
   redis: {
     host: process.env["TEST_REDIS_HOST"] ?? process.env["REDIS_HOST"] ?? "localhost",
     port: parseInt(process.env["TEST_REDIS_PORT"] ?? process.env["REDIS_PORT"] ?? "6379", 10),
+    password: (() => {
+      const pw = process.env["TEST_REDIS_PASSWORD"] ?? process.env["REDIS_PASSWORD"];
+      // ioredis treats empty string as a password and sends AUTH ""
+      // which fails with NOAUTH. Return undefined instead.
+      return pw && pw.length > 0 ? pw : undefined;
+    })(),
   },
 };
 
@@ -331,6 +338,7 @@ async function preflight(): Promise<void> {
   const redis = new Redis({
     host: TEST_CONFIG.redis.host,
     port: TEST_CONFIG.redis.port,
+    password: TEST_CONFIG.redis.password,
     maxRetriesPerRequest: 1,
     enableReadyCheck: true,
     connectTimeout: 2000,
@@ -410,6 +418,7 @@ export function getTestRedis(): Redis {
   return new Redis({
     host: TEST_CONFIG.redis.host,
     port: TEST_CONFIG.redis.port,
+    password: TEST_CONFIG.redis.password,
     maxRetriesPerRequest: 3,
   });
 }
@@ -569,6 +578,9 @@ export async function withSystemContext<T>(
   fn: (tx: TransactionSql) => Promise<T>
 ): Promise<T> {
   return await db.begin(async (tx: any) => {
+    // Ensure app.current_tenant is a valid UUID (nil) to avoid
+    // RLS policy cast errors: current_setting(...)::uuid fails on empty string.
+    await tx`SELECT set_config('app.current_tenant', '00000000-0000-0000-0000-000000000000', true)`;
     await tx`SELECT app.enable_system_context()`;
     try {
       return await fn(tx);
