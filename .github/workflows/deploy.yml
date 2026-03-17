@@ -182,7 +182,7 @@ jobs:
             type=raw,value={{date 'YYYYMMDD-HHmmss'}}
 
       - name: Build and push ${{ matrix.name }} image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
