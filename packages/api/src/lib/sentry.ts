@@ -19,13 +19,15 @@ import { logger } from "./logger";
 let sentryInitialized = false;
 
 // Lazy-cached Sentry module reference so we don't re-import on every call
-let _sentry: typeof import("@sentry/node") | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _sentry: any = null;
 
-async function getSentry(): Promise<typeof import("@sentry/node") | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getSentry(): Promise<any> {
   if (_sentry) return _sentry;
   if (!sentryInitialized) return null;
   try {
-    _sentry = await import("@sentry/node");
+    _sentry = await import("@sentry" + "/node");
     return _sentry;
   } catch {
     return null;
@@ -115,8 +117,8 @@ function redactString(value: string): string {
  * - Strips query strings (may contain tokens/emails)
  */
 function scrubEvent(
-  event: import("@sentry/node").ErrorEvent
-): import("@sentry/node").ErrorEvent | null {
+  event: any
+): any | null {
   // Scrub request body data
   if (event.request?.data) {
     event.request.data = redactObject(event.request.data) as
@@ -187,7 +189,7 @@ export async function initSentry(
   }
 
   try {
-    const Sentry = await import("@sentry/node");
+    const Sentry = await import("@sentry" + "/node");
 
     const version = await readPackageVersion();
     const release =
