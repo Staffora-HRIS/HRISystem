@@ -196,7 +196,7 @@ export interface EmployeeAddress extends TenantScopedEntity {
 
 /** Identifier type */
 export type IdentifierType =
-  | "ssn"
+  | "nino"
   | "national_id"
   | "passport"
   | "drivers_license"
@@ -316,10 +316,10 @@ export interface Position extends TenantScopedEntity, EffectiveDated {
   qualifications?: string[];
   /** Required skills */
   requiredSkills?: UUID[];
-  /** EEO job category */
-  eeoCategory?: string;
-  /** FLSA status */
-  flsaStatus?: "exempt" | "non_exempt";
+  /** UK Standard Occupational Classification (SOC) code */
+  socCode?: string;
+  /** Working Time Regulations status */
+  wtrStatus?: "subject_to_wtr" | "opted_out";
 }
 
 /**
@@ -583,10 +583,10 @@ export interface Job extends TenantScopedEntity {
   physicalRequirements?: string[];
   /** Working conditions */
   workingConditions?: string[];
-  /** FLSA status */
-  flsaStatus: "exempt" | "non_exempt";
-  /** EEO category */
-  eeoCategory?: string;
+  /** Working Time Regulations status */
+  wtrStatus: "subject_to_wtr" | "opted_out";
+  /** UK Standard Occupational Classification (SOC) code */
+  socCode?: string;
   /** SOC code */
   socCode?: string;
   /** Whether job is active */

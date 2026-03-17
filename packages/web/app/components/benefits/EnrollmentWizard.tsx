@@ -34,7 +34,7 @@ interface Dependent {
   lastName: string;
   relationship: string;
   dateOfBirth: string;
-  ssnLastFour?: string;
+  idLastFour?: string;
 }
 
 interface EnrollmentWizardProps {
@@ -69,9 +69,9 @@ const RELATIONSHIPS = [
 ];
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: "USD",
+    currency: "GBP",
   }).format(amount);
 }
 

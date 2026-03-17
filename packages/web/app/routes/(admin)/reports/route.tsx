@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";

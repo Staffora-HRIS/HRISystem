@@ -1,12 +1,21 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Plus, Calendar, Users, Edit, Copy } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+} from "~/components/ui/modal";
+import { Input, Checkbox } from "~/components/ui/input";
 import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
+import { queryKeys } from "~/lib/query-client";
 
 interface Schedule {
   id: string;
@@ -37,10 +46,29 @@ const statusLabels: Record<string, string> = {
   archived: "Archived",
 };
 
+interface CreateScheduleForm {
+  name: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  isTemplate: boolean;
+}
+
+const initialCreateForm: CreateScheduleForm = {
+  name: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  isTemplate: false,
+};
+
 export default function SchedulesPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [view, setView] = useState<"schedules" | "assignments">("schedules");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateScheduleForm>(initialCreateForm);
 
   const { data: schedulesData, isLoading: schedulesLoading } = useQuery({
     queryKey: ["admin-schedules"],
@@ -51,6 +79,51 @@ export default function SchedulesPage() {
     queryKey: ["admin-schedule-assignments"],
     queryFn: () => api.get<{ assignments: ScheduleAssignment[]; count: number }>("/time/schedule-assignments"),
   });
+
+  // Create schedule mutation
+  const createScheduleMutation = useMutation({
+    mutationFn: (data: {
+      name: string;
+      description?: string;
+      startDate: string;
+      endDate: string;
+      isTemplate?: boolean;
+    }) => api.post("/time/schedules", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-schedules"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.time.schedules() });
+      toast.success("Schedule created successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to create schedule", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreateSchedule = () => {
+    if (!formData.name.trim()) {
+      toast.warning("Please enter a schedule name");
+      return;
+    }
+    if (!formData.startDate || !formData.endDate) {
+      toast.warning("Please select start and end dates");
+      return;
+    }
+    if (new Date(formData.endDate) <= new Date(formData.startDate)) {
+      toast.warning("End date must be after start date");
+      return;
+    }
+    createScheduleMutation.mutate({
+      name: formData.name.trim(),
+      description: formData.description.trim() || undefined,
+      startDate: formData.startDate,
+      endDate: formData.endDate,
+      isTemplate: formData.isTemplate || undefined,
+    });
+  };
 
   const schedules = schedulesData?.items || [];
   const assignments = assignmentsData?.assignments || [];
@@ -66,7 +139,7 @@ export default function SchedulesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Work Schedules</h1>
           <p className="text-gray-600">Manage work schedules and assignments</p>
         </div>
-        <Button onClick={() => toast.info("Coming Soon", { message: "Schedule creation will be available in a future update." })}>
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Schedule
         </Button>
@@ -109,7 +182,7 @@ export default function SchedulesPage() {
                 <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900">No schedules yet</h3>
                 <p className="text-gray-500 mb-4">Create work schedules for your employees.</p>
-                <Button onClick={() => toast.info("Coming Soon", { message: "Schedule creation will be available in a future update." })}>Create Schedule</Button>
+                <Button onClick={() => setShowCreateModal(true)}>Create Schedule</Button>
               </CardBody>
             </Card>
           ) : (
@@ -218,6 +291,93 @@ export default function SchedulesPage() {
             </Card>
           )}
         </>
+      )}
+
+      {/* Create Schedule Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Create Work Schedule</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Schedule Name"
+                placeholder="e.g. Standard Monday-Friday"
+                required
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+              />
+              <Input
+                label="Description"
+                placeholder="Describe this schedule..."
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Start Date"
+                  type="date"
+                  required
+                  value={formData.startDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="End Date"
+                  type="date"
+                  required
+                  value={formData.endDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, endDate: e.target.value })
+                  }
+                />
+              </div>
+              <Checkbox
+                label="Save as template"
+                checked={formData.isTemplate}
+                onChange={(e) =>
+                  setFormData({ ...formData, isTemplate: e.target.checked })
+                }
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createScheduleMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateSchedule}
+              disabled={
+                !formData.name.trim() ||
+                !formData.startDate ||
+                !formData.endDate ||
+                createScheduleMutation.isPending
+              }
+            >
+              {createScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   );

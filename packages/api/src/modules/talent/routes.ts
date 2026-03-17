@@ -184,10 +184,7 @@ export const talentRoutes = new Elysia({ prefix: "/talent", name: "talent-routes
     },
     {
       beforeHandle: [requirePermission("goals", "read")],
-      query: t.Composite([
-        t.Partial(GoalFiltersSchema),
-        t.Partial(PaginationQuerySchema),
-      ]),
+      query: t.Partial(GoalFiltersSchema),
       response: {
         200: t.Object({
           items: t.Array(GoalResponseSchema),

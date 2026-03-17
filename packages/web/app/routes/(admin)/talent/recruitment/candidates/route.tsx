@@ -1,19 +1,21 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
-  Plus,
   User,
   Mail,
   Phone,
   Star,
   ChevronRight,
   Search,
+  X,
+  ExternalLink,
+  Calendar,
 } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { useToast } from "~/components/ui/toast";
 import { Button } from "~/components/ui/button";
 import { api } from "~/lib/api-client";
 
@@ -31,6 +33,18 @@ interface Candidate {
   linkedinUrl: string | null;
   rating: number | null;
   createdAt: string;
+}
+
+interface CandidateDetail extends Candidate {
+  notes?: {
+    referrerId?: string;
+    referrerName?: string;
+    agencyName?: string;
+    agencyContact?: string;
+    coverLetter?: string;
+    tags?: string[];
+  } | null;
+  updatedAt?: string;
 }
 
 interface CandidateStats {
@@ -81,13 +95,13 @@ const sourceLabels: Record<string, string> = {
 
 export default function CandidatesPage() {
   const navigate = useNavigate();
-  const toast = useToast();
   const [searchParams] = useSearchParams();
   const requisitionIdFilter = searchParams.get("requisitionId") || "";
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<string>("");
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-candidates", search, stageFilter, sourceFilter, requisitionIdFilter],
@@ -115,6 +129,12 @@ export default function CandidatesPage() {
       `/recruitment/requisitions/${requisitionIdFilter}/pipeline`
     ),
     enabled: !!requisitionIdFilter,
+  });
+
+  const { data: candidateDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ["candidate-detail", selectedCandidateId],
+    queryFn: () => api.get<CandidateDetail>(`/recruitment/candidates/${selectedCandidateId}`),
+    enabled: !!selectedCandidateId,
   });
 
   const candidates = data?.candidates || [];
@@ -152,10 +172,6 @@ export default function CandidatesPage() {
             {requisitionIdFilter ? "Candidates for this requisition" : "All candidates across requisitions"}
           </p>
         </div>
-        <Button onClick={() => toast.info("Coming Soon", { message: "Candidate creation will be available in a future update." })}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Candidate
-        </Button>
       </div>
 
       {/* Stats */}
@@ -269,12 +285,15 @@ export default function CandidatesPage() {
                 <div
                   key={candidate.id}
                   className="p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => toast.info("Coming Soon", { message: "Candidate detail view will be available in a future update." })}
+                  onClick={() => setSelectedCandidateId(candidate.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedCandidateId(candidate.id); } }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 font-medium">
-                        {candidate.firstName[0]}{candidate.lastName[0]}
+                        {(candidate.firstName ?? "?")[0]}{(candidate.lastName ?? "?")[0]}
                       </div>
                       <div>
                         <h4 className="font-medium text-gray-900">
@@ -314,6 +333,166 @@ export default function CandidatesPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Candidate Detail Slide-over */}
+      {selectedCandidateId && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setSelectedCandidateId(null)} />
+          <div
+            className="fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-xl z-50 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Candidate Details"
+          >
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-semibold text-gray-900">Candidate Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedCandidateId(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded"
+                aria-label="Close panel"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isLoadingDetail ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              </div>
+            ) : candidateDetail ? (
+              <div className="p-6 space-y-6">
+                {/* Candidate Header */}
+                <div className="flex items-start gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold text-lg">
+                    {(candidateDetail.firstName ?? "?")[0]}{(candidateDetail.lastName ?? "?")[0]}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-xl font-semibold text-gray-900">
+                      {candidateDetail.firstName} {candidateDetail.lastName}
+                    </h4>
+                    <div className="mt-1">{getStageBadge(candidateDetail.currentStage)}</div>
+                  </div>
+                </div>
+
+                {/* Contact Information */}
+                <div className="space-y-3">
+                  <h5 className="text-sm font-medium text-gray-700 uppercase tracking-wider">Contact</h5>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <a href={`mailto:${candidateDetail.email}`} className="text-blue-600 hover:underline">
+                        {candidateDetail.email}
+                      </a>
+                    </div>
+                    {candidateDetail.phone && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        {candidateDetail.phone}
+                      </div>
+                    )}
+                    {candidateDetail.linkedinUrl && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <ExternalLink className="h-4 w-4 text-gray-400" />
+                        <a href={candidateDetail.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          LinkedIn Profile
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Application Details */}
+                <div className="space-y-3">
+                  <h5 className="text-sm font-medium text-gray-700 uppercase tracking-wider">Application</h5>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    {candidateDetail.requisitionTitle && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Position</span>
+                        <span className="font-medium text-gray-900">{candidateDetail.requisitionTitle}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Source</span>
+                      <span className="font-medium text-gray-900">{sourceLabels[candidateDetail.source] || candidateDetail.source}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Applied</span>
+                      <span className="font-medium text-gray-900 flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(candidateDetail.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {candidateDetail.rating !== null && candidateDetail.rating !== undefined && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Rating</span>
+                        {renderRating(candidateDetail.rating)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Resume */}
+                {candidateDetail.resumeUrl && (
+                  <div className="space-y-3">
+                    <h5 className="text-sm font-medium text-gray-700 uppercase tracking-wider">Resume</h5>
+                    <a
+                      href={candidateDetail.resumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View Resume
+                    </a>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {candidateDetail.notes && (
+                  <div className="space-y-3">
+                    <h5 className="text-sm font-medium text-gray-700 uppercase tracking-wider">Additional Details</h5>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+                      {candidateDetail.notes.referrerName && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Referred by</span>
+                          <span className="text-gray-900">{candidateDetail.notes.referrerName}</span>
+                        </div>
+                      )}
+                      {candidateDetail.notes.agencyName && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Agency</span>
+                          <span className="text-gray-900">{candidateDetail.notes.agencyName}</span>
+                        </div>
+                      )}
+                      {candidateDetail.notes.coverLetter && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Cover Letter</p>
+                          <p className="text-gray-900 whitespace-pre-wrap">{candidateDetail.notes.coverLetter}</p>
+                        </div>
+                      )}
+                      {candidateDetail.notes.tags && candidateDetail.notes.tags.length > 0 && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Tags</p>
+                          <div className="flex flex-wrap gap-1">
+                            {candidateDetail.notes.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary">{tag}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <p>Failed to load candidate details</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

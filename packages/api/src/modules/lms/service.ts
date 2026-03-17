@@ -70,7 +70,7 @@ export class LMSService {
       const course = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createCourse(ctx, data);
+          const result = await this.repository.createCourse(ctx, data, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -117,7 +117,7 @@ export class LMSService {
       const course = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.updateCourse(ctx, id, data);
+          const result = await this.repository.updateCourse(ctx, id, data, tx);
 
           if (!result) {
             return null;
@@ -214,7 +214,7 @@ export class LMSService {
     const deleted = await this.db.withTransaction(
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
-        const result = await this.repository.deleteCourse(ctx, id);
+        const result = await this.repository.deleteCourse(ctx, id, tx);
 
         if (result) {
           // Emit domain event atomically within the same transaction
@@ -307,7 +307,7 @@ export class LMSService {
       const enrollment = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createEnrollment(ctx, data);
+          const result = await this.repository.createEnrollment(ctx, data, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -378,7 +378,7 @@ export class LMSService {
     const updated = await this.db.withTransaction(
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
-        const result = await this.repository.startEnrollment(ctx, enrollmentId);
+        const result = await this.repository.startEnrollment(ctx, enrollmentId, tx);
 
         if (!result) {
           return null;
@@ -485,7 +485,7 @@ export class LMSService {
     const updated = await this.db.withTransaction(
       { tenantId: ctx.tenantId, userId: ctx.userId },
       async (tx: TransactionSql) => {
-        const result = await this.repository.completeEnrollment(ctx, enrollmentId, score);
+        const result = await this.repository.completeEnrollment(ctx, enrollmentId, score, tx);
 
         if (!result) {
           return null;

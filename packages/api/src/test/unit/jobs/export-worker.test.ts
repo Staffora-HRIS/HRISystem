@@ -172,7 +172,7 @@ describe("Export Worker - CSV Generation", () => {
         return String(value);
       case "currency":
         if (typeof value === "number") {
-          return value.toLocaleString("en-US", { style: "currency", currency: format || "USD" });
+          return value.toLocaleString("en-GB", { style: "currency", currency: format || "GBP" });
         }
         return String(value);
       case "percentage":

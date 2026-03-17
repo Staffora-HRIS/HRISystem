@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   MessageSquare,
@@ -8,6 +9,7 @@ import {
   Clock,
   AlertTriangle,
   MoreHorizontal,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -92,21 +94,40 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 }
 
+interface CaseFormData {
+  requesterId: string;
+  category: string;
+  subject: string;
+  description: string;
+  priority: string;
+}
+
+const initialCaseForm: CaseFormData = {
+  requesterId: "",
+  category: "general",
+  subject: "",
+  description: "",
+  priority: "medium",
+};
+
 export default function CasesListPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [caseForm, setCaseForm] = useState<CaseFormData>(initialCaseForm);
 
   const { data: casesData, isLoading } = useQuery({
     queryKey: ["admin-cases", search, statusFilter, priorityFilter, categoryFilter],
@@ -120,6 +141,43 @@ export default function CasesListPage() {
       return api.get<CaseListResponse>(`/cases?${params}`);
     },
   });
+
+  const createCaseMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post("/cases", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-cases"] });
+      toast.success("Case created successfully");
+      setShowCreateModal(false);
+      setCaseForm(initialCaseForm);
+    },
+    onError: () => {
+      toast.error("Failed to create case", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreateCase = () => {
+    if (!caseForm.subject.trim()) {
+      toast.warning("Please enter a subject");
+      return;
+    }
+    if (!caseForm.requesterId.trim()) {
+      toast.warning("Please enter a requester ID");
+      return;
+    }
+    const payload: Record<string, unknown> = {
+      requesterId: caseForm.requesterId.trim(),
+      category: caseForm.category,
+      subject: caseForm.subject.trim(),
+      priority: caseForm.priority,
+    };
+    if (caseForm.description.trim()) {
+      payload.description = caseForm.description.trim();
+    }
+    createCaseMutation.mutate(payload);
+  };
 
   const cases = casesData?.cases ?? [];
 
@@ -239,13 +297,7 @@ export default function CasesListPage() {
             Manage employee support cases
           </p>
         </div>
-        <Button
-          onClick={() =>
-            toast.info("Coming Soon", {
-              message: "Case creation will be available in a future update.",
-            })
-          }
-        >
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Case
         </Button>
@@ -356,6 +408,96 @@ export default function CasesListPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Case Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowCreateModal(false); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg" role="dialog" aria-modal="true" aria-label="Create Case">
+            <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">New Case</h3>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="case-requester" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Requester ID *</label>
+                <input
+                  id="case-requester"
+                  type="text"
+                  value={caseForm.requesterId}
+                  onChange={(e) => setCaseForm({ ...caseForm, requesterId: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Employee UUID"
+                />
+              </div>
+              <div>
+                <label htmlFor="case-subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject *</label>
+                <input
+                  id="case-subject"
+                  type="text"
+                  value={caseForm.subject}
+                  onChange={(e) => setCaseForm({ ...caseForm, subject: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Brief description of the issue"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="case-category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                  <select
+                    id="case-category"
+                    value={caseForm.category}
+                    onChange={(e) => setCaseForm({ ...caseForm, category: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="case-priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                  <select
+                    id="case-priority"
+                    value={caseForm.priority}
+                    onChange={(e) => setCaseForm({ ...caseForm, priority: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="case-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea
+                  id="case-description"
+                  value={caseForm.description}
+                  onChange={(e) => setCaseForm({ ...caseForm, description: e.target.value })}
+                  rows={4}
+                  className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Detailed description of the case..."
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 p-6 border-t dark:border-gray-700">
+              <Button variant="outline" className="flex-1" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleCreateCase}
+                disabled={!caseForm.subject.trim() || !caseForm.requesterId.trim() || createCaseMutation.isPending}
+              >
+                {createCaseMutation.isPending ? "Creating..." : "Create Case"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

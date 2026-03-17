@@ -78,6 +78,8 @@ Affected Files: `packages/api/src/plugins/auth.ts:478-495`, `plugins/auth-better
 
 Notes: Combined with hardcoded fallback secret in better-auth.ts:68 (`"development-secret-change-in-production"`), this is the highest-priority security fix.
 
+**RESOLVED** (2026-03-16): Both issues fixed. CSRF now uses HMAC-SHA256 via `generateCsrfToken()`/`validateCsrfToken()` with `timingSafeEqual` for constant-time comparison. Hardcoded secret replaced with production-throws + dev-warning pattern. SameSite set to `strict` in production. Dev fallback added to INSECURE_DEFAULTS blocklist in `config/secrets.ts`.
+
 ---
 
 ### Learning Entry
@@ -355,3 +357,58 @@ Agents MUST append a new entry whenever they encounter:
 Agents must NEVER silently fix complex issues without documenting the learning.
 
 Failed attempts MUST be recorded in the **Failed Attempts** section to prevent repetition.
+
+---
+
+### Learning Entry
+
+Date: 2026-03-16
+Agent: Claude Code (UK HR Compliance Enforcement)
+Category: Architecture
+
+Context: Full UK compliance audit to remove all US HR logic and enforce UK-only employment law.
+
+Problem: Multiple US-specific defaults and identifiers embedded across the codebase despite being a UK-only system:
+- `isValidSSN()` validation function (US Social Security Number)
+- `flsa_status` / `eeo_category` database columns and TypeScript types (FLSA = US Fair Labor Standards Act, EEO = US Equal Employment Opportunity)
+- USD currency defaults in 10+ locations (hr/repository, jobs/repository, export-worker, use-tenant hook, frontend components)
+- `en-US` locale in 38+ locations for date/currency formatting
+- `ssnLastFour` field in benefits module
+
+Root Cause: Initial codebase scaffolding used US-centric defaults from common templates/patterns. While UK-specific modules (SSP, pension, RTW, etc.) were added, the underlying defaults and generic fields were never updated.
+
+Solution:
+- Replaced `isValidSSN()` with `isValidNINO()` and added `isValidUKPostcode()`
+- Renamed `flsa_status` → `wtr_status` (Working Time Regulations), `eeo_category` → `soc_code` (UK SOC classification)
+- Changed all USD defaults to GBP, all `en-US` to `en-GB`
+- Renamed `ssn_last_four` → `id_last_four` in benefits
+- Created migration `0186_uk_compliance_cleanup.sql` for all DB schema changes
+- Updated `IdentifierType` to use `nino` instead of `ssn`
+
+Prevention: New code must use GBP as default currency, en-GB as locale, and UK-specific terminology. PostgreSQL enum `identifier_type` still contains deprecated `ssn` value (cannot remove without enum recreation) — application layer prevents its use.
+
+Affected Files: 50+ files across packages/shared, packages/api, packages/web, migrations/
+
+Notes: The system already had 17+ UK compliance modules. The issue was defaults and terminology in generic/shared code, not missing UK features.
+
+---
+
+### Learning Entry
+
+Date: 2026-03-16
+Agent: Claude Code (Enterprise DevOps Implementation)
+Category: DevOps
+
+Context: Full CI/CD audit and enterprise pipeline implementation.
+
+Problem: (1) `test.yml` was missing `init.sql` database initialization before running migrations — the `app` schema, `hris_app` role, and RLS helper functions were not created, causing migration failures. Deploy.yml had this step but test.yml did not. (2) `test.yml` was missing `BETTER_AUTH_SECRET`, `SESSION_SECRET`, and `CSRF_SECRET` environment variables for API tests, causing auth-related test failures. (3) `security.yml` used `bun audit --level high || true` which swallowed ALL audit failures silently, including critical vulnerabilities. (4) Only API Docker image was scanned by Trivy — Web image was completely unscanned. (5) No CodeQL SAST analysis existed. (6) No release automation workflow. (7) No coverage enforcement gates — coverage was reported but never enforced. (8) No migration file validation. (9) No PR/issue templates. (10) No CODEOWNERS. (11) No stale issue cleanup. (12) Production deployment had no automatic rollback on health check failure.
+
+Root Cause: (1-2) test.yml was created independently from deploy.yml and steps were not kept in sync. (3) Audit was explicitly silenced to prevent false-positive pipeline failures. (4-12) Features were not yet implemented — the CI/CD was functional but not enterprise-grade.
+
+Solution: (1) Added init.sql step to test.yml matching deploy.yml. (2) Added all 3 auth secret env vars. (3) Rewrote audit to capture output first, then fail on HIGH/CRITICAL. (4) Made Docker scan a matrix job scanning both API and Web images. (5) Created codeql.yml with security-extended queries. (6) Created release.yml with semver tagging, GitHub Releases. (7) Added coverage gates: API ≥60%, Frontend ≥50%. (8) Created migration-check.yml validating naming + RLS compliance. (9) Created PR template + bug report + feature request templates. (10) Created CODEOWNERS with team ownership. (11) Created stale.yml. (12) Added automatic rollback step + enhanced Slack notification with rollback status.
+
+Prevention: When creating parallel workflows (test.yml vs deploy.yml), use YAML anchors or reusable workflows to keep database setup steps in sync. Security audit should never use `|| true` — capture output separately and fail on severity levels.
+
+Affected Files: `.github/workflows/test.yml`, `.github/workflows/security.yml`, `.github/workflows/deploy.yml`, `.github/workflows/codeql.yml` (new), `.github/workflows/release.yml` (new), `.github/workflows/stale.yml` (new), `.github/workflows/migration-check.yml` (new), `.github/CODEOWNERS` (new), `.github/pull_request_template.md` (new), `.github/ISSUE_TEMPLATE/` (new), `packages/web/.dockerignore` (new)
+
+Notes: Total workflows now: 8 (was 4). Coverage gates start conservative (60%/50%) and should be increased as test coverage improves. The migration-check.yml uses warnings (not errors) for RLS compliance to avoid blocking legitimate system-level migrations.

@@ -104,7 +104,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createCase(ctx, data);
+          const result = await this.repository.createCase(ctx, data, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -172,7 +172,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.updateCase(ctx, id, data);
+          const result = await this.repository.updateCase(ctx, id, data, tx);
 
           if (!result) {
             return null;
@@ -248,7 +248,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.assignCase(ctx, id, assigneeId);
+          const result = await this.repository.assignCase(ctx, id, assigneeId, tx);
 
           if (!result) {
             return null;
@@ -259,7 +259,7 @@ export class CasesService {
             await this.repository.createComment(ctx, id, {
               content: `Case assigned: ${note}`,
               isInternal: true,
-            });
+            }, tx);
           }
 
           // Emit domain event atomically within the same transaction
@@ -332,7 +332,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.escalateCase(ctx, id, escalateTo);
+          const result = await this.repository.escalateCase(ctx, id, escalateTo, tx);
 
           if (!result) {
             return null;
@@ -342,7 +342,7 @@ export class CasesService {
           await this.repository.createComment(ctx, id, {
             content: `Case escalated: ${reason}`,
             isInternal: true,
-          });
+          }, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -413,7 +413,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.resolveCase(ctx, id, resolution);
+          const result = await this.repository.resolveCase(ctx, id, resolution, tx);
 
           if (!result) {
             return null;
@@ -484,7 +484,7 @@ export class CasesService {
       const hrCase = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.closeCase(ctx, id);
+          const result = await this.repository.closeCase(ctx, id, tx);
 
           if (!result) {
             return null;
@@ -565,7 +565,7 @@ export class CasesService {
       const comment = await this.db.withTransaction(
         { tenantId: ctx.tenantId, userId: ctx.userId },
         async (tx: TransactionSql) => {
-          const result = await this.repository.createComment(ctx, caseId, data);
+          const result = await this.repository.createComment(ctx, caseId, data, tx);
 
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
@@ -695,13 +695,18 @@ export class CasesService {
    * Get the appeal for a case (if one exists).
    */
   async getAppeal(ctx: TenantContext, caseId: string): Promise<ServiceResult<any>> {
-    const rows = await this.db.query`
-      SELECT id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
-      FROM app.case_appeals
-      WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        return tx`
+          SELECT id, case_id, appealed_by, reason, reviewer_id, status, outcome, decided_at, created_at
+          FROM app.case_appeals
+          WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+      }
+    );
 
     if (rows.length === 0) {
       return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No appeal found for this case" } };
@@ -733,13 +738,18 @@ export class CasesService {
     caseId: string,
     data: { decision: "upheld" | "overturned" | "partially_upheld"; outcome: string }
   ): Promise<ServiceResult<any>> {
-    const rows = await this.db.query`
-      SELECT id, reviewer_id, status
-      FROM app.case_appeals
-      WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'pending'
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: TransactionSql) => {
+        return tx`
+          SELECT id, reviewer_id, status
+          FROM app.case_appeals
+          WHERE case_id = ${caseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'pending'
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+      }
+    );
 
     if (rows.length === 0) {
       return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "No pending appeal found" } };

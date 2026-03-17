@@ -45,7 +45,7 @@ export function formatRelativeTime(date: Date | string): string {
  * Format a number to a compact string (e.g., "1.2K", "3.5M")
  */
 export function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GB", {
     notation: "compact",
     compactDisplay: "short",
   }).format(value);

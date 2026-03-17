@@ -150,27 +150,31 @@ export class CasesRepository {
     return cases.map(this.mapCaseRow);
   }
 
-  async createCase(ctx: TenantContext, data: CreateCase): Promise<CaseResponse> {
+  async createCase(ctx: TenantContext, data: CreateCase, txOverride?: any): Promise<CaseResponse> {
     const caseNumber = `CASE-${Date.now().toString(36).toUpperCase()}`;
 
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          INSERT INTO app.cases (
-            id, tenant_id, case_number, requester_id, category_id, subject,
-            description, priority, assigned_to, tags
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseNumber},
-            ${data.requesterId}::uuid, ${data.category}::uuid, ${data.subject},
-            ${data.description || null}, ${data.priority || 'medium'},
-            ${data.assigneeId || null}::uuid,
-            ${JSON.stringify(data.tags || [])}::jsonb
-          )
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.cases (
+          id, tenant_id, case_number, requester_id, category_id, subject,
+          description, priority, assigned_to, tags
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseNumber},
+          ${data.requesterId}::uuid, ${data.category}::uuid, ${data.subject},
+          ${data.description || null}, ${data.priority || 'medium'},
+          ${data.assigneeId || null}::uuid,
+          ${JSON.stringify(data.tags || [])}::jsonb
+        )
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapCaseRow(hrCase);
   }
@@ -178,28 +182,33 @@ export class CasesRepository {
   async updateCase(
     ctx: TenantContext,
     id: string,
-    data: UpdateCase
+    data: UpdateCase,
+    txOverride?: any
   ): Promise<CaseResponse | null> {
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            subject = COALESCE(${data.subject}, subject),
-            description = COALESCE(${data.description}, description),
-            category_id = COALESCE(${data.category}::uuid, category_id),
-            priority = COALESCE(${data.priority}, priority),
-            status = COALESCE(${data.status}, status),
-            assigned_to = COALESCE(${data.assigneeId}::uuid, assigned_to),
-            resolution_summary = COALESCE(${data.resolution}, resolution_summary),
-            resolved_at = CASE WHEN ${data.status} = 'resolved' AND resolved_at IS NULL THEN now() ELSE resolved_at END,
-            closed_at = CASE WHEN ${data.status} = 'closed' AND closed_at IS NULL THEN now() ELSE closed_at END,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.cases SET
+          subject = COALESCE(${data.subject}, subject),
+          description = COALESCE(${data.description}, description),
+          category_id = COALESCE(${data.category}::uuid, category_id),
+          priority = COALESCE(${data.priority}, priority),
+          status = COALESCE(${data.status}, status),
+          assigned_to = COALESCE(${data.assigneeId}::uuid, assigned_to),
+          resolution_summary = COALESCE(${data.resolution}, resolution_summary),
+          resolved_at = CASE WHEN ${data.status} = 'resolved' AND resolved_at IS NULL THEN now() ELSE resolved_at END,
+          closed_at = CASE WHEN ${data.status} = 'closed' AND closed_at IS NULL THEN now() ELSE closed_at END,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return hrCase ? this.mapCaseRow(hrCase) : null;
   }
@@ -207,21 +216,26 @@ export class CasesRepository {
   async assignCase(
     ctx: TenantContext,
     id: string,
-    assigneeId: string
+    assigneeId: string,
+    txOverride?: any
   ): Promise<CaseResponse | null> {
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            assigned_to = ${assigneeId}::uuid,
-            status = CASE WHEN status = 'new' THEN 'open' ELSE status END,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.cases SET
+          assigned_to = ${assigneeId}::uuid,
+          status = CASE WHEN status = 'new' THEN 'open' ELSE status END,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return hrCase ? this.mapCaseRow(hrCase) : null;
   }
@@ -229,22 +243,27 @@ export class CasesRepository {
   async escalateCase(
     ctx: TenantContext,
     id: string,
-    escalateTo?: string
+    escalateTo?: string,
+    txOverride?: any
   ): Promise<CaseResponse | null> {
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            assigned_to = COALESCE(${escalateTo}::uuid, assigned_to),
-            escalated_at = now(),
-            escalated_by = ${ctx.userId}::uuid,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.cases SET
+          assigned_to = COALESCE(${escalateTo}::uuid, assigned_to),
+          escalated_at = now(),
+          escalated_by = ${ctx.userId}::uuid,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return hrCase ? this.mapCaseRow(hrCase) : null;
   }
@@ -252,42 +271,51 @@ export class CasesRepository {
   async resolveCase(
     ctx: TenantContext,
     id: string,
-    resolution: string
+    resolution: string,
+    txOverride?: any
   ): Promise<CaseResponse | null> {
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            status = 'resolved',
-            resolution_summary = ${resolution},
-            resolved_at = now(),
-            resolved_by = ${ctx.userId}::uuid,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.cases SET
+          status = 'resolved',
+          resolution_summary = ${resolution},
+          resolved_at = now(),
+          resolved_by = ${ctx.userId}::uuid,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return hrCase ? this.mapCaseRow(hrCase) : null;
   }
 
-  async closeCase(ctx: TenantContext, id: string): Promise<CaseResponse | null> {
-    const [hrCase] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.cases SET
-            status = 'closed',
-            closed_at = now(),
-            closed_by = ${ctx.userId}::uuid,
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+  async closeCase(ctx: TenantContext, id: string, txOverride?: any): Promise<CaseResponse | null> {
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.cases SET
+          status = 'closed',
+          closed_at = now(),
+          closed_by = ${ctx.userId}::uuid,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [hrCase] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return hrCase ? this.mapCaseRow(hrCase) : null;
   }
@@ -318,23 +346,28 @@ export class CasesRepository {
   async createComment(
     ctx: TenantContext,
     caseId: string,
-    data: CreateComment
+    data: CreateComment,
+    txOverride?: any
   ): Promise<CommentResponse> {
-    const [comment] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        // SLA response tracking is handled by the mark_sla_response_on_comment trigger
-        return tx`
-          INSERT INTO app.case_comments (
-            id, tenant_id, case_id, author_id, content, is_internal
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseId}::uuid, ${ctx.userId}::uuid,
-            ${data.content}, ${data.isInternal || false}
-          )
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      // SLA response tracking is handled by the mark_sla_response_on_comment trigger
+      return tx`
+        INSERT INTO app.case_comments (
+          id, tenant_id, case_id, author_id, content, is_internal
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${caseId}::uuid, ${ctx.userId}::uuid,
+          ${data.content}, ${data.isInternal || false}
+        )
+        RETURNING *
+      `;
+    };
+
+    const [comment] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapCommentRow(comment);
   }

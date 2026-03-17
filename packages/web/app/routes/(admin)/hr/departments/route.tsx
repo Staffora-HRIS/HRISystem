@@ -1,5 +1,6 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   Plus,
@@ -23,6 +24,23 @@ import {
   useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
+import { invalidationPatterns } from "~/lib/query-client";
+
+interface CreateDeptFormState {
+  name: string;
+  code: string;
+  unitType: string;
+  parentId: string;
+  effectiveFrom: string;
+}
+
+const INITIAL_DEPT_FORM: CreateDeptFormState = {
+  name: "",
+  code: "",
+  unitType: "department",
+  parentId: "",
+  effectiveFrom: new Date().toISOString().split("T")[0],
+};
 
 interface OrgUnit {
   id: string;
@@ -55,10 +73,37 @@ const UNIT_TYPE_COLORS: Record<string, string> = {
 
 export default function AdminDepartmentsPage() {
   const toast = useToast();
+  const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deptForm, setDeptForm] = useState<CreateDeptFormState>(INITIAL_DEPT_FORM);
+
+  // Create department mutation
+  const createDeptMutation = useMutation({
+    mutationFn: (data: CreateDeptFormState) =>
+      api.post("/hr/org-units", {
+        name: data.name,
+        code: data.code.toUpperCase(),
+        effective_from: data.effectiveFrom,
+        ...(data.parentId ? { parent_id: data.parentId } : {}),
+      }),
+    onSuccess: () => {
+      invalidationPatterns.organization().forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      qc.invalidateQueries({ queryKey: ["admin-org-units"] });
+      toast.success("Department created successfully");
+      setShowCreateModal(false);
+      setDeptForm(INITIAL_DEPT_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to create department", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
+  });
 
   const { data: orgUnitsData, isLoading } = useQuery({
     queryKey: ["admin-org-units", search, typeFilter],
@@ -264,16 +309,37 @@ export default function AdminDepartmentsPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <Modal open onClose={() => setShowCreateModal(false)} size="lg">
+        <Modal open onClose={() => { setShowCreateModal(false); setDeptForm(INITIAL_DEPT_FORM); }} size="lg">
           <ModalHeader>
             <h3 className="text-lg font-semibold">Create Department</h3>
           </ModalHeader>
           <ModalBody>
             <div className="space-y-4">
-              <Input label="Name" placeholder="Enter department name" required />
-              <Input label="Code" placeholder="Enter department code" />
+              <Input
+                label="Name"
+                placeholder="Enter department name"
+                required
+                value={deptForm.name}
+                onChange={(e) => setDeptForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <Input
+                label="Code"
+                placeholder="Enter department code (e.g., ENG, HR)"
+                required
+                value={deptForm.code}
+                onChange={(e) => setDeptForm((f) => ({ ...f, code: e.target.value }))}
+              />
+              <Input
+                label="Effective From"
+                type="date"
+                required
+                value={deptForm.effectiveFrom}
+                onChange={(e) => setDeptForm((f) => ({ ...f, effectiveFrom: e.target.value }))}
+              />
               <Select
                 label="Type"
+                value={deptForm.unitType}
+                onChange={(e) => setDeptForm((f) => ({ ...f, unitType: e.target.value }))}
                 options={[
                   { value: "department", label: "Department" },
                   { value: "division", label: "Division" },
@@ -283,6 +349,8 @@ export default function AdminDepartmentsPage() {
               />
               <Select
                 label="Parent Department"
+                value={deptForm.parentId}
+                onChange={(e) => setDeptForm((f) => ({ ...f, parentId: e.target.value }))}
                 options={[
                   { value: "", label: "None (Top Level)" },
                   ...orgUnits.map((u) => ({ value: u.id, label: u.name })),
@@ -291,16 +359,15 @@ export default function AdminDepartmentsPage() {
             </div>
           </ModalBody>
           <ModalFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setDeptForm(INITIAL_DEPT_FORM); }} disabled={createDeptMutation.isPending}>
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                toast.success("Department created successfully");
-                setShowCreateModal(false);
-              }}
+              disabled={!deptForm.name || !deptForm.code || !deptForm.effectiveFrom || createDeptMutation.isPending}
+              loading={createDeptMutation.isPending}
+              onClick={() => createDeptMutation.mutate(deptForm)}
             >
-              Create Department
+              {createDeptMutation.isPending ? "Creating..." : "Create Department"}
             </Button>
           </ModalFooter>
         </Modal>

@@ -267,7 +267,7 @@ export const factories = {
     jobGrade: faker.helpers.arrayElement(["L1", "L2", "L3", "L4", "L5", "M1", "M2", "M3"]),
     minSalary: faker.number.int({ min: 30000, max: 50000 }).toString(),
     maxSalary: faker.number.int({ min: 60000, max: 150000 }).toString(),
-    currency: "USD",
+    currency: "GBP",
     isManager: faker.datatype.boolean(),
     headcount: faker.number.int({ min: 1, max: 10 }),
     isActive: true,

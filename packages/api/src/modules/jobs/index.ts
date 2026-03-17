@@ -39,7 +39,7 @@ export {
 export {
   // Enums
   JobStatusSchema,
-  FlsaStatusSchema,
+  WtrStatusSchema,
   // Common
   UuidSchema,
   DateSchema,
@@ -57,7 +57,7 @@ export {
   OptionalIdempotencyHeaderSchema,
   // Types
   type JobStatus,
-  type FlsaStatus,
+  type WtrStatus,
   type PaginationQuery,
   type CreateJob,
   type UpdateJob,

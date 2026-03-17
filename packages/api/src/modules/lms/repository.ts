@@ -106,27 +106,32 @@ export class LMSRepository {
 
   async createCourse(
     ctx: TenantContext,
-    data: CreateCourse
+    data: CreateCourse,
+    txOverride?: any
   ): Promise<CourseResponse> {
-    const [course] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          INSERT INTO app.courses (
-            id, tenant_id, title, description, category, estimated_duration_minutes,
-            content_type, content_url, thumbnail_url, passing_score,
-            is_required, status, created_by
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.title}, ${data.description || null},
-            ${data.category || null}, ${data.durationMinutes || null},
-            ${data.contentType || 'video'}, ${data.contentUrl || null},
-            ${data.thumbnailUrl || null}, ${data.passingScore || 70},
-            ${data.isRequired || false}, 'draft', ${ctx.userId}::uuid
-          )
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.courses (
+          id, tenant_id, title, description, category, estimated_duration_minutes,
+          content_type, content_url, thumbnail_url, passing_score,
+          is_required, status, created_by
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.title}, ${data.description || null},
+          ${data.category || null}, ${data.durationMinutes || null},
+          ${data.contentType || 'video'}, ${data.contentUrl || null},
+          ${data.thumbnailUrl || null}, ${data.passingScore || 70},
+          ${data.isRequired || false}, 'draft', ${ctx.userId}::uuid
+        )
+        RETURNING *
+      `;
+    };
+
+    const [course] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapCourseRow(course);
   }
@@ -134,46 +139,55 @@ export class LMSRepository {
   async updateCourse(
     ctx: TenantContext,
     id: string,
-    data: UpdateCourse
+    data: UpdateCourse,
+    txOverride?: any
   ): Promise<CourseResponse | null> {
-    const [course] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.courses SET
-            title = COALESCE(${data.title}, title),
-            description = COALESCE(${data.description}, description),
-            category = COALESCE(${data.category}, category),
-            estimated_duration_minutes = COALESCE(${data.durationMinutes}, estimated_duration_minutes),
-            content_type = COALESCE(${data.contentType}, content_type),
-            content_url = COALESCE(${data.contentUrl}, content_url),
-            thumbnail_url = COALESCE(${data.thumbnailUrl}, thumbnail_url),
-            passing_score = COALESCE(${data.passingScore}, passing_score),
-            is_required = COALESCE(${data.isRequired}, is_required),
-            status = COALESCE(${data.status}, status),
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.courses SET
+          title = COALESCE(${data.title}, title),
+          description = COALESCE(${data.description}, description),
+          category = COALESCE(${data.category}, category),
+          estimated_duration_minutes = COALESCE(${data.durationMinutes}, estimated_duration_minutes),
+          content_type = COALESCE(${data.contentType}, content_type),
+          content_url = COALESCE(${data.contentUrl}, content_url),
+          thumbnail_url = COALESCE(${data.thumbnailUrl}, thumbnail_url),
+          passing_score = COALESCE(${data.passingScore}, passing_score),
+          is_required = COALESCE(${data.isRequired}, is_required),
+          status = COALESCE(${data.status}, status),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+
+    const [course] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return course ? this.mapCourseRow(course) : null;
   }
 
-  async deleteCourse(ctx: TenantContext, id: string): Promise<boolean> {
-    const result = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.courses SET
-            status = 'archived',
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-          RETURNING id
-        `;
-      }
-    );
+  async deleteCourse(ctx: TenantContext, id: string, txOverride?: any): Promise<boolean> {
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.courses SET
+          status = 'archived',
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING id
+      `;
+    };
+
+    const result = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return result.length > 0;
   }
@@ -281,23 +295,28 @@ export class LMSRepository {
 
   async createEnrollment(
     ctx: TenantContext,
-    data: CreateEnrollment
+    data: CreateEnrollment,
+    txOverride?: any
   ): Promise<EnrollmentResponse> {
-    const [enrollment] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          INSERT INTO app.assignments (
-            id, tenant_id, course_id, employee_id, status, assigned_at, due_date, assigned_by
-          ) VALUES (
-            gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.courseId}::uuid,
-            ${data.employeeId}::uuid, 'not_started', now(), ${data.dueDate || null}::date,
-            ${data.assignedBy || ctx.userId}::uuid
-          )
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.assignments (
+          id, tenant_id, course_id, employee_id, status, assigned_at, due_date, assigned_by
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.courseId}::uuid,
+          ${data.employeeId}::uuid, 'not_started', now(), ${data.dueDate || null}::date,
+          ${data.assignedBy || ctx.userId}::uuid
+        )
+        RETURNING *
+      `;
+    };
+
+    const [enrollment] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return this.mapEnrollmentRow(enrollment);
   }
@@ -328,22 +347,27 @@ export class LMSRepository {
 
   async startEnrollment(
     ctx: TenantContext,
-    id: string
+    id: string,
+    txOverride?: any
   ): Promise<EnrollmentResponse | null> {
-    const [enrollment] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.assignments SET
-            status = 'in_progress',
-            started_at = now(),
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-            AND status = 'not_started'
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.assignments SET
+          status = 'in_progress',
+          started_at = now(),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          AND status = 'not_started'
+        RETURNING *
+      `;
+    };
+
+    const [enrollment] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return enrollment ? this.mapEnrollmentRow(enrollment) : null;
   }
@@ -351,24 +375,29 @@ export class LMSRepository {
   async completeEnrollment(
     ctx: TenantContext,
     id: string,
-    score?: number
+    score?: number,
+    txOverride?: any
   ): Promise<EnrollmentResponse | null> {
-    const [enrollment] = await this.db.withTransaction(
-      { tenantId: ctx.tenantId, userId: ctx.userId },
-      async (tx: any) => {
-        return tx`
-          UPDATE app.assignments SET
-            status = 'completed',
-            completed_at = now(),
-            progress_percent = 100,
-            score = COALESCE(${score}, score),
-            updated_at = now()
-          WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
-            AND status IN ('not_started', 'in_progress')
-          RETURNING *
-        `;
-      }
-    );
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.assignments SET
+          status = 'completed',
+          completed_at = now(),
+          progress_percent = 100,
+          score = COALESCE(${score}, score),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+          AND status IN ('not_started', 'in_progress')
+        RETURNING *
+      `;
+    };
+
+    const [enrollment] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction(
+          { tenantId: ctx.tenantId, userId: ctx.userId },
+          exec
+        );
 
     return enrollment ? this.mapEnrollmentRow(enrollment) : null;
   }

@@ -121,7 +121,7 @@ export function useTenantSettings() {
       timezone: settings?.timezone ?? "UTC",
       dateFormat: settings?.dateFormat ?? "YYYY-MM-DD",
       timeFormat: settings?.timeFormat ?? "HH:mm",
-      currency: settings?.currency ?? "USD",
+      currency: settings?.currency ?? "GBP",
       language: settings?.language ?? "en",
       features: settings?.features ?? {},
       branding: settings?.branding ?? {},
@@ -298,7 +298,7 @@ export function useFormatCurrency() {
 
   return useCallback(
     (amount: number): string => {
-      return new Intl.NumberFormat("en-US", {
+      return new Intl.NumberFormat("en-GB", {
         style: "currency",
         currency: settings.currency,
       }).format(amount);

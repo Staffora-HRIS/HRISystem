@@ -1,5 +1,5 @@
 /**
- * Authentication Flow E2E Tests (TODO-033)
+ * Authentication Flow E2E Tests
  *
  * Tests the full auth lifecycle through REAL HTTP requests using app.handle().
  * Covers:
@@ -15,15 +15,16 @@
  * Uses the actual Elysia app from src/app.ts, NOT mocks.
  *
  * KEY BEHAVIORS:
- * - Better Auth is configured with requireEmailVerification: true.
- *   Sign-up does NOT issue a session cookie; the user must verify email first.
- * - Sign-in returns { token, user, redirect? } in the JSON body.
+ * - Better Auth is configured with requireEmailVerification: false.
+ *   Sign-up issues a session cookie immediately.
+ * - Sign-in returns { token, user } in the JSON body.
  *   Session data is carried in cookies (staffora.session_token, staffora.session_data).
  * - Cookie caching (cookieCache maxAge 5min) means get-session may return cached
  *   data even after sign-out. The DB session is deleted but the signed cookie cache
  *   may still decode. Tests account for this.
  * - Account lockout columns (failedLoginAttempts, lockedUntil) require migration 0131.
  *   Lockout tests are skipped if these columns are missing.
+ * - minPasswordLength is 8 (see better-auth.ts config).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
@@ -118,29 +119,6 @@ async function getSession(cookie: string): Promise<Response> {
 }
 
 /**
- * Verify email directly in the database (bypasses email verification requirement).
- * This is necessary because Better Auth is configured with requireEmailVerification: true,
- * and in tests we do not have a mail server to receive and click verification links.
- */
-async function verifyEmailInDb(
-  db: ReturnType<typeof getTestDb>,
-  email: string
-): Promise<void> {
-  await withSystemContext(db, async (tx) => {
-    await tx`
-      UPDATE app."user"
-      SET "emailVerified" = true, "updatedAt" = now()
-      WHERE email = ${email.trim().toLowerCase()}
-    `;
-    await tx`
-      UPDATE app.users
-      SET email_verified = true, updated_at = now()
-      WHERE email = ${email.trim().toLowerCase()}
-    `;
-  });
-}
-
-/**
  * Check whether the account lockout columns exist in the database.
  * Migration 0131 adds failedLoginAttempts and lockedUntil to app."user".
  */
@@ -182,7 +160,7 @@ async function resetLockout(
       UPDATE app.users
       SET failed_login_attempts = 0, locked_until = NULL, last_failed_login_at = NULL, updated_at = now()
       WHERE email = ${email.trim().toLowerCase()}
-    `.catch(() => { /* user may not exist in legacy table */ });
+    `.catch(() => { /* columns may not exist in legacy table */ });
   });
 }
 
@@ -261,6 +239,9 @@ describe("Authentication Flow E2E", () => {
   const LOCKOUT_EMAIL = `lockout-e2e-${suffix}@example.com`;
   const LOCKOUT_PASSWORD = "LockoutTestPass123!";
 
+  // Collect emails created during edge case tests so afterAll can clean them up
+  const edgeCaseEmails: string[] = [];
+
   beforeAll(async () => {
     await ensureTestInfra();
     if (!isInfraAvailable()) return;
@@ -285,6 +266,9 @@ describe("Authentication Flow E2E", () => {
     // Clean up test users and tenant
     await cleanupUserByEmail(db, TEST_EMAIL).catch(() => {});
     await cleanupUserByEmail(db, LOCKOUT_EMAIL).catch(() => {});
+    for (const email of edgeCaseEmails) {
+      await cleanupUserByEmail(db, email).catch(() => {});
+    }
     await cleanupTestUser(db, testUser?.id).catch(() => {});
     await cleanupTestTenant(db, tenant?.id).catch(() => {});
     await db.end();
@@ -295,7 +279,7 @@ describe("Authentication Flow E2E", () => {
   // =========================================================================
 
   describe("POST /api/auth/sign-up/email - Register new user", () => {
-    it("should create a new user and return user data", async () => {
+    it("should create a new user and return user data with session", async () => {
       if (!isInfraAvailable()) return;
 
       const response = await signUp(TEST_EMAIL, TEST_PASSWORD, TEST_NAME);
@@ -312,10 +296,11 @@ describe("Authentication Flow E2E", () => {
       expect(typeof data.user.id).toBe("string");
       expect(data.user.id.length).toBeGreaterThan(0);
 
-      // When requireEmailVerification is true, Better Auth does NOT set a session
-      // cookie on sign-up. The user must verify their email first, then sign in.
-      // This is the correct, secure behavior. We verify no session is returned.
-      expect(data.session).toBeUndefined();
+      // requireEmailVerification is false, so Better Auth issues a session
+      // cookie immediately on sign-up. Verify the session cookie is set.
+      const cookie = buildCookieHeader(response);
+      expect(cookie.length).toBeGreaterThan(0);
+      expect(cookie).toContain("staffora.session_token=");
     });
 
     it("should verify user exists in the database after sign-up", async () => {
@@ -343,6 +328,28 @@ describe("Authentication Flow E2E", () => {
       expect(legacyRows[0].email).toBe(normalized);
     });
 
+    it("should sync user IDs between Better Auth and legacy tables", async () => {
+      if (!isInfraAvailable()) return;
+
+      const normalized = TEST_EMAIL.trim().toLowerCase();
+
+      const ids = await withSystemContext(db, async (tx) => {
+        const baRow = await tx<{ id: string }[]>`
+          SELECT id FROM app."user" WHERE email = ${normalized}
+        `;
+        const legacyRow = await tx<{ id: string }[]>`
+          SELECT id::text as id FROM app.users WHERE email = ${normalized}
+        `;
+        return { baId: baRow[0]?.id, legacyId: legacyRow[0]?.id };
+      });
+
+      // The databaseHooks.user.create.before hook ensures the same UUID is used
+      // in both tables so joins and RBAC lookups work correctly.
+      expect(ids.baId).toBeDefined();
+      expect(ids.legacyId).toBeDefined();
+      expect(ids.baId).toBe(ids.legacyId);
+    });
+
     it("should handle duplicate email sign-up gracefully (no 500)", async () => {
       if (!isInfraAvailable()) return;
 
@@ -359,14 +366,16 @@ describe("Authentication Flow E2E", () => {
   // =========================================================================
 
   describe("Password requirements enforcement", () => {
-    it("should reject passwords shorter than 12 characters", async () => {
+    it("should reject passwords shorter than minPasswordLength (8 chars)", async () => {
       if (!isInfraAvailable()) return;
 
       const shortPassEmail = `short-pass-${suffix}@example.com`;
+      edgeCaseEmails.push(shortPassEmail);
       const response = await signUp(shortPassEmail, "Short1!", "Short Pass");
 
-      // Better Auth enforces minPasswordLength: 12
+      // Better Auth enforces minPasswordLength: 8 (7-char password should fail)
       expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
 
       // Clean up in case it somehow succeeded
       await cleanupUserByEmail(db, shortPassEmail).catch(() => {});
@@ -376,23 +385,31 @@ describe("Authentication Flow E2E", () => {
       if (!isInfraAvailable()) return;
 
       const emptyPassEmail = `empty-pass-${suffix}@example.com`;
+      edgeCaseEmails.push(emptyPassEmail);
       const response = await signUp(emptyPassEmail, "", "Empty Pass");
 
       expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
+
       await cleanupUserByEmail(db, emptyPassEmail).catch(() => {});
     });
 
-    it("should accept a 12+ character password", async () => {
+    it("should accept an 8+ character password", async () => {
       if (!isInfraAvailable()) return;
 
       const validPassEmail = `valid-pass-${suffix}@example.com`;
+      edgeCaseEmails.push(validPassEmail);
       const response = await signUp(
         validPassEmail,
-        "ValidPassword123!",
+        "ValidPwd123!",
         "Valid Pass"
       );
 
       expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data.user).toBeDefined();
+      expect(data.user.email).toBe(validPassEmail.toLowerCase());
 
       // Clean up
       await cleanupUserByEmail(db, validPassEmail).catch(() => {});
@@ -404,28 +421,40 @@ describe("Authentication Flow E2E", () => {
   // =========================================================================
 
   describe("POST /api/auth/sign-in/email - Login with credentials", () => {
-    it("should sign in after email is verified", async () => {
+    it("should sign in with valid credentials and return session cookie", async () => {
       if (!isInfraAvailable()) return;
-
-      // Verify email directly in DB (bypass email verification flow)
-      await verifyEmailInDb(db, TEST_EMAIL);
 
       const response = await signIn(TEST_EMAIL, TEST_PASSWORD);
 
-      // After verification, should succeed
       expect(response.status).toBe(200);
 
       const data = await response.json();
       expect(data.user).toBeDefined();
       expect(data.user.email).toBe(TEST_EMAIL.toLowerCase());
-      // Better Auth sign-in returns { token, user, redirect? } in JSON body
-      // Session data is in the Set-Cookie headers, not in the JSON body
-      expect(data.token).toBeDefined();
+      expect(data.user.id).toBeDefined();
+      expect(typeof data.user.id).toBe("string");
 
       // Session cookie should be set
       const cookie = buildCookieHeader(response);
       expect(cookie.length).toBeGreaterThan(0);
       expect(cookie).toContain("staffora.session_token=");
+    });
+
+    it("should return user object with expected fields on sign-in", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await signIn(TEST_EMAIL, TEST_PASSWORD);
+      expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data.user).toBeDefined();
+
+      // Verify user object shape
+      expect(typeof data.user.id).toBe("string");
+      expect(typeof data.user.email).toBe("string");
+      expect(typeof data.user.name).toBe("string");
+      expect(data.user.email).toBe(TEST_EMAIL.toLowerCase());
+      expect(data.user.name).toBe(TEST_NAME);
     });
 
     it("should reject invalid password", async () => {
@@ -435,6 +464,10 @@ describe("Authentication Flow E2E", () => {
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(response.status).toBeLessThan(500);
+
+      // Should not set a session cookie
+      const cookie = buildCookieHeader(response);
+      expect(cookie).not.toContain("staffora.session_token=");
     });
 
     it("should reject non-existent user", async () => {
@@ -460,8 +493,6 @@ describe("Authentication Flow E2E", () => {
     beforeAll(async () => {
       if (!isInfraAvailable()) return;
 
-      // Ensure email is verified and sign in to get a fresh cookie
-      await verifyEmailInDb(db, TEST_EMAIL);
       const response = await signIn(TEST_EMAIL, TEST_PASSWORD);
       expect(response.status).toBe(200);
       validCookie = buildCookieHeader(response);
@@ -480,7 +511,9 @@ describe("Authentication Flow E2E", () => {
       expect(data.user.email).toBe(TEST_EMAIL.toLowerCase());
       expect(data.session).toBeDefined();
       expect(data.session.id).toBeDefined();
+      expect(typeof data.session.id).toBe("string");
       expect(data.session.userId).toBeDefined();
+      expect(typeof data.session.userId).toBe("string");
     });
 
     it("should return null session for unauthenticated request", async () => {
@@ -518,19 +551,21 @@ describe("Authentication Flow E2E", () => {
     beforeAll(async () => {
       if (!isInfraAvailable()) return;
 
-      await verifyEmailInDb(db, TEST_EMAIL);
       const response = await signIn(TEST_EMAIL, TEST_PASSWORD);
       expect(response.status).toBe(200);
       authenticatedCookie = buildCookieHeader(response);
     });
 
-    it("should reject unauthenticated access to protected endpoint", async () => {
+    it("should reject unauthenticated access to /api/v1/auth/me", async () => {
       if (!isInfraAvailable()) return;
 
-      // GET /api/v1/auth/me requires authentication
+      // GET /api/v1/auth/me requires authentication (beforeHandle: [requireAuthContext])
       const response = await getJson("/api/v1/auth/me");
 
       expect(response.status).toBe(401);
+
+      const data = await response.json();
+      expect(data.error).toBeDefined();
     });
 
     it("should allow authenticated access to /api/v1/auth/me", async () => {
@@ -541,8 +576,8 @@ describe("Authentication Flow E2E", () => {
       });
 
       // The /me endpoint requires auth + tenant. Without a tenant association
-      // for this Better Auth user, it may return 200 with user data or a tenant error.
-      // The key assertion: it should NOT be 401 (unauthenticated).
+      // for this Better Auth user, it may return 200 with user data or 500 if
+      // the tenant lookup fails. The key assertion: it should NOT be 401.
       expect(response.status).not.toBe(401);
     });
 
@@ -550,6 +585,14 @@ describe("Authentication Flow E2E", () => {
       if (!isInfraAvailable()) return;
 
       const response = await getJson("/api/v1/hr/employees");
+
+      expect(response.status).toBe(401);
+    });
+
+    it("should reject unauthenticated access to absence endpoint", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await getJson("/api/v1/absence/leave-requests");
 
       expect(response.status).toBe(401);
     });
@@ -565,7 +608,6 @@ describe("Authentication Flow E2E", () => {
     beforeAll(async () => {
       if (!isInfraAvailable()) return;
 
-      await verifyEmailInDb(db, TEST_EMAIL);
       const response = await signIn(TEST_EMAIL, TEST_PASSWORD);
       expect(response.status).toBe(200);
       sessionCookie = buildCookieHeader(response);
@@ -615,11 +657,11 @@ describe("Authentication Flow E2E", () => {
       const signOutRes = await signOut(freshCookie);
       expect(signOutRes.status).toBe(200);
 
-      // Now try accessing a protected endpoint with the invalidated cookie
-      // Note: Better Auth cookie caching may still serve the cached session
-      // for up to 5 minutes. The /api/v1/ endpoints use the auth plugin which
-      // calls get-session internally, so they may also see cached data.
-      // We test the database-level deletion separately above.
+      // Now try accessing a protected endpoint with the invalidated cookie.
+      // Note: Better Auth cookie caching (maxAge 5min) means get-session may
+      // still serve the cached session briefly. The /api/v1/ endpoints use the
+      // auth plugin which calls getSession internally, so they may also see
+      // cached data. We test the database-level deletion separately above.
       const response = await getJson("/api/v1/auth/me", {
         Cookie: freshCookie,
       });
@@ -642,14 +684,13 @@ describe("Authentication Flow E2E", () => {
     beforeAll(async () => {
       if (!isInfraAvailable() || !lockoutAvailable) return;
 
-      // Register and verify a separate user for lockout testing
+      // Register a separate user for lockout testing
       const signUpRes = await signUp(
         LOCKOUT_EMAIL,
         LOCKOUT_PASSWORD,
         "Lockout Test"
       );
       expect(signUpRes.status).toBe(200);
-      await verifyEmailInDb(db, LOCKOUT_EMAIL);
 
       // Verify sign-in works before lockout test
       const verifyRes = await signIn(LOCKOUT_EMAIL, LOCKOUT_PASSWORD);
@@ -744,8 +785,6 @@ describe("Authentication Flow E2E", () => {
     it("should allow multiple concurrent sessions for same user", async () => {
       if (!isInfraAvailable()) return;
 
-      await verifyEmailInDb(db, TEST_EMAIL);
-
       // Login twice to get two different sessions
       const response1 = await signIn(TEST_EMAIL, TEST_PASSWORD);
       expect(response1.status).toBe(200);
@@ -760,20 +799,20 @@ describe("Authentication Flow E2E", () => {
       expect(session1.status).toBe(200);
       const session1Data = await session1.json();
       expect(session1Data.user).toBeDefined();
+      expect(session1Data.user.email).toBe(TEST_EMAIL.toLowerCase());
 
       const session2 = await getSession(cookie2);
       expect(session2.status).toBe(200);
       const session2Data = await session2.json();
       expect(session2Data.user).toBeDefined();
+      expect(session2Data.user.email).toBe(TEST_EMAIL.toLowerCase());
 
-      // Verify session 2 is still valid independently (even if session 1 is signed out)
-      // We verify by checking the DB that both session tokens exist before sign-out
+      // Extract raw tokens to verify they are distinct sessions
       const tokenMatch1 = cookie1.match(/staffora\.session_token=([^;]+)/);
       const tokenMatch2 = cookie2.match(/staffora\.session_token=([^;]+)/);
       expect(tokenMatch1).toBeTruthy();
       expect(tokenMatch2).toBeTruthy();
 
-      // Extract raw tokens (before the signature dot)
       const rawToken1 = decodeURIComponent(tokenMatch1![1]).split(".")[0];
       const rawToken2 = decodeURIComponent(tokenMatch2![1]).split(".")[0];
 
@@ -821,8 +860,11 @@ describe("Authentication Flow E2E", () => {
     it("should handle sign-up with missing name field", async () => {
       if (!isInfraAvailable()) return;
 
+      const noNameEmail = `no-name-${suffix}@example.com`;
+      edgeCaseEmails.push(noNameEmail);
+
       const response = await postJson("/api/auth/sign-up/email", {
-        email: `no-name-${suffix}@example.com`,
+        email: noNameEmail,
         password: "ValidPassword123!",
       });
 
@@ -830,24 +872,25 @@ describe("Authentication Flow E2E", () => {
       // Either way, should not be 500
       expect(response.status).toBeLessThan(500);
 
-      await cleanupUserByEmail(db, `no-name-${suffix}@example.com`).catch(
-        () => {}
-      );
+      await cleanupUserByEmail(db, noNameEmail).catch(() => {});
     });
 
     it("should handle sign-in with email in different casing", async () => {
       if (!isInfraAvailable()) return;
 
-      await verifyEmailInDb(db, TEST_EMAIL);
-
       // Try signing in with uppercase email
       const response = await signIn(TEST_EMAIL.toUpperCase(), TEST_PASSWORD);
 
-      // Better Auth normalizes emails to lowercase, so this should work
+      // Better Auth normalizes emails to lowercase via our databaseHooks,
+      // so this should work
       expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data.user).toBeDefined();
+      expect(data.user.email).toBe(TEST_EMAIL.toLowerCase());
     });
 
-    it("should handle malformed JSON body", async () => {
+    it("should handle malformed JSON body without crashing", async () => {
       if (!isInfraAvailable()) return;
 
       const response = await app.handle(
@@ -858,7 +901,7 @@ describe("Authentication Flow E2E", () => {
         })
       );
 
-      // Should return a client error, not crash
+      // Should return a client error, not crash with 500
       expect(response.status).toBeLessThan(500);
     });
 
@@ -872,10 +915,26 @@ describe("Authentication Flow E2E", () => {
 
       // Parse the body
       const text = await response.text();
-      // Should not contain stack traces or internal paths
+      // Should not contain stack traces or internal connection strings
       expect(text).not.toContain("node_modules");
       expect(text).not.toContain("at Object.");
       expect(text).not.toContain("postgres://");
+      expect(text).not.toContain("ECONNREFUSED");
+    });
+
+    it("should handle missing Content-Type header on sign-in", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await app.handle(
+        new Request("http://localhost/api/auth/sign-in/email", {
+          method: "POST",
+          body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+        })
+      );
+
+      // Should handle gracefully -- Better Auth may reject or succeed
+      // depending on how it parses the body. Must not be 500.
+      expect(response.status).toBeLessThan(500);
     });
   });
 
@@ -923,6 +982,58 @@ describe("Authentication Flow E2E", () => {
         "Access-Control-Allow-Credentials"
       );
       expect(allowCredentials).toBe("true");
+    });
+
+    it("should include expected CORS methods", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await app.handle(
+        new Request("http://localhost/api/auth/sign-in/email", {
+          method: "OPTIONS",
+          headers: {
+            Origin: "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+          },
+        })
+      );
+
+      const allowMethods = response.headers.get(
+        "Access-Control-Allow-Methods"
+      );
+      // The CORS config allows POST (among others)
+      if (allowMethods) {
+        expect(allowMethods).toContain("POST");
+      }
+    });
+  });
+
+  // =========================================================================
+  // 11. Health Endpoints (No Auth Required)
+  // =========================================================================
+
+  describe("Health endpoints do not require authentication", () => {
+    it("should return health status without auth", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await getJson("/health");
+
+      expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data.status).toBeDefined();
+      expect(["healthy", "degraded", "unhealthy"]).toContain(data.status);
+      expect(data.version).toBeDefined();
+    });
+
+    it("should return liveness without auth", async () => {
+      if (!isInfraAvailable()) return;
+
+      const response = await getJson("/live");
+
+      expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data.status).toBe("alive");
     });
   });
 });

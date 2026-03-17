@@ -23,6 +23,7 @@ import type {
   DocumentVersionResponse,
   UploadUrlResponse,
 } from "./schemas";
+import { getStorageService } from "../../lib/storage";
 
 // =============================================================================
 // Types
@@ -331,7 +332,7 @@ export class DocumentsService {
   }
 
   // ===========================================================================
-  // Upload URL (S3 presigned URL placeholder)
+  // Upload URL (delegates to StorageService — local or S3)
   // ===========================================================================
 
   async getUploadUrl(
@@ -350,14 +351,17 @@ export class DocumentsService {
       };
     }
 
-    // In a real implementation, this would generate a presigned S3 URL
     const fileKey = `${context.tenantId}/${Date.now()}-${fileName}`;
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    const expiresInSeconds = 15 * 60; // 15 minutes
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+
+    const storage = getStorageService();
+    const uploadUrl = await storage.getUploadUrl(fileKey, mimeType, expiresInSeconds);
 
     return {
       success: true,
       data: {
-        upload_url: `https://storage.example.com/upload?key=${fileKey}`,
+        upload_url: uploadUrl,
         file_key: fileKey,
         expires_at: expiresAt.toISOString(),
       },
@@ -380,8 +384,8 @@ export class DocumentsService {
       };
     }
 
-    // In a real implementation, this would generate a presigned S3 download URL
-    const downloadUrl = `https://storage.example.com/download?key=${document.fileKey}`;
+    const storage = getStorageService();
+    const downloadUrl = await storage.getDownloadUrl(document.fileKey);
 
     return {
       success: true,

@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -100,6 +101,8 @@ export default function AdminLeavePoliciesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState<CreatePolicyForm>(initialFormState);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingPolicy, setEditingPolicy] = useState<LeavePolicy | null>(null);
+  const [editFormData, setEditFormData] = useState<CreatePolicyForm>(initialFormState);
 
   // Fetch leave policies
   const { data: policiesData, isLoading } = useQuery({
@@ -147,6 +150,23 @@ export default function AdminLeavePoliciesPage() {
     },
   });
 
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put(`/absence/policies/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-leave-policies"] });
+      toast.success("Leave policy updated successfully");
+      setEditingPolicy(null);
+      setEditFormData(initialFormState);
+    },
+    onError: () => {
+      toast.error("Failed to update leave policy", {
+        message: "Please try again or check your input.",
+      });
+    },
+  });
+
   const policies = policiesData?.items ?? [];
   const leaveTypeOptions = leaveTypesData?.items ?? [];
 
@@ -161,6 +181,45 @@ export default function AdminLeavePoliciesPage() {
 
   // Build leave type name lookup
   const leaveTypeMap = new Map(leaveTypeOptions.map((t) => [t.id, t.name]));
+
+  const handleEditOpen = (policy: LeavePolicy) => {
+    setEditingPolicy(policy);
+    setEditFormData({
+      name: policy.name,
+      description: policy.description || "",
+      leaveTypeId: policy.leaveTypeId,
+      annualAllowance: String(policy.annualAllowance),
+      maxCarryover: String(policy.maxCarryover),
+      accrualFrequency: policy.accrualFrequency || "",
+      effectiveFrom: policy.effectiveFrom,
+      effectiveTo: policy.effectiveTo || "",
+      eligibleAfterMonths: String(policy.eligibleAfterMonths),
+    });
+  };
+
+  const handleEditSubmit = () => {
+    if (!editingPolicy) return;
+    if (!editFormData.name.trim() || !editFormData.leaveTypeId || !editFormData.annualAllowance) {
+      toast.warning("Please fill in required fields");
+      return;
+    }
+    updateMutation.mutate({
+      id: editingPolicy.id,
+      data: {
+        name: editFormData.name.trim(),
+        description: editFormData.description.trim() || undefined,
+        leaveTypeId: editFormData.leaveTypeId,
+        annualAllowance: Number(editFormData.annualAllowance),
+        maxCarryover: editFormData.maxCarryover ? Number(editFormData.maxCarryover) : 0,
+        accrualFrequency: editFormData.accrualFrequency || undefined,
+        effectiveFrom: editFormData.effectiveFrom,
+        effectiveTo: editFormData.effectiveTo || undefined,
+        eligibleAfterMonths: editFormData.eligibleAfterMonths
+          ? Number(editFormData.eligibleAfterMonths)
+          : 0,
+      },
+    });
+  };
 
   const handleCreateSubmit = () => {
     if (!formData.name.trim() || !formData.leaveTypeId || !formData.annualAllowance) {
@@ -269,9 +328,7 @@ export default function AdminLeavePoliciesPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              toast.info("Coming Soon", {
-                message: "Policy editing will be available in a future update.",
-              });
+              handleEditOpen(row);
             }}
             aria-label={`Edit ${row.name}`}
           >
@@ -509,6 +566,163 @@ export default function AdminLeavePoliciesPage() {
               }
             >
               {createMutation.isPending ? "Creating..." : "Create Policy"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Edit Modal */}
+      {editingPolicy && (
+        <Modal
+          open
+          onClose={() => {
+            setEditingPolicy(null);
+            setEditFormData(initialFormState);
+          }}
+          size="lg"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Edit Leave Policy</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Policy Name"
+                placeholder="e.g. Standard Annual Leave Policy"
+                required
+                value={editFormData.name}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, name: e.target.value })
+                }
+              />
+              <Input
+                label="Description"
+                placeholder="Describe this policy..."
+                value={editFormData.description}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, description: e.target.value })
+                }
+              />
+              <Select
+                label="Leave Type"
+                required
+                value={editFormData.leaveTypeId}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, leaveTypeId: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select a leave type" },
+                  ...leaveTypeOptions.map((t) => ({
+                    value: t.id,
+                    label: t.name,
+                  })),
+                ]}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Annual Allowance (days)"
+                  type="number"
+                  placeholder="e.g. 20"
+                  required
+                  value={editFormData.annualAllowance}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      annualAllowance: e.target.value,
+                    })
+                  }
+                  min={0}
+                  max={365}
+                />
+                <Input
+                  label="Max Carryover (days)"
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={editFormData.maxCarryover}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      maxCarryover: e.target.value,
+                    })
+                  }
+                  min={0}
+                  max={365}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Select
+                  label="Accrual Frequency"
+                  value={editFormData.accrualFrequency}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      accrualFrequency: e.target.value,
+                    })
+                  }
+                  options={ACCRUAL_OPTIONS}
+                />
+                <Input
+                  label="Eligible After (months)"
+                  type="number"
+                  placeholder="e.g. 3"
+                  value={editFormData.eligibleAfterMonths}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      eligibleAfterMonths: e.target.value,
+                    })
+                  }
+                  min={0}
+                  max={24}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Effective From"
+                  type="date"
+                  required
+                  value={editFormData.effectiveFrom}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      effectiveFrom: e.target.value,
+                    })
+                  }
+                />
+                <Input
+                  label="Effective To (optional)"
+                  type="date"
+                  value={editFormData.effectiveTo}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      effectiveTo: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingPolicy(null);
+                setEditFormData(initialFormState);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={
+                !editFormData.name.trim() ||
+                !editFormData.leaveTypeId ||
+                !editFormData.annualAllowance ||
+                updateMutation.isPending
+              }
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </ModalFooter>
         </Modal>

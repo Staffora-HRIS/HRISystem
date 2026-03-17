@@ -167,7 +167,7 @@ describe("useTenantSettings", () => {
 
     // Defaults should be applied
     expect(result.current.settings.timezone).toBe("UTC");
-    expect(result.current.settings.currency).toBe("USD");
+    expect(result.current.settings.currency).toBe("GBP");
     expect(result.current.settings.language).toBe("en");
   });
 
@@ -177,7 +177,7 @@ describe("useTenantSettings", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "HH:mm",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: { lms: true, recruitment: false },
       branding: {},
@@ -271,7 +271,7 @@ describe("useFormatDate", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "HH:mm",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: {},
       branding: {},
@@ -298,7 +298,7 @@ describe("useFormatDate", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "HH:mm",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: {},
       branding: {},
@@ -330,7 +330,7 @@ describe("useFormatTime", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "HH:mm",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: {},
       branding: {},
@@ -355,7 +355,7 @@ describe("useFormatTime", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "hh:mm A",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: {},
       branding: {},
@@ -385,7 +385,7 @@ describe("useFormatCurrency", () => {
       timezone: "UTC",
       dateFormat: "YYYY-MM-DD",
       timeFormat: "HH:mm",
-      currency: "USD",
+      currency: "GBP",
       language: "en",
       features: {},
       branding: {},

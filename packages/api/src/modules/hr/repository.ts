@@ -588,7 +588,7 @@ export class HRRepository {
         ${data.job_grade || null},
         ${data.min_salary || null},
         ${data.max_salary || null},
-        ${data.currency || 'USD'},
+        ${data.currency || 'GBP'},
         ${data.is_manager || false},
         ${data.headcount || 1},
         ${data.reports_to_position_id || null}::uuid
@@ -1002,7 +1002,7 @@ export class HRRepository {
       )
       VALUES (
         ${context.tenantId}::uuid, ${employee.id}::uuid, ${data.contract.hire_date}::date,
-        ${data.compensation.base_salary}, ${data.compensation.currency || 'USD'},
+        ${data.compensation.base_salary}, ${data.compensation.currency || 'GBP'},
         ${data.compensation.pay_frequency || 'monthly'}, 'hire', ${createdBy}::uuid
       )
       RETURNING id
@@ -1250,7 +1250,7 @@ export class HRRepository {
       )
       VALUES (
         ${context.tenantId}::uuid, ${employeeId}::uuid, ${data.effective_from}::date,
-        ${data.base_salary}, ${data.currency || 'USD'},
+        ${data.base_salary}, ${data.currency || 'GBP'},
         ${data.pay_frequency || 'monthly'}, ${data.change_reason || null}, ${updatedBy}::uuid
       )
       RETURNING id

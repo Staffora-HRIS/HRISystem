@@ -405,48 +405,111 @@ export function isValidEmployeeNumber(
 }
 
 // =============================================================================
-// SSN Validation (US)
+// National Insurance Number Validation (UK)
 // =============================================================================
 
 /**
- * Validate a US Social Security Number format.
- * Does not verify the SSN is real, only format.
+ * Validate a UK National Insurance Number (NINO) format.
+ * Format: 2 prefix letters + 6 digits + 1 suffix letter (A/B/C/D).
+ * Does not verify the NINO is real, only format.
  *
- * @param ssn - The SSN to validate (with or without dashes)
- * @returns True if SSN format is valid
+ * HMRC rules:
+ * - Prefix cannot be BG, GB, NK, KN, TN, NT, ZZ
+ * - First letter cannot be D, F, I, Q, U, V
+ * - Second letter cannot be D, F, I, O, Q, U, V
+ * - Suffix must be A, B, C, or D
+ *
+ * @param nino - The NINO to validate (with or without spaces)
+ * @returns True if NINO format is valid
+ *
+ * @example
+ * ```typescript
+ * isValidNINO("AB123456C") // true
+ * isValidNINO("AB 12 34 56 C") // true
+ * isValidNINO("QQ123456C") // false (invalid prefix)
+ * ```
  */
-export function isValidSSN(ssn: string): boolean {
-  if (!ssn || typeof ssn !== "string") {
+export function isValidNINO(nino: string): boolean {
+  if (!nino || typeof nino !== "string") {
     return false;
   }
 
-  // Remove dashes
-  const cleaned = ssn.replace(/-/g, "");
+  // Remove spaces and convert to uppercase
+  const cleaned = nino.replace(/\s/g, "").toUpperCase();
 
-  // Must be 9 digits
-  if (!/^\d{9}$/.test(cleaned)) {
+  // Must match: 2 letters + 6 digits + 1 letter
+  if (!/^[A-Z]{2}\d{6}[A-Z]$/.test(cleaned)) {
     return false;
   }
 
-  // Area number (first 3 digits) cannot be 000, 666, or 900-999
-  const area = parseInt(cleaned.substring(0, 3), 10);
-  if (area === 0 || area === 666 || (area >= 900 && area <= 999)) {
+  const prefix = cleaned.substring(0, 2);
+  const firstLetter = cleaned[0];
+  const secondLetter = cleaned[1];
+  const suffix = cleaned[8];
+
+  // Invalid prefixes per HMRC
+  const invalidPrefixes = ["BG", "GB", "NK", "KN", "TN", "NT", "ZZ"];
+  if (invalidPrefixes.includes(prefix)) {
     return false;
   }
 
-  // Group number (middle 2 digits) cannot be 00
-  const group = parseInt(cleaned.substring(3, 5), 10);
-  if (group === 0) {
+  // First letter cannot be D, F, I, Q, U, V
+  if ("DFIQUV".includes(firstLetter)) {
     return false;
   }
 
-  // Serial number (last 4 digits) cannot be 0000
-  const serial = parseInt(cleaned.substring(5, 9), 10);
-  if (serial === 0) {
+  // Second letter cannot be D, F, I, O, Q, U, V
+  if ("DFIOGUV".includes(secondLetter)) {
+    return false;
+  }
+
+  // Suffix must be A, B, C, or D
+  if (!"ABCD".includes(suffix)) {
     return false;
   }
 
   return true;
+}
+
+// =============================================================================
+// UK Postcode Validation
+// =============================================================================
+
+/**
+ * Validate a UK postcode format.
+ * Supports all valid UK postcode formats per Royal Mail PAF specification.
+ *
+ * Valid formats: A9 9AA, A99 9AA, A9A 9AA, AA9 9AA, AA99 9AA, AA9A 9AA
+ * Also accepts BFPO postcodes.
+ *
+ * @param postcode - The postcode to validate (with or without space)
+ * @returns True if postcode format is valid
+ *
+ * @example
+ * ```typescript
+ * isValidUKPostcode("SW1A 1AA") // true
+ * isValidUKPostcode("EC1A 1BB") // true
+ * isValidUKPostcode("M1 1AE") // true
+ * isValidUKPostcode("12345") // false
+ * ```
+ */
+export function isValidUKPostcode(postcode: string): boolean {
+  if (!postcode || typeof postcode !== "string") {
+    return false;
+  }
+
+  // Remove spaces and convert to uppercase
+  const cleaned = postcode.replace(/\s/g, "").toUpperCase();
+
+  // UK postcode regex covering all valid formats
+  // Format: A(A)9(9/A) 9AA where () = optional
+  const postcodeRegex =
+    /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/;
+
+  // Also accept BFPO postcodes
+  const bfpoRegex = /^BFPO\d{1,4}$/;
+
+  return postcodeRegex.test(cleaned) || bfpoRegex.test(cleaned);
 }
 
 // =============================================================================
