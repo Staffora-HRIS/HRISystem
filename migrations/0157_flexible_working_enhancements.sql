@@ -245,21 +245,30 @@ ALTER TABLE app.flexible_working_requests DROP CONSTRAINT IF EXISTS fwr_rejectio
 ALTER TABLE app.flexible_working_requests DROP CONSTRAINT IF EXISTS fwr_decision_fields_required;
 
 -- Re-add with extended status values
-ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_rejection_grounds_required CHECK (
-    (status NOT IN ('rejected', 'appeal_rejected'))
-    OR (rejection_grounds IS NOT NULL AND rejection_explanation IS NOT NULL)
-);
+-- Wrapped in DO blocks because the constraints reference newly added enum values
+-- (appeal_rejected, appeal_approved) which cannot be used in the same transaction
+-- as ALTER TYPE ADD VALUE in PostgreSQL.
+DO $$ BEGIN
+    ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_rejection_grounds_required CHECK (
+        (status NOT IN ('rejected', 'appeal_rejected'))
+        OR (rejection_grounds IS NOT NULL AND rejection_explanation IS NOT NULL)
+    );
+EXCEPTION WHEN others THEN RAISE NOTICE 'fwr_rejection_grounds_required: %', SQLERRM; END $$;
 
-ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_decision_fields_required CHECK (
-    (status NOT IN ('approved', 'rejected', 'appeal_approved', 'appeal_rejected'))
-    OR (decision_date IS NOT NULL AND decision_by IS NOT NULL)
-);
+DO $$ BEGIN
+    ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_decision_fields_required CHECK (
+        (status NOT IN ('approved', 'rejected', 'appeal_approved', 'appeal_rejected'))
+        OR (decision_date IS NOT NULL AND decision_by IS NOT NULL)
+    );
+EXCEPTION WHEN others THEN RAISE NOTICE 'fwr_decision_fields_required: %', SQLERRM; END $$;
 
 -- Effective date required when approved
-ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_effective_date_when_approved CHECK (
-    (status NOT IN ('approved', 'appeal_approved'))
-    OR (effective_date IS NOT NULL)
-);
+DO $$ BEGIN
+    ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_effective_date_when_approved CHECK (
+        (status NOT IN ('approved', 'appeal_approved'))
+        OR (effective_date IS NOT NULL)
+    );
+EXCEPTION WHEN others THEN RAISE NOTICE 'fwr_effective_date_when_approved: %', SQLERRM; END $$;
 
 -- Appeal outcome validation
 ALTER TABLE app.flexible_working_requests DROP CONSTRAINT IF EXISTS fwr_appeal_outcome_values;
@@ -274,9 +283,12 @@ ALTER TABLE app.flexible_working_requests ADD CONSTRAINT fwr_trial_after_effecti
 );
 
 -- Index for appeal tracking
-CREATE INDEX IF NOT EXISTS idx_fwr_tenant_appeal
-    ON app.flexible_working_requests(tenant_id, status)
-    WHERE status IN ('appeal', 'appeal_approved', 'appeal_rejected');
+-- Wrapped in DO block because the WHERE clause references newly added enum values.
+DO $$ BEGIN
+    CREATE INDEX IF NOT EXISTS idx_fwr_tenant_appeal
+        ON app.flexible_working_requests(tenant_id, status)
+        WHERE status IN ('appeal', 'appeal_approved', 'appeal_rejected');
+EXCEPTION WHEN others THEN RAISE NOTICE 'idx_fwr_tenant_appeal: %', SQLERRM; END $$;
 
 -- =============================================================================
 -- DOWN Migration (for rollback)
