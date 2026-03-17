@@ -255,6 +255,59 @@ export function createBetterAuth() {
           },
         },
       },
+      session: {
+        create: {
+          /**
+           * Before session creation: check if the user's account is locked.
+           * This runs AFTER password verification succeeds but BEFORE the session
+           * is persisted. If the account is locked, we throw an APIError to prevent
+           * session creation and deny access even with correct credentials.
+           */
+          before: async (session) => {
+            try {
+              const lockResult = await pool.query<{ is_locked: boolean }>(
+                `SELECT app.check_account_lockout($1::text) as is_locked`,
+                [session.userId]
+              );
+              if (lockResult.rows[0]?.is_locked) {
+                // Fetch lock expiry to include in the error message
+                const lockInfo = await pool.query<{ locked_until: Date }>(
+                  `SELECT "lockedUntil" as locked_until FROM app."user" WHERE id = $1`,
+                  [session.userId]
+                );
+                const lockedUntil = lockInfo.rows[0]?.locked_until;
+                const message = lockedUntil
+                  ? `Account is locked until ${lockedUntil.toISOString()}. Too many failed login attempts.`
+                  : "Account is locked due to too many failed login attempts.";
+                throw new APIError("FORBIDDEN", { message });
+              }
+            } catch (error) {
+              // Re-throw APIError (our lockout error) as-is
+              if (error instanceof APIError) throw error;
+              // Swallow DB errors (e.g., function missing) so login is not blocked
+              // when the lockout migration has not been applied
+              console.warn("[Auth] check_account_lockout failed (migration may not be applied):", error);
+            }
+            return { data: session };
+          },
+          /**
+           * After session creation: reset failed login counter.
+           * A successful session creation means the user authenticated correctly,
+           * so we clear any accumulated failed login attempts.
+           */
+          after: async (session) => {
+            try {
+              await pool.query(
+                `SELECT app.reset_failed_logins($1::text)`,
+                [session.userId]
+              );
+            } catch (error) {
+              // Non-fatal: don't block login if reset fails (e.g., migration not applied)
+              console.warn("[Auth] reset_failed_logins failed:", error);
+            }
+          },
+        },
+      },
     },
 
     // Email/password authentication with custom password handling

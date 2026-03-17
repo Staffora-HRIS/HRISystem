@@ -1,5 +1,7 @@
 # API Reference
 
+*Last updated: 2026-03-17*
+
 Base URL: `http://localhost:3000`
 
 Interactive Swagger docs: `http://localhost:3000/docs`
@@ -70,6 +72,61 @@ List endpoints use **cursor-based pagination**:
 | GET | `/auth/tenants` | Yes | List tenants for current user |
 | POST | `/auth/switch-tenant` | Yes | Switch active tenant |
 
+#### Example: Get Current User
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "email": "jane.smith@company.co.uk",
+    "name": "Jane Smith",
+    "emailVerified": true,
+    "status": "active",
+    "mfaEnabled": false
+  },
+  "session": {
+    "id": "sess_abc123",
+    "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "expiresAt": "2026-03-18T12:00:00Z"
+  },
+  "currentTenant": {
+    "id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Acme Ltd",
+    "slug": "acme-ltd",
+    "isPrimary": true
+  },
+  "tenants": [
+    {
+      "id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Acme Ltd",
+      "slug": "acme-ltd",
+      "isPrimary": true
+    }
+  ]
+}
+```
+
+#### Example: Switch Tenant
+
+**Request:**
+
+```json
+{
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
 ---
 
 ## Core HR Module (`/api/v1/hr`)
@@ -111,6 +168,159 @@ List endpoints use **cursor-based pagination**:
 | GET | `/hr/employees/:id/history/:dimension` | `hr.employees.read` | Get effective-dated history |
 | GET | `/hr/employees/:id/statutory-notice` | `hr.employees.read` | Calculate statutory notice period (UK ERA 1996 s.86) |
 
+#### Example: Create Org Unit
+
+**Request:**
+
+```json
+{
+  "code": "ENG-UK",
+  "name": "Engineering - United Kingdom",
+  "description": "UK-based engineering department",
+  "effective_from": "2026-04-01"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "d4e5f6a7-b8c9-0123-4567-890abcdef012",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "parent_id": null,
+  "code": "ENG-UK",
+  "name": "Engineering - United Kingdom",
+  "description": "UK-based engineering department",
+  "level": 0,
+  "path": null,
+  "manager_position_id": null,
+  "cost_center_id": null,
+  "is_active": true,
+  "effective_from": "2026-04-01",
+  "effective_to": null,
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Employee
+
+**Request:**
+
+```json
+{
+  "personal": {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1990-06-15",
+    "gender": "female",
+    "nationality": "GBR"
+  },
+  "contract": {
+    "hire_date": "2026-04-01",
+    "contract_type": "permanent",
+    "employment_type": "full_time",
+    "fte": 1.0,
+    "working_hours_per_week": 37.5,
+    "probation_end_date": "2026-10-01",
+    "notice_period_days": 30
+  },
+  "position": {
+    "position_id": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "org_unit_id": "d4e5f6a7-b8c9-0123-4567-890abcdef012",
+    "is_primary": true
+  },
+  "compensation": {
+    "base_salary": 45000,
+    "currency": "GBP",
+    "pay_frequency": "monthly"
+  },
+  "manager_id": "m1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employee_number": "EMP-001",
+  "user_id": null,
+  "status": "pending",
+  "hire_date": "2026-04-01",
+  "termination_date": null,
+  "termination_reason": null,
+  "tenure_years": null,
+  "personal": {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "middle_name": null,
+    "preferred_name": null,
+    "full_name": "Jane Smith",
+    "display_name": "Jane Smith",
+    "date_of_birth": "1990-06-15",
+    "gender": "female",
+    "marital_status": null,
+    "nationality": "GBR",
+    "effective_from": "2026-04-01"
+  },
+  "contract": {
+    "contract_type": "permanent",
+    "employment_type": "full_time",
+    "fte": 1.0,
+    "working_hours_per_week": 37.5,
+    "probation_end_date": "2026-10-01",
+    "notice_period_days": 30,
+    "effective_from": "2026-04-01"
+  },
+  "position": {
+    "position_id": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "position_code": "SWE-001",
+    "position_title": "Software Engineer",
+    "org_unit_id": "d4e5f6a7-b8c9-0123-4567-890abcdef012",
+    "org_unit_name": "Engineering - United Kingdom",
+    "job_grade": "L5",
+    "is_primary": true,
+    "effective_from": "2026-04-01"
+  },
+  "compensation": {
+    "base_salary": 45000,
+    "currency": "GBP",
+    "pay_frequency": "monthly",
+    "annual_salary": 45000,
+    "effective_from": "2026-04-01"
+  },
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: List Employees
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+      "employee_number": "EMP-001",
+      "status": "active",
+      "hire_date": "2026-04-01",
+      "full_name": "Jane Smith",
+      "display_name": "Jane Smith",
+      "position_title": "Software Engineer",
+      "org_unit_name": "Engineering - United Kingdom",
+      "manager_name": "John Davies"
+    }
+  ],
+  "nextCursor": "eyJpZCI6ImUxZjJhM2I0In0=",
+  "hasMore": true,
+  "total": 142
+}
+```
+
 ---
 
 ## Time & Attendance Module (`/api/v1/time`)
@@ -151,6 +361,71 @@ List endpoints use **cursor-based pagination**:
 | POST | `/time/timesheets/:id/submit` | Submit timesheet for approval |
 | POST | `/time/timesheets/:id/approve` | Approve or reject timesheet |
 
+#### Example: Record Clock In
+
+**Request:**
+
+```json
+{
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "eventType": "clock_in",
+  "eventTime": "2026-03-17T09:00:00Z",
+  "latitude": 51.5074,
+  "longitude": -0.1278,
+  "isManual": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "te1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "eventType": "clock_in",
+  "eventTime": "2026-03-17T09:00:00Z",
+  "deviceId": null,
+  "latitude": 51.5074,
+  "longitude": -0.1278,
+  "isManual": false,
+  "sessionId": "s1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "createdAt": "2026-03-17T09:00:01Z"
+}
+```
+
+#### Example: Create Timesheet
+
+**Request:**
+
+```json
+{
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "periodStart": "2026-03-01",
+  "periodEnd": "2026-03-31"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "ts1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "periodStart": "2026-03-01",
+  "periodEnd": "2026-03-31",
+  "status": "draft",
+  "totalRegularHours": 0,
+  "totalOvertimeHours": 0,
+  "submittedAt": null,
+  "approvedAt": null,
+  "approvedById": null,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
 ---
 
 ## Absence Module (`/api/v1/absence`)
@@ -181,6 +456,109 @@ List endpoints use **cursor-based pagination**:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/absence/balances/:employeeId` | Get employee leave balances |
+
+#### Example: Create Leave Type
+
+**Request:**
+
+```json
+{
+  "code": "ANNUAL",
+  "name": "Annual Leave",
+  "description": "Statutory annual leave entitlement (5.6 weeks)",
+  "isPaid": true,
+  "requiresApproval": true,
+  "requiresAttachment": false,
+  "maxConsecutiveDays": 20,
+  "minNoticeDays": 14,
+  "color": "#2196F3"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "lt1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "code": "ANNUAL",
+  "name": "Annual Leave",
+  "description": "Statutory annual leave entitlement (5.6 weeks)",
+  "isPaid": true,
+  "requiresApproval": true,
+  "requiresAttachment": false,
+  "maxConsecutiveDays": 20,
+  "minNoticeDays": 14,
+  "color": "#2196F3",
+  "isActive": true,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Leave Request
+
+**Request:**
+
+```json
+{
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "leaveTypeId": "lt1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "startDate": "2026-04-14",
+  "endDate": "2026-04-18",
+  "startHalfDay": false,
+  "endHalfDay": false,
+  "reason": "Family holiday"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "lr1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "leaveTypeId": "lt1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "startDate": "2026-04-14",
+  "endDate": "2026-04-18",
+  "startHalfDay": false,
+  "endHalfDay": false,
+  "totalDays": 5,
+  "reason": "Family holiday",
+  "contactInfo": null,
+  "status": "draft",
+  "submittedAt": null,
+  "approvedAt": null,
+  "approvedById": null,
+  "rejectionReason": null,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Get Employee Leave Balances
+
+**Response:**
+
+```json
+[
+  {
+    "id": "lb1b2c3d-e5f6-7890-abcd-ef1234567890",
+    "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+    "leaveTypeId": "lt1b2c3d-e5f6-7890-abcd-ef1234567890",
+    "leaveTypeName": "Annual Leave",
+    "year": 2026,
+    "entitled": 28,
+    "used": 5,
+    "pending": 3,
+    "available": 20,
+    "carryover": 3,
+    "updatedAt": "2026-03-17T10:00:00Z"
+  }
+]
+```
 
 ---
 
@@ -222,6 +600,89 @@ List endpoints use **cursor-based pagination**:
 | POST | `/talent/competencies` | Create competency |
 | GET | `/talent/competencies/:id` | Get competency by ID |
 
+#### Example: Create Goal
+
+**Request:**
+
+```json
+{
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "title": "Complete AWS Solutions Architect certification",
+  "description": "Obtain AWS SAA-C03 certification to support cloud migration programme",
+  "category": "professional_development",
+  "weight": 25,
+  "targetDate": "2026-09-30",
+  "metrics": [
+    {
+      "name": "Practice exam score",
+      "target": "85",
+      "unit": "percent"
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "g1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "title": "Complete AWS Solutions Architect certification",
+  "description": "Obtain AWS SAA-C03 certification to support cloud migration programme",
+  "category": "professional_development",
+  "weight": 25,
+  "targetDate": "2026-09-30",
+  "status": "draft",
+  "progress": 0,
+  "metrics": [
+    {
+      "name": "Practice exam score",
+      "target": "85",
+      "unit": "percent"
+    }
+  ],
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Review Cycle
+
+**Request:**
+
+```json
+{
+  "name": "H1 2026 Performance Review",
+  "description": "First half 2026 performance review cycle",
+  "periodStart": "2026-01-01",
+  "periodEnd": "2026-06-30",
+  "selfReviewDeadline": "2026-07-14",
+  "managerReviewDeadline": "2026-07-28",
+  "calibrationDeadline": "2026-08-15"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "rc1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "H1 2026 Performance Review",
+  "description": "First half 2026 performance review cycle",
+  "periodStart": "2026-01-01",
+  "periodEnd": "2026-06-30",
+  "selfReviewDeadline": "2026-07-14",
+  "managerReviewDeadline": "2026-07-28",
+  "calibrationDeadline": "2026-08-15",
+  "status": "draft",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
 ---
 
 ## LMS Module (`/api/v1/lms`)
@@ -237,6 +698,83 @@ List endpoints use **cursor-based pagination**:
 | POST | `/lms/enrollments/:id/complete` | Complete course |
 | GET | `/lms/my-learning` | Get current user's learning |
 
+#### Example: Create Course
+
+**Request:**
+
+```json
+{
+  "title": "GDPR Awareness Training",
+  "description": "Mandatory data protection training for all employees",
+  "category": "Compliance",
+  "durationMinutes": 45,
+  "contentType": "video",
+  "contentUrl": "https://lms.staffora.co.uk/courses/gdpr-awareness",
+  "passingScore": 80,
+  "isRequired": true,
+  "tags": ["gdpr", "compliance", "mandatory"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "c1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "title": "GDPR Awareness Training",
+  "description": "Mandatory data protection training for all employees",
+  "category": "Compliance",
+  "durationMinutes": 45,
+  "contentType": "video",
+  "contentUrl": "https://lms.staffora.co.uk/courses/gdpr-awareness",
+  "thumbnailUrl": null,
+  "passingScore": 80,
+  "isRequired": true,
+  "status": "draft",
+  "enrollmentCount": 0,
+  "completionCount": 0,
+  "createdBy": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Enrollment
+
+**Request:**
+
+```json
+{
+  "courseId": "c1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "dueDate": "2026-04-30"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "en1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "courseId": "c1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "status": "enrolled",
+  "enrolledAt": "2026-03-17T10:00:00Z",
+  "startedAt": null,
+  "completedAt": null,
+  "dueDate": "2026-04-30",
+  "progress": 0,
+  "score": null,
+  "assignedBy": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "courseTitle": "GDPR Awareness Training",
+  "employeeName": "Jane Smith",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
 ---
 
 ## Cases Module (`/api/v1/cases`)
@@ -251,6 +789,76 @@ List endpoints use **cursor-based pagination**:
 | POST | `/cases/:id/comments` | Add comment to case |
 | GET | `/cases/my-cases` | Get current user's cases |
 
+#### Example: Create Case
+
+**Request:**
+
+```json
+{
+  "requesterId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "category": "payroll",
+  "subject": "Incorrect overtime calculation for March",
+  "description": "My overtime hours for the week of 10th March were not included in my payslip. I worked 8 extra hours as approved by my line manager.",
+  "priority": "high",
+  "tags": ["payroll", "overtime"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "cs1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "caseNumber": "CASE-2026-0042",
+  "requesterId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "requesterName": "Jane Smith",
+  "category": "payroll",
+  "subject": "Incorrect overtime calculation for March",
+  "description": "My overtime hours for the week of 10th March were not included in my payslip. I worked 8 extra hours as approved by my line manager.",
+  "priority": "high",
+  "status": "open",
+  "assigneeId": null,
+  "assigneeName": null,
+  "resolution": null,
+  "dueDate": null,
+  "resolvedAt": null,
+  "closedAt": null,
+  "firstResponseAt": null,
+  "slaBreached": false,
+  "tags": ["payroll", "overtime"],
+  "createdBy": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Add Comment to Case
+
+**Request:**
+
+```json
+{
+  "content": "I have reviewed your timesheet records and can confirm the 8 hours are missing. This will be corrected in the next pay run.",
+  "isInternal": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "cm1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "caseId": "cs1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "authorId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "authorName": "HR Administrator",
+  "content": "I have reviewed your timesheet records and can confirm the 8 hours are missing. This will be corrected in the next pay run.",
+  "isInternal": false,
+  "createdAt": "2026-03-17T11:30:00Z",
+  "updatedAt": "2026-03-17T11:30:00Z"
+}
+```
+
 ---
 
 ## Onboarding Module (`/api/v1/onboarding`)
@@ -264,6 +872,106 @@ List endpoints use **cursor-based pagination**:
 | GET | `/onboarding/instances/:id` | Get onboarding instance |
 | POST | `/onboarding/instances/:id/tasks/:taskId/complete` | Complete task |
 | GET | `/onboarding/my-onboarding` | Get current user's onboarding |
+
+#### Example: Create Onboarding Template
+
+**Request:**
+
+```json
+{
+  "name": "UK Engineering New Starter",
+  "description": "Standard onboarding checklist for UK engineering hires",
+  "isDefault": false,
+  "tasks": [
+    {
+      "name": "Complete right to work check",
+      "category": "compliance",
+      "assigneeType": "hr",
+      "daysFromStart": 0,
+      "daysToComplete": 1,
+      "required": true,
+      "order": 1
+    },
+    {
+      "name": "Set up development environment",
+      "category": "equipment",
+      "assigneeType": "it",
+      "daysFromStart": 0,
+      "daysToComplete": 2,
+      "required": true,
+      "order": 2
+    },
+    {
+      "name": "Meet the team introductions",
+      "category": "introduction",
+      "assigneeType": "buddy",
+      "daysFromStart": 1,
+      "daysToComplete": 5,
+      "required": false,
+      "order": 3
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "ot1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "UK Engineering New Starter",
+  "description": "Standard onboarding checklist for UK engineering hires",
+  "departmentId": null,
+  "positionId": null,
+  "isDefault": false,
+  "status": "active",
+  "taskCount": 3,
+  "createdBy": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Start Onboarding for Employee
+
+**Request:**
+
+```json
+{
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "templateId": "ot1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "startDate": "2026-04-01",
+  "buddyId": "b1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "notes": "New graduate starter - may need extra support"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "oi1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employeeId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "employeeName": "Jane Smith",
+  "templateId": "ot1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "templateName": "UK Engineering New Starter",
+  "status": "not_started",
+  "startDate": "2026-04-01",
+  "targetCompletionDate": "2026-04-08",
+  "completedAt": null,
+  "buddyId": "b1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "buddyName": "Tom Williams",
+  "managerId": null,
+  "progress": 0,
+  "taskCount": 3,
+  "completedTaskCount": 0,
+  "notes": "New graduate starter - may need extra support",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -295,6 +1003,106 @@ List endpoints use **cursor-based pagination**:
 | GET | `/benefits/life-events` | List life events |
 | POST | `/benefits/life-events` | Create life event |
 
+#### Example: Create Benefit Plan
+
+**Request:**
+
+```json
+{
+  "name": "Private Medical Insurance - Standard",
+  "plan_code": "PMI-STD",
+  "category": "health",
+  "description": "Standard private medical insurance with AXA Health",
+  "contribution_type": "shared",
+  "effective_from": "2026-04-01",
+  "waiting_period_days": 90,
+  "costs": [
+    {
+      "coverage_level": "employee_only",
+      "employee_cost": 45.00,
+      "employer_cost": 85.00
+    },
+    {
+      "coverage_level": "family",
+      "employee_cost": 120.00,
+      "employer_cost": 85.00
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "bp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Private Medical Insurance - Standard",
+  "plan_code": "PMI-STD",
+  "category": "health",
+  "carrier_id": null,
+  "carrier_name": null,
+  "description": "Standard private medical insurance with AXA Health",
+  "contribution_type": "shared",
+  "effective_from": "2026-04-01",
+  "effective_to": null,
+  "waiting_period_days": 90,
+  "is_active": true,
+  "costs": [
+    {
+      "coverage_level": "employee_only",
+      "employee_cost": 45.00,
+      "employer_cost": 85.00,
+      "total_cost": 130.00
+    },
+    {
+      "coverage_level": "family",
+      "employee_cost": 120.00,
+      "employer_cost": 85.00,
+      "total_cost": 205.00
+    }
+  ],
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Enrollment
+
+**Request:**
+
+```json
+{
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "plan_id": "bp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "coverage_level": "employee_only",
+  "effective_from": "2026-07-01",
+  "enrollment_type": "new_hire"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "be1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "plan_id": "bp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "plan_name": "Private Medical Insurance - Standard",
+  "plan_category": "health",
+  "coverage_level": "employee_only",
+  "status": "active",
+  "effective_from": "2026-07-01",
+  "effective_to": null,
+  "employee_contribution": 45.00,
+  "employer_contribution": 85.00,
+  "total_contribution": 130.00,
+  "covered_dependents": [],
+  "enrollment_type": "new_hire",
+  "created_at": "2026-03-17T10:00:00Z"
+}
+```
+
 ---
 
 ## Documents Module (`/api/v1/documents`)
@@ -312,6 +1120,51 @@ List endpoints use **cursor-based pagination**:
 | GET | `/documents/:id/versions` | List document versions |
 | POST | `/documents/:id/versions` | Create new version |
 | GET | `/documents/my-summary` | Get self-service document summary |
+
+#### Example: Create Document
+
+**Request:**
+
+```json
+{
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "category": "contract",
+  "name": "Employment Contract - Jane Smith",
+  "description": "Signed employment contract for permanent position",
+  "file_name": "jane-smith-contract-2026.pdf",
+  "file_size": 245760,
+  "mime_type": "application/pdf",
+  "expires_at": "2027-04-01",
+  "tags": ["contract", "employment", "signed"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "dc1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "employee_name": "Jane Smith",
+  "category": "contract",
+  "name": "Employment Contract - Jane Smith",
+  "description": "Signed employment contract for permanent position",
+  "file_key": "docs/t1b2c3d4/contract/2026/jane-smith-contract-2026.pdf",
+  "file_name": "jane-smith-contract-2026.pdf",
+  "file_size": 245760,
+  "mime_type": "application/pdf",
+  "version": 1,
+  "status": "active",
+  "expires_at": "2027-04-01",
+  "tags": ["contract", "employment", "signed"],
+  "uploaded_by": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "uploaded_by_name": "HR Administrator",
+  "download_url": "https://storage.staffora.co.uk/docs/...",
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -332,6 +1185,88 @@ List endpoints use **cursor-based pagination**:
 | GET | `/succession/pipeline` | Get succession pipeline |
 | GET | `/succession/pipeline/stats` | Get pipeline statistics |
 | GET | `/succession/gaps` | Get succession gaps |
+
+#### Example: Create Succession Plan
+
+**Request:**
+
+```json
+{
+  "position_id": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "is_critical_role": true,
+  "criticality_reason": "Single point of failure for UK regulatory compliance expertise",
+  "risk_level": "high",
+  "incumbent_retirement_risk": false,
+  "incumbent_flight_risk": true,
+  "market_scarcity": true,
+  "notes": "Limited pool of qualified UK compliance specialists",
+  "next_review_date": "2026-06-30"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "sp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "position_id": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "position_title": "Head of Compliance",
+  "org_unit_name": "Legal & Compliance",
+  "incumbent_name": "Sarah Thompson",
+  "is_critical_role": true,
+  "criticality_reason": "Single point of failure for UK regulatory compliance expertise",
+  "risk_level": "high",
+  "incumbent_retirement_risk": false,
+  "incumbent_flight_risk": true,
+  "market_scarcity": true,
+  "notes": "Limited pool of qualified UK compliance specialists",
+  "candidate_count": 0,
+  "ready_now_count": 0,
+  "last_reviewed_at": null,
+  "next_review_date": "2026-06-30",
+  "is_active": true,
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Add Succession Candidate
+
+**Request:**
+
+```json
+{
+  "plan_id": "sp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "readiness": "ready_1_year",
+  "ranking": 1,
+  "assessment_notes": "Strong compliance background, needs leadership development",
+  "strengths": ["Regulatory knowledge", "Attention to detail", "Stakeholder management"],
+  "development_areas": ["People management", "Strategic planning"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "sc1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "plan_id": "sp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "employee_name": "Jane Smith",
+  "current_position": "Senior Compliance Analyst",
+  "current_department": "Legal & Compliance",
+  "readiness": "ready_1_year",
+  "ranking": 1,
+  "assessment_notes": "Strong compliance background, needs leadership development",
+  "strengths": ["Regulatory knowledge", "Attention to detail", "Stakeholder management"],
+  "development_areas": ["People management", "Strategic planning"],
+  "is_active": true,
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -370,6 +1305,75 @@ List endpoints use **cursor-based pagination**:
 | GET | `/analytics/recruitment/summary` | Recruitment summary |
 | GET | `/analytics/reports` | Standard reports catalog |
 
+#### Example: Executive Dashboard
+
+**Response:**
+
+```json
+{
+  "headcount": {
+    "total_employees": 342,
+    "active_employees": 325,
+    "on_leave_employees": 12,
+    "pending_employees": 5,
+    "terminated_employees": 0,
+    "as_of_date": "2026-03-17"
+  },
+  "turnover": {
+    "rate": 8.2,
+    "trend": "down",
+    "change_percentage": -1.5
+  },
+  "attendance": {
+    "rate": 96.4,
+    "trend": "stable"
+  },
+  "leave": {
+    "pending_requests": 14,
+    "avg_utilization": 62.3
+  },
+  "recruitment": {
+    "open_positions": 8,
+    "avg_time_to_fill": 32
+  }
+}
+```
+
+#### Example: Headcount Summary
+
+**Response:**
+
+```json
+{
+  "total_employees": 342,
+  "active_employees": 325,
+  "on_leave_employees": 12,
+  "pending_employees": 5,
+  "terminated_employees": 0,
+  "as_of_date": "2026-03-17"
+}
+```
+
+#### Example: Turnover Summary
+
+**Query:** `?start_date=2026-01-01&end_date=2026-03-31`
+
+**Response:**
+
+```json
+{
+  "total_terminations": 7,
+  "voluntary_terminations": 5,
+  "involuntary_terminations": 2,
+  "turnover_rate": 8.2,
+  "avg_tenure_months": 18,
+  "period": {
+    "start_date": "2026-01-01",
+    "end_date": "2026-03-31"
+  }
+}
+```
+
 ---
 
 ## Competencies Module (`/api/v1/competencies`)
@@ -404,6 +1408,91 @@ List endpoints use **cursor-based pagination**:
 | GET | `/competencies/due-assessments` | Get assessments due |
 | GET | `/competencies/team/:managerId` | Get team competency overview |
 
+#### Example: Create Competency
+
+**Request:**
+
+```json
+{
+  "code": "TECH-CLOUD",
+  "name": "Cloud Infrastructure",
+  "category": "technical",
+  "description": "Ability to design, deploy, and manage cloud infrastructure solutions",
+  "levels": [
+    {
+      "level": 1,
+      "name": "Foundation",
+      "description": "Basic understanding of cloud concepts and services"
+    },
+    {
+      "level": 3,
+      "name": "Proficient",
+      "description": "Can independently design and implement cloud solutions"
+    },
+    {
+      "level": 5,
+      "name": "Expert",
+      "description": "Leads cloud architecture decisions and mentors others"
+    }
+  ],
+  "behavioral_indicators": [
+    "Evaluates cloud services for cost and performance",
+    "Implements infrastructure as code practices",
+    "Ensures compliance with security standards"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "cp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "code": "TECH-CLOUD",
+  "name": "Cloud Infrastructure",
+  "category": "technical",
+  "description": "Ability to design, deploy, and manage cloud infrastructure solutions",
+  "is_active": true,
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Assess Employee Competency
+
+**Request:**
+
+```json
+{
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "competency_id": "cp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "current_level": 2,
+  "target_level": 4,
+  "self_assessment_level": 3,
+  "assessment_notes": "Good foundational knowledge, needs hands-on project experience",
+  "next_assessment_due": "2026-09-17"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "ec1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "competency_id": "cp1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "current_level": 2,
+  "target_level": 4,
+  "self_assessment_level": 3,
+  "gap": 2,
+  "assessment_notes": "Good foundational knowledge, needs hands-on project experience",
+  "next_assessment_due": "2026-09-17",
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
+
 ---
 
 ## Recruitment Module (`/api/v1/recruitment`)
@@ -432,6 +1521,92 @@ List endpoints use **cursor-based pagination**:
 | PATCH | `/recruitment/candidates/:id` | Update candidate |
 | POST | `/recruitment/candidates/:id/advance` | Advance candidate stage |
 | GET | `/recruitment/candidates/stats` | Get candidate statistics |
+
+#### Example: Create Requisition
+
+**Request:**
+
+```json
+{
+  "title": "Senior Software Engineer",
+  "positionId": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "orgUnitId": "d4e5f6a7-b8c9-0123-4567-890abcdef012",
+  "hiringManagerId": "m1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employmentType": "full_time",
+  "openings": 2,
+  "priority": 4,
+  "jobDescription": "We are looking for an experienced senior engineer to join our UK engineering team...",
+  "requirements": {
+    "experienceYears": 5,
+    "education": "BSc Computer Science or equivalent",
+    "skills": ["TypeScript", "React", "PostgreSQL", "AWS"],
+    "certifications": ["AWS Solutions Architect"],
+    "niceToHave": ["Kubernetes", "GraphQL"]
+  },
+  "targetStartDate": "2026-06-01",
+  "deadline": "2026-05-01",
+  "location": "London, UK"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "rq1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "title": "Senior Software Engineer",
+  "positionId": "p1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "orgUnitId": "d4e5f6a7-b8c9-0123-4567-890abcdef012",
+  "hiringManagerId": "m1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employmentType": "full_time",
+  "openings": 2,
+  "priority": 4,
+  "status": "draft",
+  "targetStartDate": "2026-06-01",
+  "deadline": "2026-05-01",
+  "location": "London, UK",
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Create Candidate
+
+**Request:**
+
+```json
+{
+  "requisitionId": "rq1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "email": "alex.johnson@example.co.uk",
+  "firstName": "Alex",
+  "lastName": "Johnson",
+  "phone": "+44 7700 900123",
+  "source": "linkedin",
+  "resumeUrl": "https://storage.staffora.co.uk/resumes/alex-johnson-cv.pdf",
+  "linkedinUrl": "https://linkedin.com/in/alexjohnson",
+  "rating": 4
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "cd1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "requisitionId": "rq1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "email": "alex.johnson@example.co.uk",
+  "firstName": "Alex",
+  "lastName": "Johnson",
+  "phone": "+44 7700 900123",
+  "source": "linkedin",
+  "currentStage": "applied",
+  "rating": 4,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -464,6 +1639,108 @@ List endpoints use **cursor-based pagination**:
 | POST | `/workflows/steps/:stepId/process` | Process step (approve/reject) |
 | POST | `/workflows/steps/:stepId/reassign` | Reassign step |
 | GET | `/workflows/my-approvals` | Get pending approvals |
+
+#### Example: Create Workflow Definition
+
+**Request:**
+
+```json
+{
+  "code": "LEAVE-APPROVAL",
+  "name": "Leave Request Approval",
+  "description": "Standard approval workflow for leave requests",
+  "category": "hr",
+  "triggerType": "event",
+  "triggerConfig": {
+    "eventType": "absence.leave_request.submitted"
+  },
+  "steps": [
+    {
+      "stepKey": "manager_approval",
+      "stepType": "approval",
+      "name": "Manager Approval",
+      "description": "Direct line manager reviews and approves/rejects the leave request",
+      "assigneeType": "manager",
+      "timeoutHours": 48,
+      "nextSteps": [
+        { "stepKey": "notify_employee" }
+      ]
+    },
+    {
+      "stepKey": "notify_employee",
+      "stepType": "notification",
+      "name": "Notify Employee",
+      "description": "Send notification to employee about the decision",
+      "assigneeType": "dynamic"
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "wd1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "code": "LEAVE-APPROVAL",
+  "name": "Leave Request Approval",
+  "description": "Standard approval workflow for leave requests",
+  "category": "hr",
+  "triggerType": "event",
+  "triggerConfig": {
+    "eventType": "absence.leave_request.submitted"
+  },
+  "steps": [],
+  "status": "draft",
+  "version": 1,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
+
+#### Example: Start Workflow Instance
+
+**Request:**
+
+```json
+{
+  "workflowDefinitionId": "wd1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "entityType": "leave_request",
+  "entityId": "lr1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "initiatorId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "contextData": {
+    "leaveType": "Annual Leave",
+    "totalDays": 5,
+    "startDate": "2026-04-14"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "wi1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "workflowDefinitionId": "wd1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "workflowName": "Leave Request Approval",
+  "entityType": "leave_request",
+  "entityId": "lr1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "initiatorId": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "status": "in_progress",
+  "currentStepKey": "manager_approval",
+  "contextData": {
+    "leaveType": "Annual Leave",
+    "totalDays": 5,
+    "startDate": "2026-04-14"
+  },
+  "startedAt": "2026-03-17T10:00:00Z",
+  "completedAt": null,
+  "createdAt": "2026-03-17T10:00:00Z",
+  "updatedAt": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -498,6 +1775,71 @@ List endpoints use **cursor-based pagination**:
 |--------|------|-------------|
 | GET | `/security/audit-log` | Query audit log entries |
 
+#### Example: Create Role
+
+**Request:**
+
+```json
+{
+  "name": "Payroll Manager",
+  "description": "Can manage payroll runs, view employee compensation, and approve timesheets",
+  "portalType": "admin",
+  "permissions": {
+    "payroll.runs.read": true,
+    "payroll.runs.write": true,
+    "payroll.runs.approve": true,
+    "hr.compensation.read": true,
+    "time.timesheets.approve": true
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "rl1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "name": "Payroll Manager",
+  "description": "Can manage payroll runs, view employee compensation, and approve timesheets",
+  "portalType": "admin",
+  "isSystem": false,
+  "permissions": {
+    "payroll.runs.read": true,
+    "payroll.runs.write": true,
+    "payroll.runs.approve": true,
+    "hr.compensation.read": true,
+    "time.timesheets.approve": true
+  }
+}
+```
+
+#### Example: Update Field Permissions (Bulk)
+
+**Request:** `PUT /security/roles/:roleId/field-permissions`
+
+```json
+{
+  "permissions": [
+    {
+      "fieldId": "f1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "permission": "view"
+    },
+    {
+      "fieldId": "f2b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "permission": "hidden"
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "updated": 2
+}
+```
+
 ---
 
 ## Portal Module (`/api/v1/portal`)
@@ -512,6 +1854,46 @@ Self-service endpoints for logged-in employees:
 | GET | `/portal/approvals` | Get my pending approvals |
 | GET | `/portal/dashboard` | Get dashboard summary |
 
+#### Example: Get My Profile
+
+**Response:**
+
+```json
+{
+  "id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "employeeNumber": "EMP-001",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "preferredName": null,
+  "photoUrl": null,
+  "jobTitle": "Software Engineer",
+  "department": "Engineering - United Kingdom",
+  "status": "active",
+  "email": "jane.smith@company.co.uk",
+  "hireDate": "2026-04-01"
+}
+```
+
+#### Example: Get My Pending Approvals
+
+**Response:**
+
+```json
+[
+  {
+    "id": "lr1b2c3d-e5f6-7890-abcd-ef1234567890",
+    "type": "leave_request",
+    "employeeId": "e2f3a4b5-c6d7-8901-abcd-ef2345678901",
+    "employeeName": "Tom Williams",
+    "employeeNumber": "EMP-042",
+    "summary": "Annual Leave: 14 Apr - 18 Apr 2026 (5 days)",
+    "submittedAt": "2026-03-15T09:30:00Z",
+    "dueDate": "2026-03-20T09:30:00Z",
+    "priority": "medium"
+  }
+]
+```
+
 ---
 
 ## Tenant Module (`/api/v1/tenant`)
@@ -521,6 +1903,30 @@ Self-service endpoints for logged-in employees:
 | GET | `/tenant/current` | Get current tenant info |
 | GET | `/tenant/settings` | Get tenant settings |
 
+#### Example: Get Current Tenant
+
+**Response:**
+
+```json
+{
+  "id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Acme Ltd",
+  "slug": "acme-ltd",
+  "domain": "acme.staffora.co.uk",
+  "status": "active",
+  "settings": {
+    "timezone": "Europe/London",
+    "dateFormat": "DD/MM/YYYY",
+    "currency": "GBP",
+    "weekStartDay": "monday",
+    "workingDaysPerWeek": 5,
+    "defaultWorkingHours": 37.5,
+    "financialYearStart": "04-06"
+  },
+  "createdAt": "2025-01-15T09:00:00Z"
+}
+```
+
 ---
 
 ## Dashboard Module (`/api/v1/dashboard`)
@@ -529,6 +1935,21 @@ Self-service endpoints for logged-in employees:
 |--------|------|-------------|
 | GET | `/dashboard/admin/stats` | Admin dashboard statistics |
 
+#### Example: Admin Dashboard Statistics
+
+**Response:**
+
+```json
+{
+  "totalEmployees": 342,
+  "activeEmployees": 325,
+  "departments": 12,
+  "openPositions": 8,
+  "pendingWorkflows": 5,
+  "pendingApprovals": 14
+}
+```
+
 ---
 
 ## System Module (`/api/v1/system`)
@@ -536,6 +1957,28 @@ Self-service endpoints for logged-in employees:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/system/health` | System health check |
+
+#### Example: System Health Check
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "services": [
+    {
+      "name": "database",
+      "status": "healthy",
+      "latency": 2.3
+    },
+    {
+      "name": "redis",
+      "status": "healthy",
+      "latency": 0.8
+    }
+  ]
+}
+```
 
 ---
 
@@ -567,6 +2010,45 @@ UK right-to-work verification and document management for Immigration, Asylum an
 | POST | `/right-to-work/checks/:id/documents` | Yes | Add document to check |
 | DELETE | `/right-to-work/checks/:id/documents/:documentId` | Yes | Remove document from check |
 | GET | `/right-to-work/employees/:employeeId/status` | Yes | Get employee RTW status |
+
+#### Example: Create RTW Check
+
+**Request:**
+
+```json
+{
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "check_type": "manual_list_a",
+  "check_date": "2026-03-17",
+  "document_type": "UK Passport",
+  "document_reference": "533410987",
+  "document_expiry_date": "2032-08-15",
+  "notes": "Original passport verified in person"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "rw1b2c3d-e5f6-7890-abcd-ef1234567890",
+  "tenant_id": "t1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "employee_id": "e1f2a3b4-c5d6-7890-abcd-ef1234567890",
+  "check_type": "manual_list_a",
+  "check_date": "2026-03-17",
+  "status": "pending",
+  "document_type": "UK Passport",
+  "document_reference": "533410987",
+  "document_expiry_date": "2032-08-15",
+  "restriction_details": null,
+  "notes": "Original passport verified in person",
+  "verified_by": null,
+  "verified_at": null,
+  "follow_up_date": null,
+  "created_at": "2026-03-17T10:00:00Z",
+  "updated_at": "2026-03-17T10:00:00Z"
+}
+```
 
 ---
 
@@ -1517,3 +2999,15 @@ Customer-facing portal API. Authentication via BetterAuth; portal users are link
 - [Error Codes](ERROR_CODES.md) — All error codes by module
 - [Security Patterns](../patterns/SECURITY.md) — Authentication and authorization
 - [Architecture Overview](../architecture/ARCHITECTURE.md) — System design context
+
+---
+
+## Related Documents
+
+- [Error Codes](ERROR_CODES.md) — Error codes and messages for all API responses
+- [Architecture Overview](../architecture/ARCHITECTURE.md) — System architecture and request flow
+- [Security Patterns](../patterns/SECURITY.md) — Authentication, CSRF, and RLS enforcement
+- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md) — RBAC and endpoint authorization
+- [State Machines](../patterns/STATE_MACHINES.md) — Entity lifecycle transitions via API
+- [Frontend Guide](../guides/FRONTEND.md) — Frontend consumption of the API
+- [Getting Started](../guides/GETTING_STARTED.md) — Running the API server locally
