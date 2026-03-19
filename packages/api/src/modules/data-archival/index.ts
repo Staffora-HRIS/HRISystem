@@ -5,6 +5,12 @@
  * (terminated employees >7 years, closed cases >5 years, etc.) and
  * restoring them when needed.
  *
+ * TODO-225 enhancements:
+ *   - archive_policies: configurable policies with archive_after_days and status_filter
+ *   - archive_log: immutable log of every archival run execution
+ *   - archive schema: parallel tables that mirror app schema structure
+ *   - Policy-based archival run and restore endpoints
+ *
  * Usage:
  * ```typescript
  * import { dataArchivalRoutes } from './modules/data-archival';
@@ -25,6 +31,8 @@ export {
   DataArchivalRepository,
   type ArchivedRecordRow,
   type ArchivalRuleRow,
+  type ArchivePolicyRow,
+  type ArchiveLogRow,
   type PaginatedResult,
   type CategoryStats,
 } from "./repository";
@@ -41,10 +49,15 @@ export {
   OptionalIdempotencyHeaderSchema,
   // Query schemas
   ArchivedRecordsQuerySchema,
+  ArchiveLogQuerySchema,
   // Request schemas
   ArchiveRecordSchema,
   RestoreRecordSchema,
   RunArchivalSchema,
+  CreateArchivePolicySchema,
+  UpdateArchivePolicySchema,
+  RunPolicyArchivalSchema,
+  RestoreFromArchiveSchema,
   // Response schemas
   ArchivedRecordResponseSchema,
   ArchivedRecordListResponseSchema,
@@ -55,6 +68,12 @@ export {
   ArchivalRuleListResponseSchema,
   SeedDefaultsResponseSchema,
   DeleteSuccessResponseSchema,
+  ArchivePolicyResponseSchema,
+  ArchivePolicyListResponseSchema,
+  ArchiveLogEntryResponseSchema,
+  ArchiveLogListResponseSchema,
+  PolicyArchivalRunResultSchema,
+  PolicyRestoreResultSchema,
   // Types
   type ArchivalSourceCategory,
   type ArchivalStatus,
@@ -74,4 +93,15 @@ export {
   type ArchivalRuleListResponse,
   type SeedDefaultsResponse,
   type DeleteSuccessResponse,
+  type CreateArchivePolicy,
+  type UpdateArchivePolicy,
+  type ArchivePolicyResponse,
+  type ArchivePolicyListResponse,
+  type ArchiveLogEntryResponse,
+  type ArchiveLogListResponse,
+  type ArchiveLogQuery,
+  type RunPolicyArchivalRequest,
+  type PolicyArchivalRunResult,
+  type RestoreFromArchiveRequest,
+  type PolicyRestoreResult,
 } from "./schemas";

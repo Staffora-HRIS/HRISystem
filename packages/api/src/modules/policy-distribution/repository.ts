@@ -32,6 +32,7 @@ export interface DistributionRow extends Row {
   distributedBy: string;
   targetDepartments: string[];
   targetAll: boolean;
+  deadlineAt: Date | null;
   createdAt: Date;
 }
 
@@ -41,9 +42,20 @@ export interface AcknowledgementRow extends Row {
   tenantId: string;
   distributionId: string;
   employeeId: string;
+  employeeName: string | null;
   acknowledgedAt: Date;
   ipAddress: string | null;
   createdAt: Date;
+}
+
+/** Raw DB row for pending policies query */
+export interface PendingPolicyRow extends Row {
+  distributionId: string;
+  documentId: string;
+  title: string;
+  distributedAt: Date;
+  deadlineAt: Date | null;
+  isOverdue: boolean;
 }
 
 // =============================================================================
@@ -57,9 +69,6 @@ export class PolicyDistributionRepository {
   // Distribution Operations
   // ===========================================================================
 
-  /**
-   * List all distributions with cursor-based pagination
-   */
   async listDistributions(
     ctx: TenantContext,
     pagination: PaginationQuery
@@ -73,7 +82,7 @@ export class PolicyDistributionRepository {
           id, tenant_id, document_id, title,
           distributed_at, distributed_by,
           target_departments, target_all,
-          created_at
+          deadline_at, created_at
         FROM policy_distributions
         WHERE 1=1
           ${pagination.cursor ? tx`AND created_at < ${pagination.cursor}::timestamptz` : tx``}
@@ -92,9 +101,6 @@ export class PolicyDistributionRepository {
     });
   }
 
-  /**
-   * Get a single distribution by ID
-   */
   async getDistributionById(
     ctx: TenantContext,
     id: string
@@ -105,7 +111,7 @@ export class PolicyDistributionRepository {
           id, tenant_id, document_id, title,
           distributed_at, distributed_by,
           target_departments, target_all,
-          created_at
+          deadline_at, created_at
         FROM policy_distributions
         WHERE id = ${id}
       `;
@@ -113,9 +119,6 @@ export class PolicyDistributionRepository {
     return rows[0] ?? null;
   }
 
-  /**
-   * Create a new distribution record
-   */
   async createDistribution(
     ctx: TenantContext,
     data: CreateDistribution & { distributedBy: string },
@@ -125,20 +128,22 @@ export class PolicyDistributionRepository {
       INSERT INTO policy_distributions (
         tenant_id, document_id, title,
         distributed_by,
-        target_departments, target_all
+        target_departments, target_all,
+        deadline_at
       ) VALUES (
         ${ctx.tenantId},
         ${data.document_id},
         ${data.title},
         ${data.distributedBy},
         ${JSON.stringify(data.target_departments ?? [])}::jsonb,
-        ${data.target_all ?? false}
+        ${data.target_all ?? false},
+        ${data.deadline_at ?? null}::timestamptz
       )
       RETURNING
         id, tenant_id, document_id, title,
         distributed_at, distributed_by,
         target_departments, target_all,
-        created_at
+        deadline_at, created_at
     `;
     return rows[0];
   }
@@ -147,9 +152,6 @@ export class PolicyDistributionRepository {
   // Acknowledgement Operations
   // ===========================================================================
 
-  /**
-   * List acknowledgements for a specific distribution with cursor-based pagination
-   */
   async listAcknowledgements(
     ctx: TenantContext,
     distributionId: string,
@@ -161,12 +163,17 @@ export class PolicyDistributionRepository {
     return this.db.withTransaction(ctx, async (tx) => {
       const rows = await tx<AcknowledgementRow[]>`
         SELECT
-          id, tenant_id, distribution_id, employee_id,
-          acknowledged_at, ip_address, created_at
-        FROM policy_acknowledgements
-        WHERE distribution_id = ${distributionId}
-          ${pagination.cursor ? tx`AND created_at < ${pagination.cursor}::timestamptz` : tx``}
-        ORDER BY created_at DESC
+          pa.id, pa.tenant_id, pa.distribution_id, pa.employee_id,
+          COALESCE(
+            e.first_name || ' ' || e.last_name,
+            pa.employee_id::text
+          ) AS employee_name,
+          pa.acknowledged_at, pa.ip_address, pa.created_at
+        FROM policy_acknowledgements pa
+        LEFT JOIN employees e ON e.id = pa.employee_id AND e.tenant_id = pa.tenant_id
+        WHERE pa.distribution_id = ${distributionId}
+          ${pagination.cursor ? tx`AND pa.created_at < ${pagination.cursor}::timestamptz` : tx``}
+        ORDER BY pa.created_at DESC
         LIMIT ${fetchLimit}
       `;
 
@@ -181,9 +188,6 @@ export class PolicyDistributionRepository {
     });
   }
 
-  /**
-   * Count total acknowledgements for a distribution
-   */
   async countAcknowledgements(
     ctx: TenantContext,
     distributionId: string
@@ -198,10 +202,6 @@ export class PolicyDistributionRepository {
     });
   }
 
-  /**
-   * Create an acknowledgement (read receipt) for a distribution
-   * Returns null if the employee has already acknowledged (unique constraint violation)
-   */
   async createAcknowledgement(
     ctx: TenantContext,
     distributionId: string,
@@ -222,6 +222,7 @@ export class PolicyDistributionRepository {
         ON CONFLICT (distribution_id, employee_id) DO NOTHING
         RETURNING
           id, tenant_id, distribution_id, employee_id,
+          NULL::text AS employee_name,
           acknowledged_at, ip_address, created_at
       `;
       return rows[0] ?? null;
@@ -230,9 +231,6 @@ export class PolicyDistributionRepository {
     }
   }
 
-  /**
-   * Get an existing acknowledgement for an employee + distribution
-   */
   async getAcknowledgement(
     ctx: TenantContext,
     distributionId: string,
@@ -242,6 +240,7 @@ export class PolicyDistributionRepository {
       return tx<AcknowledgementRow[]>`
         SELECT
           id, tenant_id, distribution_id, employee_id,
+          NULL::text AS employee_name,
           acknowledged_at, ip_address, created_at
         FROM policy_acknowledgements
         WHERE distribution_id = ${distributionId}
@@ -249,5 +248,66 @@ export class PolicyDistributionRepository {
       `;
     });
     return rows[0] ?? null;
+  }
+
+  // ===========================================================================
+  // Pending Policies (Employee Self-Service)
+  // ===========================================================================
+
+  async getEmployeeIdForUser(
+    ctx: TenantContext
+  ): Promise<string | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<{ id: string }[]>`
+        SELECT id FROM employees
+        WHERE user_id = ${ctx.userId!}::uuid
+          AND tenant_id = ${ctx.tenantId}::uuid
+        LIMIT 1
+      `;
+    });
+    return rows[0]?.id ?? null;
+  }
+
+  async getPendingForEmployee(
+    ctx: TenantContext,
+    employeeId: string
+  ): Promise<PendingPolicyRow[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      return tx<PendingPolicyRow[]>`
+        SELECT
+          pd.id AS distribution_id,
+          pd.document_id,
+          pd.title,
+          pd.distributed_at,
+          pd.deadline_at,
+          CASE
+            WHEN pd.deadline_at IS NOT NULL AND pd.deadline_at < now()
+            THEN true
+            ELSE false
+          END AS is_overdue
+        FROM policy_distributions pd
+        WHERE pd.tenant_id = ${ctx.tenantId}::uuid
+          AND (
+            pd.target_all = true
+            OR EXISTS (
+              SELECT 1 FROM employees e
+              LEFT JOIN org_units ou ON ou.id = e.department_id AND ou.tenant_id = e.tenant_id
+              WHERE e.id = ${employeeId}::uuid
+                AND e.tenant_id = ${ctx.tenantId}::uuid
+                AND pd.target_departments @> to_jsonb(ARRAY[ou.id::text])
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM policy_acknowledgements pa
+            WHERE pa.distribution_id = pd.id
+              AND pa.employee_id = ${employeeId}::uuid
+              AND pa.tenant_id = ${ctx.tenantId}::uuid
+          )
+        ORDER BY
+          CASE WHEN pd.deadline_at IS NOT NULL AND pd.deadline_at < now() THEN 0 ELSE 1 END,
+          pd.deadline_at ASC NULLS LAST,
+          pd.distributed_at DESC
+      `;
+    });
   }
 }

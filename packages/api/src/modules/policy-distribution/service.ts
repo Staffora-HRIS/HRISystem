@@ -6,6 +6,7 @@
  * - Track acknowledgement status per distribution
  * - Record individual employee acknowledgements with IP address
  * - Outbox events for async processing (notifications, audit)
+ * - Pending policy lookup for employee self-service
  */
 
 import type { DatabaseClient } from "../../plugins/db";
@@ -14,6 +15,7 @@ import {
   type DistributionRow,
   type AcknowledgementRow,
   type PaginatedResult,
+  type PendingPolicyRow,
 } from "./repository";
 import type { ServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
@@ -23,6 +25,7 @@ import type {
   DistributionResponse,
   DistributionStatusResponse,
   AcknowledgementResponse,
+  PendingPoliciesResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -41,6 +44,7 @@ function mapDistributionToResponse(row: DistributionRow): DistributionResponse {
       ? row.targetDepartments
       : [],
     target_all: row.targetAll,
+    deadline_at: row.deadlineAt ? row.deadlineAt.toISOString() : null,
     created_at: row.createdAt.toISOString(),
   };
 }
@@ -94,6 +98,20 @@ export class PolicyDistributionService {
       };
     }
 
+    // Validate deadline is in the future if provided
+    if (data.deadline_at) {
+      const deadline = new Date(data.deadline_at);
+      if (deadline <= new Date()) {
+        return {
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Deadline must be in the future",
+          },
+        };
+      }
+    }
+
     const distribution = await this.db.withTransaction(ctx, async (tx) => {
       const created = await this.repository.createDistribution(
         ctx,
@@ -116,6 +134,7 @@ export class PolicyDistributionService {
             title: data.title,
             targetAll,
             targetDepartments: data.target_departments ?? [],
+            deadlineAt: data.deadline_at ?? null,
             actor: ctx.userId,
           })}::jsonb,
           now()
@@ -164,6 +183,7 @@ export class PolicyDistributionService {
           items: ackResult.items.map((row) => ({
             id: row.id,
             employee_id: row.employeeId,
+            employee_name: row.employeeName ?? null,
             acknowledged_at: row.acknowledgedAt.toISOString(),
             ip_address: row.ipAddress ?? null,
           })),
@@ -221,7 +241,7 @@ export class PolicyDistributionService {
       };
     }
 
-    // Check if already acknowledged — return existing if so (idempotent)
+    // Check if already acknowledged -- return existing if so (idempotent)
     const existing = await this.repository.getAcknowledgement(
       ctx,
       distributionId,
@@ -300,6 +320,55 @@ export class PolicyDistributionService {
     return {
       success: true,
       data: mapAcknowledgementToResponse(acknowledgement),
+    };
+  }
+
+  // ===========================================================================
+  // Pending Policies (Employee Self-Service)
+  // ===========================================================================
+
+  /**
+   * Get all pending policy acknowledgements for the current user.
+   * Resolves the employee ID from the user session, then queries
+   * for distributions the employee has not yet acknowledged.
+   */
+  async getPendingPolicies(
+    ctx: TenantContext
+  ): Promise<ServiceResult<PendingPoliciesResponse>> {
+    if (!ctx.userId) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.UNAUTHORIZED,
+          message: "Authentication required",
+        },
+      };
+    }
+
+    const employeeId = await this.repository.getEmployeeIdForUser(ctx);
+
+    if (!employeeId) {
+      // No employee record -- return empty (not an error)
+      return {
+        success: true,
+        data: { items: [], count: 0 },
+      };
+    }
+
+    const rows = await this.repository.getPendingForEmployee(ctx, employeeId);
+
+    const items = rows.map((row: PendingPolicyRow) => ({
+      distribution_id: row.distributionId,
+      document_id: row.documentId,
+      title: row.title,
+      distributed_at: row.distributedAt.toISOString(),
+      deadline_at: row.deadlineAt ? row.deadlineAt.toISOString() : null,
+      is_overdue: row.isOverdue,
+    }));
+
+    return {
+      success: true,
+      data: { items, count: items.length },
     };
   }
 }

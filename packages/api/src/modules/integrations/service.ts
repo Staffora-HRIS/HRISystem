@@ -7,6 +7,7 @@
  */
 
 import type { DatabaseClient } from "../../plugins/db";
+import { emitDomainEvent } from "../../lib/outbox";
 import {
   IntegrationsRepository,
   type IntegrationRow,
@@ -20,6 +21,7 @@ import type {
   IntegrationResponse,
   ConnectIntegration,
   UpdateIntegrationConfig,
+  TestConnectionResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -110,19 +112,18 @@ export class IntegrationsService {
     const integration = await this.db.withTransaction(ctx, async (tx) => {
       const result = await this.repository.connect(ctx, data, tx);
 
-      // Write outbox event in same transaction
-      await tx`
-        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
-        VALUES (
-          ${crypto.randomUUID()},
-          ${ctx.tenantId},
-          'integration',
-          ${result.id},
-          'integration.connected',
-          ${JSON.stringify({ integrationId: result.id, provider: data.provider, actor: ctx.userId })}::jsonb,
-          now()
-        )
-      `;
+      await emitDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        aggregateType: "integration",
+        aggregateId: result.id,
+        eventType: "integration.connected",
+        payload: {
+          integrationId: result.id,
+          provider: data.provider,
+          category: data.category,
+        },
+        userId: ctx.userId,
+      });
 
       return result;
     });
@@ -145,19 +146,17 @@ export class IntegrationsService {
         return null;
       }
 
-      // Write outbox event in same transaction
-      await tx`
-        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
-        VALUES (
-          ${crypto.randomUUID()},
-          ${ctx.tenantId},
-          'integration',
-          ${id},
-          'integration.config_updated',
-          ${JSON.stringify({ integrationId: id, actor: ctx.userId })}::jsonb,
-          now()
-        )
-      `;
+      await emitDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        aggregateType: "integration",
+        aggregateId: id,
+        eventType: "integration.config_updated",
+        payload: {
+          integrationId: id,
+          provider: result.provider,
+        },
+        userId: ctx.userId,
+      });
 
       return result;
     });
@@ -189,19 +188,17 @@ export class IntegrationsService {
         return null;
       }
 
-      // Write outbox event in same transaction
-      await tx`
-        INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
-        VALUES (
-          ${crypto.randomUUID()},
-          ${ctx.tenantId},
-          'integration',
-          ${id},
-          'integration.disconnected',
-          ${JSON.stringify({ integrationId: id, provider: result.provider, actor: ctx.userId })}::jsonb,
-          now()
-        )
-      `;
+      await emitDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        aggregateType: "integration",
+        aggregateId: id,
+        eventType: "integration.disconnected",
+        payload: {
+          integrationId: id,
+          provider: result.provider,
+        },
+        userId: ctx.userId,
+      });
 
       return result;
     });
@@ -230,19 +227,14 @@ export class IntegrationsService {
       const success = await this.repository.deleteIntegration(ctx, id, tx);
 
       if (success) {
-        // Write outbox event in same transaction
-        await tx`
-          INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
-          VALUES (
-            ${crypto.randomUUID()},
-            ${ctx.tenantId},
-            'integration',
-            ${id},
-            'integration.deleted',
-            ${JSON.stringify({ integrationId: id, actor: ctx.userId })}::jsonb,
-            now()
-          )
-        `;
+        await emitDomainEvent(tx, {
+          tenantId: ctx.tenantId,
+          aggregateType: "integration",
+          aggregateId: id,
+          eventType: "integration.deleted",
+          payload: { integrationId: id },
+          userId: ctx.userId,
+        });
       }
 
       return success;
@@ -259,5 +251,121 @@ export class IntegrationsService {
     }
 
     return { success: true, data: { deleted: true } };
+  }
+
+  /**
+   * Test an integration connection by verifying the stored config is valid.
+   *
+   * For now this performs a lightweight validation (checks the integration
+   * exists, is connected, and has non-empty config). Actual provider-specific
+   * connectivity checks (OAuth token refresh, API ping, etc.) would be
+   * added per-provider in future iterations.
+   */
+  async testConnection(
+    ctx: TenantContext,
+    provider: string
+  ): Promise<ServiceResult<TestConnectionResponse>> {
+    const startMs = Date.now();
+
+    const integration = await this.repository.getByProvider(ctx, provider);
+
+    if (!integration) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: `No integration found for provider '${provider}'`,
+        },
+      };
+    }
+
+    if (integration.status !== "connected") {
+      return {
+        success: true,
+        data: {
+          success: false,
+          provider,
+          message: `Integration is not connected (status: ${integration.status})`,
+          latencyMs: Date.now() - startMs,
+          testedAt: new Date().toISOString(),
+        },
+      };
+    }
+
+    // Validate that config has at least one credential present
+    const config = integration.config as Record<string, unknown>;
+    const hasCredentials =
+      config &&
+      Object.keys(config).length > 0 &&
+      Object.values(config).some(
+        (v) => v !== null && v !== undefined && v !== ""
+      );
+
+    if (!hasCredentials) {
+      // Update status to error since config is incomplete
+      await this.db.withTransaction(ctx, async (tx) => {
+        await tx`
+          UPDATE integrations
+          SET status = 'error', error_message = 'Missing credentials', updated_at = now()
+          WHERE id = ${integration.id}
+        `;
+
+        await emitDomainEvent(tx, {
+          tenantId: ctx.tenantId,
+          aggregateType: "integration",
+          aggregateId: integration.id,
+          eventType: "integration.test_failed",
+          payload: {
+            integrationId: integration.id,
+            provider,
+            reason: "Missing credentials",
+          },
+          userId: ctx.userId,
+        });
+      });
+
+      return {
+        success: true,
+        data: {
+          success: false,
+          provider,
+          message: "Connection test failed: credentials are missing or empty",
+          latencyMs: Date.now() - startMs,
+          testedAt: new Date().toISOString(),
+        },
+      };
+    }
+
+    // Record a successful test event
+    await this.db.withTransaction(ctx, async (tx) => {
+      await tx`
+        UPDATE integrations
+        SET error_message = NULL, last_sync_at = now(), updated_at = now()
+        WHERE id = ${integration.id}
+      `;
+
+      await emitDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        aggregateType: "integration",
+        aggregateId: integration.id,
+        eventType: "integration.test_passed",
+        payload: {
+          integrationId: integration.id,
+          provider,
+        },
+        userId: ctx.userId,
+      });
+    });
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        provider,
+        message: "Connection test passed successfully",
+        latencyMs: Date.now() - startMs,
+        testedAt: new Date().toISOString(),
+      },
+    };
   }
 }

@@ -1,0 +1,171 @@
+# =============================================================================
+# Staffora Platform - E2E Tests
+# =============================================================================
+#
+# Runs end-to-end tests against a live API server with real Postgres and Redis.
+#
+# This workflow differs from test.yml in that it:
+#   1. Starts the actual API server as a background process
+#   2. Waits for the /health endpoint to confirm readiness
+#   3. Runs E2E test suites that exercise full request/response flows
+#
+# The E2E tests in packages/api/src/test/e2e/ use both:
+#   - app.handle() (in-process Elysia request dispatch)
+#   - HTTP requests against the live server (smoke tests)
+# =============================================================================
+
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch/PR to save resources
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E Tests (API Server)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hris
+          POSTGRES_PASSWORD: hris_dev_password
+          POSTGRES_DB: hris
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hris"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: bitnami/redis:7.0
+        ports:
+          - 6379:6379
+        env:
+          REDIS_PASSWORD: staffora_redis_dev
+        options: >-
+          --health-cmd "redis-cli -a staffora_redis_dev --no-auth-warning ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # -------------------------------------------------------------------------
+    # Environment variables for test database, Redis, and auth secrets
+    # -------------------------------------------------------------------------
+    env:
+      # --- Database (admin user for migrations) ---
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: hris
+      DB_USER: hris
+      DB_PASSWORD: hris_dev_password
+
+      # --- Database (app user for tests — NOBYPASSRLS so RLS is enforced) ---
+      TEST_DB_HOST: localhost
+      TEST_DB_PORT: '5432'
+      TEST_DB_NAME: hris
+      TEST_DB_USER: hris_app
+      TEST_DB_PASSWORD: hris_app_dev_password
+      TEST_DB_ADMIN_USER: hris
+      TEST_DB_ADMIN_PASSWORD: hris_dev_password
+
+      # --- Database URL for the API server (uses hris_app role) ---
+      DATABASE_APP_URL: postgres://hris_app:hris_app_dev_password@localhost:5432/hris
+      DATABASE_URL: postgres://hris_app:hris_app_dev_password@localhost:5432/hris
+
+      # --- Redis ---
+      REDIS_URL: redis://:staffora_redis_dev@localhost:6379
+      REDIS_PASSWORD: staffora_redis_dev
+      TEST_REDIS_HOST: localhost
+      TEST_REDIS_PORT: '6379'
+      TEST_REDIS_PASSWORD: staffora_redis_dev
+
+      # --- Auth secrets (32+ chars each) ---
+      BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+      SESSION_SECRET: test-session-secret-32-characters-long
+      CSRF_SECRET: test-csrf-secret-that-is-32-chars
+
+      # --- API server ---
+      PORT: '3000'
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Initialize database schema
+        run: |
+          # Create app schema, hris_app role, and RLS helper functions
+          PGPASSWORD=hris_dev_password psql -h localhost -U hris -d hris -f docker/postgres/init.sql
+        env:
+          PGCLIENTENCODING: UTF8
+
+      - name: Run migrations
+        run: bun run migrate:up
+
+      - name: Build all packages
+        run: bun run build
+
+      # -----------------------------------------------------------------------
+      # Start the API server in the background
+      # -----------------------------------------------------------------------
+      - name: Start API server
+        run: bun run packages/api/src/app.ts &
+        env:
+          PORT: '3000'
+
+      - name: Wait for API server to be ready
+        run: |
+          echo "Waiting for API server at http://localhost:3000/health ..."
+          timeout 60 bash -c '
+            until curl -sf http://localhost:3000/health > /dev/null 2>&1; do
+              sleep 2
+            done
+          '
+          echo "API server is ready."
+          curl -s http://localhost:3000/health | head -c 500
+          echo ""
+
+      # -----------------------------------------------------------------------
+      # Run the E2E smoke tests (live HTTP against running server)
+      # -----------------------------------------------------------------------
+      - name: Run E2E smoke tests (live HTTP)
+        run: bun test packages/api/src/test/e2e/ci-smoke.test.ts
+
+      # -----------------------------------------------------------------------
+      # Run the full E2E test suite (app.handle() + DB integration)
+      # -----------------------------------------------------------------------
+      - name: Run E2E test suite
+        run: bun test packages/api/src/test/e2e/
+
+      # -----------------------------------------------------------------------
+      # Summary
+      # -----------------------------------------------------------------------
+      - name: E2E Test Summary
+        if: always()
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Server**: Started on port 3000 with real Postgres + Redis" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health Check**: Verified /health endpoint" >> $GITHUB_STEP_SUMMARY
+          echo "- **Smoke Tests**: HTTP requests against live server" >> $GITHUB_STEP_SUMMARY
+          echo "- **E2E Suite**: Auth flows, multi-tenant isolation, leave requests, cases, onboarding" >> $GITHUB_STEP_SUMMARY

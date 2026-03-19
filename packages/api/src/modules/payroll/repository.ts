@@ -1155,33 +1155,42 @@ export class PayrollRepository {
   }
 
   // ===========================================================================
-  // Payroll Period Locks
+  // Payroll Period Locks (enhanced for TODO-234)
   // ===========================================================================
 
+  /** Column list for period lock queries (includes new status/schedule/finalized fields) */
+  private static readonly PERIOD_LOCK_COLS = `
+    id, tenant_id, pay_schedule_id, period_start, period_end,
+    status, locked_at, locked_by, unlock_reason,
+    unlocked_at, unlocked_by, finalized_at, finalized_by, created_at
+  `;
+
   /**
-   * Create a new period lock.
+   * Create a new period lock with status 'locked'.
    */
   async createPeriodLock(
     ctx: TenantContext,
     data: LockPayrollPeriod,
     tx: TransactionSql
   ): Promise<PeriodLockRow> {
+    const payScheduleId = data.pay_schedule_id ?? null;
     const [row] = await tx`
       INSERT INTO payroll_period_locks (
         tenant_id,
+        pay_schedule_id,
         period_start,
         period_end,
+        status,
         locked_by
       ) VALUES (
         ${ctx.tenantId}::uuid,
+        ${payScheduleId}::uuid,
         ${data.period_start}::date,
         ${data.period_end}::date,
+        'locked'::app.payroll_period_lock_status,
         ${ctx.userId ?? null}::uuid
       )
-      RETURNING
-        id, tenant_id, period_start, period_end,
-        locked_at, locked_by, unlock_reason,
-        unlocked_at, unlocked_by, created_at
+      RETURNING ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
     `;
     return row as unknown as PeriodLockRow;
   }
@@ -1195,10 +1204,7 @@ export class PayrollRepository {
   ): Promise<PeriodLockRow | null> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return await tx`
-        SELECT
-          id, tenant_id, period_start, period_end,
-          locked_at, locked_by, unlock_reason,
-          unlocked_at, unlocked_by, created_at
+        SELECT ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
         FROM payroll_period_locks
         WHERE id = ${id}::uuid
       `;
@@ -1209,23 +1215,29 @@ export class PayrollRepository {
   }
 
   /**
-   * Find active (not unlocked) period locks that overlap with the given date range.
+   * Find active (locked or finalized) period locks that overlap with the given date range.
+   * Optionally scoped to a specific pay_schedule_id.
    */
   async findActiveLocksForPeriod(
     ctx: TenantContext,
     periodStart: string,
-    periodEnd: string
+    periodEnd: string,
+    payScheduleId?: string | null
   ): Promise<PeriodLockRow[]> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return await tx`
-        SELECT
-          id, tenant_id, period_start, period_end,
-          locked_at, locked_by, unlock_reason,
-          unlocked_at, unlocked_by, created_at
+        SELECT ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
         FROM payroll_period_locks
-        WHERE unlocked_at IS NULL
+        WHERE status IN ('locked', 'finalized')
           AND daterange(period_start, period_end, '[]') &&
               daterange(${periodStart}::date, ${periodEnd}::date, '[]')
+          ${
+            payScheduleId !== undefined
+              ? payScheduleId === null
+                ? tx`AND pay_schedule_id IS NULL`
+                : tx`AND (pay_schedule_id = ${payScheduleId}::uuid OR pay_schedule_id IS NULL)`
+              : tx``
+          }
         ORDER BY period_start ASC
       `;
     });
@@ -1234,28 +1246,29 @@ export class PayrollRepository {
   }
 
   /**
-   * List period locks with optional filters.
+   * Find locks covering a specific date for period lock guard checks.
+   * Returns locks where the date falls within [period_start, period_end]
+   * and the lock is active (locked or finalized).
+   * Considers both schedule-specific locks and global locks (pay_schedule_id IS NULL).
    */
-  async listPeriodLocks(
+  async findLocksForDate(
     ctx: TenantContext,
-    filters: {
-      periodStart?: string;
-      periodEnd?: string;
-      activeOnly?: boolean;
-    } = {}
+    date: string,
+    payScheduleId?: string | null
   ): Promise<PeriodLockRow[]> {
     const rows = await this.db.withTransaction(ctx, async (tx) => {
       return await tx`
-        SELECT
-          id, tenant_id, period_start, period_end,
-          locked_at, locked_by, unlock_reason,
-          unlocked_at, unlocked_by, created_at
+        SELECT ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
         FROM payroll_period_locks
-        WHERE 1=1
-          ${filters.activeOnly ? tx`AND unlocked_at IS NULL` : tx``}
-          ${filters.periodStart ? tx`AND period_end >= ${filters.periodStart}::date` : tx``}
-          ${filters.periodEnd ? tx`AND period_start <= ${filters.periodEnd}::date` : tx``}
-        ORDER BY period_start DESC
+        WHERE status IN ('locked', 'finalized')
+          AND ${date}::date >= period_start
+          AND ${date}::date <= period_end
+          ${
+            payScheduleId
+              ? tx`AND (pay_schedule_id = ${payScheduleId}::uuid OR pay_schedule_id IS NULL)`
+              : tx``
+          }
+        ORDER BY period_start ASC
       `;
     });
 
@@ -1263,7 +1276,51 @@ export class PayrollRepository {
   }
 
   /**
-   * Unlock a period lock by setting unlocked_at, unlocked_by, and unlock_reason.
+   * List period locks with optional filters and cursor-based pagination.
+   */
+  async listPeriodLocks(
+    ctx: TenantContext,
+    filters: {
+      periodStart?: string;
+      periodEnd?: string;
+      payScheduleId?: string;
+      status?: string;
+      activeOnly?: boolean;
+      cursor?: string;
+      limit?: number;
+    } = {}
+  ): Promise<PaginatedResult<PeriodLockRow>> {
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const fetchLimit = limit + 1;
+
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return await tx`
+        SELECT ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
+        FROM payroll_period_locks
+        WHERE 1=1
+          ${filters.activeOnly ? tx`AND status IN ('locked', 'finalized')` : tx``}
+          ${filters.status ? tx`AND status = ${filters.status}::app.payroll_period_lock_status` : tx``}
+          ${filters.payScheduleId ? tx`AND pay_schedule_id = ${filters.payScheduleId}::uuid` : tx``}
+          ${filters.periodStart ? tx`AND period_end >= ${filters.periodStart}::date` : tx``}
+          ${filters.periodEnd ? tx`AND period_start <= ${filters.periodEnd}::date` : tx``}
+          ${filters.cursor ? tx`AND id < ${filters.cursor}::uuid` : tx``}
+        ORDER BY period_start DESC, id DESC
+        LIMIT ${fetchLimit}
+      `;
+    });
+
+    const typedRows = rows as unknown as PeriodLockRow[];
+    const hasMore = typedRows.length > limit;
+    const items = hasMore ? typedRows.slice(0, limit) : typedRows;
+    const nextCursor =
+      hasMore && items.length > 0 ? items[items.length - 1]!.id : null;
+
+    return { items, nextCursor, hasMore };
+  }
+
+  /**
+   * Unlock a period lock by setting status to 'open', unlocked_at, unlocked_by,
+   * and unlock_reason. Only works on 'locked' status (not finalized).
    */
   async unlockPeriodLock(
     ctx: TenantContext,
@@ -1274,15 +1331,37 @@ export class PayrollRepository {
     const [row] = await tx`
       UPDATE payroll_period_locks
       SET
+        status = 'open'::app.payroll_period_lock_status,
         unlock_reason = ${unlockReason},
         unlocked_at = now(),
         unlocked_by = ${ctx.userId ?? null}::uuid
       WHERE id = ${id}::uuid
-        AND unlocked_at IS NULL
-      RETURNING
-        id, tenant_id, period_start, period_end,
-        locked_at, locked_by, unlock_reason,
-        unlocked_at, unlocked_by, created_at
+        AND status = 'locked'
+      RETURNING ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
+    `;
+
+    if (!row) return null;
+    return row as unknown as PeriodLockRow;
+  }
+
+  /**
+   * Finalize a period lock (permanent, cannot be unlocked).
+   * Only works on 'locked' status.
+   */
+  async finalizePeriodLock(
+    ctx: TenantContext,
+    id: string,
+    tx: TransactionSql
+  ): Promise<PeriodLockRow | null> {
+    const [row] = await tx`
+      UPDATE payroll_period_locks
+      SET
+        status = 'finalized'::app.payroll_period_lock_status,
+        finalized_at = now(),
+        finalized_by = ${ctx.userId ?? null}::uuid
+      WHERE id = ${id}::uuid
+        AND status = 'locked'
+      RETURNING ${tx.unsafe(PayrollRepository.PERIOD_LOCK_COLS)}
     `;
 
     if (!row) return null;

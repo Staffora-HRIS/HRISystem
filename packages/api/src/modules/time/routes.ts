@@ -22,6 +22,12 @@ import {
   SubmitTimesheetWithChainSchema,
   ApprovalChainDecisionSchema,
   PendingApprovalsFiltersSchema,
+  CreateApprovalHierarchySchema,
+  UpdateApprovalHierarchySchema,
+  ApprovalHierarchyFiltersSchema,
+  SubmitForApprovalSchema,
+  ApproveTimesheetSchema,
+  RejectTimesheetSchema,
   IdParamsSchema,
   IdempotencyHeaderSchema,
 } from "./schemas";
@@ -349,6 +355,35 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     }
   )
 
+  // NOTE: pending-approval registered BEFORE /timesheets/:id to avoid param conflict
+  .get(
+    "/timesheets/pending-approval",
+    async (ctx) => {
+      const { timeService, tenant, user, query, set } = ctx as any;
+
+      const result = await timeService.getTimesheetsPendingMyApproval(
+        { tenantId: tenant.id, userId: user.id },
+        user.id,
+        query || {}
+      );
+
+      if (!result.success) {
+        set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      query: PendingApprovalsFiltersSchema,
+      beforeHandle: [requirePermission("time:timesheets", "read")],
+      detail: {
+        tags: ["Time"],
+        summary: "List timesheets pending my approval",
+      },
+    }
+  )
+
   .get(
     "/timesheets/:id",
     async (ctx) => {
@@ -400,28 +435,46 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     }
   )
 
+  // ===========================================================================
+  // Timesheet Submit / Approve / Reject with Hierarchy Auto-Resolution
+  // ===========================================================================
+
   .post(
     "/timesheets/:id/submit",
     async (ctx) => {
-      const { timeService, tenant, user, params, set } = ctx as any;
+      const { timeService, tenant, user, params, body, set } = ctx as any;
 
-      const result = await timeService.submitTimesheet(
+      const result = await timeService.submitTimesheetForApproval(
         { tenantId: tenant.id, userId: user.id },
-        params.id
+        params.id,
+        body || {}
       );
 
       if (!result.success) {
-        set.status = result.error?.code === "TIMESHEET_NOT_FOUND" ? 404 : 500;
+        const code = result.error?.code;
+        if (code === "TIMESHEET_NOT_FOUND") set.status = 404;
+        else if (
+          code === "TIMESHEET_ALREADY_SUBMITTED" ||
+          code === "NO_APPROVAL_HIERARCHY" ||
+          code === "APPROVAL_CHAIN_EMPTY"
+        )
+          set.status = 400;
+        else set.status = 500;
         return { error: { ...result.error, requestId: "" } };
       }
 
+      set.status = 200;
       return result.data;
     },
     {
       params: IdParamsSchema,
+      body: SubmitForApprovalSchema,
       headers: IdempotencyHeaderSchema,
       beforeHandle: [requirePermission("time:timesheets", "write")],
-      detail: { tags: ["Time"], summary: "Submit timesheet" },
+      detail: {
+        tags: ["Time"],
+        summary: "Submit timesheet for approval (auto-resolves hierarchy)",
+      },
     }
   )
 
@@ -430,25 +483,19 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     async (ctx) => {
       const { timeService, tenant, user, params, body, set } = ctx as any;
 
-      let result;
-      if ((body as any).action === "approve") {
-        result = await timeService.approveTimesheet(
-          { tenantId: tenant.id, userId: user.id },
-          params.id,
-          user.id,
-          (body as any).comments
-        );
-      } else {
-        result = await timeService.rejectTimesheet(
-          { tenantId: tenant.id, userId: user.id },
-          params.id,
-          user.id,
-          (body as any).comments
-        );
-      }
+      const result = await timeService.approveTimesheetAtLevel(
+        { tenantId: tenant.id, userId: user.id },
+        params.id,
+        user.id,
+        body || {}
+      );
 
       if (!result.success) {
-        set.status = result.error?.code === "TIMESHEET_NOT_SUBMITTED" ? 400 : 500;
+        const code = result.error?.code;
+        if (code === "TIMESHEET_NOT_FOUND") set.status = 404;
+        else if (code === "TIMESHEET_NOT_SUBMITTED" || code === "NOT_AUTHORIZED_APPROVER")
+          set.status = 400;
+        else set.status = 500;
         return { error: { ...result.error, requestId: "" } };
       }
 
@@ -456,15 +503,53 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
     },
     {
       params: IdParamsSchema,
-      body: TimesheetApprovalSchema,
+      body: ApproveTimesheetSchema,
       headers: IdempotencyHeaderSchema,
       beforeHandle: [requirePermission("time:timesheets", "write")],
-      detail: { tags: ["Time"], summary: "Approve or reject timesheet" },
+      detail: {
+        tags: ["Time"],
+        summary: "Approve timesheet at current level (auto-routes to next)",
+      },
+    }
+  )
+
+  .post(
+    "/timesheets/:id/reject",
+    async (ctx) => {
+      const { timeService, tenant, user, params, body, set } = ctx as any;
+
+      const result = await timeService.rejectTimesheetAtLevel(
+        { tenantId: tenant.id, userId: user.id },
+        params.id,
+        user.id,
+        body || {}
+      );
+
+      if (!result.success) {
+        const code = result.error?.code;
+        if (code === "TIMESHEET_NOT_FOUND") set.status = 404;
+        else if (code === "TIMESHEET_NOT_SUBMITTED" || code === "NOT_AUTHORIZED_APPROVER")
+          set.status = 400;
+        else set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      body: RejectTimesheetSchema,
+      headers: IdempotencyHeaderSchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Reject timesheet and return to employee",
+      },
     }
   )
 
   // ===========================================================================
-  // Approval Chains
+  // Legacy Approval Chains (backward compatibility)
   // ===========================================================================
 
   .post(
@@ -500,7 +585,7 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       beforeHandle: [requirePermission("time:timesheets", "write")],
       detail: {
         tags: ["Time"],
-        summary: "Submit timesheet with multi-level approval chain",
+        summary: "Submit timesheet with multi-level approval chain (legacy)",
       },
     }
   )
@@ -593,7 +678,156 @@ export const timeRoutes = new Elysia({ prefix: "/time" })
       beforeHandle: [requirePermission("time:timesheets", "read")],
       detail: {
         tags: ["Time"],
-        summary: "List timesheets pending your approval",
+        summary: "List timesheets pending your approval (legacy)",
+      },
+    }
+  )
+
+  // ===========================================================================
+  // Approval Hierarchy CRUD (/api/v1/time/approval-chains)
+  // ===========================================================================
+
+  .post(
+    "/approval-chains",
+    async (ctx) => {
+      const { timeService, tenant, user, body, set } = ctx as any;
+
+      const result = await timeService.createApprovalHierarchy(
+        { tenantId: tenant.id, userId: user.id },
+        body as any
+      );
+
+      if (!result.success) {
+        const code = result.error?.code;
+        if (code === "APPROVAL_HIERARCHY_CONFLICT") set.status = 409;
+        else set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      body: CreateApprovalHierarchySchema,
+      headers: IdempotencyHeaderSchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Create approval hierarchy for a department",
+      },
+    }
+  )
+
+  .get(
+    "/approval-chains",
+    async (ctx) => {
+      const { timeService, tenant, user, query, set } = ctx as any;
+
+      const result = await timeService.getApprovalHierarchies(
+        { tenantId: tenant.id, userId: user.id },
+        query || {}
+      );
+
+      if (!result.success) {
+        set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      query: ApprovalHierarchyFiltersSchema,
+      beforeHandle: [requirePermission("time:timesheets", "read")],
+      detail: {
+        tags: ["Time"],
+        summary: "List approval hierarchies",
+      },
+    }
+  )
+
+  .get(
+    "/approval-chains/:id",
+    async (ctx) => {
+      const { timeService, tenant, user, params, set } = ctx as any;
+
+      const result = await timeService.getApprovalHierarchyById(
+        { tenantId: tenant.id, userId: user.id },
+        params.id
+      );
+
+      if (!result.success) {
+        set.status = result.error?.code === "APPROVAL_HIERARCHY_NOT_FOUND" ? 404 : 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      beforeHandle: [requirePermission("time:timesheets", "read")],
+      detail: {
+        tags: ["Time"],
+        summary: "Get approval hierarchy by ID",
+      },
+    }
+  )
+
+  .put(
+    "/approval-chains/:id",
+    async (ctx) => {
+      const { timeService, tenant, user, params, body, set } = ctx as any;
+
+      const result = await timeService.updateApprovalHierarchy(
+        { tenantId: tenant.id, userId: user.id },
+        params.id,
+        body as any
+      );
+
+      if (!result.success) {
+        const code = result.error?.code;
+        if (code === "APPROVAL_HIERARCHY_NOT_FOUND") set.status = 404;
+        else if (code === "APPROVAL_HIERARCHY_CONFLICT") set.status = 409;
+        else set.status = 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      body: UpdateApprovalHierarchySchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Update approval hierarchy",
+      },
+    }
+  )
+
+  .delete(
+    "/approval-chains/:id",
+    async (ctx) => {
+      const { timeService, tenant, user, params, set } = ctx as any;
+
+      const result = await timeService.deleteApprovalHierarchy(
+        { tenantId: tenant.id, userId: user.id },
+        params.id
+      );
+
+      if (!result.success) {
+        set.status = result.error?.code === "APPROVAL_HIERARCHY_NOT_FOUND" ? 404 : 500;
+        return { error: { ...result.error, requestId: "" } };
+      }
+
+      set.status = 200;
+      return result.data;
+    },
+    {
+      params: IdParamsSchema,
+      beforeHandle: [requirePermission("time:timesheets", "write")],
+      detail: {
+        tags: ["Time"],
+        summary: "Delete approval hierarchy",
       },
     }
   )

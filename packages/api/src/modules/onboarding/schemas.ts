@@ -258,6 +258,7 @@ export const ComplianceCheckTypeSchema = t.Union([
   t.Literal("references"),
   t.Literal("medical"),
   t.Literal("qualifications"),
+  t.Literal("health_declaration"),
 ]);
 
 export const ComplianceCheckStatusSchema = t.Union([
@@ -314,6 +315,77 @@ export const ComplianceCheckListResponseSchema = t.Object({
 export const ComplianceCheckIdParamsSchema = t.Object({
   id: UuidSchema,
   checkId: UuidSchema,
+});
+
+// =============================================================================
+// Template Compliance Requirement Schemas
+// =============================================================================
+
+export const CreateTemplateComplianceRequirementSchema = t.Object({
+  checkType: ComplianceCheckTypeSchema,
+  required: t.Optional(t.Boolean()),
+  dueDaysOffset: t.Optional(t.Number({ minimum: 0, maximum: 365 })),
+  displayOrder: t.Optional(t.Number({ minimum: 0 })),
+  instructions: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export const UpdateTemplateComplianceRequirementSchema = t.Partial(
+  t.Object({
+    required: t.Boolean(),
+    dueDaysOffset: t.Number({ minimum: 0, maximum: 365 }),
+    displayOrder: t.Number({ minimum: 0 }),
+    instructions: t.String({ maxLength: 2000 }),
+  })
+);
+
+export const TemplateComplianceRequirementResponseSchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  templateId: UuidSchema,
+  checkType: ComplianceCheckTypeSchema,
+  required: t.Boolean(),
+  dueDaysOffset: t.Union([t.Number(), t.Null()]),
+  displayOrder: t.Number(),
+  instructions: t.Union([t.String(), t.Null()]),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
+export const TemplateComplianceRequirementListResponseSchema = t.Object({
+  items: t.Array(TemplateComplianceRequirementResponseSchema),
+  count: t.Number(),
+});
+
+// =============================================================================
+// Compliance Dashboard Schemas
+// =============================================================================
+
+export const ComplianceDashboardItemSchema = t.Object({
+  id: UuidSchema,
+  onboardingId: UuidSchema,
+  employeeId: UuidSchema,
+  employeeName: t.String(),
+  checkType: ComplianceCheckTypeSchema,
+  status: ComplianceCheckStatusSchema,
+  required: t.Boolean(),
+  dueDate: t.Union([t.String(), t.Null()]),
+  isOverdue: t.Boolean(),
+  templateName: t.String(),
+  onboardingStatus: OnboardingStatusSchema,
+  createdAt: t.String(),
+});
+
+export const ComplianceDashboardResponseSchema = t.Object({
+  items: t.Array(ComplianceDashboardItemSchema),
+  summary: t.Object({
+    totalChecks: t.Number(),
+    pendingCount: t.Number(),
+    inProgressCount: t.Number(),
+    passedCount: t.Number(),
+    failedCount: t.Number(),
+    waivedCount: t.Number(),
+    overdueCount: t.Number(),
+  }),
 });
 
 // =============================================================================
@@ -395,6 +467,74 @@ export const InstanceListResponseSchema = t.Object({
   hasMore: t.Boolean(),
 });
 
+// =============================================================================
+// Manager Onboarding Tracking Schemas
+// =============================================================================
+
+/**
+ * Summary of a single new hire's onboarding progress, returned as part
+ * of the team onboarding endpoint for managers.
+ */
+export const TeamOnboardingItemSchema = t.Object({
+  instanceId: UuidSchema,
+  employeeId: UuidSchema,
+  employeeName: t.String(),
+  startDate: t.String(),
+  templateId: UuidSchema,
+  templateName: t.String(),
+  status: OnboardingStatusSchema,
+  progressPercent: t.Number(),
+  totalTasks: t.Number(),
+  completedTasks: t.Number(),
+  pendingTasks: t.Number(),
+  overdueTasks: t.Number(),
+  targetCompletionDate: t.Union([t.String(), t.Null()]),
+  isOverdue: t.Boolean(),
+  buddyName: t.Union([t.String(), t.Null()]),
+});
+
+export const TeamOnboardingResponseSchema = t.Object({
+  items: t.Array(TeamOnboardingItemSchema),
+  count: t.Number(),
+});
+
+/**
+ * Detailed view of a single task for the employee progress endpoint.
+ */
+export const EmployeeOnboardingTaskSchema = t.Object({
+  taskId: t.String(),
+  name: t.String(),
+  description: t.Union([t.String(), t.Null()]),
+  category: t.Union([t.String(), t.Null()]),
+  assigneeType: t.Union([t.String(), t.Null()]),
+  assignedTo: t.Union([t.String(), t.Null()]),
+  assignedToName: t.Union([t.String(), t.Null()]),
+  status: t.String(),
+  isOverdue: t.Boolean(),
+  dueDate: t.Union([t.String(), t.Null()]),
+  completedAt: t.Union([t.String(), t.Null()]),
+  completedByName: t.Union([t.String(), t.Null()]),
+  required: t.Boolean(),
+  order: t.Number(),
+});
+
+export const EmployeeOnboardingProgressSchema = t.Object({
+  instanceId: UuidSchema,
+  employeeId: UuidSchema,
+  employeeName: t.String(),
+  templateName: t.String(),
+  status: OnboardingStatusSchema,
+  startDate: t.String(),
+  targetCompletionDate: t.Union([t.String(), t.Null()]),
+  progressPercent: t.Number(),
+  totalTasks: t.Number(),
+  completedTasks: t.Number(),
+  pendingTasks: t.Number(),
+  overdueTasks: t.Number(),
+  isOverdue: t.Boolean(),
+  tasks: t.Array(EmployeeOnboardingTaskSchema),
+});
+
 // Export types
 export type OnboardingStatus = typeof OnboardingStatusSchema.static;
 export type TaskStatus = typeof TaskStatusSchema.static;
@@ -413,3 +553,12 @@ export type ComplianceCheckStatus = typeof ComplianceCheckStatusSchema.static;
 export type CreateComplianceCheck = typeof CreateComplianceCheckSchema.static;
 export type UpdateComplianceCheck = typeof UpdateComplianceCheckSchema.static;
 export type ComplianceCheckResponse = typeof ComplianceCheckResponseSchema.static;
+export type CreateTemplateComplianceRequirement = typeof CreateTemplateComplianceRequirementSchema.static;
+export type UpdateTemplateComplianceRequirement = typeof UpdateTemplateComplianceRequirementSchema.static;
+export type TemplateComplianceRequirementResponse = typeof TemplateComplianceRequirementResponseSchema.static;
+export type ComplianceDashboardItem = typeof ComplianceDashboardItemSchema.static;
+export type ComplianceDashboardResponse = typeof ComplianceDashboardResponseSchema.static;
+export type TeamOnboardingItem = typeof TeamOnboardingItemSchema.static;
+export type TeamOnboardingResponse = typeof TeamOnboardingResponseSchema.static;
+export type EmployeeOnboardingTask = typeof EmployeeOnboardingTaskSchema.static;
+export type EmployeeOnboardingProgress = typeof EmployeeOnboardingProgressSchema.static;

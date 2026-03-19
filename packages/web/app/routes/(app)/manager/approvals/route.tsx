@@ -1,3 +1,5 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
+
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -182,8 +184,8 @@ export default function ManagerApprovalsPage() {
 
     return (
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Approvals</h1>
-        <p className="text-gray-500">{message}</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Approvals</h1>
+        <p className="text-gray-500 dark:text-gray-400">{message}</p>
       </div>
     );
   }
@@ -214,8 +216,8 @@ export default function ManagerApprovalsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Approvals</h1>
-        <p className="text-gray-600">Pending approvals assigned to you</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Approvals</h1>
+        <p className="text-gray-600 dark:text-gray-400">Pending approvals assigned to you</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -267,8 +269,8 @@ export default function ManagerApprovalsPage() {
 
         {/* Bulk Action Bar */}
         {selectedCount > 0 && (
-          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-            <span className="text-sm font-medium text-blue-800">
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 rounded-lg px-4 py-2">
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
               {selectedCount} selected
             </span>
             <Button
@@ -298,8 +300,8 @@ export default function ManagerApprovalsPage() {
           <Card>
             <CardBody className="text-center py-12">
               <CheckCircle2 className="h-12 w-12 mx-auto text-green-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900">All caught up!</h3>
-              <p className="text-gray-500">No pending approvals in this category.</p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">All caught up!</h3>
+              <p className="text-gray-500 dark:text-gray-400">No pending approvals in this category.</p>
             </CardBody>
           </Card>
         ) : (
@@ -311,13 +313,13 @@ export default function ManagerApprovalsPage() {
                 onChange={() => toggleSelectAll(filteredApprovals)}
                 aria-label="Select all approvals"
               />
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
                 Select all ({filteredApprovals.length})
               </span>
             </div>
 
             {filteredApprovals.map((a) => (
-              <Card key={`${a.type}:${a.id}`} className={`hover:shadow-md transition-shadow ${selectedIds.has(a.id) ? "ring-2 ring-blue-300 bg-blue-50/30" : ""}`}>
+              <Card key={`${a.type}:${a.id}`} className={`hover:shadow-md transition-shadow ${selectedIds.has(a.id) ? "ring-2 ring-blue-300 bg-blue-50/30 dark:ring-blue-700 dark:bg-blue-900/20" : ""}`}>
                 <CardBody>
                   <div className="flex items-start gap-3">
                     <div className="pt-1 shrink-0">
@@ -329,7 +331,7 @@ export default function ManagerApprovalsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold text-gray-900">{a.employeeName}</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">{a.employeeName}</span>
                         <Badge variant={a.type === "leave_request" ? "info" : "secondary"}>
                           {a.type === "leave_request" ? "Leave Request" : "Timesheet"}
                         </Badge>
@@ -338,23 +340,23 @@ export default function ManagerApprovalsPage() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-sm">
                             <Badge variant="outline">{a.details.leaveType}</Badge>
-                            <span className="text-gray-600">
+                            <span className="text-gray-600 dark:text-gray-400">
                               {new Date(a.details.startDate).toLocaleDateString()} –{" "}
                               {new Date(a.details.endDate).toLocaleDateString()}
                             </span>
                             <span className="text-gray-500">({a.details.totalDays} days)</span>
                           </div>
                           {a.details.reason && (
-                            <p className="text-sm text-gray-600">Reason: {a.details.reason}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Reason: {a.details.reason}</p>
                           )}
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
                           Period: {new Date(a.details.periodStart).toLocaleDateString()} –{" "}
                           {new Date(a.details.periodEnd).toLocaleDateString()} · {a.details.totalHours} hours
                         </div>
                       )}
-                      <div className="text-xs text-gray-400 mt-2">
+                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                         Submitted {new Date(a.createdAt).toLocaleString()}
                       </div>
                     </div>

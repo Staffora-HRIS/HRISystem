@@ -5,11 +5,25 @@
 # Usage:
 #   Development:    docker compose up -d
 #   Production:     docker compose --profile production up -d
+#   Monitoring:     docker compose --profile monitoring up -d
+#   Scanning:       docker compose --profile scanning up -d
 #   Scaled (3 API): docker compose --profile production up -d --scale api=3
 #
 # Profiles:
-#   - default: All services for development
+#   - default: Core services for development (postgres, pgbouncer, redis, api, worker, web, backup)
 #   - production: Production-optimized configuration with nginx load balancer
+#   - monitoring: Full observability stack (Loki, Promtail, Prometheus, Grafana, exporters)
+#   - scanning: ClamAV virus scanning for document uploads
+#
+# Monitoring Stack (--profile monitoring):
+#   Adds log aggregation (Loki + Promtail) and metrics (Prometheus + exporters)
+#   with Grafana dashboards. All container logs are collected automatically via
+#   Promtail's Docker socket discovery. Structured JSON logs from API/worker
+#   (Pino) are parsed for level, requestId, tenantId, and other fields.
+#
+#   Grafana:    http://localhost:3100 (admin/staffora)
+#   Prometheus: http://localhost:9090
+#   Loki API:   http://localhost:3101
 #
 # Horizontal Scaling:
 #   The API service is stateless and can be scaled to multiple instances.
@@ -484,6 +498,283 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # ===========================================================================
+  # Monitoring Profile Services
+  # ===========================================================================
+  # Full observability stack: log aggregation (Loki + Promtail), metrics
+  # (Prometheus + exporters), and dashboards (Grafana).
+  #
+  # Enable with: docker compose --profile monitoring up -d
+  #
+  # Architecture:
+  #   Docker containers --> json-file driver --> /var/lib/docker/containers/
+  #   Promtail (tails log files via Docker socket) --> Loki (stores + indexes)
+  #   Grafana (queries Loki via LogQL + Prometheus via PromQL)
+  #
+  # Log Rotation:
+  #   All containers use json-file driver with rotation:
+  #     max-size: 50m (api, worker, postgres, nginx) or 20m (redis, web, others)
+  #     max-file: 5 (high-volume) or 3 (low-volume)
+  #   Promtail reads these rotated files seamlessly via the Docker socket.
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Loki -- Log aggregation and storage
+  # ---------------------------------------------------------------------------
+  # Receives logs from Promtail, indexes labels (not full text), and serves
+  # LogQL queries to Grafana. Uses local filesystem storage with 30-day
+  # retention. Lighter than ELK for structured log aggregation.
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: staffora-loki
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+      - "-config.expand-env=true"
+    ports:
+      - "${LOKI_PORT:-3101}:3100"
+    volumes:
+      - ./loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    environment:
+      # Retention period override (default: 720h = 30 days)
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-720h}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Promtail -- Log collection agent
+  # ---------------------------------------------------------------------------
+  # Discovers Docker containers via the Docker socket, tails their log files,
+  # parses structured JSON logs (Pino from API/worker), extracts labels
+  # (level, service, container), and pushes log entries to Loki.
+  #
+  # Requires Docker socket mount for container discovery.
+  # Also mounts /var/lib/docker/containers for reading log files.
+  # ---------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: staffora-promtail
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "-config.file=/etc/promtail/config.yml"
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      # Docker socket for container discovery
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker container log files (json-file driver output)
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9080/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Prometheus -- Metrics collection and alerting
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: staffora-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Grafana -- Dashboards and visualization
+  # ---------------------------------------------------------------------------
+  # Pre-provisioned with Prometheus and Loki datasources, plus dashboards for
+  # platform overview (metrics) and log exploration (Loki).
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: staffora-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-staffora}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
+      GF_SERVER_HTTP_PORT: "3100"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/staffora-overview.json
+      # Enable Explore for ad-hoc log queries
+      GF_EXPLORE_ENABLED: "true"
+    ports:
+      - "${GRAFANA_PORT:-3100}:3100"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Exporter -- Exposes pg_stat metrics to Prometheus
+  # ---------------------------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: staffora-postgres-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-hris}:${POSTGRES_PASSWORD:-hris_dev_password}@postgres:5432/${POSTGRES_DB:-hris}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Redis Exporter -- Exposes Redis metrics to Prometheus
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: staffora-redis-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-staffora_redis_dev}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
 # =============================================================================
 # Volumes
 # =============================================================================
@@ -500,6 +791,13 @@ volumes:
     driver: local
   clamav_data:
     driver: local
+  # Monitoring profile volumes
+  loki_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 # =============================================================================
 # Networks
@@ -511,3 +809,4 @@ networks:
       driver: default
       config:
         - subnet: 172.28.0.0/16
+

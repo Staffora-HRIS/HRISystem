@@ -16,7 +16,8 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "generate:icons": "bun scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@better-auth/infra": "^0.1.8",
@@ -53,6 +54,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.6",
+    "@storybook/addon-a11y": "^8.5.0",
+    "@storybook/addon-essentials": "^8.5.0",
     "@storybook/react": "^8.5.0",
     "@storybook/react-vite": "^8.5.0",
     "storybook": "^8.5.0",

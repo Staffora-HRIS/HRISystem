@@ -42,6 +42,7 @@ export {
 export {
   // Enums
   OvertimeRequestTypeSchema,
+  OvertimeAuthorisationTypeSchema,
   OvertimeRequestStatusSchema,
   // Common
   UuidSchema,
@@ -59,6 +60,7 @@ export {
   OvertimeRequestResponseSchema,
   // Types
   type OvertimeRequestType,
+  type OvertimeAuthorisationType,
   type OvertimeRequestStatus,
   type PaginationQuery,
   type IdParams,

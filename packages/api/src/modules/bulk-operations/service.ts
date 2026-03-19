@@ -22,8 +22,10 @@ import type {
   BulkUpdateEmployeeItem,
   BulkLeaveRequestActionItem,
   BulkResponse,
+  GenericBulkOperationItem,
+  GenericBulkResponse,
 } from "./schemas";
-import { MAX_BULK_BATCH_SIZE } from "./schemas";
+import { MAX_BULK_BATCH_SIZE, ALLOWED_BULK_PATH_PREFIXES } from "./schemas";
 
 // =============================================================================
 // Service
@@ -269,6 +271,47 @@ export class BulkOperationsService {
       };
     }
   }
+
+  // ===========================================================================
+  // Generic Bulk Operations (POST /api/v1/bulk)
+  // ===========================================================================
+
+  async executeGenericBulk(
+    ctx: TenantContext,
+    operations: GenericBulkOperationItem[],
+    appFetch: (request: Request) => Promise<Response>,
+    authHeaders: Record<string, string>
+  ): Promise<ServiceResult<GenericBulkResponse>> {
+    if (operations.length === 0) {
+      return { success: false, error: { code: "VALIDATION_ERROR", message: "At least one operation is required" } };
+    }
+    if (operations.length > MAX_BULK_BATCH_SIZE) {
+      return { success: false, error: { code: "VALIDATION_ERROR", message: `Batch size exceeds maximum of ${MAX_BULK_BATCH_SIZE} operations`, details: { provided: operations.length, maximum: MAX_BULK_BATCH_SIZE } } };
+    }
+
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i]!;
+      if (!isPathAllowed(op.path)) {
+        return { success: false, error: { code: "VALIDATION_ERROR", message: `Operation at index ${i}: path "${op.path}" is not allowed in bulk operations. Only data module paths are permitted.`, details: { index: i, path: op.path, allowedPrefixes: [...ALLOWED_BULK_PATH_PREFIXES] } } };
+      }
+      if (op.method === "DELETE" && op.body && Object.keys(op.body).length > 0) {
+        return { success: false, error: { code: "VALIDATION_ERROR", message: `Operation at index ${i}: DELETE operations must not include a request body`, details: { index: i, method: op.method } } };
+      }
+      if ((op.method === "POST" || op.method === "PUT" || op.method === "PATCH") && !op.body) {
+        return { success: false, error: { code: "VALIDATION_ERROR", message: `Operation at index ${i}: ${op.method} operations must include a request body`, details: { index: i, method: op.method } } };
+      }
+    }
+
+    try {
+      const results = await this.repository.executeGenericOperations(ctx, operations, appFetch, authHeaders);
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+      return { success: true, data: { total: results.length, succeeded, failed, results } };
+    } catch (error) {
+      console.error("Generic bulk operations failed:", error);
+      return { success: false, error: { code: "INTERNAL_ERROR", message: "Bulk operations execution failed" } };
+    }
+  }
 }
 
 // =============================================================================
@@ -288,4 +331,15 @@ function findDuplicates(values: string[]): string[] {
     seen.add(v);
   }
   return [...duplicates];
+}
+
+
+function isPathAllowed(path: string): boolean {
+  if (path.includes("..") || path.includes("//")) {
+    return false;
+  }
+  const normalised = path.endsWith("/") ? path.slice(0, -1) : path;
+  return ALLOWED_BULK_PATH_PREFIXES.some(
+    (prefix) => normalised === prefix || normalised.startsWith(prefix + "/")
+  );
 }

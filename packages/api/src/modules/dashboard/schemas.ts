@@ -26,6 +26,33 @@ export const AdminStatsResponseSchema = t.Object({
 export type AdminStatsResponse = Static<typeof AdminStatsResponseSchema>;
 
 /**
+ * Extended dashboard statistics response (from materialized views)
+ */
+export const ExtendedStatsResponseSchema = t.Object({
+  totalEmployees: t.Number(),
+  activeEmployees: t.Number(),
+  pendingEmployees: t.Number(),
+  terminatedEmployees: t.Number(),
+  onLeaveEmployees: t.Number(),
+  newHires30d: t.Number(),
+  departments: t.Number(),
+  openPositions: t.Number(),
+  pendingWorkflows: t.Number(),
+  pendingApprovals: t.Number(),
+  pendingLeaveRequests: t.Number(),
+  approvedUpcomingLeave: t.Number(),
+  currentlyOnLeave: t.Number(),
+  openCases: t.Number(),
+  pendingCases: t.Number(),
+  slaBreachedCases: t.Number(),
+  activeOnboardings: t.Number(),
+  avgOnboardingProgress: t.Number(),
+  refreshedAt: t.Union([t.String(), t.Null()]),
+});
+
+export type ExtendedStatsResponse = Static<typeof ExtendedStatsResponseSchema>;
+
+/**
  * Single recent activity entry
  */
 export const RecentActivityItemSchema = t.Object({

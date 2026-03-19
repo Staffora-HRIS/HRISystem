@@ -21,6 +21,9 @@ import {
   PaginationQuerySchema,
   FieldValuesParamsSchema,
   ExportFormatParamsSchema,
+  CreateReportScheduleSchema,
+  UpdateReportScheduleSchema,
+  ScheduleListQuerySchema,
 } from "./schemas";
 
 // =============================================================================
@@ -789,3 +792,76 @@ export const reportsRoutes = new Elysia({ prefix: "/reports" })
       detail: { tags: ["Reports"], summary: "Remove report schedule" },
     }
   );
+
+// =============================================================================
+// Report Schedule CRUD Routes (dedicated table)
+// =============================================================================
+
+export const reportScheduleRoutes = new Elysia({ prefix: "/reports/schedules" })
+
+  .get("/", async (ctx) => {
+    const { tenantContext, requestId, query } = ctx as any;
+    const reportsService = getService(ctx);
+    if (!tenantContext) { ctx.set.status = 401; return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } }; }
+    const result = await reportsService.listSchedules(tenantContext, query);
+    if (!result.success) { ctx.set.status = 500; return { error: { ...result.error, requestId } }; }
+    return { data: result.data!.items, total: result.data!.total, nextCursor: result.data!.nextCursor };
+  }, {
+    beforeHandle: [requirePermission("reports", "read")],
+    query: ScheduleListQuerySchema,
+    detail: { tags: ["Report Schedules"], summary: "List report schedules" },
+  })
+
+  .post("/", async (ctx) => {
+    const { tenantContext, requestId, body } = ctx as any;
+    const reportsService = getService(ctx);
+    if (!tenantContext) { ctx.set.status = 401; return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } }; }
+    const result = await reportsService.createSchedule(tenantContext, body as any);
+    if (!result.success) { const status = mapErrorToStatus(result.error!.code); ctx.set.status = status; return { error: { ...result.error, requestId } }; }
+    ctx.set.status = 201;
+    return { data: result.data };
+  }, {
+    beforeHandle: [requirePermission("reports", "schedule")],
+    body: CreateReportScheduleSchema,
+    detail: { tags: ["Report Schedules"], summary: "Create report schedule" },
+  })
+
+  .get("/:id", async (ctx) => {
+    const { tenantContext, requestId, params } = ctx as any;
+    const reportsService = getService(ctx);
+    if (!tenantContext) { ctx.set.status = 401; return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } }; }
+    const result = await reportsService.getSchedule(tenantContext, params.id);
+    if (!result.success) { const status = mapErrorToStatus(result.error!.code); ctx.set.status = status; return { error: { ...result.error, requestId } }; }
+    return { data: result.data };
+  }, {
+    beforeHandle: [requirePermission("reports", "read")],
+    params: IdParamsSchema,
+    detail: { tags: ["Report Schedules"], summary: "Get report schedule by ID" },
+  })
+
+  .put("/:id", async (ctx) => {
+    const { tenantContext, requestId, params, body } = ctx as any;
+    const reportsService = getService(ctx);
+    if (!tenantContext) { ctx.set.status = 401; return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } }; }
+    const result = await reportsService.updateSchedule(tenantContext, params.id, body as any);
+    if (!result.success) { const status = mapErrorToStatus(result.error!.code); ctx.set.status = status; return { error: { ...result.error, requestId } }; }
+    return { data: result.data };
+  }, {
+    beforeHandle: [requirePermission("reports", "schedule")],
+    params: IdParamsSchema,
+    body: UpdateReportScheduleSchema,
+    detail: { tags: ["Report Schedules"], summary: "Update report schedule" },
+  })
+
+  .delete("/:id", async (ctx) => {
+    const { tenantContext, requestId, params } = ctx as any;
+    const reportsService = getService(ctx);
+    if (!tenantContext) { ctx.set.status = 401; return { error: { code: "UNAUTHORIZED", message: "Authentication required", requestId } }; }
+    const result = await reportsService.deleteSchedule(tenantContext, params.id);
+    if (!result.success) { const status = mapErrorToStatus(result.error!.code); ctx.set.status = status; return { error: { ...result.error, requestId } }; }
+    return { success: true };
+  }, {
+    beforeHandle: [requirePermission("reports", "schedule")],
+    params: IdParamsSchema,
+    detail: { tags: ["Report Schedules"], summary: "Delete report schedule" },
+  });

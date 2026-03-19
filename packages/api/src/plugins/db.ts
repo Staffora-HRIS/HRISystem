@@ -7,6 +7,7 @@
  * - Transaction wrapper with tenant context setting
  * - Query logging in development
  * - Type-safe query interface
+ * - Periodic pool utilization monitoring
  *
  * ==========================================================================
  * CONNECTION BUDGET
@@ -193,9 +194,12 @@ export class DatabaseClient {
   private sql: Sql<Record<string, unknown>>;
   /** The PostgreSQL role name used for this connection pool */
   public readonly connectionUser: string;
+  /** Maximum pool size configured for this client */
+  public readonly maxConnections: number;
 
   constructor(config: DbConfig) {
     this.connectionUser = config.username;
+    this.maxConnections = config.maxConnections;
     const debugEnabled = process.env["DB_DEBUG"] === "true";
     const viaPgBouncer = !config.prepare;
 
@@ -393,6 +397,46 @@ export class DatabaseClient {
   }
 
   /**
+   * Collect connection pool statistics from pg_stat_activity.
+   *
+   * Returns counts of active, idle, and total connections for the current
+   * database user. This is the most reliable way to monitor pool utilization
+   * since postgres.js does not expose internal pool counters directly.
+   */
+  async getPoolStats(): Promise<{
+    active: number;
+    idle: number;
+    idleInTransaction: number;
+    total: number;
+    maxConnections: number;
+  }> {
+    try {
+      const rows = await this.sql<{ state: string; count: string }[]>`
+        SELECT COALESCE(state, 'unknown') AS state, count(*)::text AS count
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND usename = ${this.connectionUser}
+          AND pid <> pg_backend_pid()
+        GROUP BY state
+      `;
+      let active = 0;
+      let idle = 0;
+      let idleInTransaction = 0;
+      let total = 0;
+      for (const row of rows) {
+        const c = parseInt(row.count, 10);
+        total += c;
+        if (row.state === "active") active = c;
+        else if (row.state === "idle") idle = c;
+        else if (row.state === "idle in transaction") idleInTransaction = c;
+      }
+      return { active, idle, idleInTransaction, total, maxConnections: this.maxConnections };
+    } catch {
+      return { active: 0, idle: 0, idleInTransaction: 0, total: 0, maxConnections: this.maxConnections };
+    }
+  }
+
+  /**
    * Close all connections in the pool
    */
   async close(): Promise<void> {
@@ -432,10 +476,24 @@ export async function closeDbClient(): Promise<void> {
 // =============================================================================
 
 /**
+ * Pool monitoring interval handle.
+ * Cleared on plugin stop to avoid leaked timers.
+ */
+let poolMonitorInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Pool monitoring interval in milliseconds.
+ * Logs pool utilization every 5 minutes to aid capacity planning
+ * and connection leak detection. Adjustable via POOL_MONITOR_INTERVAL_MS env var.
+ */
+const POOL_MONITOR_INTERVAL_MS =
+  Number(process.env["POOL_MONITOR_INTERVAL_MS"]) || 5 * 60 * 1000;
+
+/**
  * Database plugin for Elysia
  *
  * Adds database client to the request context.
- * Also handles graceful shutdown.
+ * Also handles graceful shutdown and periodic pool monitoring.
  *
  * Usage:
  * ```ts
@@ -452,7 +510,9 @@ export function dbPlugin() {
   return new Elysia({ name: "db" })
     .decorate("db", db)
     .onStart(async () => {
-      console.log(`[DB] Database plugin initialized (role=${db.connectionUser})`);
+      console.log(
+        `[DB] Database plugin initialized (role=${db.connectionUser}, maxPool=${db.maxConnections})`
+      );
 
       // Verify connection on startup
       const health = await db.healthCheck();
@@ -462,8 +522,60 @@ export function dbPlugin() {
         console.error("[DB] Failed to connect to database");
         throw new Error("Database connection failed");
       }
+
+      // Start periodic pool monitoring
+      poolMonitorInterval = setInterval(async () => {
+        try {
+          const stats = await db.getPoolStats();
+          const utilization = stats.maxConnections > 0
+            ? Math.round((stats.total / stats.maxConnections) * 100)
+            : 0;
+          console.log(
+            `[DB Pool] active=${stats.active} idle=${stats.idle} ` +
+            `idle_in_tx=${stats.idleInTransaction} total=${stats.total}/${stats.maxConnections} ` +
+            `utilization=${utilization}%`
+          );
+
+          // Warn if pool utilization exceeds 80%
+          if (stats.maxConnections > 0 && stats.total / stats.maxConnections > 0.8) {
+            console.warn(
+              `[DB Pool] WARNING: Pool utilization at ${utilization}% ` +
+              `(${stats.total}/${stats.maxConnections}). Consider increasing DB_MAX_CONNECTIONS.`
+            );
+          }
+
+          // Warn if there are idle-in-transaction connections (potential leaks)
+          if (stats.idleInTransaction > 0) {
+            console.warn(
+              `[DB Pool] WARNING: ${stats.idleInTransaction} connection(s) idle in transaction. ` +
+              "This may indicate a connection leak or long-running transaction."
+            );
+          }
+        } catch (error) {
+          // Non-fatal: don't crash the server if monitoring fails
+          console.warn(
+            "[DB Pool] Failed to collect pool stats:",
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+      }, POOL_MONITOR_INTERVAL_MS);
+
+      // Ensure the interval doesn't prevent graceful shutdown
+      if (
+        poolMonitorInterval &&
+        typeof poolMonitorInterval === "object" &&
+        "unref" in poolMonitorInterval
+      ) {
+        (poolMonitorInterval as NodeJS.Timeout).unref();
+      }
     })
     .onStop(async () => {
+      // Stop pool monitoring
+      if (poolMonitorInterval) {
+        clearInterval(poolMonitorInterval);
+        poolMonitorInterval = null;
+      }
+
       console.log("[DB] Closing database connections...");
       await closeDbClient();
       console.log("[DB] Database connections closed");

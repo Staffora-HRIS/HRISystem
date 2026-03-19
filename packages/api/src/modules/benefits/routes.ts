@@ -7,6 +7,7 @@
  *   - plan.routes.ts     -- benefit plan CRUD
  *   - enrollment.routes.ts -- enrollment, dependents, open enrollment, costs, self-service, stats
  *   - life-event.routes.ts -- life event triggers, review, self-service
+ *   - flex-fund.routes.ts -- Flexible benefit fund allocation
  *
  * Shared schemas and error maps live in routes.shared.ts and are
  * re-exported here for backward compatibility.
@@ -18,6 +19,7 @@
  * - benefits:dependents: read, write
  * - benefits:life_events: read, write, approve
  * - benefits:open_enrollment: read, write, admin
+ * - benefits:flex_fund: read, write
  */
 
 import { Elysia } from "elysia";
@@ -27,6 +29,7 @@ import { carrierRoutes } from "./carrier.routes";
 import { planRoutes } from "./plan.routes";
 import { enrollmentRoutes } from "./enrollment.routes";
 import { lifeEventRoutes } from "./life-event.routes";
+import { flexFundRoutes } from "./flex-fund.routes";
 
 // Re-export shared schemas for any external consumers
 export {
@@ -65,6 +68,7 @@ export const benefitsRoutes = new Elysia({ prefix: "/benefits", name: "benefits-
   .use(carrierRoutes)
   .use(planRoutes)
   .use(enrollmentRoutes)
-  .use(lifeEventRoutes);
+  .use(lifeEventRoutes)
+  .use(flexFundRoutes);
 
 export type BenefitsRoutes = typeof benefitsRoutes;

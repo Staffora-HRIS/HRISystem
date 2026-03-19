@@ -19,6 +19,10 @@ import type {
   CreateComplianceCheck,
   UpdateComplianceCheck,
   ComplianceCheckResponse,
+  CreateTemplateComplianceRequirement,
+  UpdateTemplateComplianceRequirement,
+  TemplateComplianceRequirementResponse,
+  ComplianceDashboardResponse,
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
@@ -287,6 +291,11 @@ export class OnboardingService {
         async (tx: TransactionSql) => {
           const result = await this.repository.createInstance(ctx, data, template.tasks || [], tx);
 
+          // Auto-create compliance checks from template requirements (TODO-254)
+          const autoCreatedChecks = await this.repository.autoCreateComplianceChecks(
+            ctx, result.id, data.employeeId, data.templateId, data.startDate, tx
+          );
+
           // Emit domain event atomically within the same transaction
           await this.emitDomainEvent(tx, ctx, {
             aggregateType: "onboarding_instance",
@@ -296,9 +305,26 @@ export class OnboardingService {
               instance: result,
               employeeId: data.employeeId,
               templateId: data.templateId,
+              complianceChecksCreated: autoCreatedChecks.length,
               actor: ctx.userId,
             },
           });
+
+          // Emit individual events for each auto-created compliance check
+          for (const check of autoCreatedChecks) {
+            await this.emitDomainEvent(tx, ctx, {
+              aggregateType: "onboarding_instance",
+              aggregateId: result.id,
+              eventType: "onboarding.compliance_check.auto_created",
+              payload: {
+                onboardingId: result.id,
+                checkId: check.id,
+                checkType: check.checkType,
+                employeeId: data.employeeId,
+                actor: ctx.userId,
+              },
+            });
+          }
 
           return result;
         }

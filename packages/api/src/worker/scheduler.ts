@@ -178,6 +178,17 @@ class Scheduler {
       nextRun: this.getNextRunTime("0 4 * * 0"),
       handler: this.runDataArchival.bind(this),
     });
+
+    // Dashboard materialized view refresh — every 5 minutes
+    // Refreshes pre-aggregated counters for employee, leave, case, and
+    // onboarding stats using REFRESH CONCURRENTLY (non-blocking reads).
+    this.jobs.push({
+      name: "dashboard-stats-refresh",
+      cronExpression: "*/5 * * * *", // Every 5 minutes
+      lastRun: null,
+      nextRun: this.getNextRunTime("*/5 * * * *"),
+      handler: this.refreshDashboardStats.bind(this),
+    });
   }
 
   async start() {

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Offline - Staffora</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui,
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background-color: #ffffff;
+        color: #111827;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #111827;
+          color: #f3f4f6;
+        }
+
+        .description {
+          color: #9ca3af;
+        }
+
+        .retry-btn {
+          background-color: #4f46e5;
+          color: #ffffff;
+        }
+
+        .retry-btn:hover {
+          background-color: #4338ca;
+        }
+
+        .retry-btn:focus-visible {
+          outline-color: #6366f1;
+        }
+      }
+
+      .container {
+        text-align: center;
+        max-width: 28rem;
+      }
+
+      .icon {
+        width: 4rem;
+        height: 4rem;
+        margin: 0 auto 1.5rem;
+        color: #4f46e5;
+      }
+
+      .title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 2rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .description {
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: #6b7280;
+        margin-bottom: 2rem;
+      }
+
+      .retry-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.625rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1.25rem;
+        color: #ffffff;
+        background-color: #4f46e5;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background-color 150ms ease-in-out;
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+      }
+
+      .retry-btn:hover {
+        background-color: #4338ca;
+      }
+
+      .retry-btn:focus-visible {
+        outline: 2px solid #4f46e5;
+        outline-offset: 2px;
+      }
+
+      .retry-btn:active {
+        background-color: #3730a3;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container" role="main">
+      <svg
+        class="icon"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M12 9.75v6.75m0 0-3-3m3 3 3-3m-8.25 6a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
+        />
+      </svg>
+      <h1 class="title">You are offline</h1>
+      <p class="description">
+        It looks like you have lost your internet connection. Please check your
+        network settings and try again.
+      </p>
+      <button
+        type="button"
+        class="retry-btn"
+        onclick="window.location.reload()"
+      >
+        Try again
+      </button>
+    </main>
+  </body>
+</html>

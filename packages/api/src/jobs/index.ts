@@ -165,6 +165,15 @@ export {
 } from "./analytics-worker";
 
 // =============================================================================
+// Webhook Worker
+// =============================================================================
+
+export {
+  webhookDeliveryProcessor,
+  handleWebhookDelivery,
+} from "./webhook-worker";
+
+// =============================================================================
 // All Processors
 // =============================================================================
 
@@ -173,6 +182,7 @@ import { notificationProcessors } from "./notification-worker";
 import { exportProcessors } from "./export-worker";
 import { pdfProcessors } from "./pdf-worker";
 import { analyticsProcessors } from "./analytics-worker";
+import { webhookDeliveryProcessor } from "./webhook-worker";
 import type { ProcessorRegistration } from "./base";
 
 /**
@@ -184,6 +194,7 @@ export const allProcessors: ProcessorRegistration[] = [
   ...exportProcessors,
   ...pdfProcessors,
   ...analyticsProcessors,
+  webhookDeliveryProcessor,
 ];
 
 /**
@@ -195,4 +206,5 @@ export const processorsByCategory = {
   exports: exportProcessors,
   pdf: pdfProcessors,
   analytics: analyticsProcessors,
+  webhooks: [webhookDeliveryProcessor],
 } as const;

@@ -322,6 +322,65 @@ export const PendingApprovalsFiltersSchema = t.Object({
 export type PendingApprovalsFilters = Static<typeof PendingApprovalsFiltersSchema>;
 
 // =============================================================================
+// Approval Hierarchy Schemas (Configurable per-department chain templates)
+// =============================================================================
+
+export const ApprovalLevelSchema = t.Object({
+  level: t.Number({ minimum: 1, maximum: 10 }),
+  role: t.String({ minLength: 1, maxLength: 100 }),
+  approverId: t.Optional(t.Nullable(UuidSchema)),
+});
+export type ApprovalLevel = Static<typeof ApprovalLevelSchema>;
+
+export const CreateApprovalHierarchySchema = t.Object({
+  name: t.String({ minLength: 1, maxLength: 150 }),
+  description: t.Optional(t.String({ maxLength: 500 })),
+  departmentId: t.Optional(t.Nullable(UuidSchema)),
+  approvalLevels: t.Array(ApprovalLevelSchema, { minItems: 1, maxItems: 10 }),
+  isActive: t.Optional(t.Boolean({ default: true })),
+});
+export type CreateApprovalHierarchy = Static<typeof CreateApprovalHierarchySchema>;
+
+export const UpdateApprovalHierarchySchema = t.Partial(CreateApprovalHierarchySchema);
+export type UpdateApprovalHierarchy = Static<typeof UpdateApprovalHierarchySchema>;
+
+export const ApprovalHierarchyResponseSchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  departmentId: t.Nullable(UuidSchema),
+  name: t.String(),
+  description: t.Nullable(t.String()),
+  isActive: t.Boolean(),
+  approvalLevels: t.Array(ApprovalLevelSchema),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+export type ApprovalHierarchyResponse = Static<typeof ApprovalHierarchyResponseSchema>;
+
+export const ApprovalHierarchyFiltersSchema = t.Object({
+  departmentId: t.Optional(UuidSchema),
+  isActive: t.Optional(t.Boolean()),
+  ...PaginationQuerySchema.properties,
+});
+export type ApprovalHierarchyFilters = Static<typeof ApprovalHierarchyFiltersSchema>;
+
+export const SubmitForApprovalSchema = t.Object({
+  approverIds: t.Optional(t.Array(UuidSchema, { minItems: 1, maxItems: 10 })),
+});
+export type SubmitForApproval = Static<typeof SubmitForApprovalSchema>;
+
+export const ApproveTimesheetSchema = t.Object({
+  comments: t.Optional(t.String({ maxLength: 500 })),
+});
+export type ApproveTimesheet = Static<typeof ApproveTimesheetSchema>;
+
+export const RejectTimesheetSchema = t.Object({
+  comments: t.Optional(t.String({ maxLength: 500 })),
+  reason: t.Optional(t.String({ maxLength: 1000 })),
+});
+export type RejectTimesheet = Static<typeof RejectTimesheetSchema>;
+
+// =============================================================================
 // Params Schemas
 // =============================================================================
 

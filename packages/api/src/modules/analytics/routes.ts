@@ -19,6 +19,7 @@ import {
   DiversityFiltersSchema,
   CompensationFiltersSchema,
   WorkforcePlanningFiltersSchema,
+  WorkforceAnalyticsFiltersSchema,
   HeadcountSummarySchema,
   HeadcountByDepartmentSchema,
   HeadcountTrendSchema,
@@ -35,6 +36,12 @@ import {
   ExecutiveDashboardSchema,
   ManagerDashboardSchema,
   PeriodSchema,
+  WorkforceHeadcountTrendsResponseSchema,
+  WorkforceTurnoverRateResponseSchema,
+  WorkforceRetirementProjectionResponseSchema,
+  WorkforceTenureDistributionResponseSchema,
+  WorkforceVacancyRateResponseSchema,
+  WorkforceSummaryResponseSchema,
 } from "./schemas";
 
 /**
@@ -621,6 +628,224 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
       },
     }
   );
+
+// ===========================================================================
+// Workforce Analytics - Individual Endpoints (TODO-198)
+// ===========================================================================
+
+// GET /analytics/workforce/headcount-trends
+analyticsRoutes.get(
+  "/workforce/headcount-trends",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+    const result = await analyticsService.getWorkforceHeadcountTrends(tenantContext, query || {});
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceHeadcountTrendsResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get headcount trends over time",
+      description:
+        "Returns monthly headcount, hires, and terminations for the specified date range. " +
+        "Defaults to the last 12 months if no date range is specified. " +
+        "Supports filtering by department_id, location, and date range.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// GET /analytics/workforce/turnover-rate
+analyticsRoutes.get(
+  "/workforce/turnover-rate",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+    const result = await analyticsService.getWorkforceTurnoverRate(tenantContext, query || {});
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceTurnoverRateResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get voluntary/involuntary turnover rate by department",
+      description:
+        "Returns overall and per-department turnover rates, split by voluntary and involuntary. " +
+        "Voluntary reasons: resignation, retirement, personal. All other reasons are involuntary. " +
+        "Defaults to the last 12 months if no date range is specified.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// GET /analytics/workforce/retirement-projection
+analyticsRoutes.get(
+  "/workforce/retirement-projection",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+
+    // Parse retirement ages from query if provided, otherwise use defaults
+    const retirementAges = [55, 60, 65, 67];
+
+    const result = await analyticsService.getWorkforceRetirementProjection(
+      tenantContext,
+      query || {},
+      retirementAges
+    );
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceRetirementProjectionResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get retirement projection",
+      description:
+        "Projects employees approaching configurable retirement ages (55, 60, 65, 67). " +
+        "Uses date_of_birth from employee_personal to calculate years until each retirement age. " +
+        "Results are bucketed into risk bands (0-2 years, 3-5 years, 6-10 years) " +
+        "with department breakdowns for succession planning.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// GET /analytics/workforce/tenure-distribution
+analyticsRoutes.get(
+  "/workforce/tenure-distribution",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+    const result = await analyticsService.getWorkforceTenureDistribution(tenantContext, query || {});
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceTenureDistributionResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get employee tenure distribution",
+      description:
+        "Returns employee tenure distribution across bands (0-1, 1-2, 2-5, 5-10, 10-20, 20+ years) " +
+        "with average and median tenure. Only includes active and on-leave employees.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// GET /analytics/workforce/vacancy-rate
+analyticsRoutes.get(
+  "/workforce/vacancy-rate",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+    const result = await analyticsService.getWorkforceVacancyRate(tenantContext, query || {});
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceVacancyRateResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get vacancy rate by department",
+      description:
+        "Compares budgeted headcount (from positions.headcount) vs filled positions " +
+        "(current active position_assignments) and open requisitions per department. " +
+        "Vacancy rate = (budgeted - filled) / budgeted * 100.",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
+
+// GET /analytics/workforce/summary
+analyticsRoutes.get(
+  "/workforce/summary",
+  async (ctx) => {
+    const { analyticsService, query, tenantContext, error } = ctx as any;
+    const result = await analyticsService.getWorkforceSummary(tenantContext, query || {});
+
+    if (!result.success) {
+      const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", ANALYTICS_ERROR_CODES);
+      return error(status, { error: result.error });
+    }
+
+    return result.data;
+  },
+  {
+    beforeHandle: [requirePermission("analytics", "read")],
+    query: t.Partial(WorkforceAnalyticsFiltersSchema),
+    response: {
+      200: WorkforceSummaryResponseSchema,
+      400: ErrorResponseSchema,
+      500: ErrorResponseSchema,
+    },
+    detail: {
+      tags: ["Analytics", "Workforce Planning"],
+      summary: "Get key workforce metrics summary",
+      description:
+        "Returns a consolidated summary of key workforce planning metrics: " +
+        "headcount breakdown, trailing 12-month turnover rates (voluntary/involuntary), " +
+        "average and median tenure, retirement risk counts (within 2 and 5 years based on " +
+        "UK state pension age 66-68), and vacancy metrics (budgeted vs filled positions, " +
+        "open requisitions).",
+      security: [{ bearerAuth: [] }],
+    },
+  }
+);
 
 // ===========================================================================
 // Diversity Analytics

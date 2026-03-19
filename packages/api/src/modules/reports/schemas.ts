@@ -297,3 +297,72 @@ export const ExportFormatParamsSchema = t.Object({
   id: t.String(),
   format: t.Union([t.Literal("xlsx"), t.Literal("csv"), t.Literal("pdf")]),
 });
+
+// =============================================================================
+// Report Schedule CRUD Schemas
+// =============================================================================
+
+export const ScheduleRecipientSchema = t.Object({
+  email: t.String({ minLength: 1 }),
+  userId: t.Optional(t.String()),
+  deliveryMethod: t.Optional(
+    t.Union([t.Literal("email"), t.Literal("in_app"), t.Literal("both")])
+  ),
+});
+export type ScheduleRecipient = Static<typeof ScheduleRecipientSchema>;
+
+export const ScheduleExportFormatSchema = t.Union([
+  t.Literal("csv"),
+  t.Literal("xlsx"),
+  t.Literal("pdf"),
+]);
+export type ScheduleExportFormat = Static<typeof ScheduleExportFormatSchema>;
+
+export const CreateReportScheduleSchema = t.Object({
+  report_id: t.String({ minLength: 1 }),
+  name: t.String({ minLength: 1, maxLength: 200 }),
+  cron_expression: t.String({ minLength: 1, maxLength: 100 }),
+  frequency: ScheduleFrequencySchema,
+  recipients: t.Array(ScheduleRecipientSchema, { minItems: 1 }),
+  export_format: t.Optional(ScheduleExportFormatSchema),
+  filters: t.Optional(t.Record(t.String(), t.Unknown())),
+  is_active: t.Optional(t.Boolean()),
+});
+export type CreateReportSchedule = Static<typeof CreateReportScheduleSchema>;
+
+export const UpdateReportScheduleSchema = t.Object({
+  name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  cron_expression: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  frequency: t.Optional(ScheduleFrequencySchema),
+  recipients: t.Optional(t.Array(ScheduleRecipientSchema, { minItems: 1 })),
+  export_format: t.Optional(ScheduleExportFormatSchema),
+  filters: t.Optional(t.Record(t.String(), t.Unknown())),
+  is_active: t.Optional(t.Boolean()),
+});
+export type UpdateReportSchedule = Static<typeof UpdateReportScheduleSchema>;
+
+export const ScheduleListQuerySchema = t.Object({
+  cursor: t.Optional(t.String()),
+  limit: t.Optional(t.String()),
+  report_id: t.Optional(t.String()),
+  is_active: t.Optional(t.String()),
+});
+export type ScheduleListQuery = Static<typeof ScheduleListQuerySchema>;
+
+export const ReportScheduleResponseSchema = t.Object({
+  id: t.String(),
+  tenantId: t.String(),
+  reportId: t.String(),
+  name: t.String(),
+  cronExpression: t.String(),
+  frequency: t.String(),
+  recipients: t.Array(ScheduleRecipientSchema),
+  exportFormat: t.String(),
+  filters: t.Unknown(),
+  isActive: t.Boolean(),
+  lastRunAt: t.Union([t.String(), t.Null()]),
+  nextRunAt: t.Union([t.String(), t.Null()]),
+  createdBy: t.String(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});

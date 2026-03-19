@@ -9,7 +9,7 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
 import { ManagerService } from "./manager.service";
-import { ApprovalTypeSchema, ApprovalActionSchema } from "./manager.schemas";
+import { ApprovalTypeSchema, ApprovalActionSchema, TeamTrainingQuerySchema } from "./manager.schemas";
 
 export const managerRoutes = new Elysia({ prefix: "/manager" })
   // Get team overview/dashboard
@@ -375,6 +375,99 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
       detail: {
         tags: ["Manager"],
         summary: "Check if employee is a subordinate",
+      },
+    }
+  )
+
+  // =========================================================================
+  // Team Training (TODO-207)
+  // =========================================================================
+
+  // Get team training overview for direct reports
+  .get(
+    "/team-training",
+    async (ctx) => {
+      const { tenant, user, db, query, set, requestId } = ctx as any;
+
+      try {
+        const service = new ManagerService(db);
+        const filter = query?.filter || "all";
+        const result = await service.getTeamTrainingOverview(
+          { tenantId: tenant.id, userId: user.id },
+          filter
+        );
+
+        return result;
+      } catch (error: any) {
+        set.status = 500;
+        return {
+          error: {
+            code: ErrorCodes.INTERNAL_ERROR,
+            message: "Failed to fetch team training overview",
+            requestId,
+          },
+        };
+      }
+    },
+    {
+      beforeHandle: [requireAuthContext, requireTenantContext],
+      query: TeamTrainingQuerySchema,
+      detail: {
+        tags: ["Manager"],
+        summary: "Get team training overview",
+        description:
+          "Returns training status for each direct report: completed courses, " +
+          "in-progress courses, overdue mandatory training, and total training hours. " +
+          "Supports filtering by all, overdue, or in_progress.",
+      },
+    }
+  )
+
+  // Get detailed training for a specific team member
+  .get(
+    "/team-training/:employeeId",
+    async (ctx) => {
+      const { tenant, user, db, params, set, requestId } = ctx as any;
+
+      try {
+        const service = new ManagerService(db);
+        const result = await service.getTeamMemberTraining(
+          { tenantId: tenant.id, userId: user.id },
+          params.employeeId
+        );
+
+        if (!result) {
+          set.status = 404;
+          return {
+            error: {
+              code: ErrorCodes.NOT_FOUND,
+              message: "Employee not found or not a direct report",
+              requestId,
+            },
+          };
+        }
+
+        return result;
+      } catch (error: any) {
+        set.status = 500;
+        return {
+          error: {
+            code: ErrorCodes.INTERNAL_ERROR,
+            message: "Failed to fetch team member training details",
+            requestId,
+          },
+        };
+      }
+    },
+    {
+      beforeHandle: [requireAuthContext, requireTenantContext],
+      params: t.Object({ employeeId: t.String({ format: "uuid" }) }),
+      detail: {
+        tags: ["Manager"],
+        summary: "Get detailed training for a team member",
+        description:
+          "Returns full training details for a specific direct report including " +
+          "all enrollments, completion status, overdue mandatory training, and total hours.",
       },
     }
   );

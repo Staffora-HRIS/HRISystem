@@ -331,6 +331,38 @@ export const workflowRoutes = new Elysia({ prefix: "/workflows" })
     detail: { tags: ["Workflows"], summary: "Bulk process workflow steps (approve/reject multiple)" }
   })
 
+  // Escalation History (TODO-156)
+  .get("/escalations", async (ctx) => {
+    const { tenant, user, workflowService, query, set } = ctx as any;
+
+    try {
+      const result = await workflowService.getEscalationHistory(
+        { tenantId: tenant.id, userId: user.id },
+        {
+          entityType: query.entityType,
+          entityId: query.entityId,
+          slaId: query.slaId,
+          fromDate: query.fromDate,
+          toDate: query.toDate,
+          cursor: query.cursor,
+          limit: query.limit !== undefined && query.limit !== null ? Number(query.limit) : undefined,
+        }
+      );
+      return result;
+    } catch (error: any) {
+      set.status = 500;
+      return { error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
+    }
+  }, {
+    query: schemas.EscalationHistoryQuerySchema,
+    beforeHandle: [requirePermission("workflows", "read")],
+    detail: {
+      tags: ["Workflows"],
+      summary: "List SLA escalation history",
+      description: "Returns paginated escalation history for workflow tasks and cases.",
+    }
+  })
+
   // My Approvals
   .get("/my-approvals", async (ctx) => {
     const { tenant, user, workflowService, set } = ctx as any;

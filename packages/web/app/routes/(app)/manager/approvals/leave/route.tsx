@@ -178,19 +178,19 @@ export default function ManagerLeaveApprovalsPage() {
         <div className="flex items-center gap-3">
           <Link
             to="/manager/approvals"
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
             aria-label="Back to all approvals"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-2xl font-bold">Leave Approvals</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leave Approvals</h1>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
           <CardBody className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-medium text-red-800">Error loading data</h4>
-              <p className="text-sm text-red-700 mt-1">{message}</p>
+              <h4 className="font-medium text-red-800 dark:text-red-300">Error loading data</h4>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">{message}</p>
             </div>
           </CardBody>
         </Card>
@@ -215,14 +215,14 @@ export default function ManagerLeaveApprovalsPage() {
       <div className="flex items-center gap-3">
         <Link
           to="/manager/approvals"
-          className="text-gray-500 hover:text-gray-700"
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
           aria-label="Back to all approvals"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leave Approvals</h1>
-          <p className="text-gray-600">Review and action pending leave requests from your team</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leave Approvals</h1>
+          <p className="text-gray-600 dark:text-gray-400">Review and action pending leave requests from your team</p>
         </div>
       </div>
 
@@ -247,8 +247,8 @@ export default function ManagerLeaveApprovalsPage() {
 
       {/* Bulk Action Bar */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-blue-800">
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
             {selectedCount} leave request{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <Button
@@ -275,7 +275,7 @@ export default function ManagerLeaveApprovalsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold">Pending Leave Requests</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">Pending Leave Requests</h3>
             {approvals.length > 0 && (
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -283,7 +283,7 @@ export default function ManagerLeaveApprovalsPage() {
                   onChange={toggleSelectAll}
                   aria-label="Select all leave requests"
                 />
-                <span className="text-sm text-gray-600">Select all</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Select all</span>
               </div>
             )}
           </div>
@@ -292,8 +292,8 @@ export default function ManagerLeaveApprovalsPage() {
           {approvals.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircle2 className="h-12 w-12 mx-auto text-green-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900">All caught up</h3>
-              <p className="text-gray-500 mt-1">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">All caught up</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
                 No pending leave requests to review.
               </p>
               <Link to="/manager/approvals" className="inline-block mt-4">
@@ -303,7 +303,7 @@ export default function ManagerLeaveApprovalsPage() {
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {approvals.map((approval) => {
                 const metadata = approval.metadata as {
                   leaveType?: string;
@@ -317,7 +317,7 @@ export default function ManagerLeaveApprovalsPage() {
                 return (
                   <div
                     key={approval.id}
-                    className={`flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50/50" : ""}`}
+                    className={`flex items-start gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${isSelected ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}`}
                   >
                     <div className="pt-1 shrink-0">
                       <Checkbox
@@ -328,7 +328,7 @@ export default function ManagerLeaveApprovalsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900">
+                        <span className="font-semibold text-gray-900 dark:text-white">
                           {approval.requesterName}
                         </span>
                         <Badge variant={PRIORITY_COLORS[approval.priority] ?? "secondary"}>
@@ -339,17 +339,17 @@ export default function ManagerLeaveApprovalsPage() {
                         )}
                       </div>
 
-                      <p className="text-sm text-gray-700 mb-1">{approval.title}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{approval.title}</p>
 
                       {metadata.startDate && metadata.endDate && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                           <Calendar className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                           <span>
                             {new Date(metadata.startDate).toLocaleDateString()} –{" "}
                             {new Date(metadata.endDate).toLocaleDateString()}
                           </span>
                           {metadata.totalDays !== undefined && (
-                            <span className="text-gray-500">
+                            <span className="text-gray-500 dark:text-gray-400">
                               ({metadata.totalDays} {metadata.totalDays === 1 ? "day" : "days"})
                             </span>
                           )}
@@ -357,18 +357,18 @@ export default function ManagerLeaveApprovalsPage() {
                       )}
 
                       {metadata.reason && (
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           Reason: {metadata.reason}
                         </p>
                       )}
 
                       {approval.description && !metadata.reason && (
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           {approval.description}
                         </p>
                       )}
 
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 dark:text-gray-500">
                         <span>Submitted {new Date(approval.createdAt).toLocaleString()}</span>
                         {approval.dueDate && (
                           <span

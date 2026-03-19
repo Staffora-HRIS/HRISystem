@@ -9,6 +9,7 @@
  */
 
 export { analyticsRoutes } from "./routes";
+export { recruitmentAnalyticsRoutes } from "./recruitment-analytics.routes";
 export { AnalyticsService } from "./service";
 export { AnalyticsRepository } from "./repository";
 export * from "./schemas";

@@ -39,19 +39,21 @@ export const DistributionResponseSchema = t.Object({
   distributed_by: UuidSchema,
   target_departments: t.Array(t.String()),
   target_all: t.Boolean(),
+  deadline_at: t.Union([t.String(), t.Null()]),
   created_at: t.String(),
 });
 
 export type DistributionResponse = Static<typeof DistributionResponseSchema>;
 
 /**
- * Create distribution request
+ * Create distribution request body
  */
 export const CreateDistributionSchema = t.Object({
   document_id: UuidSchema,
   title: t.String({ minLength: 1, maxLength: 500 }),
   target_departments: t.Optional(t.Array(t.String())),
   target_all: t.Optional(t.Boolean({ default: false })),
+  deadline_at: t.Optional(t.String({ format: "date-time" })),
 });
 
 export type CreateDistribution = Static<typeof CreateDistributionSchema>;
@@ -66,6 +68,7 @@ export type CreateDistribution = Static<typeof CreateDistributionSchema>;
 export const AcknowledgementRecordSchema = t.Object({
   id: UuidSchema,
   employee_id: UuidSchema,
+  employee_name: t.Union([t.String(), t.Null()]),
   acknowledged_at: t.String(),
   ip_address: t.Union([t.String(), t.Null()]),
 });
@@ -92,7 +95,7 @@ export type DistributionStatusResponse = Static<typeof DistributionStatusRespons
 // =============================================================================
 
 /**
- * Acknowledge distribution request
+ * Acknowledge distribution request (body; distribution ID from URL params)
  */
 export const AcknowledgeDistributionSchema = t.Object({
   distribution_id: UuidSchema,
@@ -114,6 +117,34 @@ export const AcknowledgementResponseSchema = t.Object({
 });
 
 export type AcknowledgementResponse = Static<typeof AcknowledgementResponseSchema>;
+
+// =============================================================================
+// Pending Policies (Portal / Employee Self-Service)
+// =============================================================================
+
+/**
+ * A single pending policy acknowledgement for the current employee
+ */
+export const PendingPolicySchema = t.Object({
+  distribution_id: UuidSchema,
+  document_id: UuidSchema,
+  title: t.String(),
+  distributed_at: t.String(),
+  deadline_at: t.Union([t.String(), t.Null()]),
+  is_overdue: t.Boolean(),
+});
+
+export type PendingPolicy = Static<typeof PendingPolicySchema>;
+
+/**
+ * Response for the pending policies endpoint
+ */
+export const PendingPoliciesResponseSchema = t.Object({
+  items: t.Array(PendingPolicySchema),
+  count: t.Number(),
+});
+
+export type PendingPoliciesResponse = Static<typeof PendingPoliciesResponseSchema>;
 
 // =============================================================================
 // API Route Parameter Schemas

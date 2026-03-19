@@ -18,7 +18,7 @@ export const UuidSchema = t.String({
 
 export const PaginationQuerySchema = t.Object({
   cursor: t.Optional(t.String({ minLength: 1 })),
-  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 50 })),
+  limit: t.Optional(t.String({ pattern: "^[0-9]+$" })),
 });
 
 export type PaginationQuery = Static<typeof PaginationQuerySchema>;
@@ -138,3 +138,20 @@ export const OptionalIdempotencyHeaderSchema = t.Object({
 });
 
 export type OptionalIdempotencyHeader = Static<typeof OptionalIdempotencyHeaderSchema>;
+
+// =============================================================================
+// Test Connection Response
+// =============================================================================
+
+/**
+ * Response shape for testing an integration connection
+ */
+export const TestConnectionResponseSchema = t.Object({
+  success: t.Boolean(),
+  provider: t.String(),
+  message: t.String(),
+  latencyMs: t.Optional(t.Number()),
+  testedAt: t.String(),
+});
+
+export type TestConnectionResponse = Static<typeof TestConnectionResponseSchema>;

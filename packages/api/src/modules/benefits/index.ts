@@ -12,6 +12,7 @@
  * - plan.routes.ts     -- benefit plan CRUD
  * - enrollment.routes.ts -- enrollment, dependents, open enrollment, costs, self-service, stats
  * - life-event.routes.ts -- life event triggers, review, self-service
+ * - flex-fund.routes.ts -- Flexible benefit fund allocation
  */
 
 // Composed route plugin (the main entry point for app.ts)
@@ -27,10 +28,15 @@ export { enrollmentRoutes } from "./enrollment.routes";
 export type { EnrollmentRoutes } from "./enrollment.routes";
 export { lifeEventRoutes } from "./life-event.routes";
 export type { LifeEventRoutes } from "./life-event.routes";
+export { flexFundRoutes } from "./flex-fund.routes";
+export type { FlexFundRoutes } from "./flex-fund.routes";
 
 // Service and Repository
 export { BenefitsService } from "./service";
 export { BenefitsRepository } from "./repository";
+export { FlexFundService } from "./flex-fund.service";
+export { FlexFundRepository } from "./flex-fund.repository";
 
 // Schemas
 export * from "./schemas";
+export * from "./flex-fund.schemas";

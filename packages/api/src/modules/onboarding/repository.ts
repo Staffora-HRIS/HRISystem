@@ -19,6 +19,11 @@ import type {
   CreateComplianceCheck,
   UpdateComplianceCheck,
   ComplianceCheckResponse,
+  CreateTemplateComplianceRequirement,
+  UpdateTemplateComplianceRequirement,
+  TemplateComplianceRequirementResponse,
+  ComplianceDashboardItem,
+  ComplianceDashboardResponse,
 } from "./schemas";
 import type { TenantContext } from "../../types/service-result";
 
@@ -1139,6 +1144,236 @@ export class OnboardingRepository {
       order: row.order,
       notes: row.notes,
       formData: row.form_data,
+    };
+  }
+
+  // ===========================================================================
+  // Template Compliance Requirement Operations
+  // ===========================================================================
+
+  async listTemplateComplianceRequirements(
+    ctx: TenantContext,
+    templateId: string
+  ): Promise<TemplateComplianceRequirementResponse[]> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT *
+          FROM app.onboarding_template_compliance_requirements
+          WHERE template_id = ${templateId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY display_order ASC, created_at ASC
+        `;
+      }
+    );
+    return rows.map(this.mapTemplateComplianceRequirementRow);
+  }
+
+  async getTemplateComplianceRequirementById(
+    ctx: TenantContext,
+    requirementId: string
+  ): Promise<TemplateComplianceRequirementResponse | null> {
+    const [row] = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT *
+          FROM app.onboarding_template_compliance_requirements
+          WHERE id = ${requirementId}::uuid
+            AND tenant_id = ${ctx.tenantId}::uuid
+        `;
+      }
+    );
+    return row ? this.mapTemplateComplianceRequirementRow(row) : null;
+  }
+
+  async createTemplateComplianceRequirement(
+    ctx: TenantContext,
+    templateId: string,
+    data: CreateTemplateComplianceRequirement,
+    txOverride?: any
+  ): Promise<TemplateComplianceRequirementResponse> {
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.onboarding_template_compliance_requirements (
+          id, tenant_id, template_id, check_type, required,
+          due_days_offset, display_order, instructions
+        ) VALUES (
+          gen_random_uuid(), ${ctx.tenantId}::uuid, ${templateId}::uuid,
+          ${data.checkType}, ${data.required !== false},
+          ${data.dueDaysOffset ?? null}, ${data.displayOrder ?? 0},
+          ${data.instructions ?? null}
+        )
+        RETURNING *
+      `;
+    };
+    const [row] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return this.mapTemplateComplianceRequirementRow(row);
+  }
+
+  async updateTemplateComplianceRequirement(
+    ctx: TenantContext,
+    requirementId: string,
+    data: UpdateTemplateComplianceRequirement,
+    txOverride?: any
+  ): Promise<TemplateComplianceRequirementResponse | null> {
+    const exec = async (tx: any) => {
+      return tx`
+        UPDATE app.onboarding_template_compliance_requirements SET
+          required = COALESCE(${data.required ?? null}, required),
+          due_days_offset = COALESCE(${data.dueDaysOffset ?? null}, due_days_offset),
+          display_order = COALESCE(${data.displayOrder ?? null}, display_order),
+          instructions = COALESCE(${data.instructions ?? null}, instructions),
+          updated_at = now()
+        WHERE id = ${requirementId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+    };
+    const [row] = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return row ? this.mapTemplateComplianceRequirementRow(row) : null;
+  }
+
+  async deleteTemplateComplianceRequirement(
+    ctx: TenantContext,
+    requirementId: string,
+    txOverride?: any
+  ): Promise<boolean> {
+    const exec = async (tx: any) => {
+      return tx`
+        DELETE FROM app.onboarding_template_compliance_requirements
+        WHERE id = ${requirementId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING id
+      `;
+    };
+    const result = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return result.length > 0;
+  }
+
+  async autoCreateComplianceChecks(
+    ctx: TenantContext,
+    onboardingId: string,
+    employeeId: string,
+    templateId: string,
+    startDate: string,
+    txOverride?: any
+  ): Promise<ComplianceCheckResponse[]> {
+    const exec = async (tx: any) => {
+      const requirements = await tx`
+        SELECT * FROM app.onboarding_template_compliance_requirements
+        WHERE template_id = ${templateId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        ORDER BY display_order ASC
+      `;
+      if (requirements.length === 0) return [];
+      const created: any[] = [];
+      const start = new Date(startDate);
+      for (const req of requirements) {
+        let dueDate: string | null = null;
+        if (req.due_days_offset != null) {
+          const due = new Date(start);
+          due.setDate(due.getDate() + Number(req.due_days_offset));
+          dueDate = due.toISOString().split("T")[0] || null;
+        }
+        const [row] = await tx`
+          INSERT INTO app.onboarding_compliance_checks (
+            id, tenant_id, onboarding_id, employee_id,
+            check_type, status, required, due_date, notes, created_by
+          ) VALUES (
+            gen_random_uuid(), ${ctx.tenantId}::uuid, ${onboardingId}::uuid, ${employeeId}::uuid,
+            ${req.check_type}, 'pending', ${req.required},
+            ${dueDate}::date, ${req.instructions || null}, ${ctx.userId}::uuid
+          )
+          RETURNING *
+        `;
+        created.push(row);
+      }
+      return created;
+    };
+    const rows = txOverride
+      ? await exec(txOverride)
+      : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return rows.map(this.mapComplianceCheckRow);
+  }
+
+  // ===========================================================================
+  // Compliance Dashboard
+  // ===========================================================================
+
+  async getComplianceDashboard(
+    ctx: TenantContext,
+    filters?: { checkType?: string; status?: string; onlyOverdue?: boolean }
+  ): Promise<ComplianceDashboardResponse> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT
+            occ.id, occ.onboarding_id, occ.employee_id,
+            e.first_name || ' ' || e.last_name AS employee_name,
+            occ.check_type, occ.status, occ.required, occ.due_date, occ.created_at,
+            ot.name AS template_name, oi.status AS onboarding_status
+          FROM app.onboarding_compliance_checks occ
+          JOIN app.onboarding_instances oi ON oi.id = occ.onboarding_id
+          JOIN app.employees e ON e.id = occ.employee_id
+          JOIN app.onboarding_templates ot ON ot.id = oi.template_id
+          WHERE occ.tenant_id = ${ctx.tenantId}::uuid
+            AND oi.status NOT IN ('completed', 'cancelled')
+            ${filters?.checkType ? tx`AND occ.check_type = ${filters.checkType}::app.compliance_check_type` : tx``}
+            ${filters?.status ? tx`AND occ.status = ${filters.status}::app.compliance_check_status` : tx``}
+            ${filters?.onlyOverdue ? tx`AND occ.due_date IS NOT NULL AND occ.due_date < CURRENT_DATE AND occ.status IN ('pending', 'in_progress')` : tx``}
+          ORDER BY
+            CASE WHEN occ.status IN ('pending', 'in_progress') THEN 0 ELSE 1 END,
+            CASE WHEN occ.due_date IS NOT NULL AND occ.due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+            occ.due_date ASC NULLS LAST, occ.created_at ASC
+        `;
+      }
+    );
+    const items: ComplianceDashboardItem[] = rows.map((row: any) => ({
+      id: row.id,
+      onboardingId: row.onboarding_id,
+      employeeId: row.employee_id,
+      employeeName: row.employee_name,
+      checkType: row.check_type,
+      status: row.status,
+      required: row.required,
+      dueDate: row.due_date?.toISOString()?.split("T")[0] || row.due_date || null,
+      isOverdue: row.due_date != null && new Date(row.due_date) < new Date() && ["pending", "in_progress"].includes(row.status),
+      templateName: row.template_name,
+      onboardingStatus: row.onboarding_status,
+      createdAt: row.created_at?.toISOString() || row.created_at,
+    }));
+    return {
+      items,
+      summary: {
+        totalChecks: items.length,
+        pendingCount: items.filter((i) => i.status === "pending").length,
+        inProgressCount: items.filter((i) => i.status === "in_progress").length,
+        passedCount: items.filter((i) => i.status === "passed").length,
+        failedCount: items.filter((i) => i.status === "failed").length,
+        waivedCount: items.filter((i) => i.status === "waived").length,
+        overdueCount: items.filter((i) => i.isOverdue).length,
+      },
+    };
+  }
+
+  private mapTemplateComplianceRequirementRow(row: any): TemplateComplianceRequirementResponse {
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      templateId: row.template_id,
+      checkType: row.check_type,
+      required: row.required,
+      dueDaysOffset: row.due_days_offset != null ? Number(row.due_days_offset) : null,
+      displayOrder: Number(row.display_order) || 0,
+      instructions: row.instructions || null,
+      createdAt: row.created_at?.toISOString() || row.created_at,
+      updatedAt: row.updated_at?.toISOString() || row.updated_at,
     };
   }
 }

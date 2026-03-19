@@ -16,6 +16,7 @@ import type {
   DiversityFilters,
   CompensationFilters,
   WorkforcePlanningFilters,
+  WorkforceAnalyticsFilters,
   HeadcountSummary,
   HeadcountByDepartment,
   HeadcountTrend,
@@ -29,12 +30,24 @@ import type {
   ExecutiveDashboard,
   ManagerDashboard,
   DiversityDashboard,
+  DiversityAnalyticsFilters,
+  DiversityOverview,
+  DiversityByDepartmentResponse,
+  DiversityByGradeResponse,
+  DiversityTrendsResponse,
+  CharacteristicBreakdownItem,
   CompensationDashboard,
   WorkforcePlanningDashboard,
   HeadcountProjection,
   RetirementProjection,
   AttritionForecast,
   SkillsGapAnalysis,
+  WorkforceHeadcountTrendsResponse,
+  WorkforceTurnoverRateResponse,
+  WorkforceRetirementProjectionResponse,
+  WorkforceTenureDistributionResponse,
+  WorkforceVacancyRateResponse,
+  WorkforceSummaryResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -894,5 +907,246 @@ export class AnalyticsService {
         horizon_months: horizonMonths,
       },
     };
+  }
+
+  // ===========================================================================
+  // Workforce Analytics - Individual Endpoints (TODO-198)
+  // ===========================================================================
+
+  /**
+   * Headcount trends over time: monthly hires vs terminations.
+   */
+  async getWorkforceHeadcountTrends(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {}
+  ): Promise<ServiceResult<WorkforceHeadcountTrendsResponse>> {
+    const data = await this.repository.getWorkforceHeadcountTrends(context, filters);
+
+    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
+
+    return {
+      success: true,
+      data: {
+        current_headcount: data.currentHeadcount,
+        period_start: startDate,
+        period_end: endDate,
+        trends: data.trends.map((t) => ({
+          period: t.period,
+          total_headcount: t.totalHeadcount,
+          hires: t.hires,
+          terminations: t.terminations,
+          net_change: t.netChange,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Voluntary/involuntary turnover rate by department.
+   */
+  async getWorkforceTurnoverRate(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {}
+  ): Promise<ServiceResult<WorkforceTurnoverRateResponse>> {
+    const data = await this.repository.getWorkforceTurnoverRate(context, filters);
+
+    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
+
+    return {
+      success: true,
+      data: {
+        period_start: startDate,
+        period_end: endDate,
+        overall_turnover_rate: data.overallTurnoverRate,
+        overall_voluntary_rate: data.overallVoluntaryRate,
+        overall_involuntary_rate: data.overallInvoluntaryRate,
+        total_terminations: data.totalTerminations,
+        by_department: data.byDepartment.map((d) => ({
+          org_unit_id: d.orgUnitId,
+          org_unit_name: d.orgUnitName,
+          total_terminations: d.totalTerminations,
+          voluntary_terminations: d.voluntaryTerminations,
+          involuntary_terminations: d.involuntaryTerminations,
+          headcount: d.headcount,
+          turnover_rate: d.turnoverRate,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Retirement projection: employees approaching retirement at configurable ages.
+   */
+  async getWorkforceRetirementProjection(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {},
+    retirementAges: number[] = [55, 60, 65, 67]
+  ): Promise<ServiceResult<WorkforceRetirementProjectionResponse>> {
+    const data = await this.repository.getWorkforceRetirementProjection(
+      context,
+      filters,
+      retirementAges
+    );
+
+    return {
+      success: true,
+      data: {
+        total_active_employees: data.totalActive,
+        employees_with_dob: data.employeesWithDob,
+        retirement_ages: retirementAges,
+        projections: data.projections.map((p) => ({
+          retirement_age: p.retirementAge,
+          years_to_retirement: p.yearsToRetirement,
+          employee_count: p.employeeCount,
+          percentage: p.percentage,
+          departments: p.departments.map((d) => ({
+            org_unit_id: d.orgUnitId,
+            org_unit_name: d.orgUnitName,
+            count: d.count,
+          })),
+        })),
+      },
+    };
+  }
+
+  /**
+   * Employee tenure distribution across bands.
+   */
+  async getWorkforceTenureDistribution(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {}
+  ): Promise<ServiceResult<WorkforceTenureDistributionResponse>> {
+    const data = await this.repository.getWorkforceTenureDistribution(context, filters);
+
+    return {
+      success: true,
+      data: {
+        total_employees: data.totalEmployees,
+        average_tenure_months: data.averageTenureMonths,
+        median_tenure_months: data.medianTenureMonths,
+        bands: data.bands.map((b) => ({
+          band: b.band,
+          employee_count: b.employeeCount,
+          percentage: b.percentage,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Vacancy rate: open positions vs headcount budget.
+   */
+  async getWorkforceVacancyRate(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {}
+  ): Promise<ServiceResult<WorkforceVacancyRateResponse>> {
+    const data = await this.repository.getWorkforceVacancyRate(context, filters);
+
+    return {
+      success: true,
+      data: {
+        total_budgeted_headcount: data.totalBudgeted,
+        total_filled: data.totalFilled,
+        total_open_requisitions: data.totalOpenRequisitions,
+        overall_vacancy_rate: data.overallVacancyRate,
+        by_department: data.byDepartment.map((d) => ({
+          org_unit_id: d.orgUnitId,
+          org_unit_name: d.orgUnitName,
+          budgeted_headcount: d.budgetedHeadcount,
+          filled_positions: d.filledPositions,
+          open_requisitions: d.openRequisitions,
+          vacancy_rate: d.vacancyRate,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Key workforce metrics summary (headcount, turnover, tenure, retirement risk, vacancy).
+   */
+  async getWorkforceSummary(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters = {}
+  ): Promise<ServiceResult<WorkforceSummaryResponse>> {
+    const data = await this.repository.getWorkforceSummary(context, filters);
+
+    return {
+      success: true,
+      data: {
+        headcount: {
+          total: data.headcount.total,
+          active: data.headcount.active,
+          on_leave: data.headcount.onLeave,
+          pending: data.headcount.pending,
+        },
+        turnover: {
+          rate_12m: data.turnover.rate12m,
+          voluntary_rate_12m: data.turnover.voluntaryRate12m,
+          involuntary_rate_12m: data.turnover.involuntaryRate12m,
+        },
+        tenure: {
+          average_months: data.tenure.averageMonths,
+          median_months: data.tenure.medianMonths,
+        },
+        retirement_risk: {
+          within_2_years: data.retirementRisk.within2Years,
+          within_5_years: data.retirementRisk.within5Years,
+        },
+        vacancy: {
+          budgeted_headcount: data.vacancy.budgetedHeadcount,
+          filled: data.vacancy.filled,
+          vacancy_rate: data.vacancy.vacancyRate,
+          open_requisitions: data.vacancy.openRequisitions,
+        },
+        as_of_date: new Date().toISOString().split("T")[0]!,
+      },
+    };
+  }
+
+  // ===========================================================================
+  // Diversity Analytics - Extended Endpoints (TODO-147)
+  // ===========================================================================
+
+  /** Apply minimum threshold to a breakdown array for GDPR/Equality Act compliance. */
+  private applyThresholdToBreakdown(items: Array<{ label: string; count: number }>, total: number): CharacteristicBreakdownItem[] {
+    return items.filter((item) => item.count >= AnalyticsService.MIN_THRESHOLD).map((item) => ({ label: item.label, count: item.count, percentage: total > 0 ? Math.round((item.count / total) * 1000) / 10 : 0 }));
+  }
+
+  /** GET /analytics/diversity/overview - Headcount by all protected characteristics with threshold enforcement. */
+  async getDiversityOverviewAnalytics(context: TenantContext, filters: DiversityAnalyticsFilters = {}): Promise<ServiceResult<DiversityOverview>> {
+    const data = await this.repository.getDiversityOverview(context, { org_unit_id: filters.org_unit_id });
+    const total = data.totalEmployees;
+    return { success: true, data: { total_employees: total, by_gender: this.applyThresholdToBreakdown(data.byGender, total), by_ethnicity: this.applyThresholdToBreakdown(data.byEthnicity, total), by_disability: this.applyThresholdToBreakdown(data.byDisability, total), by_age_band: this.applyThresholdToBreakdown(data.byAgeBand, total), diversity_completion: { total_employees: data.completionRate.totalEmployees, total_submissions: data.completionRate.totalSubmissions, completion_rate: data.completionRate.completionRate }, minimum_threshold: AnalyticsService.MIN_THRESHOLD, as_of_date: new Date().toISOString().split("T")[0]! } };
+  }
+
+  /** GET /analytics/diversity/by-department - Diversity per department with threshold enforcement. */
+  async getDiversityByDepartmentAnalytics(context: TenantContext, filters: DiversityAnalyticsFilters = {}): Promise<ServiceResult<DiversityByDepartmentResponse>> {
+    const data = await this.repository.getDiversityByDepartmentDetailed(context, { org_unit_id: filters.org_unit_id });
+    const items = data.filter((dept: any) => dept.totalEmployees >= AnalyticsService.MIN_THRESHOLD).map((dept: any) => ({ org_unit_id: dept.orgUnitId, org_unit_name: dept.orgUnitName, total_employees: dept.totalEmployees, by_gender: this.applyThresholdToBreakdown(dept.byGender, dept.totalEmployees), by_ethnicity: this.applyThresholdToBreakdown(dept.byEthnicity, dept.totalEmployees), by_disability: this.applyThresholdToBreakdown(dept.byDisability, dept.totalEmployees), by_age_band: this.applyThresholdToBreakdown(dept.byAgeBand, dept.totalEmployees) }));
+    return { success: true, data: { items, minimum_threshold: AnalyticsService.MIN_THRESHOLD, as_of_date: new Date().toISOString().split("T")[0]! } };
+  }
+
+  /** GET /analytics/diversity/by-grade - Diversity per job grade with threshold enforcement. */
+  async getDiversityByGradeAnalytics(context: TenantContext, filters: DiversityAnalyticsFilters = {}): Promise<ServiceResult<DiversityByGradeResponse>> {
+    const data = await this.repository.getDiversityByGradeDetailed(context, { org_unit_id: filters.org_unit_id });
+    const items = data.filter((grade: any) => grade.totalEmployees >= AnalyticsService.MIN_THRESHOLD).map((grade: any) => ({ job_grade: grade.jobGrade, total_employees: grade.totalEmployees, by_gender: this.applyThresholdToBreakdown(grade.byGender, grade.totalEmployees), by_ethnicity: this.applyThresholdToBreakdown(grade.byEthnicity, grade.totalEmployees), by_disability: this.applyThresholdToBreakdown(grade.byDisability, grade.totalEmployees), by_age_band: this.applyThresholdToBreakdown(grade.byAgeBand, grade.totalEmployees) }));
+    return { success: true, data: { items, minimum_threshold: AnalyticsService.MIN_THRESHOLD, as_of_date: new Date().toISOString().split("T")[0]! } };
+  }
+
+  /** GET /analytics/diversity/trends - Diversity metrics over time with threshold enforcement. */
+  async getDiversityTrendsAnalytics(context: TenantContext, filters: DiversityAnalyticsFilters = {}): Promise<ServiceResult<DiversityTrendsResponse>> {
+    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const endDate = filters.end_date || new Date().toISOString().split("T")[0];
+    const data = await this.repository.getDiversityTrendsDetailed(context, { org_unit_id: filters.org_unit_id, start_date: startDate, end_date: endDate });
+    const periodTotals = new Map<string, number>();
+    for (const pt of data.genderTrends) { periodTotals.set(pt.period, (periodTotals.get(pt.period) || 0) + pt.headcount); }
+    const items: Array<{ period: string; characteristic: string; label: string; headcount: number; percentage: number }> = [];
+    const addTrends = (trends: Array<{ period: string; label: string; headcount: number }>, characteristic: string) => { for (const t of trends) { if (t.headcount >= AnalyticsService.MIN_THRESHOLD) { const tot = periodTotals.get(t.period) || 0; items.push({ period: t.period, characteristic, label: t.label, headcount: t.headcount, percentage: tot > 0 ? Math.round((t.headcount / tot) * 1000) / 10 : 0 }); } } };
+    addTrends(data.genderTrends, "gender"); addTrends(data.ethnicityTrends, "ethnicity"); addTrends(data.disabilityTrends, "disability"); addTrends(data.ageBandTrends, "age_band");
+    const hiringTrends = data.hiringTrends.filter((t) => t.hires >= AnalyticsService.MIN_THRESHOLD).map((t) => ({ period: t.period, characteristic: t.characteristic, value: t.value, hires: t.hires, leavers: 0 }));
+    const leavingTrends = data.leavingTrends.filter((t) => t.leavers >= AnalyticsService.MIN_THRESHOLD).map((t) => ({ period: t.period, characteristic: t.characteristic, value: t.value, hires: 0, leavers: t.leavers }));
+    return { success: true, data: { items, hiring_trends: hiringTrends, leaving_trends: leavingTrends, minimum_threshold: AnalyticsService.MIN_THRESHOLD, period: { start_date: startDate!, end_date: endDate! } } };
   }
 }

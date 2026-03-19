@@ -29,6 +29,7 @@ import {
   getValidTransitions as getValidEmployeeTransitions,
   EmployeeStates,
 } from "@staffora/shared/state-machines";
+import { calculateStatutoryNoticePeriod } from "@staffora/shared/utils";
 import type {
   CreateEmployee,
   UpdateEmployeePersonal,
@@ -47,6 +48,8 @@ import type {
   AssignEmployeePosition,
   EmployeePositionAssignmentResponse,
   EmployeePositionsListResponse,
+  RehireEmployee,
+  EmploymentRecordResponse,
 } from "./schemas";
 
 // =============================================================================
@@ -59,6 +62,7 @@ type EmployeeDomainEventType =
   | "hr.employee.transferred"
   | "hr.employee.promoted"
   | "hr.employee.terminated"
+  | "hr.employee.rehired"
   | "hr.employee.status_changed"
   | "hr.employee.ni_category_changed"
   | "hr.employee.position_assigned"
@@ -917,6 +921,331 @@ export class EmployeeService {
   }
 
   /**
+   * Rehire a terminated employee.
+   *
+   * Creates a new employment record linking to the previous terminated record,
+   * preserving the full employment history chain. Reactivates the employee
+   * with new contract, position, and compensation records.
+   *
+   * The employee status transitions: terminated -> pending (rehire sets pending,
+   * then the normal activation flow brings them to active).
+   */
+  async rehireEmployee(
+    context: TenantContext,
+    employeeId: string,
+    data: RehireEmployee,
+    idempotencyKey?: string
+  ): Promise<ServiceResult<{ employee: EmployeeResponse; employment_records: EmploymentRecordResponse[] }>> {
+    // Validate employee exists
+    const employeeResult = await this.repository.findEmployeeById(context, employeeId);
+    if (!employeeResult.employee) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Employee not found",
+          details: { id: employeeId },
+        },
+      };
+    }
+
+    // Validate employee is terminated (only terminated employees can be rehired)
+    if (employeeResult.employee.status !== EmployeeStates.TERMINATED) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.STATE_MACHINE_VIOLATION,
+          message: "Only terminated employees can be rehired",
+          details: {
+            id: employeeId,
+            current_status: employeeResult.employee.status,
+            required_status: "terminated",
+          },
+        },
+      };
+    }
+
+    // Validate rehire date is after termination date
+    const terminationDate = employeeResult.employee.terminationDate
+      ? new Date(employeeResult.employee.terminationDate)
+      : null;
+    const rehireDate = new Date(data.rehire_date);
+
+    if (terminationDate && rehireDate <= terminationDate) {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_REHIRE_DATE",
+          message: "Rehire date must be after the termination date",
+          details: {
+            termination_date: employeeResult.employee.terminationDate,
+            rehire_date: data.rehire_date,
+          },
+        },
+      };
+    }
+
+    // Validate position exists and has headcount
+    const positionHeadcount = await this.repository.getPositionHeadcount(
+      context,
+      data.position.position_id
+    );
+
+    if (positionHeadcount.headcount === 0) {
+      return {
+        success: false,
+        error: {
+          code: "POSITION_NOT_FOUND",
+          message: "Position not found",
+          details: { position_id: data.position.position_id },
+        },
+      };
+    }
+
+    if (positionHeadcount.currentCount >= positionHeadcount.headcount) {
+      return {
+        success: false,
+        error: {
+          code: "POSITION_OVERFILLED",
+          message: "Position is already at maximum headcount",
+          details: {
+            position_id: data.position.position_id,
+            headcount: positionHeadcount.headcount,
+            current_count: positionHeadcount.currentCount,
+          },
+        },
+      };
+    }
+
+    // Validate org unit exists
+    const orgUnit = await this.repository.findOrgUnitById(context, data.position.org_unit_id);
+    if (!orgUnit) {
+      return {
+        success: false,
+        error: {
+          code: "ORG_UNIT_NOT_FOUND",
+          message: "Org unit not found",
+          details: { org_unit_id: data.position.org_unit_id },
+        },
+      };
+    }
+
+    // Validate manager exists if specified
+    if (data.manager_id) {
+      const managerResult = await this.repository.findEmployeeById(context, data.manager_id);
+      if (!managerResult.employee) {
+        return {
+          success: false,
+          error: {
+            code: "MANAGER_NOT_FOUND",
+            message: "Manager not found",
+            details: { manager_id: data.manager_id },
+          },
+        };
+      }
+      if (managerResult.employee.status !== "active" && managerResult.employee.status !== "on_leave") {
+        return {
+          success: false,
+          error: {
+            code: "INVALID_MANAGER",
+            message: "Manager is not in active status",
+            details: { manager_id: data.manager_id, status: managerResult.employee.status },
+          },
+        };
+      }
+    }
+
+    // Perform rehire in a single transaction
+    await this.db.withTransaction(context, async (tx) => {
+      // 1. Close the current employment record if it exists
+      //    (if the employee was hired before this feature existed, there may not be one)
+      const currentRecord = await tx<{ id: string }[]>`
+        SELECT id FROM app.employment_records
+        WHERE employee_id = ${employeeId}::uuid AND is_current = true
+        LIMIT 1
+      `;
+
+      let previousEmploymentId: string | null = null;
+
+      if (currentRecord.length > 0) {
+        // Close the existing current record
+        previousEmploymentId = currentRecord[0]!.id;
+        await this.repository.closeCurrentEmploymentRecord(
+          tx,
+          context,
+          employeeId,
+          employeeResult.employee!.terminationDate
+            ? new Date(employeeResult.employee!.terminationDate).toISOString().split("T")[0]!
+            : data.rehire_date,
+          employeeResult.employee!.terminationReason || "terminated"
+        );
+      } else {
+        // No employment record exists yet; create a closed one for the prior employment
+        const maxNum = await this.repository.getMaxEmploymentNumber(tx, employeeId);
+        const priorRows = await tx<{ id: string }[]>`
+          INSERT INTO app.employment_records (
+            tenant_id, employee_id, employment_number,
+            start_date, end_date, termination_reason,
+            is_current
+          )
+          VALUES (
+            ${context.tenantId}::uuid, ${employeeId}::uuid, ${maxNum + 1},
+            ${new Date(employeeResult.employee!.hireDate).toISOString().split("T")[0]}::date,
+            ${employeeResult.employee!.terminationDate ? new Date(employeeResult.employee!.terminationDate).toISOString().split("T")[0] : data.rehire_date}::date,
+            ${employeeResult.employee!.terminationReason || "terminated"},
+            false
+          )
+          RETURNING id
+        `;
+        previousEmploymentId = priorRows[0]?.id || null;
+      }
+
+      // 2. Create a new employment record for the rehire
+      const maxNum = await this.repository.getMaxEmploymentNumber(tx, employeeId);
+      await this.repository.createEmploymentRecord(tx, context, {
+        employeeId,
+        employmentNumber: maxNum + 1,
+        startDate: data.rehire_date,
+        previousEmploymentId,
+      });
+
+      // 3. Reactivate the employee (status -> pending, new hire_date, clear termination)
+      await this.repository.rehireEmployee(
+        tx,
+        context,
+        employeeId,
+        data.rehire_date,
+        context.userId || "system"
+      );
+
+      // 4. Create new contract record
+      await this.repository.updateEmployeeContract(
+        tx,
+        context,
+        employeeId,
+        {
+          effective_from: data.rehire_date,
+          contract_type: data.contract.contract_type,
+          employment_type: data.contract.employment_type,
+          fte: data.contract.fte,
+          working_hours_per_week: data.contract.working_hours_per_week,
+          probation_end_date: data.contract.probation_end_date,
+          notice_period_days: data.contract.notice_period_days,
+        },
+        context.userId || "system"
+      );
+
+      // 5. Create new position assignment
+      await this.repository.updateEmployeePosition(
+        tx,
+        context,
+        employeeId,
+        {
+          effective_from: data.rehire_date,
+          position_id: data.position.position_id,
+          org_unit_id: data.position.org_unit_id,
+          is_primary: data.position.is_primary !== false,
+          assignment_reason: "rehire",
+        },
+        context.userId || "system"
+      );
+
+      // 6. Create new compensation record
+      await this.repository.updateEmployeeCompensation(
+        tx,
+        context,
+        employeeId,
+        {
+          effective_from: data.rehire_date,
+          base_salary: data.compensation.base_salary,
+          currency: data.compensation.currency,
+          pay_frequency: data.compensation.pay_frequency,
+          change_reason: "rehire",
+        },
+        context.userId || "system"
+      );
+
+      // 7. Create reporting line if manager specified
+      if (data.manager_id) {
+        await this.repository.updateEmployeeManager(
+          tx,
+          context,
+          employeeId,
+          {
+            effective_from: data.rehire_date,
+            manager_id: data.manager_id,
+            relationship_type: "direct",
+            is_primary: true,
+          },
+          context.userId || "system"
+        );
+      }
+
+      // 8. Emit rehire domain event
+      await this.emitEvent(tx, context, "employee", employeeId, "hr.employee.rehired", {
+        employeeId,
+        rehireDate: data.rehire_date,
+        previousEmploymentId,
+        reason: data.reason || "rehire",
+      });
+    });
+
+    // Fetch updated employee and employment records
+    const employeeResponse = await this.getEmployee(context, employeeId);
+    if (!employeeResponse.success) {
+      return {
+        success: false,
+        error: employeeResponse.error,
+      };
+    }
+
+    const employmentRecords = await this.repository.getEmploymentRecords(context, employeeId);
+
+    // Helper to safely convert date to YYYY-MM-DD string
+    const toDateString = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString().split("T")[0]!;
+      }
+      if (typeof value === "string") {
+        return value.includes("T") ? value.split("T")[0]! : value;
+      }
+      return "";
+    };
+
+    const toISOString = (value: unknown): string => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+      if (typeof value === "string") {
+        return value;
+      }
+      return new Date().toISOString();
+    };
+
+    return {
+      success: true,
+      data: {
+        employee: employeeResponse.data!,
+        employment_records: employmentRecords.map((rec) => {
+          const raw = rec as Record<string, unknown>;
+          return {
+            id: String(raw.id),
+            tenant_id: String(raw.tenantId ?? raw.tenant_id),
+            employee_id: String(raw.employeeId ?? raw.employee_id),
+            employment_number: Number(raw.employmentNumber ?? raw.employment_number),
+            start_date: toDateString(raw.startDate ?? raw.start_date),
+            end_date: (raw.endDate ?? raw.end_date) ? toDateString(raw.endDate ?? raw.end_date) : null,
+            termination_reason: (raw.terminationReason ?? raw.termination_reason) as string | null,
+            is_current: Boolean(raw.isCurrent ?? raw.is_current),
+            previous_employment_id: (raw.previousEmploymentId ?? raw.previous_employment_id) as string | null,
+            created_at: toISOString(raw.createdAt ?? raw.created_at),
+          };
+        }),
+      },
+    };
+  }
+
+  /**
    * Update employee NI category
    */
   async updateNiCategory(
@@ -1008,30 +1337,11 @@ export class EmployeeService {
     }
 
     const employee = employeeResult.employee;
-    const hireDate = new Date(employee.hireDate);
     const referenceDate = employee.terminationDate
       ? new Date(employee.terminationDate)
       : new Date();
 
-    // Calculate months and years of service
-    const diffMs = referenceDate.getTime() - hireDate.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const monthsOfService = Math.floor(diffDays / 30.44); // average days per month
-    const yearsOfService = Math.floor(diffDays / 365.25);
-
-    // Statutory notice weeks (Employment Rights Act 1996, s.86)
-    let statutoryNoticeWeeks: number;
-    if (monthsOfService < 1) {
-      statutoryNoticeWeeks = 0;
-    } else if (yearsOfService < 2) {
-      statutoryNoticeWeeks = 1;
-    } else {
-      statutoryNoticeWeeks = Math.min(yearsOfService, 12);
-    }
-
-    const statutoryNoticeDays = statutoryNoticeWeeks * 7;
-
-    // Get current contractual notice period
+    // Get current contractual notice period from the active employment contract
     const contractRows = await this.db.withTransaction(context, async (tx) => {
       return tx`
         SELECT notice_period_days
@@ -1046,21 +1356,12 @@ export class EmployeeService {
 
     const contractualNoticeDays = (contractRows[0] as any)?.noticePeriodDays ?? null;
 
-    // Compliance: contractual must be >= statutory (employer-to-employee notice)
-    const isCompliant = contractualNoticeDays === null
-      ? statutoryNoticeWeeks === 0 // no contract needed if < 1 month
-      : contractualNoticeDays >= statutoryNoticeDays;
-
-    let complianceMessage: string;
-    if (monthsOfService < 1) {
-      complianceMessage = "Employee has less than 1 month service — no statutory notice entitlement yet.";
-    } else if (contractualNoticeDays === null) {
-      complianceMessage = `No contractual notice period set. Statutory minimum is ${statutoryNoticeWeeks} week(s).`;
-    } else if (isCompliant) {
-      complianceMessage = `Contractual notice (${contractualNoticeDays} days) meets or exceeds statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks).`;
-    } else {
-      complianceMessage = `NON-COMPLIANT: Contractual notice (${contractualNoticeDays} days) is below statutory minimum (${statutoryNoticeDays} days / ${statutoryNoticeWeeks} weeks). Update the employment contract.`;
-    }
+    // Delegate calculation to the shared utility (UK Employment Rights Act 1996, s.86)
+    const notice = calculateStatutoryNoticePeriod({
+      hireDate: employee.hireDate,
+      referenceDate,
+      contractualNoticeDays,
+    });
 
     return {
       success: true,
@@ -1068,13 +1369,13 @@ export class EmployeeService {
         employee_id: employeeId,
         hire_date: String(employee.hireDate),
         reference_date: referenceDate.toISOString().split("T")[0],
-        years_of_service: yearsOfService,
-        months_of_service: monthsOfService,
-        statutory_notice_weeks: statutoryNoticeWeeks,
-        statutory_notice_days: statutoryNoticeDays,
-        contractual_notice_days: contractualNoticeDays ?? null,
-        is_compliant: isCompliant,
-        compliance_message: complianceMessage,
+        years_of_service: notice.yearsOfService,
+        months_of_service: notice.monthsOfService,
+        statutory_notice_weeks: notice.statutoryNoticeWeeks,
+        statutory_notice_days: notice.statutoryNoticeDays,
+        contractual_notice_days: notice.contractualNoticeDays,
+        is_compliant: notice.isCompliant,
+        compliance_message: notice.complianceMessage,
       },
     };
   }

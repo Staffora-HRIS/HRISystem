@@ -10,7 +10,7 @@ import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
 import { LMSRepository } from "./repository";
 import { LMSService } from "./service";
-import { CreateLearningPathSchema, ComplianceReportQuerySchema } from "./schemas";
+import { CreateLearningPathSchema, ComplianceReportQuerySchema, AddCoursePrerequisiteSchema } from "./schemas";
 import { mapErrorToStatus } from "../../lib/route-helpers";
 
 const UuidSchema = t.String({ format: "uuid" });
@@ -23,6 +23,7 @@ const LMS_ERROR_CODES: Record<string, number> = {
   ALREADY_PUBLISHED: 409,
   INVALID_STATUS: 409,
   INVALID_COURSE: 400,
+  PREREQUISITE_NOT_MET: 400,
   CREATE_FAILED: 500,
   UPDATE_FAILED: 500,
   ENROLLMENT_FAILED: 500,
@@ -124,6 +125,69 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
     params: t.Object({ id: UuidSchema }),
     beforeHandle: [requirePermission("lms", "read")],
     detail: { tags: ["LMS"], summary: "Get course by ID" }
+  })
+
+  // Course Prerequisites (TODO-245)
+  .get("/courses/:id/prerequisites", async (ctx) => {
+    const { lmsService, tenantContext, params, set } = ctx as any;
+
+    const result = await lmsService.listCoursePrerequisites(tenantContext, params.id);
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, LMS_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    beforeHandle: [requirePermission("lms", "read")],
+    detail: { tags: ["LMS"], summary: "List course prerequisites" }
+  })
+
+  .post("/courses/:id/prerequisites", async (ctx) => {
+    const { lmsService, tenantContext, params, body, set } = ctx as any;
+
+    const result = await lmsService.addCoursePrerequisite(
+      tenantContext,
+      params.id,
+      body.prerequisiteCourseId,
+      body.isMandatory ?? true
+    );
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, LMS_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    set.status = 201;
+    return result.data;
+  }, {
+    params: t.Object({ id: UuidSchema }),
+    body: AddCoursePrerequisiteSchema,
+    beforeHandle: [requirePermission("lms", "write")],
+    detail: { tags: ["LMS"], summary: "Add course prerequisite" }
+  })
+
+  .delete("/courses/:courseId/prerequisites/:prereqId", async (ctx) => {
+    const { lmsService, tenantContext, params, set } = ctx as any;
+
+    const result = await lmsService.removeCoursePrerequisite(
+      tenantContext,
+      params.courseId,
+      params.prereqId
+    );
+
+    if (!result.success) {
+      set.status = mapErrorToStatus(result.error.code, LMS_ERROR_CODES);
+      return { error: result.error };
+    }
+
+    return { success: true, message: "Prerequisite removed" };
+  }, {
+    params: t.Object({ courseId: UuidSchema, prereqId: UuidSchema }),
+    beforeHandle: [requirePermission("lms", "write")],
+    detail: { tags: ["LMS"], summary: "Remove course prerequisite" }
   })
 
   // Enrollments

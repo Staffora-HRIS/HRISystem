@@ -27,6 +27,16 @@ export const OvertimeRequestTypeSchema = t.Union([
 export type OvertimeRequestType = Static<typeof OvertimeRequestTypeSchema>;
 
 /**
+ * Overtime authorisation type: pre-approval (before overtime) or post-approval (retroactive).
+ */
+export const OvertimeAuthorisationTypeSchema = t.Union([
+  t.Literal("pre_approval"),
+  t.Literal("post_approval"),
+]);
+
+export type OvertimeAuthorisationType = Static<typeof OvertimeAuthorisationTypeSchema>;
+
+/**
  * Overtime request status enum matching database type
  */
 export const OvertimeRequestStatusSchema = t.Union([
@@ -78,6 +88,7 @@ export type PaginationQuery = Static<typeof PaginationQuerySchema>;
 export const CreateOvertimeRequestSchema = t.Object({
   employee_id: UuidSchema,
   request_type: t.Optional(OvertimeRequestTypeSchema),
+  authorisation_type: t.Optional(OvertimeAuthorisationTypeSchema),
   date: DateSchema,
   planned_hours: t.Number({ minimum: 0.25, maximum: 24 }),
   actual_hours: t.Optional(t.Number({ minimum: 0, maximum: 24 })),
@@ -91,6 +102,7 @@ export type CreateOvertimeRequest = Static<typeof CreateOvertimeRequestSchema>;
  */
 export const ApproveOvertimeRequestSchema = t.Object({
   actual_hours: t.Optional(t.Number({ minimum: 0, maximum: 24 })),
+  manager_notes: t.Optional(t.String({ maxLength: 5000 })),
 });
 
 export type ApproveOvertimeRequest = Static<typeof ApproveOvertimeRequestSchema>;
@@ -100,6 +112,7 @@ export type ApproveOvertimeRequest = Static<typeof ApproveOvertimeRequestSchema>
  */
 export const RejectOvertimeRequestSchema = t.Object({
   rejection_reason: t.String({ minLength: 1, maxLength: 5000 }),
+  manager_notes: t.Optional(t.String({ maxLength: 5000 })),
 });
 
 export type RejectOvertimeRequest = Static<typeof RejectOvertimeRequestSchema>;
@@ -115,6 +128,7 @@ export const OvertimeRequestFiltersSchema = t.Object({
   employee_id: t.Optional(UuidSchema),
   status: t.Optional(OvertimeRequestStatusSchema),
   request_type: t.Optional(OvertimeRequestTypeSchema),
+  authorisation_type: t.Optional(OvertimeAuthorisationTypeSchema),
   date_from: t.Optional(DateSchema),
   date_to: t.Optional(DateSchema),
 });
@@ -133,6 +147,7 @@ export const OvertimeRequestResponseSchema = t.Object({
   tenant_id: UuidSchema,
   employee_id: UuidSchema,
   request_type: OvertimeRequestTypeSchema,
+  authorisation_type: OvertimeAuthorisationTypeSchema,
   date: t.String(),
   planned_hours: t.Number(),
   actual_hours: t.Union([t.Number(), t.Null()]),
@@ -141,6 +156,7 @@ export const OvertimeRequestResponseSchema = t.Object({
   approver_id: t.Union([UuidSchema, t.Null()]),
   approved_at: t.Union([t.String(), t.Null()]),
   rejection_reason: t.Union([t.String(), t.Null()]),
+  manager_notes: t.Union([t.String(), t.Null()]),
   created_at: t.String(),
   updated_at: t.String(),
 });

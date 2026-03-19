@@ -177,6 +177,8 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   NO_CURRENT_TAX_CODE: 404,
   INVALID_PAYROLL_TRANSITION: 409,
   PAYROLL_PERIOD_LOCKED: 423,
+  PAYROLL_PERIOD_FINALIZED: 423,
+  BELOW_NMW: 400,
 
   // Domain-specific CONFLICT codes used in service layers
   DUPLICATE_CODE: 409,

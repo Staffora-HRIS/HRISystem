@@ -487,6 +487,42 @@ export async function adminUnlockAccount(userId: string): Promise<void> {
 }
 
 /**
+ * Close the shared pg Pool and release all connections.
+ * Called during graceful shutdown to ensure the Better Auth pg Pool
+ * (max=5 connections) is properly drained alongside the postgres.js pool.
+ */
+export async function closePgPool(): Promise<void> {
+  if (pgPool) {
+    await pgPool.end();
+    pgPool = null;
+    console.log("[Auth] Better Auth pg Pool closed");
+  }
+}
+
+/**
+ * Get pg Pool connection stats for monitoring.
+ * Returns the current state of the Better Auth pg Pool including
+ * total, idle, and waiting connection counts.
+ */
+export function getPgPoolStats(): {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  maxSize: number;
+} {
+  const pool = pgPool;
+  if (!pool) {
+    return { totalCount: 0, idleCount: 0, waitingCount: 0, maxSize: 5 };
+  }
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    maxSize: 5,
+  };
+}
+
+/**
  * Type exports for Better Auth
  */
 export type Auth = ReturnType<typeof createBetterAuth>;

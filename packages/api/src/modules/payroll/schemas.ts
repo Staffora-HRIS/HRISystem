@@ -729,3 +729,193 @@ export const JournalEntriesListResponseSchema = t.Object({
   nextCursor: t.Union([t.String(), t.Null()]),
   hasMore: t.Boolean(),
 });
+
+// =============================================================================
+// Pay Schedule Assignment Schemas (TODO-124)
+// =============================================================================
+
+export const PayFrequencySchema = t.Union([
+  t.Literal("weekly"),
+  t.Literal("fortnightly"),
+  t.Literal("four_weekly"),
+  t.Literal("monthly"),
+  t.Literal("annually"),
+]);
+
+export type PayFrequency = Static<typeof PayFrequencySchema>;
+
+// =============================================================================
+// Final Pay Calculation Schemas (TODO-132)
+// =============================================================================
+
+export const FinalPayComponentTypeSchema = t.Union([
+  t.Literal("outstanding_salary"),
+  t.Literal("holiday_pay"),
+  t.Literal("holiday_overpayment"),
+  t.Literal("notice_pay"),
+  t.Literal("contractual_payment"),
+  t.Literal("salary_sacrifice"),
+  t.Literal("loan_repayment"),
+  t.Literal("other_deduction"),
+  t.Literal("additional_deduction"),
+]);
+
+export type FinalPayComponentType = Static<typeof FinalPayComponentTypeSchema>;
+
+export const FinalPayComponentSchema = t.Object({
+  type: FinalPayComponentTypeSchema,
+  description: t.String(),
+  amount: t.String({ description: "Monetary value as a decimal string" }),
+  is_deduction: t.Boolean({ description: "true if this component reduces the net total" }),
+});
+
+export type FinalPayComponent = Static<typeof FinalPayComponentSchema>;
+
+export const FinalPayAdditionalItemSchema = t.Object({
+  description: t.String({ minLength: 1, maxLength: 500 }),
+  amount: t.Number({ minimum: 0.01, description: "Monetary value" }),
+});
+
+export type FinalPayAdditionalItem = Static<typeof FinalPayAdditionalItemSchema>;
+
+export const FinalPayCalculationRequestSchema = t.Object({
+  employee_id: UuidSchema,
+  termination_date: DateSchema,
+  pilon_applied: t.Optional(t.Boolean({ default: false })),
+  notice_period_weeks: t.Optional(t.Union([t.Number({ minimum: 0 }), t.Null()])),
+  additional_payments: t.Optional(t.Array(FinalPayAdditionalItemSchema)),
+  additional_deductions: t.Optional(t.Array(FinalPayAdditionalItemSchema)),
+});
+
+export type FinalPayCalculationRequest = Static<typeof FinalPayCalculationRequestSchema>;
+
+export const FinalPayCalculationResponseSchema = t.Object({
+  employee_id: UuidSchema,
+  employee_name: t.String(),
+  employee_number: t.String(),
+  termination_date: t.String(),
+  last_working_day: t.String(),
+  annual_salary: t.String(),
+  daily_rate: t.String(),
+  components: t.Array(FinalPayComponentSchema),
+  gross_total: t.String(),
+  total_deductions: t.String(),
+  net_total: t.String(),
+  calculation_notes: t.Array(t.String()),
+  calculated_at: t.String(),
+});
+
+export type FinalPayCalculationResponse = Static<typeof FinalPayCalculationResponseSchema>;
+
+// =============================================================================
+// Holiday Pay Rate Schemas (TODO-113: 52-Week Reference Period)
+// =============================================================================
+
+export const HolidayPayBreakdownSchema = t.Object({
+  average_basic_pay: t.String({ description: "Average weekly basic pay" }),
+  average_overtime_pay: t.String({ description: "Average weekly regular overtime" }),
+  average_commission: t.String({ description: "Average weekly commission" }),
+  average_regular_bonus: t.String({ description: "Average weekly regular bonus" }),
+});
+
+export type HolidayPayBreakdown = Static<typeof HolidayPayBreakdownSchema>;
+
+export const WeeklyPayComponentSchema = t.Object({
+  week_start: t.String({ description: "ISO date of the Monday starting this week" }),
+  week_end: t.String({ description: "ISO date of the Sunday ending this week" }),
+  basic_pay: t.String(),
+  overtime_pay: t.String(),
+  commission: t.String(),
+  regular_bonus: t.String(),
+  total: t.String(),
+});
+
+export type WeeklyPayComponent = Static<typeof WeeklyPayComponentSchema>;
+
+export const HolidayPayRateResponseSchema = t.Object({
+  employee_id: UuidSchema,
+  average_weekly_pay: t.String({ description: "Average weekly pay across qualifying weeks" }),
+  average_daily_rate: t.String({ description: "Average daily rate (weekly / working days)" }),
+  qualifying_weeks: t.Number({ description: "Number of paid weeks used in the calculation" }),
+  total_weeks_examined: t.Number({ description: "Total weeks examined (including zero-pay weeks)" }),
+  is_incomplete: t.Boolean({ description: "True if fewer than 52 qualifying weeks were available" }),
+  working_days_per_week: t.Number({ description: "Working days per week used for daily rate" }),
+  breakdown: HolidayPayBreakdownSchema,
+  weekly_data: t.Array(WeeklyPayComponentSchema, {
+    description: "Individual week data used in the calculation (most recent first)",
+  }),
+  reference_start: t.String({ description: "Start date of the reference period" }),
+  reference_end: t.String({ description: "End date of the reference period" }),
+  calculated_at: t.String({ description: "ISO timestamp of when the calculation was performed" }),
+});
+
+export type HolidayPayRateResponse = Static<typeof HolidayPayRateResponseSchema>;
+
+// =============================================================================
+// Harpur Trust v Brazel Holiday Pay Schemas (TODO-131)
+// =============================================================================
+
+/**
+ * Query parameters for the Harpur Trust holiday pay calculation endpoint.
+ * Optional salary and hours data enables the pro-rata comparison.
+ */
+export const HarpurTrustQuerySchema = t.Object({
+  annual_salary: t.Optional(t.String({
+    description: "Annual contractual salary (used for pro-rata comparison)",
+  })),
+  contracted_hours_per_week: t.Optional(t.String({
+    description: "Contracted hours per week (used for hours-based pro-rata comparison)",
+  })),
+  fte_hours_per_week: t.Optional(t.String({
+    description: "Full-time equivalent hours per week (default: 37.5)",
+  })),
+  working_days_per_week: t.Optional(t.String({
+    description: "Working days per week for this employee (default: 5)",
+  })),
+  as_of_date: t.Optional(DateSchema),
+});
+
+export type HarpurTrustQuery = Static<typeof HarpurTrustQuerySchema>;
+
+/**
+ * Breakdown of average weekly pay by component.
+ */
+const HarpurTrustBreakdownSchema = t.Object({
+  average_basic_pay: t.Number(),
+  average_overtime_pay: t.Number(),
+  average_commission: t.Number(),
+  average_regular_bonus: t.Number(),
+});
+
+/**
+ * Pro-rata comparison showing the difference between methods.
+ */
+const HarpurTrustProRataComparisonSchema = t.Object({
+  pro_rata_entitlement: t.Number(),
+  difference: t.Number(),
+  harpur_trust_is_higher: t.Boolean(),
+  correct_method: t.Literal("harpur_trust"),
+  legal_basis: t.String(),
+});
+
+/**
+ * Full response for the Harpur Trust holiday pay calculation.
+ */
+export const HarpurTrustResponseSchema = t.Object({
+  employee_id: UuidSchema,
+  employee_name: t.String(),
+  harpur_trust_entitlement: t.Number({ description: "Holiday pay entitlement: 5.6 weeks x average weekly pay" }),
+  average_weekly_pay: t.Number({ description: "Average weekly pay from the 52-week reference period" }),
+  average_daily_rate: t.Number({ description: "Average daily rate derived from weekly pay" }),
+  statutory_weeks: t.Number({ description: "UK statutory holiday entitlement in weeks (always 5.6)" }),
+  qualifying_weeks: t.Number({ description: "Number of weeks with pay > 0 used in calculation" }),
+  is_incomplete: t.Boolean({ description: "Whether fewer than 52 qualifying weeks were available" }),
+  breakdown: HarpurTrustBreakdownSchema,
+  reference_start: t.String({ description: "Start date of the reference period used" }),
+  reference_end: t.String({ description: "End date of the reference period used" }),
+  pro_rata_comparison: t.Union([HarpurTrustProRataComparisonSchema, t.Null()]),
+  calculated_at: t.String({ description: "ISO timestamp of when the calculation was performed" }),
+});
+
+export type HarpurTrustResponse = Static<typeof HarpurTrustResponseSchema>;
+

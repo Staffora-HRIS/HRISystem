@@ -27,6 +27,8 @@ import {
   BulkUpdateEmployeesRequestSchema,
   BulkLeaveRequestActionsRequestSchema,
   BulkResponseSchema,
+  GenericBulkRequestSchema,
+  GenericBulkResponseSchema,
   IdempotencyHeaderSchema,
 } from "./schemas";
 
@@ -192,6 +194,63 @@ export const bulkOperationsRoutes = new Elysia({
           "Approve or reject multiple leave requests in a single request. " +
           "Only pending leave requests can be actioned. Each item is processed " +
           "within a shared transaction. Maximum batch size is 100 items.",
+      },
+    }
+  )
+
+  // ===========================================================================
+  // POST /bulk - Generic bulk API operations
+  // ===========================================================================
+  .post(
+    "/",
+    async (ctx) => {
+      const { bulkService, tenantContext, body, error: errorFn, requestId, request, audit } = ctx as any;
+
+      const authHeaders: Record<string, string> = {};
+      const cookieHeader = request.headers.get("cookie");
+      if (cookieHeader) authHeaders["cookie"] = cookieHeader;
+      const authorizationHeader = request.headers.get("authorization");
+      if (authorizationHeader) authHeaders["authorization"] = authorizationHeader;
+      const csrfHeader = request.headers.get("x-csrf-token");
+      if (csrfHeader) authHeaders["x-csrf-token"] = csrfHeader;
+      const tenantHeader = request.headers.get("x-tenant-id");
+      if (tenantHeader) authHeaders["x-tenant-id"] = tenantHeader;
+
+      const appFetch = async (internalReq: Request): Promise<Response> => {
+        const { app } = await import("../../app");
+        return app.handle(internalReq);
+      };
+
+      const result = await bulkService.executeGenericBulk(tenantContext, body.operations, appFetch, authHeaders);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error!.code, BULK_ERROR_MAP);
+        return errorFn(status, { error: { code: result.error!.code, message: result.error!.message, details: result.error!.details, requestId } });
+      }
+
+      if (audit) {
+        await audit.log({
+          action: "bulk.operations.executed",
+          resourceType: "bulk_operation",
+          newValues: { total: result.data!.total, succeeded: result.data!.succeeded, failed: result.data!.failed },
+          metadata: { operationPaths: body.operations.map((op: any) => `${op.method} ${op.path}`), requestId },
+        });
+      }
+
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("employees", "write")],
+      body: GenericBulkRequestSchema,
+      response: { 200: GenericBulkResponseSchema, 400: ErrorResponseSchema, 500: ErrorResponseSchema },
+      headers: IdempotencyHeaderSchema,
+      detail: {
+        tags: ["Bulk Operations"],
+        summary: "Execute generic bulk API operations",
+        description:
+          "Execute multiple API operations in a single request. Each operation is dispatched " +
+          "internally through the full middleware pipeline. Operations are processed sequentially. " +
+          "Maximum batch size is 100 operations. Requires Idempotency-Key header.",
       },
     }
   );

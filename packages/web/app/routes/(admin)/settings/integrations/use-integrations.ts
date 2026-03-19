@@ -13,6 +13,7 @@ import type {
   IntegrationResponse,
   IntegrationListResponse,
   MergedIntegration,
+  TestConnectionResponse,
 } from "./types";
 import { PROVIDER_CATALOG } from "./types";
 
@@ -134,6 +135,24 @@ export function useIntegrations() {
     },
   });
 
+  const testConnectionMutation = useMutation({
+    mutationFn: (provider: string) =>
+      api.post<TestConnectionResponse>(`/integrations/${provider}/test`),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-integrations"] });
+      if (data.success) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.message);
+      }
+    },
+    onError: (err) => {
+      toast.error(
+        `Failed to test connection: ${err instanceof Error ? err.message : "Unknown error"}`
+      );
+    },
+  });
+
   function retryFetch() {
     queryClient.invalidateQueries({ queryKey: ["admin-integrations"] });
   }
@@ -153,5 +172,6 @@ export function useIntegrations() {
     connectMutation,
     disconnectMutation,
     updateConfigMutation,
+    testConnectionMutation,
   };
 }

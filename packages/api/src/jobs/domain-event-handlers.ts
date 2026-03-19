@@ -11,6 +11,7 @@
 import type { DomainEvent } from "./outbox-processor";
 import { StreamKeys } from "./base";
 import { getCacheClient, CacheKeys, type CacheClient } from "../plugins/cache";
+import { handleWebhookDelivery } from "./webhook-worker";
 
 // =============================================================================
 // Types
@@ -858,6 +859,158 @@ async function handleWorkflowTaskCompleted(
 }
 
 // =============================================================================
+// Workflow SLA Breach Event Handlers (TODO-156)
+// =============================================================================
+
+/**
+ * Handle workflow SLA breach events emitted by the auto-escalation scheduler.
+ *
+ * Processes both basic SLA breach events (workflow.task.sla.breached) and
+ * multi-level escalation events (workflow.sla.breached). Sends email
+ * notifications to affected users, complementing the in-app notifications
+ * already sent by the scheduler.
+ */
+async function handleWorkflowSlaBreached(
+  event: DomainEvent,
+  ctx: EventHandlerContext
+): Promise<void> {
+  const {
+    taskId,
+    instanceId,
+    slaId,
+    action,
+    previousAssignee,
+    newAssignee,
+    reason,
+    escalationLevel,
+  } = event.payload as {
+    taskId: string;
+    instanceId: string;
+    slaId: string;
+    ruleId?: string;
+    escalationLevel?: number;
+    action: string;
+    previousAssignee: string | null;
+    newAssignee: string | null;
+    reason: string;
+    eventType?: string;
+  };
+
+  ctx.log.info("Processing workflow SLA breach event", {
+    taskId,
+    instanceId,
+    slaId,
+    action,
+    escalationLevel,
+  });
+
+  // Look up the task details and affected user emails for email notification
+  const taskDetails = await ctx.db.withSystemContext(async (tx) => {
+    return await tx<
+      Array<{
+        stepName: string;
+        assigneeEmail: string | null;
+        assigneeFirstName: string | null;
+        previousAssigneeEmail: string | null;
+        previousAssigneeFirstName: string | null;
+        definitionName: string | null;
+      }>
+    >`
+      SELECT
+        wt.step_name AS "stepName",
+        u_new.email AS "assigneeEmail",
+        ep_new.first_name AS "assigneeFirstName",
+        u_prev.email AS "previousAssigneeEmail",
+        ep_prev.first_name AS "previousAssigneeFirstName",
+        wd.name AS "definitionName"
+      FROM app.workflow_tasks wt
+      JOIN app.workflow_instances wi ON wi.id = wt.instance_id
+      JOIN app.workflow_definitions wd ON wd.id = wi.definition_id
+      LEFT JOIN app.users u_new ON u_new.id = ${newAssignee}::uuid
+      LEFT JOIN app.employees e_new ON e_new.user_id = u_new.id
+      LEFT JOIN app.employee_personal ep_new ON ep_new.employee_id = e_new.id
+      LEFT JOIN app.users u_prev ON u_prev.id = ${previousAssignee}::uuid
+      LEFT JOIN app.employees e_prev ON e_prev.user_id = u_prev.id
+      LEFT JOIN app.employee_personal ep_prev ON ep_prev.employee_id = e_prev.id
+      WHERE wt.id = ${taskId}::uuid
+      LIMIT 1
+    `;
+  });
+
+  if (!taskDetails || taskDetails.length === 0) {
+    ctx.log.warn("Could not find task details for SLA breach notification", { taskId });
+    return;
+  }
+
+  const details = taskDetails[0]!;
+  const levelLabel = escalationLevel ? ` (Level ${escalationLevel})` : "";
+  const workflowLabel = details.definitionName || "Workflow";
+
+  // Send email to the new assignee (if reassigned)
+  if (action === "reassign" && newAssignee && details.assigneeEmail) {
+    await ctx.redis.xadd(
+      StreamKeys.NOTIFICATIONS,
+      "*",
+      "payload",
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        type: "notification.email",
+        tenantId: event.tenantId,
+        data: {
+          to: details.assigneeEmail,
+          subject: `SLA Breach${levelLabel}: Task Escalated to You - ${workflowLabel}`,
+          template: "notification",
+          templateData: {
+            title: `SLA Breach${levelLabel}: Task Escalated to You`,
+            message: `Hi ${details.assigneeFirstName || "Team Member"}, the task "${details.stepName || "Workflow task"}" in "${workflowLabel}" has been escalated to you after an SLA breach. Reason: ${reason}. Please take action as soon as possible.`,
+            actionUrl: `${process.env["APP_URL"] || "http://localhost:3000"}/admin/workflows/instances/${instanceId}`,
+            actionText: "View Workflow",
+          },
+        },
+      }),
+      "attempt",
+      "1"
+    );
+  }
+
+  // Send email to the previous assignee (notify them of the breach/escalation)
+  if (previousAssignee && details.previousAssigneeEmail) {
+    const subject =
+      action === "reassign"
+        ? `SLA Breach${levelLabel}: Task Reassigned - ${workflowLabel}`
+        : action === "auto_approve"
+        ? `SLA Breach${levelLabel}: Task Auto-Approved - ${workflowLabel}`
+        : action === "auto_reject"
+        ? `SLA Breach${levelLabel}: Task Auto-Rejected - ${workflowLabel}`
+        : `SLA Breach${levelLabel}: Action Required - ${workflowLabel}`;
+
+    await ctx.redis.xadd(
+      StreamKeys.NOTIFICATIONS,
+      "*",
+      "payload",
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        type: "notification.email",
+        tenantId: event.tenantId,
+        data: {
+          to: details.previousAssigneeEmail,
+          subject,
+          template: "notification",
+          templateData: {
+            title: `SLA Breach Notification${levelLabel}`,
+            message: `Hi ${details.previousAssigneeFirstName || "Team Member"}, the task "${details.stepName || "Workflow task"}" in "${workflowLabel}" has breached its SLA deadline. ${reason}`,
+            actionUrl: `${process.env["APP_URL"] || "http://localhost:3000"}/admin/workflows/instances/${instanceId}`,
+            actionText: "View Workflow",
+          },
+        },
+      }),
+      "attempt",
+      "1"
+    );
+  }
+}
+
+// =============================================================================
 // GDPR Event Handlers
 // =============================================================================
 
@@ -1155,6 +1308,10 @@ export function registerAllHandlers(): void {
   registerHandler("workflow.instance.completed", handleWorkflowCompleted);
   registerHandler("workflow.task.completed", handleWorkflowTaskCompleted);
 
+  // Workflow SLA Breach Events (from scheduler auto-escalation, TODO-156)
+  registerHandler("workflow.sla.breached", handleWorkflowSlaBreached);
+  registerHandler("workflow.task.sla.breached", handleWorkflowSlaBreached);
+
   // GDPR Events
   registerHandler("gdpr.erasure.certificate_requested", handleErasureCertificateRequested);
 
@@ -1171,6 +1328,10 @@ export function registerAllHandlers(): void {
 
   // Tenant settings changes (event not yet emitted, but ready for when it is)
   registerHandler("tenant.settings.updated", handleTenantCacheInvalidation);
+
+  // Outbound Webhook Delivery (global handler - receives all domain events)
+  // Creates delivery records for any webhook subscriptions matching the event type
+  registerHandler("*", handleWebhookDelivery);
 }
 
 // =============================================================================

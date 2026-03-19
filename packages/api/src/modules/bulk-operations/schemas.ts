@@ -257,6 +257,90 @@ export const BulkLeaveRequestActionsRequestSchema = t.Object({
 export type BulkLeaveRequestActionsRequest = Static<typeof BulkLeaveRequestActionsRequestSchema>;
 
 // =============================================================================
+// Generic Bulk Operation Schemas (POST /api/v1/bulk)
+// =============================================================================
+
+export const BulkOperationMethodSchema = t.Union([
+  t.Literal("PUT"),
+  t.Literal("PATCH"),
+  t.Literal("DELETE"),
+  t.Literal("POST"),
+]);
+
+export type BulkOperationMethod = Static<typeof BulkOperationMethodSchema>;
+
+export const ALLOWED_BULK_PATH_PREFIXES = [
+  "/api/v1/employees",
+  "/api/v1/absence",
+  "/api/v1/time",
+  "/api/v1/talent",
+  "/api/v1/lms",
+  "/api/v1/onboarding",
+  "/api/v1/benefits",
+  "/api/v1/payroll",
+  "/api/v1/cases",
+  "/api/v1/documents",
+  "/api/v1/competencies",
+  "/api/v1/recruitment",
+  "/api/v1/jobs",
+  "/api/v1/equipment",
+  "/api/v1/notifications",
+  "/api/v1/bank-details",
+  "/api/v1/emergency-contacts",
+  "/api/v1/dbs-checks",
+  "/api/v1/background-checks",
+  "/api/v1/warnings",
+  "/api/v1/probation",
+  "/api/v1/training-budgets",
+] as const;
+
+export const GenericBulkOperationItemSchema = t.Object({
+  method: BulkOperationMethodSchema,
+  path: t.String({ minLength: 1, maxLength: 500 }),
+  body: t.Optional(t.Record(t.String(), t.Unknown())),
+  ref: t.Optional(t.String({ maxLength: 100 })),
+});
+
+export type GenericBulkOperationItem = Static<typeof GenericBulkOperationItemSchema>;
+
+export const GenericBulkRequestSchema = t.Object({
+  operations: t.Array(GenericBulkOperationItemSchema, {
+    minItems: 1,
+    maxItems: MAX_BULK_BATCH_SIZE,
+  }),
+});
+
+export type GenericBulkRequest = Static<typeof GenericBulkRequestSchema>;
+
+export const GenericBulkOperationResultSchema = t.Object({
+  index: t.Number(),
+  method: t.String(),
+  path: t.String(),
+  ref: t.Optional(t.String()),
+  status: t.Number(),
+  success: t.Boolean(),
+  data: t.Optional(t.Unknown()),
+  error: t.Optional(
+    t.Object({
+      code: t.String(),
+      message: t.String(),
+      details: t.Optional(t.Record(t.String(), t.Unknown())),
+    })
+  ),
+});
+
+export type GenericBulkOperationResult = Static<typeof GenericBulkOperationResultSchema>;
+
+export const GenericBulkResponseSchema = t.Object({
+  total: t.Number(),
+  succeeded: t.Number(),
+  failed: t.Number(),
+  results: t.Array(GenericBulkOperationResultSchema),
+});
+
+export type GenericBulkResponse = Static<typeof GenericBulkResponseSchema>;
+
+// =============================================================================
 // Headers
 // =============================================================================
 
