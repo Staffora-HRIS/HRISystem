@@ -184,19 +184,19 @@ export default function ManagerTimesheetApprovalsPage() {
         <div className="flex items-center gap-3">
           <Link
             to="/manager/approvals"
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
             aria-label="Back to all approvals"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-2xl font-bold">Timesheet Approvals</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Timesheet Approvals</h1>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
           <CardBody className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-medium text-red-800">Error loading data</h4>
-              <p className="text-sm text-red-700 mt-1">{message}</p>
+              <h4 className="font-medium text-red-800 dark:text-red-300">Error loading data</h4>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">{message}</p>
             </div>
           </CardBody>
         </Card>
@@ -225,14 +225,14 @@ export default function ManagerTimesheetApprovalsPage() {
       <div className="flex items-center gap-3">
         <Link
           to="/manager/approvals"
-          className="text-gray-500 hover:text-gray-700"
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
           aria-label="Back to all approvals"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Timesheet Approvals</h1>
-          <p className="text-gray-600">Review and action submitted timesheets from your team</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Timesheet Approvals</h1>
+          <p className="text-gray-600 dark:text-gray-400">Review and action submitted timesheets from your team</p>
         </div>
       </div>
 
@@ -257,8 +257,8 @@ export default function ManagerTimesheetApprovalsPage() {
 
       {/* Bulk Action Bar */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-blue-800">
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
             {selectedCount} timesheet{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <Button
@@ -285,7 +285,7 @@ export default function ManagerTimesheetApprovalsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold">Submitted Timesheets</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">Submitted Timesheets</h3>
             {approvals.length > 0 && (
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -293,7 +293,7 @@ export default function ManagerTimesheetApprovalsPage() {
                   onChange={toggleSelectAll}
                   aria-label="Select all timesheets"
                 />
-                <span className="text-sm text-gray-600">Select all</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Select all</span>
               </div>
             )}
           </div>
@@ -302,8 +302,8 @@ export default function ManagerTimesheetApprovalsPage() {
           {approvals.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircle2 className="h-12 w-12 mx-auto text-green-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900">All caught up</h3>
-              <p className="text-gray-500 mt-1">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">All caught up</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
                 No pending timesheets to review.
               </p>
               <Link to="/manager/approvals" className="inline-block mt-4">
@@ -313,7 +313,7 @@ export default function ManagerTimesheetApprovalsPage() {
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {approvals.map((approval) => {
                 const metadata = approval.metadata as {
                   periodStart?: string;
@@ -327,7 +327,7 @@ export default function ManagerTimesheetApprovalsPage() {
                 return (
                   <div
                     key={approval.id}
-                    className={`flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50/50" : ""}`}
+                    className={`flex items-start gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${isSelected ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}`}
                   >
                     <div className="pt-1 shrink-0">
                       <Checkbox
@@ -338,7 +338,7 @@ export default function ManagerTimesheetApprovalsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900">
+                        <span className="font-semibold text-gray-900 dark:text-white">
                           {approval.requesterName}
                         </span>
                         <Badge variant={PRIORITY_COLORS[approval.priority] ?? "secondary"}>
@@ -346,10 +346,10 @@ export default function ManagerTimesheetApprovalsPage() {
                         </Badge>
                       </div>
 
-                      <p className="text-sm text-gray-700 mb-1">{approval.title}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{approval.title}</p>
 
                       {metadata.periodStart && metadata.periodEnd && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-1">
                           <Clock className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                           <span>
                             Period: {new Date(metadata.periodStart).toLocaleDateString()} –{" "}
@@ -358,7 +358,7 @@ export default function ManagerTimesheetApprovalsPage() {
                         </div>
                       )}
 
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                         {metadata.totalHours !== undefined && (
                           <span className="font-medium">
                             Total: {formatHours(metadata.totalHours)}
@@ -375,12 +375,12 @@ export default function ManagerTimesheetApprovalsPage() {
                       </div>
 
                       {approval.description && (
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           {approval.description}
                         </p>
                       )}
 
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 dark:text-gray-500">
                         <span>Submitted {new Date(approval.createdAt).toLocaleString()}</span>
                         {approval.dueDate && (
                           <span

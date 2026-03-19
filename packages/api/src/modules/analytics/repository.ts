@@ -1364,6 +1364,298 @@ export class AnalyticsRepository {
   }
 
   // ===========================================================================
+  // Compensation Analytics - Focused Endpoints (TODO-146)
+  // ===========================================================================
+
+  private compensationFilterFragments(tx: any, filters: CompensationAnalyticsFilters) {
+    const currency = filters.currency || "GBP";
+    return {
+      currency,
+      departmentFilter: filters.department_id ? tx`AND pa.org_unit_id = ${filters.department_id}::uuid` : tx``,
+      gradeFilter: filters.job_grade ? tx`AND p.job_grade = ${filters.job_grade}` : tx``,
+      dateRangeFilter: filters.start_date && filters.end_date
+        ? tx`AND ch.effective_from <= ${filters.end_date}::date AND (ch.effective_to IS NULL OR ch.effective_to >= ${filters.start_date}::date)`
+        : tx`AND ch.effective_to IS NULL`,
+    };
+  }
+
+  async getDistributionByDepartment(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COALESCE(o.id::text, 'unassigned') AS group_key, COALESCE(o.name, 'Unassigned') AS group_label,
+          COUNT(*)::int AS headcount,
+          ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS median_salary,
+          ROUND(MIN(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS min_salary,
+          ROUND(MAX(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS max_salary,
+          ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p25_salary,
+          ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p75_salary,
+          ROUND(SUM(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS total_payroll
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
+        WHERE e.status = 'active' AND ch.currency = ${currency}
+          ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        GROUP BY o.id, o.name ORDER BY avg_salary DESC
+      `;
+    });
+  }
+
+  async getDistributionByGrade(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COALESCE(p.job_grade, 'Ungraded') AS group_key, COALESCE(p.job_grade, 'Ungraded') AS group_label,
+          COUNT(*)::int AS headcount,
+          ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS median_salary,
+          ROUND(MIN(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS min_salary,
+          ROUND(MAX(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS max_salary,
+          ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p25_salary,
+          ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p75_salary,
+          ROUND(SUM(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS total_payroll
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency}
+          ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        GROUP BY p.job_grade ORDER BY p.job_grade NULLS LAST
+      `;
+    });
+  }
+
+  async getDistributionByGender(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COALESCE(ep.gender::text, 'not_specified') AS group_key,
+          COALESCE(INITCAP(ep.gender::text), 'Not Specified') AS group_label,
+          COUNT(*)::int AS headcount,
+          ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS median_salary,
+          ROUND(MIN(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS min_salary,
+          ROUND(MAX(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS max_salary,
+          ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p25_salary,
+          ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p75_salary,
+          ROUND(SUM(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS total_payroll
+        FROM app.compensation_history ch
+        INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.tenant_id = e.tenant_id AND ep.effective_to IS NULL
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency}
+          ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        GROUP BY ep.gender ORDER BY headcount DESC
+      `;
+    });
+  }
+
+  async getDistributionByBand(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        WITH salaries AS (SELECT app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) AS annual_salary FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL LEFT JOIN app.positions p ON p.id = pa.position_id WHERE e.status = 'active' AND ch.currency = ${currency} ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter})
+        SELECT CASE WHEN annual_salary < 25000 THEN 'Under 25k' WHEN annual_salary < 35000 THEN '25k-35k' WHEN annual_salary < 50000 THEN '35k-50k' WHEN annual_salary < 75000 THEN '50k-75k' WHEN annual_salary < 100000 THEN '75k-100k' ELSE '100k+' END AS band, COUNT(*)::int AS count, ROUND(AVG(annual_salary), 2) AS avg_salary FROM salaries GROUP BY band ORDER BY CASE band WHEN 'Under 25k' THEN 1 WHEN '25k-35k' THEN 2 WHEN '35k-50k' THEN 3 WHEN '50k-75k' THEN 4 WHEN '75k-100k' THEN 5 WHEN '100k+' THEN 6 END
+      `;
+    });
+  }
+
+  async getCompaRatioByDepartment(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        WITH employee_compa AS (
+          SELECT COALESCE(o.id::text, 'unassigned') AS org_unit_id, COALESCE(o.name, 'Unassigned') AS org_unit_name,
+            app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) AS annual_salary, p.min_salary AS range_min, p.max_salary AS range_max,
+            CASE WHEN (p.min_salary + p.max_salary) / 2.0 > 0 THEN app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) / ((p.min_salary + p.max_salary) / 2.0) ELSE NULL END AS compa_ratio
+          FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+          INNER JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+          INNER JOIN app.positions p ON p.id = pa.position_id LEFT JOIN app.org_units o ON o.id = pa.org_unit_id
+          WHERE e.status = 'active' AND ch.currency = ${currency} AND p.min_salary IS NOT NULL AND p.max_salary IS NOT NULL AND p.min_salary > 0 AND p.max_salary > 0
+            ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        )
+        SELECT org_unit_id, org_unit_name, COUNT(*)::int AS headcount, ROUND(AVG(compa_ratio), 4) AS avg_compa_ratio,
+          COUNT(*) FILTER (WHERE annual_salary < range_min)::int AS below_range_count,
+          COUNT(*) FILTER (WHERE annual_salary >= range_min AND annual_salary <= range_max)::int AS within_range_count,
+          COUNT(*) FILTER (WHERE annual_salary > range_max)::int AS above_range_count
+        FROM employee_compa WHERE compa_ratio IS NOT NULL GROUP BY org_unit_id, org_unit_name ORDER BY org_unit_name
+      `;
+    });
+  }
+
+  async getCompaRatioByGradeExtended(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        WITH employee_compa AS (
+          SELECT p.job_grade, p.min_salary AS range_min, p.max_salary AS range_max, (p.min_salary + p.max_salary) / 2.0 AS range_midpoint,
+            app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) AS annual_salary,
+            CASE WHEN (p.min_salary + p.max_salary) / 2.0 > 0 THEN app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) / ((p.min_salary + p.max_salary) / 2.0) ELSE NULL END AS compa_ratio
+          FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+          INNER JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+          INNER JOIN app.positions p ON p.id = pa.position_id
+          WHERE e.status = 'active' AND ch.currency = ${currency} AND p.job_grade IS NOT NULL AND p.min_salary IS NOT NULL AND p.max_salary IS NOT NULL AND p.min_salary > 0 AND p.max_salary > 0
+            ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        )
+        SELECT job_grade, COUNT(*)::int AS headcount, ROUND(MIN(range_min), 2) AS range_min, ROUND(MAX(range_max), 2) AS range_max,
+          ROUND(AVG(range_midpoint), 2) AS range_midpoint, ROUND(AVG(annual_salary), 2) AS avg_salary, ROUND(AVG(compa_ratio), 4) AS avg_compa_ratio,
+          COUNT(*) FILTER (WHERE annual_salary < range_min)::int AS below_range_count,
+          COUNT(*) FILTER (WHERE annual_salary >= range_min AND annual_salary <= range_max)::int AS within_range_count,
+          COUNT(*) FILTER (WHERE annual_salary > range_max)::int AS above_range_count
+        FROM employee_compa WHERE compa_ratio IS NOT NULL GROUP BY job_grade ORDER BY job_grade
+      `;
+    });
+  }
+
+  async getPayEquityByGradeExtended(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        WITH employee_pay AS (
+          SELECT COALESCE(p.job_grade, 'Ungraded') AS job_grade, ep.gender, app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) AS annual_salary
+          FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+          INNER JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.tenant_id = e.tenant_id AND ep.effective_to IS NULL
+          LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+          LEFT JOIN app.positions p ON p.id = pa.position_id
+          WHERE e.status = 'active' AND ch.currency = ${currency} AND ep.gender IN ('male', 'female') ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        ), by_grade_gender AS (
+          SELECT job_grade, gender, COUNT(*)::int AS employee_count, ROUND(AVG(annual_salary), 2) AS avg_salary, ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY annual_salary), 2) AS median_salary FROM employee_pay GROUP BY job_grade, gender
+        )
+        SELECT g.job_grade, COALESCE(m.employee_count, 0)::int AS male_count, COALESCE(f.employee_count, 0)::int AS female_count,
+          COALESCE(m.avg_salary, 0) AS male_avg_salary, COALESCE(f.avg_salary, 0) AS female_avg_salary,
+          CASE WHEN COALESCE(m.avg_salary, 0) > 0 AND f.avg_salary IS NOT NULL THEN ROUND(((m.avg_salary - f.avg_salary) / m.avg_salary) * 100, 2) ELSE NULL END AS pay_gap_percentage,
+          COALESCE(m.median_salary, 0) AS male_median_salary, COALESCE(f.median_salary, 0) AS female_median_salary,
+          CASE WHEN COALESCE(m.median_salary, 0) > 0 AND f.median_salary IS NOT NULL THEN ROUND(((m.median_salary - f.median_salary) / m.median_salary) * 100, 2) ELSE NULL END AS median_pay_gap_percentage
+        FROM (SELECT DISTINCT job_grade FROM by_grade_gender) g
+        LEFT JOIN by_grade_gender m ON m.job_grade = g.job_grade AND m.gender = 'male'
+        LEFT JOIN by_grade_gender f ON f.job_grade = g.job_grade AND f.gender = 'female' ORDER BY g.job_grade
+      `;
+    });
+  }
+
+  async getPayEquityOverallExtended(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any> {
+    const currency = filters.currency || "GBP";
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        WITH employee_pay AS (
+          SELECT ep.gender, app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) AS annual_salary
+          FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+          INNER JOIN app.employee_personal ep ON ep.employee_id = e.id AND ep.tenant_id = e.tenant_id AND ep.effective_to IS NULL
+          LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+          LEFT JOIN app.positions p ON p.id = pa.position_id
+          WHERE e.status = 'active' AND ch.currency = ${currency} AND ep.gender IN ('male', 'female') ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        )
+        SELECT COUNT(*) FILTER (WHERE gender = 'male')::int AS total_male, COUNT(*) FILTER (WHERE gender = 'female')::int AS total_female,
+          ROUND(AVG(annual_salary) FILTER (WHERE gender = 'male'), 2) AS overall_male_avg_salary,
+          ROUND(AVG(annual_salary) FILTER (WHERE gender = 'female'), 2) AS overall_female_avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY annual_salary) FILTER (WHERE gender = 'male'), 2) AS overall_male_median_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY annual_salary) FILTER (WHERE gender = 'female'), 2) AS overall_female_median_salary
+        FROM employee_pay
+      `;
+    });
+    const r = rows[0] || {};
+    const maleAvg = Number(r.overallMaleAvgSalary) || 0;
+    const femaleAvg = Number(r.overallFemaleAvgSalary) || 0;
+    const maleMedian = Number(r.overallMaleMedianSalary) || 0;
+    const femaleMedian = Number(r.overallFemaleMedianSalary) || 0;
+    return {
+      total_male: Number(r.totalMale) || 0, total_female: Number(r.totalFemale) || 0,
+      overall_male_avg_salary: maleAvg, overall_female_avg_salary: femaleAvg,
+      overall_mean_pay_gap_percentage: maleAvg > 0 && femaleAvg > 0 ? Number(((maleAvg - femaleAvg) / maleAvg * 100).toFixed(2)) : null,
+      overall_median_pay_gap_percentage: maleMedian > 0 && femaleMedian > 0 ? Number(((maleMedian - femaleMedian) / maleMedian * 100).toFixed(2)) : null,
+    };
+  }
+
+  async getPayEquityByEthnicity(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any[]> {
+    const currency = filters.currency || "GBP";
+    return this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COALESCE(dd.ethnicity, 'Not provided') AS ethnicity, COUNT(*)::int AS employee_count,
+          ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS median_salary
+        FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        INNER JOIN app.diversity_data dd ON dd.employee_id = e.id AND dd.tenant_id = e.tenant_id AND dd.consent_given = true AND dd.ethnicity IS NOT NULL
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency} ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+        GROUP BY dd.ethnicity ORDER BY avg_salary DESC
+      `;
+    });
+  }
+
+  async getCompensationSummaryExtended(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<any> {
+    const currency = filters.currency || "GBP";
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COUNT(*)::int AS total_employees,
+          ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS avg_salary,
+          ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS median_salary,
+          ROUND(MIN(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS min_salary,
+          ROUND(MAX(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS max_salary,
+          ROUND(PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p10_salary,
+          ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p25_salary,
+          ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p75_salary,
+          ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS p90_salary,
+          ROUND(SUM(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency)), 2) AS total_payroll
+        FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency} ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+      `;
+    });
+    return rows[0] || {};
+  }
+
+  async getRecentCompensationChangesExtended(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<{ count: number; avg_change_pct: number | null }> {
+    const currency = filters.currency || "GBP";
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT COUNT(*)::int AS change_count, ROUND(AVG(ch.change_percentage), 2) AS avg_change_pct
+        FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        LEFT JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency} AND ch.effective_from >= (CURRENT_DATE - INTERVAL '12 months') AND ch.change_reason IS NOT NULL
+          ${f.departmentFilter} ${f.gradeFilter}
+      `;
+    });
+    const r = rows[0] || {};
+    return { count: Number(r.changeCount) || 0, avg_change_pct: r.avgChangePct != null ? Number(r.avgChangePct) : null };
+  }
+
+  async getOverallCompaRatio(context: TenantContext, filters: CompensationAnalyticsFilters = {}): Promise<number | null> {
+    const currency = filters.currency || "GBP";
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      const f = this.compensationFilterFragments(tx, filters);
+      return tx<any[]>`
+        SELECT ROUND(AVG(app.calculate_annual_salary(ch.base_salary, ch.pay_frequency) / NULLIF((p.min_salary + p.max_salary) / 2.0, 0)), 4) AS avg_compa_ratio
+        FROM app.compensation_history ch INNER JOIN app.employees e ON e.id = ch.employee_id AND e.tenant_id = ch.tenant_id
+        INNER JOIN app.position_assignments pa ON pa.employee_id = e.id AND pa.tenant_id = e.tenant_id AND pa.is_primary = true AND pa.effective_to IS NULL
+        INNER JOIN app.positions p ON p.id = pa.position_id
+        WHERE e.status = 'active' AND ch.currency = ${currency} AND p.min_salary IS NOT NULL AND p.max_salary IS NOT NULL AND p.min_salary > 0 AND p.max_salary > 0
+          ${f.dateRangeFilter} ${f.departmentFilter} ${f.gradeFilter}
+      `;
+    });
+    const r = rows[0];
+    return r?.avgCompaRatio != null ? Number(r.avgCompaRatio) : null;
+  }
+
+
+  // ===========================================================================
   // Workforce Planning Analytics
   // ===========================================================================
 
@@ -1762,6 +2054,985 @@ export class AnalyticsRepository {
         employeesBelowRequired: Number(r.employeesBelowRequired) || 0,
         coverageRate: Number(r.coverageRate) || 0,
       })),
+    };
+  }
+
+  // ===========================================================================
+  // Workforce Analytics - Individual Endpoints (TODO-198)
+  // ===========================================================================
+
+  /**
+   * GET /analytics/workforce/headcount-trends
+   * Monthly hires vs terminations over a date range.
+   */
+  async getWorkforceHeadcountTrends(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters
+  ): Promise<{
+    currentHeadcount: number;
+    trends: Array<{
+      period: string;
+      totalHeadcount: number;
+      hires: number;
+      terminations: number;
+      netChange: number;
+    }>;
+  }> {
+    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
+
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH date_range AS (
+          SELECT
+            generate_series(
+              date_trunc('month', ${startDate}::date),
+              date_trunc('month', ${endDate}::date),
+              '1 month'::interval
+            )::date AS month_start
+        ),
+        emp_base AS (
+          SELECT e.id, e.hire_date, e.termination_date, e.status
+          FROM employees e
+          WHERE true
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+        ),
+        monthly_data AS (
+          SELECT
+            dr.month_start,
+            COUNT(*) FILTER (
+              WHERE eb.hire_date >= dr.month_start
+                AND eb.hire_date < dr.month_start + '1 month'::interval
+            ) AS hires,
+            COUNT(*) FILTER (
+              WHERE eb.termination_date >= dr.month_start
+                AND eb.termination_date < dr.month_start + '1 month'::interval
+            ) AS terminations,
+            COUNT(*) FILTER (
+              WHERE eb.hire_date <= (dr.month_start + '1 month'::interval - '1 day'::interval)
+                AND (eb.termination_date IS NULL
+                     OR eb.termination_date > (dr.month_start + '1 month'::interval - '1 day'::interval))
+            ) AS end_headcount
+          FROM date_range dr
+          CROSS JOIN emp_base eb
+          GROUP BY dr.month_start
+        )
+        SELECT
+          to_char(month_start, 'YYYY-MM') AS period,
+          COALESCE(hires, 0)::int AS hires,
+          COALESCE(terminations, 0)::int AS terminations,
+          COALESCE(end_headcount, 0)::int AS end_headcount
+        FROM monthly_data
+        ORDER BY month_start
+      `;
+    });
+
+    // Get current headcount
+    const currentRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<{ count: string }[]>`
+        SELECT COUNT(*)::int AS count
+        FROM employees e
+        WHERE e.status IN ('active', 'on_leave')
+          ${filters.department_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                WHERE pa.employee_id = e.id
+                  AND p.org_unit_id = ${filters.department_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+          ${filters.location
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                WHERE pa.employee_id = e.id
+                  AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+      `;
+    });
+
+    return {
+      currentHeadcount: Number(currentRows[0]?.count) || 0,
+      trends: rows.map((r: any) => ({
+        period: r.period,
+        totalHeadcount: Number(r.endHeadcount) || 0,
+        hires: Number(r.hires) || 0,
+        terminations: Number(r.terminations) || 0,
+        netChange: (Number(r.hires) || 0) - (Number(r.terminations) || 0),
+      })),
+    };
+  }
+
+  /**
+   * GET /analytics/workforce/turnover-rate
+   * Voluntary/involuntary turnover by department.
+   */
+  async getWorkforceTurnoverRate(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters
+  ): Promise<{
+    overallTurnoverRate: number;
+    overallVoluntaryRate: number;
+    overallInvoluntaryRate: number;
+    totalTerminations: number;
+    byDepartment: Array<{
+      orgUnitId: string;
+      orgUnitName: string;
+      totalTerminations: number;
+      voluntaryTerminations: number;
+      involuntaryTerminations: number;
+      headcount: number;
+      turnoverRate: number;
+    }>;
+  }> {
+    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
+
+    // Department-level turnover
+    const deptRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH dept_terms AS (
+          SELECT
+            ou.id AS org_unit_id,
+            ou.name AS org_unit_name,
+            COUNT(DISTINCT e.id) AS total_terminations,
+            COUNT(DISTINCT e.id) FILTER (
+              WHERE e.termination_reason IN ('resignation', 'retirement', 'personal')
+            ) AS voluntary_terminations,
+            COUNT(DISTINCT e.id) FILTER (
+              WHERE e.termination_reason NOT IN ('resignation', 'retirement', 'personal')
+            ) AS involuntary_terminations
+          FROM employees e
+          INNER JOIN position_assignments pa ON pa.employee_id = e.id
+          INNER JOIN positions p ON pa.position_id = p.id
+          INNER JOIN org_units ou ON p.org_unit_id = ou.id
+          WHERE e.status = 'terminated'
+            AND e.termination_date BETWEEN ${startDate}::date AND ${endDate}::date
+            ${filters.department_id
+              ? tx`AND ou.id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})`
+              : tx``}
+          GROUP BY ou.id, ou.name
+        ),
+        dept_headcount AS (
+          SELECT
+            ou.id AS org_unit_id,
+            COUNT(DISTINCT e.id) AS headcount
+          FROM employees e
+          INNER JOIN position_assignments pa ON pa.employee_id = e.id
+            AND pa.effective_to IS NULL
+            AND pa.is_primary = true
+          INNER JOIN positions p ON pa.position_id = p.id
+          INNER JOIN org_units ou ON p.org_unit_id = ou.id
+          WHERE e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND ou.id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})`
+              : tx``}
+          GROUP BY ou.id
+        )
+        SELECT
+          dt.org_unit_id,
+          dt.org_unit_name,
+          dt.total_terminations::int,
+          dt.voluntary_terminations::int,
+          dt.involuntary_terminations::int,
+          COALESCE(dh.headcount, 0)::int AS headcount,
+          CASE WHEN COALESCE(dh.headcount, 0) > 0
+            THEN ROUND(dt.total_terminations::numeric / dh.headcount * 100, 2)
+            ELSE 0
+          END AS turnover_rate
+        FROM dept_terms dt
+        LEFT JOIN dept_headcount dh ON dt.org_unit_id = dh.org_unit_id
+        ORDER BY dt.total_terminations DESC
+      `;
+    });
+
+    // Overall aggregation
+    const overallRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH active_count AS (
+          SELECT COUNT(*)::numeric AS headcount
+          FROM employees e
+          WHERE e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                )`
+              : tx``}
+        )
+        SELECT
+          COUNT(*) AS total_terminations,
+          COUNT(*) FILTER (
+            WHERE e.termination_reason IN ('resignation', 'retirement', 'personal')
+          ) AS voluntary_terminations,
+          COUNT(*) FILTER (
+            WHERE e.termination_reason NOT IN ('resignation', 'retirement', 'personal')
+          ) AS involuntary_terminations,
+          (SELECT headcount FROM active_count) AS headcount
+        FROM employees e
+        WHERE e.status = 'terminated'
+          AND e.termination_date BETWEEN ${startDate}::date AND ${endDate}::date
+          ${filters.department_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                WHERE pa.employee_id = e.id
+                  AND p.org_unit_id = ${filters.department_id}::uuid
+              )`
+            : tx``}
+          ${filters.location
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                WHERE pa.employee_id = e.id
+                  AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+              )`
+            : tx``}
+      `;
+    });
+
+    const overall = overallRows[0] || {};
+    const headcount = Number(overall.headcount) || 0;
+    const totalTerm = Number(overall.totalTerminations) || 0;
+    const volTerm = Number(overall.voluntaryTerminations) || 0;
+    const involTerm = Number(overall.involuntaryTerminations) || 0;
+
+    return {
+      overallTurnoverRate: headcount > 0 ? Number(((totalTerm / headcount) * 100).toFixed(2)) : 0,
+      overallVoluntaryRate: headcount > 0 ? Number(((volTerm / headcount) * 100).toFixed(2)) : 0,
+      overallInvoluntaryRate: headcount > 0 ? Number(((involTerm / headcount) * 100).toFixed(2)) : 0,
+      totalTerminations: totalTerm,
+      byDepartment: deptRows.map((r: any) => ({
+        orgUnitId: r.orgUnitId ?? r.org_unit_id,
+        orgUnitName: r.orgUnitName ?? r.org_unit_name,
+        totalTerminations: Number(r.totalTerminations ?? r.total_terminations) || 0,
+        voluntaryTerminations: Number(r.voluntaryTerminations ?? r.voluntary_terminations) || 0,
+        involuntaryTerminations: Number(r.involuntaryTerminations ?? r.involuntary_terminations) || 0,
+        headcount: Number(r.headcount) || 0,
+        turnoverRate: Number(r.turnoverRate ?? r.turnover_rate) || 0,
+      })),
+    };
+  }
+
+  /**
+   * GET /analytics/workforce/retirement-projection
+   * Employees approaching configurable retirement ages (55/60/65/67).
+   */
+  async getWorkforceRetirementProjection(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters,
+    retirementAges: number[] = [55, 60, 65, 67]
+  ): Promise<{
+    totalActive: number;
+    employeesWithDob: number;
+    projections: Array<{
+      retirementAge: number;
+      yearsToRetirement: string;
+      employeeCount: number;
+      percentage: number;
+      departments: Array<{
+        orgUnitId: string;
+        orgUnitName: string;
+        count: number;
+      }>;
+    }>;
+  }> {
+    // Get total active and dob counts
+    const countRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          COUNT(*) FILTER (WHERE e.status IN ('active', 'on_leave')) AS total_active,
+          COUNT(*) FILTER (
+            WHERE e.status IN ('active', 'on_leave')
+              AND EXISTS (
+                SELECT 1 FROM employee_personal ep
+                WHERE ep.employee_id = e.id
+                  AND ep.effective_to IS NULL
+                  AND ep.date_of_birth IS NOT NULL
+              )
+          ) AS with_dob
+        FROM employees e
+        WHERE true
+          ${filters.department_id
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                WHERE pa.employee_id = e.id
+                  AND p.org_unit_id = ${filters.department_id}::uuid
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+          ${filters.location
+            ? tx`AND EXISTS (
+                SELECT 1 FROM position_assignments pa
+                INNER JOIN positions p ON p.id = pa.position_id
+                INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                WHERE pa.employee_id = e.id
+                  AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                  AND pa.effective_to IS NULL
+                  AND pa.is_primary = true
+              )`
+            : tx``}
+      `;
+    });
+
+    const totalActive = Number(countRows[0]?.totalActive) || 0;
+    const employeesWithDob = Number(countRows[0]?.withDob) || 0;
+
+    // Single query to get all retirement projections bucketed by age and band
+    const projRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH active_personal AS (
+          SELECT DISTINCT ON (ep.employee_id)
+            ep.employee_id,
+            ep.date_of_birth
+          FROM employee_personal ep
+          INNER JOIN employees e ON e.id = ep.employee_id
+          WHERE e.status IN ('active', 'on_leave')
+            AND ep.effective_to IS NULL
+            AND ep.date_of_birth IS NOT NULL
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+          ORDER BY ep.employee_id, ep.effective_from DESC
+        ),
+        retirement_ages AS (
+          SELECT unnest(${retirementAges}::int[]) AS retirement_age
+        ),
+        with_years AS (
+          SELECT
+            ra.retirement_age,
+            ap.employee_id,
+            EXTRACT(YEAR FROM age(
+              (ap.date_of_birth + (ra.retirement_age || ' years')::interval),
+              CURRENT_DATE
+            )) + EXTRACT(MONTH FROM age(
+              (ap.date_of_birth + (ra.retirement_age || ' years')::interval),
+              CURRENT_DATE
+            )) / 12.0 AS years_to_retirement
+          FROM active_personal ap
+          CROSS JOIN retirement_ages ra
+          WHERE ap.date_of_birth + (ra.retirement_age || ' years')::interval >= CURRENT_DATE
+        ),
+        banded AS (
+          SELECT
+            wy.retirement_age,
+            wy.employee_id,
+            CASE
+              WHEN wy.years_to_retirement < 2 THEN '0-2 years'
+              WHEN wy.years_to_retirement < 5 THEN '3-5 years'
+              WHEN wy.years_to_retirement < 10 THEN '6-10 years'
+              ELSE NULL
+            END AS band,
+            CASE
+              WHEN wy.years_to_retirement < 2 THEN 1
+              WHEN wy.years_to_retirement < 5 THEN 2
+              WHEN wy.years_to_retirement < 10 THEN 3
+              ELSE NULL
+            END AS band_order
+          FROM with_years wy
+          WHERE wy.years_to_retirement < 10
+        ),
+        dept_info AS (
+          SELECT
+            b.retirement_age,
+            b.band,
+            b.band_order,
+            COALESCE(ou.id::text, 'unassigned') AS org_unit_id,
+            COALESCE(ou.name, 'Unassigned') AS org_unit_name,
+            COUNT(*)::int AS count
+          FROM banded b
+          LEFT JOIN LATERAL (
+            SELECT pa.org_unit_id
+            FROM position_assignments pa
+            WHERE pa.employee_id = b.employee_id
+              AND pa.is_primary = true
+              AND pa.effective_to IS NULL
+            LIMIT 1
+          ) pa_lat ON true
+          LEFT JOIN org_units ou ON ou.id = pa_lat.org_unit_id
+          WHERE b.band IS NOT NULL
+          GROUP BY b.retirement_age, b.band, b.band_order, ou.id, ou.name
+          ORDER BY b.retirement_age, b.band_order, count DESC
+        )
+        SELECT
+          retirement_age,
+          band,
+          band_order,
+          org_unit_id,
+          org_unit_name,
+          count
+        FROM dept_info
+      `;
+    });
+
+    // Group results by (retirement_age, band)
+    const projMap = new Map<string, {
+      retirementAge: number;
+      yearsToRetirement: string;
+      bandOrder: number;
+      totalCount: number;
+      departments: Map<string, { orgUnitId: string; orgUnitName: string; count: number }>;
+    }>();
+
+    for (const r of projRows) {
+      const key = `${r.retirementAge}-${r.band}`;
+      if (!projMap.has(key)) {
+        projMap.set(key, {
+          retirementAge: Number(r.retirementAge),
+          yearsToRetirement: r.band,
+          bandOrder: Number(r.bandOrder),
+          totalCount: 0,
+          departments: new Map(),
+        });
+      }
+      const entry = projMap.get(key)!;
+      const count = Number(r.count) || 0;
+      entry.totalCount += count;
+      const deptId = r.orgUnitId ?? r.org_unit_id;
+      if (!entry.departments.has(deptId)) {
+        entry.departments.set(deptId, {
+          orgUnitId: deptId,
+          orgUnitName: r.orgUnitName ?? r.org_unit_name,
+          count: 0,
+        });
+      }
+      entry.departments.get(deptId)!.count += count;
+    }
+
+    const projections = Array.from(projMap.values())
+      .sort((a, b) => a.retirementAge - b.retirementAge || a.bandOrder - b.bandOrder)
+      .map((p) => ({
+        retirementAge: p.retirementAge,
+        yearsToRetirement: p.yearsToRetirement,
+        employeeCount: p.totalCount,
+        percentage: totalActive > 0 ? Number(((p.totalCount / totalActive) * 100).toFixed(1)) : 0,
+        departments: Array.from(p.departments.values()).sort((a, b) => b.count - a.count),
+      }));
+
+    return { totalActive, employeesWithDob, projections };
+  }
+
+  /**
+   * GET /analytics/workforce/tenure-distribution
+   * Employee tenure distribution across configurable bands.
+   */
+  async getWorkforceTenureDistribution(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters
+  ): Promise<{
+    totalEmployees: number;
+    averageTenureMonths: number;
+    medianTenureMonths: number;
+    bands: Array<{ band: string; employeeCount: number; percentage: number }>;
+  }> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH active_emp AS (
+          SELECT
+            e.id,
+            EXTRACT(EPOCH FROM (CURRENT_DATE - e.hire_date)) / 86400 / 30.44 AS tenure_months
+          FROM employees e
+          WHERE e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+        ),
+        stats AS (
+          SELECT
+            COUNT(*)::int AS total,
+            ROUND(AVG(tenure_months)::numeric, 1) AS avg_months,
+            ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tenure_months)::numeric, 1) AS median_months
+          FROM active_emp
+        ),
+        banded AS (
+          SELECT
+            CASE
+              WHEN tenure_months < 12 THEN '0-1 years'
+              WHEN tenure_months < 24 THEN '1-2 years'
+              WHEN tenure_months < 60 THEN '2-5 years'
+              WHEN tenure_months < 120 THEN '5-10 years'
+              WHEN tenure_months < 240 THEN '10-20 years'
+              ELSE '20+ years'
+            END AS band,
+            CASE
+              WHEN tenure_months < 12 THEN 1
+              WHEN tenure_months < 24 THEN 2
+              WHEN tenure_months < 60 THEN 3
+              WHEN tenure_months < 120 THEN 4
+              WHEN tenure_months < 240 THEN 5
+              ELSE 6
+            END AS band_order,
+            COUNT(*)::int AS employee_count
+          FROM active_emp
+          GROUP BY band, band_order
+        )
+        SELECT
+          s.total,
+          s.avg_months,
+          s.median_months,
+          b.band,
+          b.employee_count,
+          b.band_order
+        FROM stats s
+        CROSS JOIN banded b
+        ORDER BY b.band_order
+      `;
+    });
+
+    if (rows.length === 0) {
+      return { totalEmployees: 0, averageTenureMonths: 0, medianTenureMonths: 0, bands: [] };
+    }
+
+    const total = Number(rows[0].total) || 0;
+    const avgMonths = Number(rows[0].avgMonths) || 0;
+    const medianMonths = Number(rows[0].medianMonths) || 0;
+
+    return {
+      totalEmployees: total,
+      averageTenureMonths: avgMonths,
+      medianTenureMonths: medianMonths,
+      bands: rows.map((r: any) => ({
+        band: r.band,
+        employeeCount: Number(r.employeeCount) || 0,
+        percentage: total > 0 ? Number(((Number(r.employeeCount) / total) * 100).toFixed(1)) : 0,
+      })),
+    };
+  }
+
+  /**
+   * GET /analytics/workforce/vacancy-rate
+   * Open positions vs headcount budget by department.
+   */
+  async getWorkforceVacancyRate(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters
+  ): Promise<{
+    totalBudgeted: number;
+    totalFilled: number;
+    totalOpenRequisitions: number;
+    overallVacancyRate: number;
+    byDepartment: Array<{
+      orgUnitId: string;
+      orgUnitName: string;
+      budgetedHeadcount: number;
+      filledPositions: number;
+      openRequisitions: number;
+      vacancyRate: number;
+    }>;
+  }> {
+    const deptRows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH dept_budget AS (
+          SELECT
+            ou.id AS org_unit_id,
+            ou.name AS org_unit_name,
+            COALESCE(SUM(p.headcount), 0)::int AS budgeted_headcount
+          FROM org_units ou
+          INNER JOIN positions p ON p.org_unit_id = ou.id AND p.is_active = true
+          WHERE ou.is_active = true
+            ${filters.department_id
+              ? tx`AND ou.id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})`
+              : tx``}
+          GROUP BY ou.id, ou.name
+        ),
+        dept_filled AS (
+          SELECT
+            p.org_unit_id,
+            COUNT(DISTINCT pa.employee_id)::int AS filled_positions
+          FROM position_assignments pa
+          INNER JOIN positions p ON p.id = pa.position_id AND p.is_active = true
+          INNER JOIN employees e ON e.id = pa.employee_id
+          WHERE pa.effective_to IS NULL
+            AND pa.is_primary = true
+            AND e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND p.org_unit_id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM org_units ou
+                  WHERE ou.id = p.org_unit_id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                )`
+              : tx``}
+          GROUP BY p.org_unit_id
+        ),
+        dept_reqs AS (
+          SELECT
+            r.org_unit_id,
+            COALESCE(SUM(r.openings - r.filled), 0)::int AS open_requisitions
+          FROM requisitions r
+          WHERE r.status = 'open'
+            ${filters.department_id
+              ? tx`AND r.org_unit_id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM org_units ou
+                  WHERE ou.id = r.org_unit_id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                )`
+              : tx``}
+          GROUP BY r.org_unit_id
+        )
+        SELECT
+          db.org_unit_id,
+          db.org_unit_name,
+          db.budgeted_headcount,
+          COALESCE(df.filled_positions, 0)::int AS filled_positions,
+          COALESCE(dr.open_requisitions, 0)::int AS open_requisitions,
+          CASE WHEN db.budgeted_headcount > 0
+            THEN ROUND(
+              ((db.budgeted_headcount - COALESCE(df.filled_positions, 0))::numeric / db.budgeted_headcount) * 100,
+              2
+            )
+            ELSE 0
+          END AS vacancy_rate
+        FROM dept_budget db
+        LEFT JOIN dept_filled df ON db.org_unit_id = df.org_unit_id
+        LEFT JOIN dept_reqs dr ON db.org_unit_id = dr.org_unit_id
+        ORDER BY db.budgeted_headcount DESC
+      `;
+    });
+
+    const totalBudgeted = deptRows.reduce((s: number, r: any) => s + (Number(r.budgetedHeadcount) || 0), 0);
+    const totalFilled = deptRows.reduce((s: number, r: any) => s + (Number(r.filledPositions) || 0), 0);
+    const totalOpenReqs = deptRows.reduce((s: number, r: any) => s + (Number(r.openRequisitions) || 0), 0);
+
+    return {
+      totalBudgeted,
+      totalFilled,
+      totalOpenRequisitions: totalOpenReqs,
+      overallVacancyRate: totalBudgeted > 0 ? Number((((totalBudgeted - totalFilled) / totalBudgeted) * 100).toFixed(2)) : 0,
+      byDepartment: deptRows.map((r: any) => ({
+        orgUnitId: r.orgUnitId ?? r.org_unit_id,
+        orgUnitName: r.orgUnitName ?? r.org_unit_name,
+        budgetedHeadcount: Number(r.budgetedHeadcount ?? r.budgeted_headcount) || 0,
+        filledPositions: Number(r.filledPositions ?? r.filled_positions) || 0,
+        openRequisitions: Number(r.openRequisitions ?? r.open_requisitions) || 0,
+        vacancyRate: Number(r.vacancyRate ?? r.vacancy_rate) || 0,
+      })),
+    };
+  }
+
+  /**
+   * GET /analytics/workforce/summary
+   * Key workforce metrics summary.
+   */
+  async getWorkforceSummary(
+    context: TenantContext,
+    filters: WorkforceAnalyticsFilters
+  ): Promise<{
+    headcount: { total: number; active: number; onLeave: number; pending: number };
+    turnover: { rate12m: number; voluntaryRate12m: number; involuntaryRate12m: number };
+    tenure: { averageMonths: number; medianMonths: number };
+    retirementRisk: { within2Years: number; within5Years: number };
+    vacancy: { budgetedHeadcount: number; filled: number; vacancyRate: number; openRequisitions: number };
+  }> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        WITH active_emp AS (
+          SELECT
+            e.id,
+            e.status,
+            e.hire_date,
+            EXTRACT(EPOCH FROM (CURRENT_DATE - e.hire_date)) / 86400 / 30.44 AS tenure_months
+          FROM employees e
+          WHERE e.status IN ('active', 'on_leave', 'pending')
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+        ),
+        headcount AS (
+          SELECT
+            COUNT(*) FILTER (WHERE status IN ('active', 'on_leave')) AS total,
+            COUNT(*) FILTER (WHERE status = 'active') AS active,
+            COUNT(*) FILTER (WHERE status = 'on_leave') AS on_leave,
+            COUNT(*) FILTER (WHERE status = 'pending') AS pending
+          FROM active_emp
+        ),
+        tenure_stats AS (
+          SELECT
+            ROUND(AVG(tenure_months)::numeric, 1) AS avg_months,
+            ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tenure_months)::numeric, 1) AS median_months
+          FROM active_emp
+          WHERE status IN ('active', 'on_leave')
+        ),
+        -- Trailing 12-month turnover
+        turnover_12m AS (
+          SELECT
+            COUNT(*) AS total_terms,
+            COUNT(*) FILTER (
+              WHERE e.termination_reason IN ('resignation', 'retirement', 'personal')
+            ) AS voluntary_terms,
+            COUNT(*) FILTER (
+              WHERE e.termination_reason NOT IN ('resignation', 'retirement', 'personal')
+            ) AS involuntary_terms
+          FROM employees e
+          WHERE e.status = 'terminated'
+            AND e.termination_date >= CURRENT_DATE - INTERVAL '12 months'
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                )`
+              : tx``}
+        ),
+        -- Retirement risk (using UK state pension age 66-68)
+        retirement_risk AS (
+          SELECT
+            COUNT(*) FILTER (
+              WHERE CASE
+                WHEN ep.date_of_birth < '1960-04-06' THEN ep.date_of_birth + INTERVAL '66 years'
+                WHEN ep.date_of_birth <= '1961-03-05' THEN ep.date_of_birth + INTERVAL '67 years'
+                ELSE ep.date_of_birth + INTERVAL '68 years'
+              END BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '2 years'
+            ) AS within_2_years,
+            COUNT(*) FILTER (
+              WHERE CASE
+                WHEN ep.date_of_birth < '1960-04-06' THEN ep.date_of_birth + INTERVAL '66 years'
+                WHEN ep.date_of_birth <= '1961-03-05' THEN ep.date_of_birth + INTERVAL '67 years'
+                ELSE ep.date_of_birth + INTERVAL '68 years'
+              END BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '5 years'
+            ) AS within_5_years
+          FROM employees e
+          INNER JOIN employee_personal ep
+            ON ep.employee_id = e.id
+            AND ep.effective_to IS NULL
+            AND ep.date_of_birth IS NOT NULL
+          WHERE e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  WHERE pa.employee_id = e.id
+                    AND p.org_unit_id = ${filters.department_id}::uuid
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM position_assignments pa
+                  INNER JOIN positions p ON p.id = pa.position_id
+                  INNER JOIN org_units ou ON ou.id = p.org_unit_id
+                  WHERE pa.employee_id = e.id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                    AND pa.effective_to IS NULL
+                    AND pa.is_primary = true
+                )`
+              : tx``}
+        ),
+        -- Vacancy metrics
+        vacancy_metrics AS (
+          SELECT
+            COALESCE(SUM(p.headcount), 0)::int AS budgeted_headcount
+          FROM positions p
+          INNER JOIN org_units ou ON ou.id = p.org_unit_id
+          WHERE p.is_active = true
+            AND ou.is_active = true
+            ${filters.department_id
+              ? tx`AND p.org_unit_id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})`
+              : tx``}
+        ),
+        filled_count AS (
+          SELECT COUNT(DISTINCT pa.employee_id)::int AS filled
+          FROM position_assignments pa
+          INNER JOIN positions p ON p.id = pa.position_id AND p.is_active = true
+          INNER JOIN employees e ON e.id = pa.employee_id
+          WHERE pa.effective_to IS NULL
+            AND pa.is_primary = true
+            AND e.status IN ('active', 'on_leave')
+            ${filters.department_id
+              ? tx`AND p.org_unit_id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM org_units ou
+                  WHERE ou.id = p.org_unit_id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                )`
+              : tx``}
+        ),
+        open_reqs AS (
+          SELECT COALESCE(SUM(r.openings - r.filled), 0)::int AS open_requisitions
+          FROM requisitions r
+          WHERE r.status = 'open'
+            ${filters.department_id
+              ? tx`AND r.org_unit_id = ${filters.department_id}::uuid`
+              : tx``}
+            ${filters.location
+              ? tx`AND EXISTS (
+                  SELECT 1 FROM org_units ou
+                  WHERE ou.id = r.org_unit_id
+                    AND LOWER(ou.name) LIKE LOWER(${`%${filters.location}%`})
+                )`
+              : tx``}
+        )
+        SELECT
+          h.total::int, h.active::int, h.on_leave::int, h.pending::int,
+          t12.total_terms::int, t12.voluntary_terms::int, t12.involuntary_terms::int,
+          ts.avg_months, ts.median_months,
+          rr.within_2_years::int, rr.within_5_years::int,
+          vm.budgeted_headcount, fc.filled, oreqs.open_requisitions
+        FROM headcount h, turnover_12m t12, tenure_stats ts,
+             retirement_risk rr, vacancy_metrics vm, filled_count fc, open_reqs oreqs
+      `;
+    });
+
+    const r = rows[0] || {};
+    const total = Number(r.total) || 0;
+    const totalTerms = Number(r.totalTerms) || 0;
+    const volTerms = Number(r.voluntaryTerms) || 0;
+    const involTerms = Number(r.involuntaryTerms) || 0;
+    const budgeted = Number(r.budgetedHeadcount) || 0;
+    const filled = Number(r.filled) || 0;
+
+    return {
+      headcount: {
+        total,
+        active: Number(r.active) || 0,
+        onLeave: Number(r.onLeave) || 0,
+        pending: Number(r.pending) || 0,
+      },
+      turnover: {
+        rate12m: total > 0 ? Number(((totalTerms / total) * 100).toFixed(2)) : 0,
+        voluntaryRate12m: total > 0 ? Number(((volTerms / total) * 100).toFixed(2)) : 0,
+        involuntaryRate12m: total > 0 ? Number(((involTerms / total) * 100).toFixed(2)) : 0,
+      },
+      tenure: {
+        averageMonths: Number(r.avgMonths) || 0,
+        medianMonths: Number(r.medianMonths) || 0,
+      },
+      retirementRisk: {
+        within2Years: Number(r.within2Years) || 0,
+        within5Years: Number(r.within5Years) || 0,
+      },
+      vacancy: {
+        budgetedHeadcount: budgeted,
+        filled,
+        vacancyRate: budgeted > 0 ? Number((((budgeted - filled) / budgeted) * 100).toFixed(2)) : 0,
+        openRequisitions: Number(r.openRequisitions) || 0,
+      },
     };
   }
 }

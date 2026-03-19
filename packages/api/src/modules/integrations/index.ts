@@ -40,6 +40,7 @@ export {
   IdParamsSchema,
   ProviderParamsSchema,
   OptionalIdempotencyHeaderSchema,
+  TestConnectionResponseSchema,
   type IntegrationStatus,
   type IntegrationCategory,
   type IntegrationResponse,
@@ -50,4 +51,5 @@ export {
   type ProviderParams,
   type OptionalIdempotencyHeader,
   type PaginationQuery,
+  type TestConnectionResponse,
 } from "./schemas";

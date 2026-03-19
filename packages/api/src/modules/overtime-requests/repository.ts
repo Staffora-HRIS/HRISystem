@@ -15,6 +15,7 @@ import type {
   OvertimeRequestFilters,
   OvertimeRequestStatus,
   OvertimeRequestType,
+  OvertimeAuthorisationType,
   PaginationQuery,
 } from "./schemas";
 
@@ -38,6 +39,7 @@ export interface OvertimeRequestRow extends Row {
   tenantId: string;
   employeeId: string;
   requestType: OvertimeRequestType;
+  authorisationType: OvertimeAuthorisationType;
   date: Date;
   plannedHours: number;
   actualHours: number | null;
@@ -46,6 +48,7 @@ export interface OvertimeRequestRow extends Row {
   approverId: string | null;
   approvedAt: Date | null;
   rejectionReason: string | null;
+  managerNotes: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,9 +58,9 @@ export interface OvertimeRequestRow extends Row {
 // =============================================================================
 
 const REQUEST_COLUMNS = `
-  id, tenant_id, employee_id, request_type, date,
+  id, tenant_id, employee_id, request_type, authorisation_type, date,
   planned_hours, actual_hours, reason,
-  status, approver_id, approved_at, rejection_reason,
+  status, approver_id, approved_at, rejection_reason, manager_notes,
   created_at, updated_at
 `;
 
@@ -77,6 +80,7 @@ export class OvertimeRequestRepository {
     data: {
       employeeId: string;
       requestType: string;
+      authorisationType: string;
       date: string;
       plannedHours: number;
       actualHours: number | null;
@@ -86,12 +90,13 @@ export class OvertimeRequestRepository {
   ): Promise<OvertimeRequestRow> {
     const [row] = await tx`
       INSERT INTO overtime_requests (
-        tenant_id, employee_id, request_type, date,
+        tenant_id, employee_id, request_type, authorisation_type, date,
         planned_hours, actual_hours, reason, status
       ) VALUES (
         ${ctx.tenantId}::uuid,
         ${data.employeeId}::uuid,
         ${data.requestType}::app.overtime_request_type,
+        ${data.authorisationType}::app.overtime_authorisation_type,
         ${data.date}::date,
         ${data.plannedHours},
         ${data.actualHours},
@@ -148,6 +153,10 @@ export class OvertimeRequestRepository {
 
       if (filters.request_type) {
         conditions.push(tx`request_type = ${filters.request_type}::app.overtime_request_type`);
+      }
+
+      if (filters.authorisation_type) {
+        conditions.push(tx`authorisation_type = ${filters.authorisation_type}::app.overtime_authorisation_type`);
       }
 
       if (filters.date_from) {
@@ -249,6 +258,7 @@ export class OvertimeRequestRepository {
     id: string,
     approverId: string,
     actualHours: number | null,
+    managerNotes: string | null,
     tx: TransactionSql
   ): Promise<OvertimeRequestRow | null> {
     if (actualHours !== null) {
@@ -258,7 +268,8 @@ export class OvertimeRequestRepository {
           status = 'approved'::app.overtime_request_status,
           approver_id = ${approverId}::uuid,
           approved_at = now(),
-          actual_hours = ${actualHours}
+          actual_hours = ${actualHours},
+          manager_notes = ${managerNotes}
         WHERE id = ${id}::uuid
           AND status = 'pending'::app.overtime_request_status
         RETURNING ${tx.unsafe(REQUEST_COLUMNS)}
@@ -290,6 +301,7 @@ export class OvertimeRequestRepository {
     id: string,
     approverId: string,
     rejectionReason: string,
+    managerNotes: string | null,
     tx: TransactionSql
   ): Promise<OvertimeRequestRow | null> {
     const rows = await tx`
@@ -298,7 +310,8 @@ export class OvertimeRequestRepository {
         status = 'rejected'::app.overtime_request_status,
         approver_id = ${approverId}::uuid,
         approved_at = now(),
-        rejection_reason = ${rejectionReason}
+        rejection_reason = ${rejectionReason},
+        manager_notes = ${managerNotes}
       WHERE id = ${id}::uuid
         AND status = 'pending'::app.overtime_request_status
       RETURNING ${tx.unsafe(REQUEST_COLUMNS)}

@@ -14,6 +14,7 @@
 
 import type { TransactionSql } from "postgres";
 import type { DatabaseClient } from "../../plugins/db";
+import { SalarySacrificeRepository } from "./salary-sacrifice.repository";
 import type {
   PayrollRepository,
   PayrollRunRow,
@@ -48,8 +49,14 @@ import type {
   PeriodLockResponse,
   JournalEntryResponse,
   JournalEntriesQuery,
+  HolidayPayRateResponse,
 } from "./schemas";
 import { PAYROLL_STATUS_TRANSITIONS } from "./schemas";
+import {
+  calculateHolidayDayRate,
+  MAX_LOOKBACK_WEEKS,
+  type WeeklyEarnings,
+} from "@staffora/shared/utils";
 
 // =============================================================================
 // Domain Event Types
@@ -65,7 +72,8 @@ type PayrollEventType =
   | "payroll.tax_details.updated"
   | "payroll.period.locked"
   | "payroll.period.unlocked"
-  | "payroll.journal_entries.generated";
+  | "payroll.journal_entries.generated"
+  | "payroll.holiday_pay.calculated";
 
 // =============================================================================
 // UK Tax/NI Calculation Helpers (simplified)
@@ -581,8 +589,31 @@ export class PayrollService {
         // Bonus
         const bonusPay = bonusMap.get(emp.id) || 0;
 
-        // Gross
+        // Gross (before salary sacrifice)
         const gross = Math.round((monthlyBasic + overtimePay + bonusPay) * 100) / 100;
+
+        // Salary sacrifice (TODO-232): reduces gross pay before tax/NI calculation
+        // UK salary sacrifice reduces both taxable income and NI-able income
+        let totalMonthlySacrifice = 0;
+        try {
+          const sacrificeRepo = new SalarySacrificeRepository(this.db);
+          const activeSacrifices = await sacrificeRepo.findActiveByEmployee(
+            context,
+            emp.id,
+            periodEnd,
+            tx
+          );
+          for (const sacrifice of activeSacrifices) {
+            const amount = parseFloat(sacrifice.amount);
+            totalMonthlySacrifice += sacrifice.frequency === "annual" ? amount / 12 : amount;
+          }
+        } catch {
+          // salary_sacrifices table may not exist in all environments -- skip
+        }
+        totalMonthlySacrifice = Math.round(totalMonthlySacrifice * 100) / 100;
+
+        // Adjusted annual income for tax/NI (reduced by salary sacrifice)
+        const adjustedAnnualForTaxNI = Math.max(0, annualSalary - (totalMonthlySacrifice * 12)) + (overtimePay + bonusPay) * 12;
 
         // Tax details
         const taxDetails = await this.repository.findTaxDetailsAsOfDate(
@@ -596,17 +627,17 @@ export class PayrollService {
         const niCategory = taxDetails?.niCategory ?? "A";
         const studentLoanPlan = taxDetails?.studentLoanPlan ?? "none";
 
-        // Calculate deductions
-        const taxDeduction = calculateMonthlyIncomeTax(annualSalary + (overtimePay + bonusPay) * 12, taxCode);
-        const niEmployee = calculateMonthlyEmployeeNI(annualSalary + (overtimePay + bonusPay) * 12, niCategory);
-        const niEmployer = calculateMonthlyEmployerNI(annualSalary + (overtimePay + bonusPay) * 12);
-        const studentLoan = calculateMonthlyStudentLoan(annualSalary + (overtimePay + bonusPay) * 12, studentLoanPlan);
+        // Calculate deductions on adjusted (post-sacrifice) income
+        const taxDeduction = calculateMonthlyIncomeTax(adjustedAnnualForTaxNI, taxCode);
+        const niEmployee = calculateMonthlyEmployeeNI(adjustedAnnualForTaxNI, niCategory);
+        const niEmployer = calculateMonthlyEmployerNI(adjustedAnnualForTaxNI);
+        const studentLoan = calculateMonthlyStudentLoan(adjustedAnnualForTaxNI, studentLoanPlan);
 
         // Pension (simplified: 5% employee, 3% employer as auto-enrolment minimum)
         const pensionEmployee = Math.round(gross * 0.05 * 100) / 100;
         const pensionEmployer = Math.round(gross * 0.03 * 100) / 100;
 
-        const deductions = Math.round((taxDeduction + niEmployee + pensionEmployee + studentLoan) * 100) / 100;
+        const deductions = Math.round((taxDeduction + niEmployee + pensionEmployee + studentLoan + totalMonthlySacrifice) * 100) / 100;
         const netPay = Math.round((gross - deductions) * 100) / 100;
         const employerCosts = Math.round((niEmployer + pensionEmployer) * 100) / 100;
 
@@ -625,7 +656,7 @@ export class PayrollService {
             pensionEmployee: pensionEmployee.toFixed(2),
             pensionEmployer: pensionEmployer.toFixed(2),
             studentLoan: studentLoan.toFixed(2),
-            otherDeductions: "0.00",
+            otherDeductions: totalMonthlySacrifice.toFixed(2),
             totalDeductions: deductions.toFixed(2),
             netPay: netPay.toFixed(2),
             taxCode,
@@ -1827,5 +1858,160 @@ export class PayrollService {
         hasMore: result.hasMore,
       },
     };
+  }
+
+  // ===========================================================================
+  // Holiday Pay 52-Week Reference Period (TODO-113)
+  // ===========================================================================
+
+  /**
+   * Calculate the holiday pay daily rate for an employee using the UK
+   * 52-week reference period (Employment Rights Act 1996).
+   *
+   * Steps:
+   * 1. Determine the look-back window (up to 104 weeks from today)
+   * 2. Fetch weekly earnings from payroll runs + bonus payments
+   * 3. Map DB rows to WeeklyEarnings format for the shared calculator
+   * 4. Run the 52-week reference period calculation
+   * 5. Persist an audit record of the calculation
+   * 6. Return the full breakdown
+   */
+  async getHolidayPayRate(
+    context: TenantContext,
+    employeeId: string
+  ): Promise<ServiceResult<HolidayPayRateResponse>> {
+    try {
+      // 1. Determine the look-back window
+      const today = new Date();
+      const toDate = today.toISOString().slice(0, 10);
+
+      const lookbackStart = new Date(today);
+      lookbackStart.setDate(lookbackStart.getDate() - MAX_LOOKBACK_WEEKS * 7);
+      const fromDate = lookbackStart.toISOString().slice(0, 10);
+
+      // 2. Fetch weekly earnings data from the repository
+      const weeklyRows = await this.repository.getWeeklyEarningsForHolidayPay(
+        context,
+        employeeId,
+        fromDate,
+        toDate
+      );
+
+      // 3. Get working days per week from the employee's contract
+      const workingDaysPerWeek = await this.repository.getWorkingDaysPerWeek(
+        context,
+        employeeId
+      );
+
+      // 4. Map DB rows to the shared WeeklyEarnings format
+      const earnings: WeeklyEarnings[] = weeklyRows.map((row) => ({
+        weekStart: row.weekStart instanceof Date
+          ? row.weekStart.toISOString().slice(0, 10)
+          : String(row.weekStart),
+        weekEnd: row.weekEnd instanceof Date
+          ? row.weekEnd.toISOString().slice(0, 10)
+          : String(row.weekEnd),
+        basicPay: parseFloat(String(row.basicPay)) || 0,
+        overtimePay: parseFloat(String(row.overtimePay)) || 0,
+        commission: parseFloat(String(row.commission)) || 0,
+        regularBonus: parseFloat(String(row.regularBonus)) || 0,
+      }));
+
+      // 5. Run the shared 52-week reference period calculation
+      const calcResult = calculateHolidayDayRate(earnings, workingDaysPerWeek);
+
+      // 6. Persist an audit record within a transaction + domain event
+      await this.db.withTransaction(context, async (tx) => {
+        await this.repository.saveHolidayPayCalculation(
+          context,
+          {
+            employeeId,
+            averageWeeklyPay: calcResult.averageWeeklyPay.toFixed(2),
+            averageDailyRate: calcResult.averageDailyRate.toFixed(2),
+            qualifyingWeeks: calcResult.qualifyingWeeks,
+            totalWeeksExamined: calcResult.totalWeeksExamined,
+            isIncomplete: calcResult.isIncomplete,
+            workingDaysPerWeek,
+            breakdownBasicPay: calcResult.breakdown.averageBasicPay.toFixed(2),
+            breakdownOvertimePay: calcResult.breakdown.averageOvertimePay.toFixed(2),
+            breakdownCommission: calcResult.breakdown.averageCommission.toFixed(2),
+            breakdownRegularBonus: calcResult.breakdown.averageRegularBonus.toFixed(2),
+            referenceStart: calcResult.referenceStart,
+            referenceEnd: calcResult.referenceEnd,
+          },
+          tx
+        );
+
+        await this.emitEvent(
+          tx,
+          context,
+          "employee",
+          employeeId,
+          "payroll.holiday_pay.calculated",
+          {
+            employeeId,
+            averageWeeklyPay: calcResult.averageWeeklyPay,
+            averageDailyRate: calcResult.averageDailyRate,
+            qualifyingWeeks: calcResult.qualifyingWeeks,
+            isIncomplete: calcResult.isIncomplete,
+          }
+        );
+      });
+
+      // 7. Build the weekly data array for the response
+      const weeklyData = earnings
+        .filter(
+          (w) =>
+            w.basicPay + w.overtimePay + w.commission + w.regularBonus > 0
+        )
+        .slice(0, calcResult.qualifyingWeeks)
+        .map((w) => ({
+          week_start: w.weekStart,
+          week_end: w.weekEnd,
+          basic_pay: w.basicPay.toFixed(2),
+          overtime_pay: w.overtimePay.toFixed(2),
+          commission: w.commission.toFixed(2),
+          regular_bonus: w.regularBonus.toFixed(2),
+          total: (
+            w.basicPay +
+            w.overtimePay +
+            w.commission +
+            w.regularBonus
+          ).toFixed(2),
+        }));
+
+      return {
+        success: true,
+        data: {
+          employee_id: employeeId,
+          average_weekly_pay: calcResult.averageWeeklyPay.toFixed(2),
+          average_daily_rate: calcResult.averageDailyRate.toFixed(2),
+          qualifying_weeks: calcResult.qualifyingWeeks,
+          total_weeks_examined: calcResult.totalWeeksExamined,
+          is_incomplete: calcResult.isIncomplete,
+          working_days_per_week: workingDaysPerWeek,
+          breakdown: {
+            average_basic_pay: calcResult.breakdown.averageBasicPay.toFixed(2),
+            average_overtime_pay: calcResult.breakdown.averageOvertimePay.toFixed(2),
+            average_commission: calcResult.breakdown.averageCommission.toFixed(2),
+            average_regular_bonus: calcResult.breakdown.averageRegularBonus.toFixed(2),
+          },
+          weekly_data: weeklyData,
+          reference_start: calcResult.referenceStart,
+          reference_end: calcResult.referenceEnd,
+          calculated_at: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: `Failed to calculate holiday pay rate: ${message}`,
+        },
+      };
+    }
   }
 }

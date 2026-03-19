@@ -1,1 +1,1 @@
-export { reportsRoutes } from "./routes";
+export { reportsRoutes, reportScheduleRoutes } from "./routes";

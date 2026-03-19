@@ -19,6 +19,8 @@ import type {
   BulkUpdateEmployeeItem,
   BulkLeaveRequestActionItem,
   BulkItemResult,
+  GenericBulkOperationItem,
+  GenericBulkOperationResult,
 } from "./schemas";
 
 export type { TenantContext } from "../../types/service-result";
@@ -705,6 +707,64 @@ export class BulkOperationsRepository {
         },
       };
     }
+  }
+
+  // ===========================================================================
+  // Generic Bulk Operations
+  // ===========================================================================
+
+  async executeGenericOperations(
+    ctx: TenantContext,
+    operations: GenericBulkOperationItem[],
+    appFetch: (request: Request) => Promise<Response>,
+    authHeaders: Record<string, string>
+  ): Promise<GenericBulkOperationResult[]> {
+    const results: GenericBulkOperationResult[] = [];
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i]!;
+      try {
+        const result = await this.executeSingleOperation(op, i, appFetch, authHeaders);
+        results.push(result);
+      } catch (error: unknown) {
+        results.push({
+          index: i, method: op.method, path: op.path, ref: op.ref, status: 500, success: false,
+          error: { code: "INTERNAL_ERROR", message: error instanceof Error ? error.message : "Unknown error executing operation" },
+        });
+      }
+    }
+    return results;
+  }
+
+  private async executeSingleOperation(
+    op: GenericBulkOperationItem,
+    index: number,
+    appFetch: (request: Request) => Promise<Response>,
+    authHeaders: Record<string, string>
+  ): Promise<GenericBulkOperationResult> {
+    const url = `http://localhost${op.path}`;
+    const headers: Record<string, string> = { ...authHeaders };
+    let requestBody: string | undefined;
+    if (op.body && (op.method === "POST" || op.method === "PUT" || op.method === "PATCH")) {
+      headers["content-type"] = "application/json";
+      requestBody = JSON.stringify(op.body);
+    }
+    const request = new Request(url, { method: op.method, headers, body: requestBody });
+    const response = await appFetch(request);
+    const status = response.status;
+    let responseData: unknown;
+    try {
+      const text = await response.text();
+      if (text) { responseData = JSON.parse(text); }
+    } catch { /* non-JSON response */ }
+    const success = status >= 200 && status < 300;
+    if (success) {
+      return { index, method: op.method, path: op.path, ref: op.ref, status, success: true, data: responseData };
+    }
+    const errorObj = responseData as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | undefined;
+    return {
+      index, method: op.method, path: op.path, ref: op.ref, status, success: false,
+      error: { code: errorObj?.error?.code || "OPERATION_FAILED", message: errorObj?.error?.message || `Operation returned status ${status}`, details: errorObj?.error?.details },
+    };
   }
 
   // ===========================================================================

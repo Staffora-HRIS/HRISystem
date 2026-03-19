@@ -70,7 +70,7 @@ function OrgTreeNode({
   return (
     <div role="treeitem" aria-expanded={hasChildren ? expanded : undefined}>
       <div
-        className="flex items-center gap-3 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+        className="flex items-center gap-3 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
         style={{ paddingLeft: `${level * 24 + 12}px` }}
       >
         {/* Expand/collapse button */}
@@ -78,13 +78,13 @@ function OrgTreeNode({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 flex-shrink-0"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex-shrink-0"
             aria-label={expanded ? "Collapse" : "Expand"}
           >
             {expanded ? (
-              <ChevronDown className="h-4 w-4 text-gray-500" />
+              <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-gray-500" />
+              <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
             )}
           </button>
         ) : (
@@ -100,14 +100,14 @@ function OrgTreeNode({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h4 className="font-medium text-gray-900 truncate">
+            <h4 className="font-medium text-gray-900 dark:text-white truncate">
               {node.displayName || `${node.firstName} ${node.lastName}`}
             </h4>
             <Badge variant={STATUS_COLORS[node.status] ?? "secondary"} size="sm">
               {STATUS_LABELS[node.status] ?? node.status}
             </Badge>
           </div>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
+          <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
             {node.jobTitle && (
               <span className="flex items-center gap-1 truncate">
                 <Briefcase className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
@@ -124,7 +124,7 @@ function OrgTreeNode({
         {node.email && (
           <a
             href={`mailto:${node.email}`}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex-shrink-0"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 flex-shrink-0"
             aria-label={`Send email to ${node.firstName} ${node.lastName}`}
           >
             <Mail className="h-4 w-4" />
@@ -133,7 +133,7 @@ function OrgTreeNode({
 
         {/* Children count indicator */}
         {hasChildren && (
-          <span className="text-xs text-gray-400 flex-shrink-0">
+          <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
             {node.children.length} direct {node.children.length === 1 ? "report" : "reports"}
           </span>
         )}
@@ -169,9 +169,9 @@ function OrgCardView({ nodes }: { nodes: OrgChartNode[] }) {
   if (flatNodes.length === 0) {
     return (
       <div className="text-center py-12">
-        <Users className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">No team hierarchy data</h3>
-        <p className="text-gray-500 mt-1">
+        <Users className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white">No team hierarchy data</h3>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">
           Your team hierarchy could not be loaded.
         </p>
       </div>
@@ -191,7 +191,7 @@ function OrgCardView({ nodes }: { nodes: OrgChartNode[] }) {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-medium text-gray-900 truncate">
+                  <h4 className="font-medium text-gray-900 dark:text-white truncate">
                     {node.displayName || `${node.firstName} ${node.lastName}`}
                   </h4>
                   <Badge variant={STATUS_COLORS[node.status] ?? "secondary"} size="sm">
@@ -199,20 +199,20 @@ function OrgCardView({ nodes }: { nodes: OrgChartNode[] }) {
                   </Badge>
                 </div>
                 {node.jobTitle && (
-                  <p className="text-sm text-gray-600 truncate">{node.jobTitle}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{node.jobTitle}</p>
                 )}
                 {node.department && (
-                  <p className="text-xs text-gray-400 mt-1">{node.department}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{node.department}</p>
                 )}
                 {depth > 0 && (
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                     Level {depth} report
                   </p>
                 )}
               </div>
             </div>
             {node.children && node.children.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-1 text-xs text-gray-500">
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <Users className="h-3 w-3" aria-hidden="true" />
                 <span>
                   {node.children.length} direct {node.children.length === 1 ? "report" : "reports"}
@@ -259,8 +259,8 @@ export default function ManagerOrgChartPage() {
 
     return (
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Organisation Chart</h1>
-        <p className="text-gray-500">{message}</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organisation Chart</h1>
+        <p className="text-gray-500 dark:text-gray-400">{message}</p>
       </div>
     );
   }
@@ -270,11 +270,11 @@ export default function ManagerOrgChartPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Organisation Chart</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organisation Chart</h1>
+          <p className="text-gray-600 dark:text-gray-400">
             View your team hierarchy
             {totalCount > 0 && (
-              <span className="ml-1 text-gray-500">
+              <span className="ml-1 text-gray-500 dark:text-gray-400">
                 -- {totalCount} {totalCount === 1 ? "member" : "members"}
               </span>
             )}
@@ -286,8 +286,8 @@ export default function ManagerOrgChartPage() {
             onClick={() => setViewMode("tree")}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               viewMode === "tree"
-                ? "bg-blue-100 text-blue-700"
-                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             }`}
             aria-pressed={viewMode === "tree"}
           >
@@ -301,8 +301,8 @@ export default function ManagerOrgChartPage() {
             onClick={() => setViewMode("cards")}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               viewMode === "cards"
-                ? "bg-blue-100 text-blue-700"
-                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             }`}
             aria-pressed={viewMode === "cards"}
           >
@@ -318,14 +318,14 @@ export default function ManagerOrgChartPage() {
       {viewMode === "tree" && (
         <Card>
           <CardHeader>
-            <h3 className="font-semibold">Team Hierarchy</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">Team Hierarchy</h3>
           </CardHeader>
           <CardBody className="p-0">
             {tree.length === 0 ? (
               <div className="text-center py-12">
-                <Users className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900">No hierarchy data</h3>
-                <p className="text-gray-500 mt-1">
+                <Users className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">No hierarchy data</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
                   Your team hierarchy has not been set up yet.
                 </p>
               </div>

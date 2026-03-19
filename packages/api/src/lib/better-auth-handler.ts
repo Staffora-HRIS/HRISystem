@@ -9,7 +9,7 @@
  */
 
 import { Elysia } from "elysia";
-import { getBetterAuth, getPgPool } from "./better-auth";
+import { getBetterAuth, getPgPool, closePgPool, getPgPoolStats } from "./better-auth";
 
 let lastDbReachabilityCheckAt = 0;
 let lastDbReachable: boolean | null = null;
@@ -401,6 +401,11 @@ export function betterAuthPlugin() {
         console.error("Better Auth handler error:", error instanceof Error ? error.message : "Unknown error");
         return buildAuthErrorResponse(error);
       }
+    })
+
+    // Graceful shutdown: close the Better Auth pg Pool
+    .onStop(async () => {
+      await closePgPool();
     });
 }
 

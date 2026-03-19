@@ -30,6 +30,11 @@ export * from "./crypto";
 export * from "./bradford-factor";
 
 // =============================================================================
+// Holiday Pay 52-Week Reference Period (UK Employment Rights Act 1996)
+// =============================================================================
+export * from "./holiday-pay";
+
+// =============================================================================
 // Statutory Notice Period (UK Employment Rights Act 1996)
 // =============================================================================
 export * from "./statutory-notice";

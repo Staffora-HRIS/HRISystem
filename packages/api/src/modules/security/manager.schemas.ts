@@ -82,3 +82,87 @@ export const ApprovalActionSchema = t.Object({
   comment: t.Optional(t.String()),
 });
 export type ApprovalAction = Static<typeof ApprovalActionSchema>;
+
+
+// =============================================================================
+// Team Training Schemas (TODO-207)
+// =============================================================================
+
+/**
+ * Query params for GET /manager/team-training
+ */
+export const TeamTrainingQuerySchema = t.Object({
+  filter: t.Optional(
+    t.Union([
+      t.Literal("all"),
+      t.Literal("overdue"),
+      t.Literal("in_progress"),
+    ])
+  ),
+});
+export type TeamTrainingQuery = Static<typeof TeamTrainingQuerySchema>;
+
+/**
+ * Enrollment item within a team member's training record
+ */
+export const TeamTrainingEnrollmentSchema = t.Object({
+  enrollmentId: t.String({ format: "uuid" }),
+  courseId: t.String({ format: "uuid" }),
+  courseTitle: t.String(),
+  status: t.String(),
+  dueDate: t.Union([t.String(), t.Null()]),
+  progress: t.Number(),
+  isOverdue: t.Boolean(),
+  isMandatory: t.Boolean(),
+});
+export type TeamTrainingEnrollment = Static<typeof TeamTrainingEnrollmentSchema>;
+
+/**
+ * Per-employee training summary within the team overview
+ */
+export const TeamTrainingMemberSchema = t.Object({
+  employeeId: t.String({ format: "uuid" }),
+  employeeName: t.String(),
+  employeeNumber: t.String(),
+  photoUrl: t.Union([t.String(), t.Null()]),
+  completedCourses: t.Number(),
+  inProgressCourses: t.Number(),
+  overdueMandatoryTraining: t.Number(),
+  totalHours: t.Number(),
+  completionRate: t.Number(),
+});
+export type TeamTrainingMember = Static<typeof TeamTrainingMemberSchema>;
+
+/**
+ * Response for GET /manager/team-training
+ */
+export const TeamTrainingOverviewResponseSchema = t.Object({
+  members: t.Array(TeamTrainingMemberSchema),
+  summary: t.Object({
+    totalMembers: t.Number(),
+    totalCompleted: t.Number(),
+    totalInProgress: t.Number(),
+    totalOverdue: t.Number(),
+    teamCompletionRate: t.Number(),
+    totalTrainingHours: t.Number(),
+  }),
+});
+export type TeamTrainingOverviewResponse = Static<typeof TeamTrainingOverviewResponseSchema>;
+
+/**
+ * Response for GET /manager/team-training/:employeeId
+ */
+export const TeamTrainingDetailResponseSchema = t.Object({
+  employeeId: t.String({ format: "uuid" }),
+  employeeName: t.String(),
+  employeeNumber: t.String(),
+  photoUrl: t.Union([t.String(), t.Null()]),
+  completedCourses: t.Number(),
+  inProgressCourses: t.Number(),
+  notStartedCourses: t.Number(),
+  overdueMandatoryTraining: t.Number(),
+  totalHours: t.Number(),
+  completionRate: t.Number(),
+  enrollments: t.Array(TeamTrainingEnrollmentSchema),
+});
+export type TeamTrainingDetailResponse = Static<typeof TeamTrainingDetailResponseSchema>;

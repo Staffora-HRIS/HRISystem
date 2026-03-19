@@ -1,0 +1,194 @@
+# =============================================================================
+# Staffora Platform -- Promtail Configuration
+# =============================================================================
+# Promtail is Loki's log collection agent. It discovers Docker container logs
+# via the Docker socket, enriches them with container labels, and ships them
+# to Loki for indexing and querying.
+#
+# Key features:
+#   - Automatic Docker container discovery via /var/run/docker.sock
+#   - Container name, image, and compose service labels extracted
+#   - Multiline log joining (stack traces)
+#   - JSON log parsing for structured fields (level, msg, requestId)
+#   - Pino numeric level translation (30 -> info, 50 -> error, etc.)
+#   - Pipeline stages for label extraction and filtering
+#
+# Mounted into the Promtail container at /etc/promtail/config.yml by
+# docker-compose.yml (monitoring profile).
+# =============================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+# ---------------------------------------------------------------------------
+# Position tracking -- remembers where Promtail left off per log file
+# ---------------------------------------------------------------------------
+positions:
+  filename: /tmp/positions.yaml
+
+# ---------------------------------------------------------------------------
+# Loki push target
+# ---------------------------------------------------------------------------
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    tenant_id: staffora
+    batchwait: 1s
+    batchsize: 1048576  # 1 MB
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+# ---------------------------------------------------------------------------
+# Scrape configs -- discover and tail Docker container logs
+# ---------------------------------------------------------------------------
+scrape_configs:
+  # -------------------------------------------------------------------------
+  # Docker container log discovery
+  # -------------------------------------------------------------------------
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          # Only collect logs from staffora containers
+          - name: label
+            values: ["com.docker.compose.project=docker"]
+
+    relabel_configs:
+      # Use container name as the primary label
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+
+      # Extract compose service name
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+
+      # Extract compose project
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: "project"
+
+      # Extract container image
+      - source_labels: ["__meta_docker_container_image"]
+        target_label: "image"
+
+      # Drop Promtail's own logs to avoid feedback loops
+      - source_labels: ["__meta_docker_container_name"]
+        regex: ".*promtail.*"
+        action: drop
+
+    pipeline_stages:
+      # ------------------------------------------------------------------
+      # Stage 1: Parse Docker JSON log format
+      # Docker json-file driver wraps each line in {"log":"...","stream":"...","time":"..."}
+      # ------------------------------------------------------------------
+      - docker: {}
+
+      # ------------------------------------------------------------------
+      # Stage 2: Try to parse the log line as JSON (structured logs from API/worker)
+      # This extracts level, msg, requestId, tenantId, userId, etc.
+      # Pino outputs numeric levels (10=trace, 20=debug, 30=info, 40=warn,
+      # 50=error, 60=fatal) in production JSON mode.
+      # ------------------------------------------------------------------
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            timestamp: timestamp
+            request_id: requestId
+            tenant_id: tenantId
+            user_id: userId
+            method: method
+            path: path
+            status: status
+            duration: duration
+            error: error
+
+      # ------------------------------------------------------------------
+      # Stage 3: Translate Pino numeric levels to human-readable strings.
+      # Pino outputs level as an integer in production JSON mode:
+      #   10=trace, 20=debug, 30=info, 40=warn, 50=error, 60=fatal
+      # These replacements normalise numeric levels to strings before
+      # the label stage, so Grafana queries work with level="info" etc.
+      # ------------------------------------------------------------------
+      - replace:
+          expression: "^10$"
+          source: "level"
+          replace: "trace"
+      - replace:
+          expression: "^20$"
+          source: "level"
+          replace: "debug"
+      - replace:
+          expression: "^30$"
+          source: "level"
+          replace: "info"
+      - replace:
+          expression: "^40$"
+          source: "level"
+          replace: "warn"
+      - replace:
+          expression: "^50$"
+          source: "level"
+          replace: "error"
+      - replace:
+          expression: "^60$"
+          source: "level"
+          replace: "fatal"
+
+      # ------------------------------------------------------------------
+      # Stage 4: Normalise string-format level values (from pino-pretty
+      # in development or other non-Pino services)
+      # ------------------------------------------------------------------
+      - replace:
+          expression: "^(DEBUG|debug)$"
+          source: "level"
+          replace: "debug"
+      - replace:
+          expression: "^(INFO|info)$"
+          source: "level"
+          replace: "info"
+      - replace:
+          expression: "^(WARN|warn|WARNING|warning)$"
+          source: "level"
+          replace: "warn"
+      - replace:
+          expression: "^(ERROR|error|ERR|err)$"
+          source: "level"
+          replace: "error"
+      - replace:
+          expression: "^(FATAL|fatal)$"
+          source: "level"
+          replace: "fatal"
+
+      # ------------------------------------------------------------------
+      # Stage 5: Set extracted level as a label (for filtering in Grafana)
+      # Falls back to "unknown" if not a structured JSON log
+      # ------------------------------------------------------------------
+      - labels:
+          level:
+
+      # ------------------------------------------------------------------
+      # Stage 6: Add static labels
+      # ------------------------------------------------------------------
+      - static_labels:
+          cluster: staffora
+          environment: development
+
+      # ------------------------------------------------------------------
+      # Stage 7: Timestamp extraction from structured JSON logs
+      # The docker: {} stage already handles the Docker json-file timestamp.
+      # This stage extracts the application-level timestamp if present in
+      # the structured JSON log body (e.g., {"timestamp":"2026-03-17T..."}).
+      # If no application timestamp is found, the Docker timestamp is used.
+      # ------------------------------------------------------------------
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - "2006-01-02T15:04:05Z07:00"
+            - "2006-01-02T15:04:05.999999999Z07:00"
+          action_on_failure: fudge

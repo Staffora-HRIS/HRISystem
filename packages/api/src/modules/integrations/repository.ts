@@ -64,7 +64,7 @@ export class IntegrationsRepository {
     filters: IntegrationFilters,
     pagination: PaginationQuery
   ): Promise<PaginatedResult<IntegrationRow>> {
-    const limit = pagination.limit || 50;
+    const limit = Math.min(Math.max(pagination.limit ? Number(pagination.limit) : 50, 1), 100);
     const fetchLimit = limit + 1;
 
     return this.db.withTransaction(ctx, async (tx) => {

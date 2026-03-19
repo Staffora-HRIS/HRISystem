@@ -204,6 +204,80 @@ export class PortalService {
   }
 
   // ===========================================================================
+  // Org Chart
+  // ===========================================================================
+
+  async getOrgChart(
+    ctx: TenantContext,
+    rootEmployeeId: string | null,
+    depth: number
+  ) {
+    const clampedDepth = Math.min(Math.max(depth, 1), 10);
+    const rows = await this.repository.getOrgChartFlat(ctx, rootEmployeeId, clampedDepth);
+
+    if (rows.length === 0) {
+      return { roots: [], totalEmployees: 0 };
+    }
+
+    const nodeMap = new Map<string, any>();
+    for (const row of rows) {
+      nodeMap.set(row.employeeId, {
+        employee: {
+          id: row.employeeId,
+          name: row.employeeName || "Unknown",
+          jobTitle: row.positionTitle || null,
+          department: row.orgUnitName || null,
+          photoUrl: row.photoUrl || null,
+        },
+        directReportsCount: Number(row.directReportsCount || 0),
+        children: [],
+      });
+    }
+
+    const roots: any[] = [];
+    for (const row of rows) {
+      const node = nodeMap.get(row.employeeId);
+      if (row.managerId && nodeMap.has(row.managerId)) {
+        nodeMap.get(row.managerId).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    return { roots, totalEmployees: rows.length };
+  }
+
+  async getTeam(ctx: TenantContext, employeeId: string) {
+    const [manager, directReports] = await Promise.all([
+      this.repository.getOrgChartEmployee(ctx, employeeId),
+      this.repository.getDirectReportsForEmployee(ctx, employeeId),
+    ]);
+
+    if (!manager) {
+      return null;
+    }
+
+    return {
+      manager: {
+        id: manager.employeeId,
+        name: manager.employeeName || "Unknown",
+        jobTitle: manager.positionTitle || null,
+        department: manager.orgUnitName || null,
+        photoUrl: manager.photoUrl || null,
+      },
+      directReports: directReports.map((r: any) => ({
+        id: r.employeeId,
+        name: r.employeeName || "Unknown",
+        jobTitle: r.positionTitle || null,
+        department: r.orgUnitName || null,
+        photoUrl: r.photoUrl || null,
+        directReportsCount: Number(r.directReportsCount || 0),
+      })),
+      count: directReports.length,
+    };
+  }
+
+  // ===========================================================================
   // Portal Access & Navigation
   // ===========================================================================
 

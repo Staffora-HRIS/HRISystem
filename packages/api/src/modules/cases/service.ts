@@ -17,18 +17,13 @@ import type {
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
-
-// Valid state transitions for case status
-const VALID_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
-  open: ["in_progress", "pending_info", "escalated", "resolved", "cancelled"],
-  in_progress: ["pending_info", "escalated", "resolved", "cancelled"],
-  pending_info: ["in_progress", "escalated", "resolved", "cancelled"],
-  escalated: ["in_progress", "resolved", "cancelled"],
-  resolved: ["closed", "in_progress", "appealed"], // Can reopen or appeal
-  appealed: ["in_progress", "resolved", "closed"], // Appeal review can reopen, uphold, or close
-  closed: [], // Terminal state
-  cancelled: [], // Terminal state
-};
+import {
+  canTransitionCase,
+  getValidCaseTransitions,
+  CaseStates,
+  isCaseTerminalState,
+  type CaseState,
+} from "@staffora/shared/state-machines";
 
 export class CasesService {
   constructor(
@@ -155,8 +150,8 @@ export class CasesService {
 
     // Validate status transition if status is being changed
     if (data.status && data.status !== existing.status) {
-      const validTransitions = VALID_TRANSITIONS[existing.status as CaseStatus] || [];
-      if (!validTransitions.includes(data.status as CaseStatus)) {
+      if (!canTransitionCase(existing.status as CaseState, data.status as CaseState)) {
+        const validTransitions = getValidCaseTransitions(existing.status as CaseState);
         return {
           success: false,
           error: {
@@ -234,11 +229,11 @@ export class CasesService {
       };
     }
 
-    if (["closed", "cancelled"].includes(existing.status)) {
+    if (isCaseTerminalState(existing.status as CaseState)) {
       return {
         success: false,
         error: {
-          code: "CASE_CLOSED",
+          code: ErrorCodes.CASE_CLOSED,
           message: "Cannot assign a closed or cancelled case",
         },
       };
@@ -318,11 +313,11 @@ export class CasesService {
       };
     }
 
-    if (["closed", "cancelled", "resolved"].includes(existing.status)) {
+    if (!canTransitionCase(existing.status as CaseState, CaseStates.ESCALATED)) {
       return {
         success: false,
         error: {
-          code: "CANNOT_ESCALATE",
+          code: ErrorCodes.STATE_MACHINE_VIOLATION,
           message: `Cannot escalate a ${existing.status} case`,
         },
       };
@@ -399,11 +394,11 @@ export class CasesService {
       };
     }
 
-    if (["closed", "cancelled"].includes(existing.status)) {
+    if (!canTransitionCase(existing.status as CaseState, CaseStates.RESOLVED)) {
       return {
         success: false,
         error: {
-          code: "CANNOT_RESOLVE",
+          code: ErrorCodes.STATE_MACHINE_VIOLATION,
           message: `Cannot resolve a ${existing.status} case`,
         },
       };
@@ -470,11 +465,11 @@ export class CasesService {
       };
     }
 
-    if (existing.status !== "resolved") {
+    if (!canTransitionCase(existing.status as CaseState, CaseStates.CLOSED)) {
       return {
         success: false,
         error: {
-          code: "CANNOT_CLOSE",
+          code: ErrorCodes.STATE_MACHINE_VIOLATION,
           message: "Case must be resolved before closing",
         },
       };
@@ -551,11 +546,11 @@ export class CasesService {
       };
     }
 
-    if (["closed", "cancelled"].includes(hrCase.status)) {
+    if (isCaseTerminalState(hrCase.status as CaseState)) {
       return {
         success: false,
         error: {
-          code: "CASE_CLOSED",
+          code: ErrorCodes.CASE_CLOSED,
           message: "Cannot add comments to a closed or cancelled case",
         },
       };
@@ -622,10 +617,10 @@ export class CasesService {
       return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "Case not found" } };
     }
 
-    if (hrCase.status !== "resolved") {
+    if (hrCase.status !== CaseStates.RESOLVED) {
       return {
         success: false,
-        error: { code: "INVALID_STATUS", message: "Only resolved cases can be appealed" },
+        error: { code: ErrorCodes.STATE_MACHINE_VIOLATION, message: "Only resolved cases can be appealed" },
       };
     }
 

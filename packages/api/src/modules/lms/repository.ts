@@ -720,6 +720,101 @@ export class LMSRepository {
   }
 
   // ===========================================================================
+  // Course Prerequisite Operations (TODO-245)
+  // ===========================================================================
+
+  async listCoursePrerequisites(ctx: TenantContext, courseId: string): Promise<any[]> {
+    return this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT cp.id, cp.tenant_id, cp.course_id, cp.prerequisite_course_id,
+            c.title AS prerequisite_course_title, cp.is_mandatory, cp.created_at
+          FROM app.course_prerequisites cp
+          JOIN app.courses c ON c.id = cp.prerequisite_course_id AND c.tenant_id = cp.tenant_id
+          WHERE cp.course_id = ${courseId}::uuid AND cp.tenant_id = ${ctx.tenantId}::uuid
+          ORDER BY cp.created_at ASC
+        `;
+      }
+    );
+  }
+
+  async addCoursePrerequisite(ctx: TenantContext, courseId: string, prerequisiteCourseId: string, isMandatory: boolean, txOverride?: any): Promise<any> {
+    const exec = async (tx: any) => {
+      return tx`
+        INSERT INTO app.course_prerequisites (id, tenant_id, course_id, prerequisite_course_id, is_mandatory)
+        VALUES (gen_random_uuid(), ${ctx.tenantId}::uuid, ${courseId}::uuid, ${prerequisiteCourseId}::uuid, ${isMandatory})
+        RETURNING *
+      `;
+    };
+    const [row] = txOverride ? await exec(txOverride) : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return row;
+  }
+
+  async removeCoursePrerequisite(ctx: TenantContext, prereqId: string, txOverride?: any): Promise<boolean> {
+    const exec = async (tx: any) => {
+      return tx`DELETE FROM app.course_prerequisites WHERE id = ${prereqId}::uuid AND tenant_id = ${ctx.tenantId}::uuid RETURNING id`;
+    };
+    const result = txOverride ? await exec(txOverride) : await this.db.withTransaction({ tenantId: ctx.tenantId, userId: ctx.userId }, exec);
+    return result.length > 0;
+  }
+
+  async getCoursePrerequisiteById(ctx: TenantContext, prereqId: string): Promise<any | null> {
+    const [row] = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT cp.*, c.title AS prerequisite_course_title
+          FROM app.course_prerequisites cp
+          JOIN app.courses c ON c.id = cp.prerequisite_course_id AND c.tenant_id = cp.tenant_id
+          WHERE cp.id = ${prereqId}::uuid AND cp.tenant_id = ${ctx.tenantId}::uuid
+        `;
+      }
+    );
+    return row || null;
+  }
+
+  async getTransitivePrerequisites(ctx: TenantContext, startCourseId: string): Promise<string[]> {
+    const rows = await this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          WITH RECURSIVE prereq_chain AS (
+            SELECT prerequisite_course_id AS course_id, 1 AS depth
+            FROM app.course_prerequisites
+            WHERE course_id = ${startCourseId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+            UNION
+            SELECT cp.prerequisite_course_id AS course_id, pc.depth + 1
+            FROM app.course_prerequisites cp
+            JOIN prereq_chain pc ON pc.course_id = cp.course_id
+            WHERE cp.tenant_id = ${ctx.tenantId}::uuid AND pc.depth < 50
+          )
+          SELECT DISTINCT course_id FROM prereq_chain
+        `;
+      }
+    );
+    return rows.map((r: any) => r.courseId);
+  }
+
+  async getMandatoryPrerequisitesWithStatus(ctx: TenantContext, courseId: string, employeeId: string): Promise<any[]> {
+    return this.db.withTransaction(
+      { tenantId: ctx.tenantId, userId: ctx.userId },
+      async (tx: any) => {
+        return tx`
+          SELECT cp.prerequisite_course_id AS course_id, c.title AS course_title, cp.is_mandatory,
+            COALESCE(a.status, 'not_enrolled') AS enrollment_status
+          FROM app.course_prerequisites cp
+          JOIN app.courses c ON c.id = cp.prerequisite_course_id AND c.tenant_id = cp.tenant_id
+          LEFT JOIN app.assignments a ON a.course_id = cp.prerequisite_course_id
+            AND a.employee_id = ${employeeId}::uuid AND a.tenant_id = cp.tenant_id
+          WHERE cp.course_id = ${courseId}::uuid AND cp.tenant_id = ${ctx.tenantId}::uuid AND cp.is_mandatory = true
+          ORDER BY cp.created_at ASC
+        `;
+      }
+    );
+  }
+
+  // ===========================================================================
   // Helper Methods
   // ===========================================================================
 

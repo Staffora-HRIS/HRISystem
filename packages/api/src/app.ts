@@ -51,7 +51,7 @@ import { systemRoutes } from "./modules/system";
 import { benefitsRoutes } from "./modules/benefits";
 import { documentsRoutes } from "./modules/documents";
 import { successionRoutes } from "./modules/succession";
-import { analyticsRoutes } from "./modules/analytics";
+import { analyticsRoutes, recruitmentAnalyticsRoutes } from "./modules/analytics";
 import { competenciesRoutes } from "./modules/competencies";
 import { recruitmentRoutes } from "./modules/recruitment";
 import { jobBoardRoutes } from "./modules/job-boards";
@@ -97,7 +97,8 @@ import { letterTemplateRoutes } from "./modules/letter-templates";
 import { nmwRoutes } from "./modules/nmw";
 import { notificationsRoutes } from "./modules/notifications";
 import { parentalLeaveRoutes } from "./modules/parental-leave";
-import { payrollRoutes } from "./modules/payroll";
+import { payrollRoutes, p45P60AdminRoutes, p45P60PortalRoutes } from "./modules/payroll";
+import { periodLockRoutes } from "./modules/payroll/period-lock.routes";
 import { payrollConfigRoutes } from "./modules/payroll-config";
 import { payslipRoutes } from "./modules/payslips";
 import { pensionRoutes } from "./modules/pension";
@@ -105,7 +106,8 @@ import { privacyNoticeRoutes } from "./modules/privacy-notices";
 import { probationRoutes } from "./modules/probation";
 import { reasonableAdjustmentsRoutes } from "./modules/reasonable-adjustments";
 import { referenceCheckRoutes } from "./modules/reference-checks";
-import { reportsRoutes } from "./modules/reports";
+import { reportsRoutes, reportScheduleRoutes } from "./modules/reports";
+import { contractEndDateRoutes } from "./modules/reports/contract-end-dates.routes";
 import { returnToWorkRoutes } from "./modules/return-to-work";
 import { rightToWorkRoutes } from "./modules/right-to-work";
 import { secondmentRoutes } from "./modules/secondments";
@@ -133,6 +135,12 @@ import { calendarSyncRoutes } from "./modules/calendar-sync";
 import { dataArchivalRoutes } from "./modules/data-archival";
 import { eSignaturesRoutes } from "./modules/e-signatures";
 import { ssoAdminRoutes, ssoPublicRoutes } from "./modules/sso";
+import { webhookRoutes } from "./modules/webhooks";
+import { dpiaRoutes } from "./modules/dpia";
+import { shiftSwapRoutes } from "./modules/shift-swaps";
+import { overtimeRulesRoutes } from "./modules/overtime-rules";
+import { offerLetterRoutes } from "./modules/offer-letters";
+import { personalDetailChangePortalRoutes, personalDetailChangeAdminRoutes } from "./modules/personal-detail-changes";
 /**
  * Environment configuration with validation
  */
@@ -529,6 +537,8 @@ export const app = new Elysia()
       .use(hrRoutes)
       .use(costCentreAssignmentRoutes)
       .use(timeRoutes)
+      // Shift Swap (two-phase approval: target accepts -> manager approves)
+      .use(shiftSwapRoutes)
       .use(absenceRoutes)
       // Talent & Learning
       .use(talentRoutes)
@@ -557,23 +567,32 @@ export const app = new Elysia()
       .use(successionRoutes)
       // Analytics
       .use(analyticsRoutes)
+      // Recruitment Analytics (time-to-fill, cost-per-hire, source effectiveness, pipeline)
+      .use(recruitmentAnalyticsRoutes)
       // Competencies
       .use(competenciesRoutes)
       // Recruitment
       .use(recruitmentRoutes)
       // Job Board Integration (recruitment)
       .use(jobBoardRoutes)
+      // Offer Letters (recruitment - template-based offer generation & candidate response tracking)
+      .use(offerLetterRoutes)
       // Portal aggregations
       .use(portalRoutes)
       // Client Portal (customer-facing portal on staffora.co.uk)
       .use(clientPortalRoutes)
       // Bulk Operations (cross-module batch endpoints)
       .use(bulkOperationsRoutes)
+      // API Key Management
+      .use(apiKeyRoutes)
       // Data Import (CSV bulk data loading)
       .use(dataImportRoutes)
       // Employee Change Requests (self-service + HR review)
       .use(changeRequestPortalRoutes)
       .use(changeRequestAdminRoutes)
+      // Personal Detail Changes (portal self-service + HR approval, TODO-150)
+      .use(personalDetailChangePortalRoutes)
+      .use(personalDetailChangeAdminRoutes)
 
       // UK Compliance modules (Employment Rights Act, GDPR, etc.)
       .use(rightToWorkRoutes)
@@ -604,6 +623,7 @@ export const app = new Elysia()
       .use(consentRoutes)
       .use(privacyNoticeRoutes)
       .use(dataArchivalRoutes)
+      .use(dpiaRoutes)
 
       // Employee data modules
       .use(bankDetailRoutes)
@@ -617,6 +637,10 @@ export const app = new Elysia()
 
       // Payroll & Compensation modules
       .use(payrollRoutes)
+      .use(periodLockRoutes) // Period locking (TODO-234)
+      // P45/P60 statutory document generation (TODO-129, TODO-130)
+      .use(p45P60AdminRoutes)
+      .use(p45P60PortalRoutes)
       .use(payrollConfigRoutes)
       .use(payslipRoutes)
       .use(taxCodeRoutes)
@@ -642,6 +666,8 @@ export const app = new Elysia()
       .use(notificationsRoutes)
       .use(delegationRoutes)
       .use(reportsRoutes)
+      .use(reportScheduleRoutes)
+      .use(contractEndDateRoutes)
       // Integrations
       .use(integrationsRoutes)
       // SSO Admin (SAML/OIDC configuration management)
@@ -654,10 +680,14 @@ export const app = new Elysia()
       .use(emailTrackingRoutes)
       // Overtime Requests (authorisation workflow)
       .use(overtimeRequestRoutes)
+      // Overtime Rules (rate configuration, effective dating, overtime calculations)
+      .use(overtimeRulesRoutes)
       // Employment Tribunal Preparation
       .use(tribunalRoutes)
       // Calendar Sync (iCal feed generation)
       .use(calendarSyncRoutes)
+      // Outbound Webhooks (configurable webhook subscriptions & deliveries)
+      .use(webhookRoutes)
   )
 
   // 404 handler (must be last)

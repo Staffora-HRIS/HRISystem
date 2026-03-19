@@ -5,12 +5,13 @@
  * All routes require authentication.
  *
  * Endpoints:
- * - GET    /integrations              - List all integrations for the tenant
- * - GET    /integrations/:id          - Get a single integration
- * - POST   /integrations/connect      - Connect (create/update) an integration
- * - PATCH  /integrations/:id/config   - Update integration configuration
- * - POST   /integrations/:id/disconnect - Disconnect an integration
- * - DELETE /integrations/:id          - Delete an integration
+ * - GET    /integrations                    - List all integrations for the tenant
+ * - GET    /integrations/:id                - Get a single integration
+ * - POST   /integrations/connect            - Connect (create/update) an integration
+ * - PATCH  /integrations/:id/config         - Update integration configuration
+ * - POST   /integrations/:id/disconnect     - Disconnect an integration
+ * - POST   /integrations/:provider/test     - Test an integration connection
+ * - DELETE /integrations/:id                - Delete an integration
  */
 
 import { Elysia, t } from "elysia";
@@ -25,7 +26,9 @@ import {
   ConnectIntegrationSchema,
   UpdateIntegrationConfigSchema,
   IdParamsSchema,
+  ProviderParamsSchema,
   OptionalIdempotencyHeaderSchema,
+  TestConnectionResponseSchema,
 } from "./schemas";
 
 /** Elysia context shape after plugins inject db/tenant/user */
@@ -33,6 +36,7 @@ interface PluginContext {
   db: DatabaseClient;
   tenant: { id: string };
   user: { id: string };
+  requestId: string;
 }
 
 /** Elysia context after derive injects service + tenantContext */
@@ -43,6 +47,7 @@ interface DerivedContext {
   params: Record<string, string>;
   body: unknown;
   set: { status: number };
+  requestId: string;
 }
 
 export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
@@ -70,7 +75,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .get(
     "/",
     async (ctx) => {
-      const { integrationsService, tenantContext, query, set } =
+      const { integrationsService, tenantContext, query, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -80,8 +85,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
           filters as { category?: string; status?: "connected" | "disconnected" | "error"; search?: string },
           {
             cursor: cursor as string | undefined,
-            limit:
-              limit !== undefined && limit !== null ? Number(limit) : undefined,
+            limit: limit as string | undefined,
           }
         );
 
@@ -98,6 +102,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }
@@ -120,7 +125,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .get(
     "/:id",
     async (ctx) => {
-      const { integrationsService, tenantContext, params, set } =
+      const { integrationsService, tenantContext, params, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -131,7 +136,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code);
-          return { error: result.error };
+          return { error: { ...result.error!, requestId } };
         }
 
         return result.data;
@@ -142,17 +147,13 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }
     },
     {
       params: IdParamsSchema,
-      response: {
-        200: IntegrationResponseSchema,
-        404: ErrorResponseSchema,
-        500: ErrorResponseSchema,
-      },
       detail: {
         tags: ["Integrations"],
         summary: "Get a single integration by ID",
@@ -166,7 +167,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .post(
     "/connect",
     async (ctx) => {
-      const { integrationsService, tenantContext, body, set } =
+      const { integrationsService, tenantContext, body, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -184,7 +185,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code);
-          return { error: result.error };
+          return { error: { ...result.error!, requestId } };
         }
 
         set.status = 201;
@@ -196,6 +197,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }
@@ -203,10 +205,6 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
     {
       body: ConnectIntegrationSchema,
       headers: OptionalIdempotencyHeaderSchema,
-      response: {
-        201: IntegrationResponseSchema,
-        500: ErrorResponseSchema,
-      },
       detail: {
         tags: ["Integrations"],
         summary: "Connect (create or update) an integration",
@@ -220,7 +218,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .patch(
     "/:id/config",
     async (ctx) => {
-      const { integrationsService, tenantContext, params, body, set } =
+      const { integrationsService, tenantContext, params, body, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -232,7 +230,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code);
-          return { error: result.error };
+          return { error: { ...result.error!, requestId } };
         }
 
         return result.data;
@@ -243,6 +241,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }
@@ -251,11 +250,6 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
       params: IdParamsSchema,
       body: UpdateIntegrationConfigSchema,
       headers: OptionalIdempotencyHeaderSchema,
-      response: {
-        200: IntegrationResponseSchema,
-        404: ErrorResponseSchema,
-        500: ErrorResponseSchema,
-      },
       detail: {
         tags: ["Integrations"],
         summary: "Update integration configuration",
@@ -269,7 +263,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .post(
     "/:id/disconnect",
     async (ctx) => {
-      const { integrationsService, tenantContext, params, set } =
+      const { integrationsService, tenantContext, params, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -280,7 +274,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code);
-          return { error: result.error };
+          return { error: { ...result.error!, requestId } };
         }
 
         return result.data;
@@ -291,6 +285,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }
@@ -298,14 +293,57 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
     {
       params: IdParamsSchema,
       headers: OptionalIdempotencyHeaderSchema,
+      detail: {
+        tags: ["Integrations"],
+        summary: "Disconnect an integration",
+      },
+    }
+  )
+
+  // =========================================================================
+  // POST /integrations/:provider/test - Test an integration connection
+  // =========================================================================
+  .post(
+    "/:provider/test",
+    async (ctx) => {
+      const { integrationsService, tenantContext, params, set, requestId } =
+        ctx as unknown as DerivedContext;
+
+      try {
+        const result = await integrationsService.testConnection(
+          tenantContext,
+          params.provider
+        );
+
+        if (!result.success) {
+          set.status = mapErrorToStatus(result.error!.code);
+          return { error: { ...result.error!, requestId } };
+        }
+
+        return result.data;
+      } catch (error: unknown) {
+        set.status = 500;
+        return {
+          error: {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : String(error),
+            requestId,
+          },
+        };
+      }
+    },
+    {
+      params: ProviderParamsSchema,
+      headers: OptionalIdempotencyHeaderSchema,
       response: {
-        200: IntegrationResponseSchema,
+        200: TestConnectionResponseSchema,
         404: ErrorResponseSchema,
         500: ErrorResponseSchema,
       },
       detail: {
         tags: ["Integrations"],
-        summary: "Disconnect an integration",
+        summary: "Test an integration connection",
       },
     }
   )
@@ -316,7 +354,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   .delete(
     "/:id",
     async (ctx) => {
-      const { integrationsService, tenantContext, params, set } =
+      const { integrationsService, tenantContext, params, set, requestId } =
         ctx as unknown as DerivedContext;
 
       try {
@@ -327,7 +365,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code);
-          return { error: result.error };
+          return { error: { ...result.error!, requestId } };
         }
 
         return { success: true as const, message: "Integration deleted" };
@@ -338,6 +376,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
             code: "INTERNAL_ERROR",
             message:
               error instanceof Error ? error.message : String(error),
+            requestId,
           },
         };
       }

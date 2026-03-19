@@ -31,22 +31,31 @@ export { BulkOperationsRepository, type TenantContext } from "./repository";
 export {
   // Constants
   MAX_BULK_BATCH_SIZE,
+  ALLOWED_BULK_PATH_PREFIXES,
   // Request schemas
   BulkCreateEmployeesRequestSchema,
   BulkUpdateEmployeesRequestSchema,
   BulkLeaveRequestActionsRequestSchema,
+  GenericBulkRequestSchema,
+  GenericBulkOperationItemSchema,
   BulkCreateEmployeeItemSchema,
   BulkUpdateEmployeeItemSchema,
   BulkLeaveRequestActionItemSchema,
   // Response schemas
   BulkResponseSchema,
   BulkItemResultSchema,
+  GenericBulkResponseSchema,
+  GenericBulkOperationResultSchema,
   // Header schemas
   IdempotencyHeaderSchema,
   // Types
   type BulkCreateEmployeesRequest,
   type BulkUpdateEmployeesRequest,
   type BulkLeaveRequestActionsRequest,
+  type GenericBulkRequest,
+  type GenericBulkOperationItem,
+  type GenericBulkResponse,
+  type GenericBulkOperationResult,
   type BulkCreateEmployeeItem,
   type BulkUpdateEmployeeItem,
   type BulkLeaveRequestActionItem,

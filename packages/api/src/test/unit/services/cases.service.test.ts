@@ -2,641 +2,369 @@
  * Cases Service Unit Tests
  *
  * Tests for HR Case Management business logic including:
- * - State machine transitions (open -> in_progress -> resolved -> closed)
- * - Invalid transition rejection
- * - Case assignment and escalation rules
- * - Comment rules on open/closed cases
- * - Resolution and closing workflows
+ * - State machine transitions (via actual shared state machine)
+ * - Terminal state enforcement
+ * - Transition metadata requirements
+ * - Case lifecycle completeness
  *
- * NOTE: These tests extract and verify the business logic directly
- * rather than importing the service class, to avoid bun 1.3.3
- * segfault on Windows when importing modules with native postgres
- * dependencies.
+ * Refactored to import and test the actual state machine from @staffora/shared
+ * instead of re-implementing transition logic locally.
  */
 
 import { describe, it, expect } from "bun:test";
-
-// =============================================================================
-// Extracted Business Logic (from modules/cases/service.ts)
-// =============================================================================
-
-type CaseStatus = "open" | "in_progress" | "pending_info" | "escalated" | "resolved" | "appealed" | "closed" | "cancelled";
-
-const VALID_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
-  open: ["in_progress", "pending_info", "escalated", "resolved", "cancelled"],
-  in_progress: ["pending_info", "escalated", "resolved", "cancelled"],
-  pending_info: ["in_progress", "escalated", "resolved", "cancelled"],
-  escalated: ["in_progress", "resolved", "cancelled"],
-  resolved: ["closed", "in_progress", "appealed"], // Can reopen or appeal
-  appealed: ["in_progress", "resolved", "closed"], // Appeal review can reopen, uphold, or close
-  closed: [], // Terminal state
-  cancelled: [], // Terminal state
-};
-
-import type { ServiceResult } from "../../../types/service-result";
-
-interface CaseData {
-  id: string;
-  caseNumber?: string;
-  status: CaseStatus;
-  category?: string;
-  priority?: string;
-  subject?: string;
-  description?: string;
-  requesterId?: string;
-  assigneeId?: string | null;
-  resolution?: string;
-  resolvedAt?: Date;
-  closedAt?: Date;
-  escalatedTo?: string;
-}
-
-// Service logic extracted into testable functions
-function validateStatusTransition(
-  currentStatus: CaseStatus,
-  newStatus: CaseStatus
-): ServiceResult<null> {
-  const validTransitions = VALID_TRANSITIONS[currentStatus] || [];
-  if (!validTransitions.includes(newStatus)) {
-    return {
-      success: false,
-      error: {
-        code: "STATE_MACHINE_VIOLATION",
-        message: `Cannot transition from ${currentStatus} to ${newStatus}`,
-        details: { validTransitions },
-      },
-    };
-  }
-  return { success: true };
-}
-
-function validateCaseExists(hrCase: CaseData | null): ServiceResult<CaseData> {
-  if (!hrCase) {
-    return {
-      success: false,
-      error: { code: "NOT_FOUND", message: "Case not found" },
-    };
-  }
-  return { success: true, data: hrCase };
-}
-
-function canAssignCase(status: CaseStatus): ServiceResult<null> {
-  if (["closed", "cancelled"].includes(status)) {
-    return {
-      success: false,
-      error: {
-        code: "CASE_CLOSED",
-        message: "Cannot assign a closed or cancelled case",
-      },
-    };
-  }
-  return { success: true };
-}
-
-function canEscalateCase(status: CaseStatus): ServiceResult<null> {
-  if (["closed", "cancelled", "resolved"].includes(status)) {
-    return {
-      success: false,
-      error: {
-        code: "CANNOT_ESCALATE",
-        message: `Cannot escalate a ${status} case`,
-      },
-    };
-  }
-  return { success: true };
-}
-
-function canResolveCase(status: CaseStatus): ServiceResult<null> {
-  if (["closed", "cancelled"].includes(status)) {
-    return {
-      success: false,
-      error: {
-        code: "CANNOT_RESOLVE",
-        message: `Cannot resolve a ${status} case`,
-      },
-    };
-  }
-  return { success: true };
-}
-
-function canCloseCase(status: CaseStatus): ServiceResult<null> {
-  if (status !== "resolved") {
-    return {
-      success: false,
-      error: {
-        code: "CANNOT_CLOSE",
-        message: "Case must be resolved before closing",
-      },
-    };
-  }
-  return { success: true };
-}
-
-function canAddComment(status: CaseStatus): ServiceResult<null> {
-  if (["closed", "cancelled"].includes(status)) {
-    return {
-      success: false,
-      error: {
-        code: "CASE_CLOSED",
-        message: "Cannot add comments to a closed or cancelled case",
-      },
-    };
-  }
-  return { success: true };
-}
-
-// =============================================================================
-// Tests
-// =============================================================================
+import {
+  canTransitionCase,
+  getValidCaseTransitions,
+  validateCaseTransition,
+  isCaseTerminalState,
+  isCaseActive,
+  getCaseInitialState,
+  isCaseState,
+  getCaseStateMachineSummary,
+  getCaseTransitionMetadata,
+  CaseStates,
+  type CaseState,
+} from "@staffora/shared/state-machines";
 
 describe("CasesService", () => {
-  // ===========================================================================
-  // Case Lookup
-  // ===========================================================================
-
-  describe("Case Lookup", () => {
-    it("should return NOT_FOUND when case does not exist", () => {
-      const result = validateCaseExists(null);
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("NOT_FOUND");
-    });
-
-    it("should return case data when found", () => {
-      const hrCase: CaseData = {
-        id: "case1",
-        caseNumber: "CASE-001",
-        status: "open",
-        category: "grievance",
-      };
-
-      const result = validateCaseExists(hrCase);
-
-      expect(result.success).toBe(true);
-      expect(result.data?.caseNumber).toBe("CASE-001");
-    });
-  });
-
   // ===========================================================================
   // State Machine Transitions
   // ===========================================================================
 
   describe("State Machine", () => {
-    describe("valid transitions", () => {
+    describe("valid transitions from open", () => {
       it("should allow open -> in_progress", () => {
-        const result = validateStatusTransition("open", "in_progress");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("open", "in_progress")).toBe(true);
       });
 
       it("should allow open -> escalated", () => {
-        const result = validateStatusTransition("open", "escalated");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("open", "escalated")).toBe(true);
       });
 
       it("should allow open -> cancelled", () => {
-        const result = validateStatusTransition("open", "cancelled");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("open", "cancelled")).toBe(true);
       });
 
-      it("should allow open -> resolved", () => {
-        const result = validateStatusTransition("open", "resolved");
-        expect(result.success).toBe(true);
+      it("should allow open -> resolved (quick resolution)", () => {
+        expect(canTransitionCase("open", "resolved")).toBe(true);
       });
+    });
 
-      it("should allow open -> pending_info", () => {
-        const result = validateStatusTransition("open", "pending_info");
-        expect(result.success).toBe(true);
-      });
-
-      it("should allow in_progress -> resolved", () => {
-        const result = validateStatusTransition("in_progress", "resolved");
-        expect(result.success).toBe(true);
+    describe("valid transitions from in_progress", () => {
+      it("should allow in_progress -> pending_info", () => {
+        expect(canTransitionCase("in_progress", "pending_info")).toBe(true);
       });
 
       it("should allow in_progress -> escalated", () => {
-        const result = validateStatusTransition("in_progress", "escalated");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("in_progress", "escalated")).toBe(true);
+      });
+
+      it("should allow in_progress -> resolved", () => {
+        expect(canTransitionCase("in_progress", "resolved")).toBe(true);
       });
 
       it("should allow in_progress -> cancelled", () => {
-        const result = validateStatusTransition("in_progress", "cancelled");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("in_progress", "cancelled")).toBe(true);
+      });
+    });
+
+    describe("valid transitions from pending_info", () => {
+      it("should allow pending_info -> in_progress", () => {
+        expect(canTransitionCase("pending_info", "in_progress")).toBe(true);
       });
 
-      it("should allow resolved -> closed", () => {
-        const result = validateStatusTransition("resolved", "closed");
-        expect(result.success).toBe(true);
+      it("should allow pending_info -> escalated", () => {
+        expect(canTransitionCase("pending_info", "escalated")).toBe(true);
       });
 
-      it("should allow resolved -> in_progress (reopen)", () => {
-        const result = validateStatusTransition("resolved", "in_progress");
-        expect(result.success).toBe(true);
+      it("should allow pending_info -> resolved", () => {
+        expect(canTransitionCase("pending_info", "resolved")).toBe(true);
       });
 
-      it("should allow escalated -> in_progress", () => {
-        const result = validateStatusTransition("escalated", "in_progress");
-        expect(result.success).toBe(true);
+      it("should allow pending_info -> cancelled", () => {
+        expect(canTransitionCase("pending_info", "cancelled")).toBe(true);
+      });
+    });
+
+    describe("valid transitions from escalated", () => {
+      it("should allow escalated -> in_progress (de-escalate)", () => {
+        expect(canTransitionCase("escalated", "in_progress")).toBe(true);
       });
 
       it("should allow escalated -> resolved", () => {
-        const result = validateStatusTransition("escalated", "resolved");
-        expect(result.success).toBe(true);
+        expect(canTransitionCase("escalated", "resolved")).toBe(true);
       });
 
-      it("should allow pending_info -> in_progress", () => {
-        const result = validateStatusTransition("pending_info", "in_progress");
-        expect(result.success).toBe(true);
+      it("should allow escalated -> cancelled", () => {
+        expect(canTransitionCase("escalated", "cancelled")).toBe(true);
+      });
+    });
+
+    describe("valid transitions from resolved", () => {
+      it("should allow resolved -> closed", () => {
+        expect(canTransitionCase("resolved", "closed")).toBe(true);
+      });
+
+      it("should allow resolved -> in_progress (reopen)", () => {
+        expect(canTransitionCase("resolved", "in_progress")).toBe(true);
+      });
+
+      it("should allow resolved -> appealed", () => {
+        expect(canTransitionCase("resolved", "appealed")).toBe(true);
+      });
+    });
+
+    describe("valid transitions from appealed", () => {
+      it("should allow appealed -> in_progress (overturned)", () => {
+        expect(canTransitionCase("appealed", "in_progress")).toBe(true);
+      });
+
+      it("should allow appealed -> resolved (upheld)", () => {
+        expect(canTransitionCase("appealed", "resolved")).toBe(true);
+      });
+
+      it("should allow appealed -> closed (final)", () => {
+        expect(canTransitionCase("appealed", "closed")).toBe(true);
       });
     });
 
     describe("invalid transitions", () => {
       it("should reject closed -> any state (terminal)", () => {
-        const targets: CaseStatus[] = ["open", "in_progress", "escalated", "resolved", "cancelled", "pending_info"];
+        const targets: CaseState[] = ["open", "in_progress", "escalated", "resolved", "cancelled", "pending_info", "appealed"];
         for (const target of targets) {
-          const result = validateStatusTransition("closed", target);
-          expect(result.success).toBe(false);
-          expect(result.error?.code).toBe("STATE_MACHINE_VIOLATION");
+          expect(canTransitionCase("closed", target)).toBe(false);
         }
       });
 
       it("should reject cancelled -> any state (terminal)", () => {
-        const targets: CaseStatus[] = ["open", "in_progress", "escalated", "resolved", "closed", "pending_info"];
+        const targets: CaseState[] = ["open", "in_progress", "escalated", "resolved", "closed", "pending_info", "appealed"];
         for (const target of targets) {
-          const result = validateStatusTransition("cancelled", target);
-          expect(result.success).toBe(false);
-          expect(result.error?.code).toBe("STATE_MACHINE_VIOLATION");
+          expect(canTransitionCase("cancelled", target)).toBe(false);
         }
       });
 
       it("should reject open -> closed (must resolve first)", () => {
-        const result = validateStatusTransition("open", "closed");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("STATE_MACHINE_VIOLATION");
+        expect(canTransitionCase("open", "closed")).toBe(false);
       });
 
       it("should reject in_progress -> closed (must resolve first)", () => {
-        const result = validateStatusTransition("in_progress", "closed");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("STATE_MACHINE_VIOLATION");
+        expect(canTransitionCase("in_progress", "closed")).toBe(false);
       });
 
-      it("should include valid transitions in error details", () => {
-        const result = validateStatusTransition("closed", "open");
-
-        expect(result.error?.details).toBeDefined();
-        expect(result.error?.details.validTransitions).toEqual([]);
+      it("should reject appealed -> cancelled", () => {
+        expect(canTransitionCase("appealed", "cancelled")).toBe(false);
       });
 
-      it("should include available transitions for non-terminal states", () => {
-        const result = validateStatusTransition("open", "closed");
+      it("should reject appealed -> escalated", () => {
+        expect(canTransitionCase("appealed", "escalated")).toBe(false);
+      });
 
-        expect(result.error?.details.validTransitions).toContain("in_progress");
-        expect(result.error?.details.validTransitions).toContain("escalated");
-        expect(result.error?.details.validTransitions).not.toContain("closed");
+      it("should reject appealed -> appealed (self-transition)", () => {
+        expect(canTransitionCase("appealed", "appealed")).toBe(false);
+      });
+    });
+
+    describe("getValidCaseTransitions", () => {
+      it("should return correct transitions for open", () => {
+        const transitions = getValidCaseTransitions("open");
+        expect(transitions).toContain("in_progress");
+        expect(transitions).toContain("escalated");
+        expect(transitions).toContain("cancelled");
+        expect(transitions).toContain("resolved");
+        expect(transitions).not.toContain("closed");
+      });
+
+      it("should return empty array for closed", () => {
+        expect(getValidCaseTransitions("closed")).toHaveLength(0);
+      });
+
+      it("should return empty array for cancelled", () => {
+        expect(getValidCaseTransitions("cancelled")).toHaveLength(0);
+      });
+    });
+
+    describe("validateCaseTransition", () => {
+      it("should return null for valid transition", () => {
+        expect(validateCaseTransition("open", "in_progress")).toBeNull();
+      });
+
+      it("should return error for invalid transition", () => {
+        const error = validateCaseTransition("open", "closed");
+        expect(error).not.toBeNull();
+        expect(error).toContain("Invalid transition");
+      });
+
+      it("should return same-state error", () => {
+        const error = validateCaseTransition("open", "open");
+        expect(error).not.toBeNull();
+        expect(error).toContain("already in");
+      });
+
+      it("should return terminal state error for closed", () => {
+        const error = validateCaseTransition("closed", "open");
+        expect(error).not.toBeNull();
+        expect(error).toContain("terminal state");
+      });
+
+      it("should include valid transitions in error for non-terminal states", () => {
+        const error = validateCaseTransition("open", "closed");
+        expect(error).not.toBeNull();
+        expect(error).toContain("in_progress");
+        expect(error).toContain("escalated");
       });
     });
 
     describe("transition completeness", () => {
       it("should have entries for all defined statuses", () => {
-        const allStatuses: CaseStatus[] = [
+        const allStatuses: CaseState[] = [
           "open", "in_progress", "pending_info", "escalated",
-          "resolved", "closed", "cancelled",
+          "resolved", "appealed", "closed", "cancelled",
         ];
 
         for (const status of allStatuses) {
-          expect(VALID_TRANSITIONS[status]).toBeDefined();
-          expect(Array.isArray(VALID_TRANSITIONS[status])).toBe(true);
+          const transitions = getValidCaseTransitions(status);
+          expect(transitions).toBeDefined();
+          expect(Array.isArray(transitions)).toBe(true);
         }
       });
 
       it("should have terminal states with no outgoing transitions", () => {
-        expect(VALID_TRANSITIONS.closed).toHaveLength(0);
-        expect(VALID_TRANSITIONS.cancelled).toHaveLength(0);
+        expect(getValidCaseTransitions("closed")).toHaveLength(0);
+        expect(getValidCaseTransitions("cancelled")).toHaveLength(0);
       });
 
       it("should not allow any state to transition to open", () => {
-        for (const [_status, targets] of Object.entries(VALID_TRANSITIONS)) {
-          expect(targets).not.toContain("open");
+        const summary = getCaseStateMachineSummary();
+        for (const state of summary.states) {
+          const transitions = getValidCaseTransitions(state);
+          expect(transitions).not.toContain("open");
         }
       });
     });
   });
 
   // ===========================================================================
-  // Case Assignment Rules
+  // State Properties
   // ===========================================================================
 
-  describe("Case Assignment", () => {
-    it("should allow assigning open case", () => {
-      const result = canAssignCase("open");
-      expect(result.success).toBe(true);
+  describe("State Properties", () => {
+    it("should have open as the initial state", () => {
+      expect(getCaseInitialState()).toBe("open");
     });
 
-    it("should allow assigning in_progress case", () => {
-      const result = canAssignCase("in_progress");
-      expect(result.success).toBe(true);
+    it("should recognize closed as terminal", () => {
+      expect(isCaseTerminalState("closed")).toBe(true);
     });
 
-    it("should allow assigning escalated case", () => {
-      const result = canAssignCase("escalated");
-      expect(result.success).toBe(true);
+    it("should recognize cancelled as terminal", () => {
+      expect(isCaseTerminalState("cancelled")).toBe(true);
     });
 
-    it("should reject assigning closed case", () => {
-      const result = canAssignCase("closed");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CASE_CLOSED");
+    it("should not recognize open as terminal", () => {
+      expect(isCaseTerminalState("open")).toBe(false);
     });
 
-    it("should reject assigning cancelled case", () => {
-      const result = canAssignCase("cancelled");
+    it("should recognize open as active", () => {
+      expect(isCaseActive("open")).toBe(true);
+    });
 
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CASE_CLOSED");
+    it("should recognize in_progress as active", () => {
+      expect(isCaseActive("in_progress")).toBe(true);
+    });
+
+    it("should recognize pending_info as active", () => {
+      expect(isCaseActive("pending_info")).toBe(true);
+    });
+
+    it("should recognize escalated as active", () => {
+      expect(isCaseActive("escalated")).toBe(true);
+    });
+
+    it("should not recognize closed as active", () => {
+      expect(isCaseActive("closed")).toBe(false);
+    });
+
+    it("should not recognize cancelled as active", () => {
+      expect(isCaseActive("cancelled")).toBe(false);
+    });
+
+    it("should validate known case states", () => {
+      expect(isCaseState("open")).toBe(true);
+      expect(isCaseState("in_progress")).toBe(true);
+      expect(isCaseState("closed")).toBe(true);
+      expect(isCaseState("appealed")).toBe(true);
+    });
+
+    it("should reject unknown state strings", () => {
+      expect(isCaseState("invalid")).toBe(false);
+      expect(isCaseState("")).toBe(false);
+      expect(isCaseState("reopened")).toBe(false);
     });
   });
 
   // ===========================================================================
-  // Case Escalation Rules
+  // Transition Metadata
   // ===========================================================================
 
-  describe("Case Escalation", () => {
-    it("should allow escalating open case", () => {
-      const result = canEscalateCase("open");
-      expect(result.success).toBe(true);
+  describe("Transition Metadata", () => {
+    it("should require assignment for open -> in_progress", () => {
+      const meta = getCaseTransitionMetadata("open", "in_progress");
+      expect(meta).not.toBeNull();
+      expect(meta!.requiresAssignment).toBe(true);
     });
 
-    it("should allow escalating in_progress case", () => {
-      const result = canEscalateCase("in_progress");
-      expect(result.success).toBe(true);
+    it("should require reason for escalation", () => {
+      const meta = getCaseTransitionMetadata("open", "escalated");
+      expect(meta).not.toBeNull();
+      expect(meta!.requiresReason).toBe(true);
     });
 
-    it("should allow escalating pending_info case", () => {
-      const result = canEscalateCase("pending_info");
-      expect(result.success).toBe(true);
+    it("should notify requester on resolution", () => {
+      const meta = getCaseTransitionMetadata("in_progress", "resolved");
+      expect(meta).not.toBeNull();
+      expect(meta!.notifiesRequester).toBe(true);
     });
 
-    it("should reject escalating closed case", () => {
-      const result = canEscalateCase("closed");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CANNOT_ESCALATE");
+    it("should affect SLA on assignment", () => {
+      const meta = getCaseTransitionMetadata("open", "in_progress");
+      expect(meta).not.toBeNull();
+      expect(meta!.affectsSLA).toBe(true);
     });
 
-    it("should reject escalating cancelled case", () => {
-      const result = canEscalateCase("cancelled");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CANNOT_ESCALATE");
-    });
-
-    it("should reject escalating resolved case", () => {
-      const result = canEscalateCase("resolved");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CANNOT_ESCALATE");
+    it("should return null for invalid transition metadata", () => {
+      const meta = getCaseTransitionMetadata("closed", "open");
+      expect(meta).toBeNull();
     });
   });
 
   // ===========================================================================
-  // Resolution and Closing Rules
+  // State Machine Summary
   // ===========================================================================
 
-  describe("Resolution and Closing", () => {
-    describe("resolveCase rules", () => {
-      it("should allow resolving open case", () => {
-        const result = canResolveCase("open");
-        expect(result.success).toBe(true);
-      });
-
-      it("should allow resolving in_progress case", () => {
-        const result = canResolveCase("in_progress");
-        expect(result.success).toBe(true);
-      });
-
-      it("should allow resolving escalated case", () => {
-        const result = canResolveCase("escalated");
-        expect(result.success).toBe(true);
-      });
-
-      it("should reject resolving closed case", () => {
-        const result = canResolveCase("closed");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_RESOLVE");
-      });
-
-      it("should reject resolving cancelled case", () => {
-        const result = canResolveCase("cancelled");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_RESOLVE");
-      });
+  describe("State Machine Summary", () => {
+    it("should include all eight states", () => {
+      const summary = getCaseStateMachineSummary();
+      expect(summary.states).toHaveLength(8);
+      expect(summary.states).toContain("open");
+      expect(summary.states).toContain("in_progress");
+      expect(summary.states).toContain("pending_info");
+      expect(summary.states).toContain("escalated");
+      expect(summary.states).toContain("resolved");
+      expect(summary.states).toContain("appealed");
+      expect(summary.states).toContain("closed");
+      expect(summary.states).toContain("cancelled");
     });
 
-    describe("closeCase rules", () => {
-      it("should allow closing resolved case", () => {
-        const result = canCloseCase("resolved");
-        expect(result.success).toBe(true);
-      });
-
-      it("should reject closing open case", () => {
-        const result = canCloseCase("open");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_CLOSE");
-        expect(result.error?.message).toBe("Case must be resolved before closing");
-      });
-
-      it("should reject closing in_progress case", () => {
-        const result = canCloseCase("in_progress");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_CLOSE");
-      });
-
-      it("should reject closing escalated case", () => {
-        const result = canCloseCase("escalated");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_CLOSE");
-      });
-
-      it("should reject closing cancelled case", () => {
-        const result = canCloseCase("cancelled");
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("CANNOT_CLOSE");
-      });
-    });
-  });
-
-  // ===========================================================================
-  // Comment Rules
-  // ===========================================================================
-
-  describe("Comment Rules", () => {
-    it("should allow comments on open case", () => {
-      const result = canAddComment("open");
-      expect(result.success).toBe(true);
+    it("should identify closed and cancelled as terminal states", () => {
+      const summary = getCaseStateMachineSummary();
+      expect(summary.terminalStates).toContain("closed");
+      expect(summary.terminalStates).toContain("cancelled");
+      expect(summary.terminalStates).toHaveLength(2);
     });
 
-    it("should allow comments on in_progress case", () => {
-      const result = canAddComment("in_progress");
-      expect(result.success).toBe(true);
-    });
-
-    it("should allow comments on escalated case", () => {
-      const result = canAddComment("escalated");
-      expect(result.success).toBe(true);
-    });
-
-    it("should allow comments on resolved case", () => {
-      const result = canAddComment("resolved");
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject comments on closed case", () => {
-      const result = canAddComment("closed");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CASE_CLOSED");
-    });
-
-    it("should reject comments on cancelled case", () => {
-      const result = canAddComment("cancelled");
-
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe("CASE_CLOSED");
-    });
-
-    it("should allow comments on appealed case", () => {
-      const result = canAddComment("appealed");
-      expect(result.success).toBe(true);
-    });
-  });
-
-  // ===========================================================================
-  // Appeal Process Tests
-  // ===========================================================================
-
-  describe("Appeal Process", () => {
-    describe("filing appeals", () => {
-      it("should allow appealing a resolved case", () => {
-        const result = validateStatusTransition("resolved", "appealed");
-        expect(result.success).toBe(true);
-      });
-
-      it("should not allow appealing an open case", () => {
-        const result = validateStatusTransition("open", "appealed");
-        expect(result.success).toBe(false);
-      });
-
-      it("should not allow appealing an in_progress case", () => {
-        const result = validateStatusTransition("in_progress", "appealed");
-        expect(result.success).toBe(false);
-      });
-
-      it("should not allow appealing a closed case", () => {
-        const result = validateStatusTransition("closed", "appealed");
-        expect(result.success).toBe(false);
-      });
-
-      it("should not allow appealing a cancelled case", () => {
-        const result = validateStatusTransition("cancelled", "appealed");
-        expect(result.success).toBe(false);
-      });
-
-      it("should not allow appealing an already appealed case", () => {
-        const result = validateStatusTransition("appealed", "appealed");
-        expect(result.success).toBe(false);
-      });
-    });
-
-    describe("appeal decisions", () => {
-      it("should allow transitioning appealed case to in_progress (overturned)", () => {
-        const result = validateStatusTransition("appealed", "in_progress");
-        expect(result.success).toBe(true);
-      });
-
-      it("should allow transitioning appealed case to resolved (upheld)", () => {
-        const result = validateStatusTransition("appealed", "resolved");
-        expect(result.success).toBe(true);
-      });
-
-      it("should allow transitioning appealed case to closed (final)", () => {
-        const result = validateStatusTransition("appealed", "closed");
-        expect(result.success).toBe(true);
-      });
-
-      it("should not allow transitioning appealed case to cancelled", () => {
-        const result = validateStatusTransition("appealed", "cancelled");
-        expect(result.success).toBe(false);
-      });
-
-      it("should not allow transitioning appealed case to escalated", () => {
-        const result = validateStatusTransition("appealed", "escalated");
-        expect(result.success).toBe(false);
-      });
-    });
-
-    describe("appeal requester validation", () => {
-      const REQUESTER_ID = "user-requester-001";
-      const OTHER_USER_ID = "user-other-002";
-
-      function canFileAppeal(caseStatus: CaseStatus, requesterId: string, currentUserId: string): ServiceResult<any> {
-        if (caseStatus !== "resolved") {
-          return { success: false, error: { code: "INVALID_STATUS", message: "Only resolved cases can be appealed" } };
-        }
-        if (requesterId !== currentUserId) {
-          return { success: false, error: { code: "FORBIDDEN", message: "Only the case requester can file an appeal" } };
-        }
-        return { success: true, data: { appealId: "test" } };
-      }
-
-      it("should allow requester to appeal their own resolved case", () => {
-        const result = canFileAppeal("resolved", REQUESTER_ID, REQUESTER_ID);
-        expect(result.success).toBe(true);
-      });
-
-      it("should reject non-requester from appealing", () => {
-        const result = canFileAppeal("resolved", REQUESTER_ID, OTHER_USER_ID);
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("FORBIDDEN");
-      });
-
-      it("should reject appealing a non-resolved case even by requester", () => {
-        const result = canFileAppeal("open", REQUESTER_ID, REQUESTER_ID);
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("INVALID_STATUS");
-      });
-
-      it("should reject appealing closed case even by requester", () => {
-        const result = canFileAppeal("closed", REQUESTER_ID, REQUESTER_ID);
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe("INVALID_STATUS");
-      });
-    });
-
-    describe("appeal decision outcome mapping", () => {
-      function getNewCaseStatus(decision: "upheld" | "overturned" | "partially_upheld"): CaseStatus {
-        return decision === "overturned" ? "in_progress" : "closed";
-      }
-
-      it("should reopen case when appeal is overturned", () => {
-        expect(getNewCaseStatus("overturned")).toBe("in_progress");
-      });
-
-      it("should close case when appeal is upheld", () => {
-        expect(getNewCaseStatus("upheld")).toBe("closed");
-      });
-
-      it("should close case when appeal is partially upheld", () => {
-        expect(getNewCaseStatus("partially_upheld")).toBe("closed");
-      });
+    it("should set open as the initial state", () => {
+      const summary = getCaseStateMachineSummary();
+      expect(summary.initialState).toBe("open");
     });
   });
 });

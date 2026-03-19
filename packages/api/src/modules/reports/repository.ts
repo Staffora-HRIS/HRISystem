@@ -598,4 +598,97 @@ export class ReportsRepository {
   ): Promise<void> {
     await tx`SELECT app.seed_system_report_templates(${tenantId}, ${userId})`;
   }
+
+  // =========================================================================
+  // Report Schedules (dedicated table)
+  // =========================================================================
+
+  async listSchedules(
+    tx: TransactionSql,
+    filters: { reportId?: string; isActive?: boolean; limit?: number; cursor?: string; }
+  ): Promise<{ rows: ReportScheduleRow[]; total: number }> {
+    const limit = Math.min(filters.limit ?? 50, 100);
+    const rows = await tx`
+      SELECT rs.*, COUNT(*) OVER() AS total_count
+      FROM report_schedules rs
+      WHERE 1 = 1
+      ${filters.reportId ? tx`AND rs.report_id = ${filters.reportId}` : tx``}
+      ${filters.isActive !== undefined ? tx`AND rs.is_active = ${filters.isActive}` : tx``}
+      ${filters.cursor ? tx`AND rs.id < ${filters.cursor}` : tx``}
+      ORDER BY rs.created_at DESC, rs.id DESC
+      LIMIT ${limit}
+    ` as (ReportScheduleRow & { totalCount: number })[];
+    const total = rows.length > 0 ? Number((rows[0] as Record<string, unknown>).totalCount ?? 0) : 0;
+    return { rows: rows as ReportScheduleRow[], total };
+  }
+
+  async getScheduleById(tx: TransactionSql, id: string): Promise<ReportScheduleRow | null> {
+    const rows = await tx`SELECT * FROM report_schedules WHERE id = ${id}` as ReportScheduleRow[];
+    return rows[0] ?? null;
+  }
+
+  async createSchedule(
+    tx: TransactionSql, tenantId: string, userId: string,
+    data: { reportId: string; name: string; cronExpression: string; frequency: string; recipients: unknown[]; exportFormat: string; filters: Record<string, unknown>; isActive: boolean; nextRunAt: Date | null; }
+  ): Promise<ReportScheduleRow> {
+    const [row] = await tx`
+      INSERT INTO report_schedules (tenant_id, report_id, name, cron_expression, frequency, recipients, export_format, filters, is_active, next_run_at, created_by)
+      VALUES (${tenantId}, ${data.reportId}, ${data.name}, ${data.cronExpression}, ${data.frequency},
+        ${JSON.stringify(data.recipients)}::jsonb, ${data.exportFormat}, ${JSON.stringify(data.filters)}::jsonb,
+        ${data.isActive}, ${data.nextRunAt}, ${userId})
+      RETURNING *
+    ` as ReportScheduleRow[];
+    return row;
+  }
+
+  async updateSchedule(
+    tx: TransactionSql, id: string,
+    data: { name?: string; cronExpression?: string; frequency?: string; recipients?: unknown[]; exportFormat?: string; filters?: Record<string, unknown>; isActive?: boolean; nextRunAt?: Date | null; }
+  ): Promise<ReportScheduleRow | null> {
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIdx = 1;
+    if (data.name !== undefined) { setClauses.push(`"name" = $${paramIdx}`); values.push(data.name); paramIdx++; }
+    if (data.cronExpression !== undefined) { setClauses.push(`"cron_expression" = $${paramIdx}`); values.push(data.cronExpression); paramIdx++; }
+    if (data.frequency !== undefined) { setClauses.push(`"frequency" = $${paramIdx}`); values.push(data.frequency); paramIdx++; }
+    if (data.recipients !== undefined) { setClauses.push(`"recipients" = $${paramIdx}::jsonb`); values.push(JSON.stringify(data.recipients)); paramIdx++; }
+    if (data.exportFormat !== undefined) { setClauses.push(`"export_format" = $${paramIdx}`); values.push(data.exportFormat); paramIdx++; }
+    if (data.filters !== undefined) { setClauses.push(`"filters" = $${paramIdx}::jsonb`); values.push(JSON.stringify(data.filters)); paramIdx++; }
+    if (data.isActive !== undefined) { setClauses.push(`"is_active" = $${paramIdx}`); values.push(data.isActive); paramIdx++; }
+    if (data.nextRunAt !== undefined) { setClauses.push(`"next_run_at" = $${paramIdx}`); values.push(data.nextRunAt); paramIdx++; }
+    if (setClauses.length === 0) return this.getScheduleById(tx, id);
+    setClauses.push(`"updated_at" = now()`);
+    values.push(id);
+    const sql = `UPDATE report_schedules SET ${setClauses.join(", ")} WHERE id = $${paramIdx} RETURNING *`;
+    const [row] = await tx.unsafe(sql, values as any[]) as ReportScheduleRow[];
+    return row ?? null;
+  }
+
+  async deleteSchedule(tx: TransactionSql, id: string): Promise<boolean> {
+    const result = await tx`DELETE FROM report_schedules WHERE id = ${id}`;
+    return result.count > 0;
+  }
+}
+
+
+// =============================================================================
+// Report Schedule Row Type
+// =============================================================================
+
+export interface ReportScheduleRow extends Row {
+  id: string;
+  tenantId: string;
+  reportId: string;
+  name: string;
+  cronExpression: string;
+  frequency: string;
+  recipients: unknown[];
+  exportFormat: string;
+  filters: Record<string, unknown>;
+  isActive: boolean;
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

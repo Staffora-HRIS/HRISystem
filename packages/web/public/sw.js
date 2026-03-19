@@ -5,8 +5,9 @@
  *
  * Strategy:
  * - Cache-first for static assets (JS, CSS, images, fonts)
- * - Network-first for API calls and navigation requests
+ * - Network-first for API calls (pass-through, no caching)
  * - Stale-while-revalidate for Google Fonts
+ * - Network-first for navigation with offline fallback page
  *
  * The cache version must be bumped on each deployment so stale
  * assets are purged during the activate event.
@@ -15,6 +16,9 @@
 const CACHE_VERSION = "staffora-v1";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const FONT_CACHE = `${CACHE_VERSION}-fonts`;
+
+/** Resources to pre-cache during install for offline support. */
+const PRECACHE_URLS = ["/offline.html"];
 
 /** File extensions that qualify as static assets. */
 const STATIC_EXTENSIONS = [
@@ -62,11 +66,18 @@ function isApiRequest(url) {
 }
 
 // ---------------------------------------------------------------------------
-// Install — pre-cache the app shell (manifest + start URL)
+// Install — pre-cache the offline fallback page
 // ---------------------------------------------------------------------------
 self.addEventListener("install", (event) => {
-  // Activate immediately without waiting for existing clients to close.
-  self.skipWaiting();
+  event.waitUntil(
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => {
+        // Activate immediately without waiting for existing clients to close.
+        self.skipWaiting();
+      })
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -144,11 +155,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // --- Navigation / HTML: network-first ------------------------------------
+  // --- Navigation / HTML: network-first with offline fallback ---------------
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match(request).then((cached) => cached || fetch(request))
+        caches
+          .match("/offline.html")
+          .then(
+            (offlinePage) =>
+              offlinePage ||
+              new Response("Offline", {
+                status: 503,
+                statusText: "Service Unavailable",
+                headers: { "Content-Type": "text/plain" },
+              })
+          )
       )
     );
     return;

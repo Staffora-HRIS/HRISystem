@@ -8,6 +8,7 @@
  *   - Idempotency key auto-generation
  *   - Response parsing and assertion helpers
  *   - RLS isolation between tenants
+ *   - Static factory methods (authenticated, unauthenticated)
  *
  * These tests require running Docker infrastructure (postgres + redis).
  */
@@ -76,13 +77,17 @@ describe("TestApiClient", () => {
       email: `test-api-client-b-${suffix}@example.com`,
     });
 
-    // Authenticate both clients
+    // Authenticate both clients using createAuthenticatedClient
     client = await createAuthenticatedClient(app, db, tenant, user);
     clientB = await createAuthenticatedClient(app, db, tenantB, userB);
   });
 
   afterAll(async () => {
     if (!db) return;
+
+    // Clean up clients
+    await client?.cleanup();
+    await clientB?.cleanup();
 
     // Clean up created resources
     await withSystemContext(db, async (tx) => {
@@ -109,7 +114,7 @@ describe("TestApiClient", () => {
     // Clean up sessions and auth records
     for (const u of [user, userB]) {
       if (u) {
-        await withSystemContext(db, async (tx) => {
+        await withSystemContext(db!, async (tx) => {
           await tx.unsafe(`DELETE FROM app."session" WHERE "userId" = $1::text`, [u.id]).catch(() => {});
           await tx.unsafe(`DELETE FROM app."account" WHERE "userId" = $1::text`, [u.id]).catch(() => {});
           await tx.unsafe(`DELETE FROM app."user" WHERE id = $1::text`, [u.id]).catch(() => {});
@@ -146,12 +151,36 @@ describe("TestApiClient", () => {
     });
 
     it("should return 401 for unauthenticated requests to protected endpoints", async () => {
-      const unauthClient = new TestApiClient(app);
+      const unauthClient = TestApiClient.unauthenticated(app);
 
       const res = await unauthClient.get("/api/v1/hr/org-units");
       // Should fail with 401 (no session) or 403 (tenant missing)
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);
+    });
+  });
+
+  // ===========================================================================
+  // Static factory: TestApiClient.authenticated()
+  // ===========================================================================
+
+  describe("TestApiClient.authenticated()", () => {
+    it("should create a fully authenticated client via static factory", async () => {
+      if (!db || !tenant || !user) return;
+
+      const staticClient = await TestApiClient.authenticated(app, {
+        db: db!,
+        tenantId: tenant.id,
+        userId: user.id,
+        userEmail: user.email,
+      });
+
+      expect(staticClient.isLoggedIn()).toBe(true);
+
+      const res = await staticClient.get("/api/v1/hr/org-units");
+      expectSuccess(res);
+
+      await staticClient.cleanup();
     });
   });
 
@@ -293,15 +322,15 @@ describe("TestApiClient", () => {
 
   describe("assertion helpers", () => {
     it("expectSuccess should pass for 2xx responses", () => {
-      const res = { status: 200, body: { ok: true }, headers: {}, raw: new Response() };
+      const res = { status: 200, body: { ok: true }, headers: new Headers(), data: { ok: true }, raw: new Response() };
       expect(() => expectSuccess(res)).not.toThrow();
 
-      const res201 = { status: 201, body: { id: "123" }, headers: {}, raw: new Response() };
+      const res201 = { status: 201, body: { id: "123" }, headers: new Headers(), data: { id: "123" }, raw: new Response() };
       expect(() => expectSuccess(res201)).not.toThrow();
     });
 
     it("expectSuccess should fail for non-2xx responses", () => {
-      const res = { status: 400, body: { error: { code: "VALIDATION_ERROR", message: "bad" } }, headers: {}, raw: new Response() };
+      const res = { status: 400, body: { error: { code: "VALIDATION_ERROR", message: "bad" } }, headers: new Headers(), data: { error: { code: "VALIDATION_ERROR", message: "bad" } }, raw: new Response() };
       expect(() => expectSuccess(res)).toThrow(/Expected success/);
     });
 
@@ -309,7 +338,8 @@ describe("TestApiClient", () => {
       const res = {
         status: 404,
         body: { error: { code: "NOT_FOUND", message: "Resource not found" } },
-        headers: {},
+        headers: new Headers(),
+        data: { error: { code: "NOT_FOUND", message: "Resource not found" } },
         raw: new Response(),
       };
       const err = expectError(res, "NOT_FOUND", 404);
@@ -321,7 +351,8 @@ describe("TestApiClient", () => {
       const res = {
         status: 400,
         body: { error: { code: "VALIDATION_ERROR", message: "bad" } },
-        headers: {},
+        headers: new Headers(),
+        data: { error: { code: "VALIDATION_ERROR", message: "bad" } },
         raw: new Response(),
       };
       expect(() => expectError(res, "NOT_FOUND")).toThrow(/Expected error code/);
@@ -331,7 +362,8 @@ describe("TestApiClient", () => {
       const res = {
         status: 200,
         body: { items: [{ id: "1" }], hasMore: false, nextCursor: null },
-        headers: {},
+        headers: new Headers(),
+        data: { items: [{ id: "1" }], hasMore: false, nextCursor: null },
         raw: new Response(),
       };
       const page = expectPaginated(res);
@@ -343,14 +375,15 @@ describe("TestApiClient", () => {
       const res = {
         status: 401,
         body: { error: { code: "AUTH", message: "no" } },
-        headers: {},
+        headers: new Headers(),
+        data: { error: { code: "AUTH", message: "no" } },
         raw: new Response(),
       };
       expect(() => expectPaginated(res)).toThrow(/Expected 200/);
     });
 
     it("expectStatus should validate specific status codes", () => {
-      const res = { status: 204, body: null, headers: {}, raw: new Response() };
+      const res = { status: 204, body: null, headers: new Headers(), data: null, raw: new Response() };
       expect(() => expectStatus(res, 204)).not.toThrow();
       expect(() => expectStatus(res, 200)).toThrow(/Expected status 200/);
     });
@@ -359,7 +392,8 @@ describe("TestApiClient", () => {
       const res = {
         status: 200,
         body: { id: "abc", name: "Test", status: "active" },
-        headers: {},
+        headers: new Headers(),
+        data: { id: "abc", name: "Test", status: "active" },
         raw: new Response(),
       };
       expect(() => expectBodyContains(res, { name: "Test", status: "active" })).not.toThrow();

@@ -48,6 +48,14 @@ export interface IntegrationListResponse {
   count: number;
 }
 
+export interface TestConnectionResponse {
+  success: boolean;
+  provider: string;
+  message: string;
+  latencyMs?: number;
+  testedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Merged integration type (catalog + backend data)
 // ---------------------------------------------------------------------------

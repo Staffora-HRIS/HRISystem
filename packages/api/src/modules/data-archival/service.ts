@@ -868,4 +868,617 @@ export class DataArchivalService {
       };
     });
   }
+
+  // ===========================================================================
+  // Archive Policy Formatting (TODO-225)
+  // ===========================================================================
+
+  private formatArchivePolicy(row: ArchivePolicyRow): ArchivePolicyResponse {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      sourceTable: row.sourceTable,
+      archiveAfterDays: row.archiveAfterDays,
+      statusFilter: row.statusFilter,
+      enabled: row.enabled,
+      description: row.description,
+      createdAt:
+        row.createdAt instanceof Date
+          ? row.createdAt.toISOString()
+          : String(row.createdAt),
+      updatedAt:
+        row.updatedAt instanceof Date
+          ? row.updatedAt.toISOString()
+          : String(row.updatedAt),
+    };
+  }
+
+  private formatArchiveLogEntry(
+    row: ArchiveLogRow
+  ): ArchiveLogEntryResponse {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      policyId: row.policyId,
+      sourceTable: row.sourceTable,
+      recordsArchived: row.recordsArchived,
+      recordsSkipped: row.recordsSkipped,
+      recordsRestored: row.recordsRestored,
+      errorMessage: row.errorMessage,
+      archivedAt:
+        row.archivedAt instanceof Date
+          ? row.archivedAt.toISOString()
+          : String(row.archivedAt),
+      createdAt:
+        row.createdAt instanceof Date
+          ? row.createdAt.toISOString()
+          : String(row.createdAt),
+    };
+  }
+
+  // ===========================================================================
+  // Create Archive Policy (TODO-225)
+  // ===========================================================================
+
+  async createArchivePolicy(
+    ctx: TenantContext,
+    data: {
+      sourceTable: string;
+      archiveAfterDays: number;
+      statusFilter?: string | null;
+      enabled?: boolean;
+      description?: string | null;
+    }
+  ): Promise<ServiceResult<ArchivePolicyResponse>> {
+    return await this.db.withTransaction(ctx, async (tx) => {
+      const exists = await this.repository.archivePolicyExistsForTable(
+        tx,
+        data.sourceTable
+      );
+      if (exists) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.CONFLICT,
+            message: `An archive policy already exists for source table '${data.sourceTable}'. Update the existing policy or delete it first.`,
+          },
+        };
+      }
+
+      const policyId = crypto.randomUUID();
+      const row = await this.repository.createArchivePolicy(tx, {
+        id: policyId,
+        tenantId: ctx.tenantId,
+        sourceTable: data.sourceTable,
+        archiveAfterDays: data.archiveAfterDays,
+        statusFilter: data.statusFilter ?? null,
+        enabled: data.enabled ?? true,
+        description: data.description ?? null,
+      });
+
+      await this.emitEvent(
+        tx,
+        ctx,
+        policyId,
+        "data.archival.policy_created",
+        {
+          policyId,
+          sourceTable: data.sourceTable,
+          archiveAfterDays: data.archiveAfterDays,
+          statusFilter: data.statusFilter,
+        }
+      );
+
+      return {
+        success: true,
+        data: this.formatArchivePolicy(row),
+      };
+    });
+  }
+
+  // ===========================================================================
+  // Get Archive Policy (TODO-225)
+  // ===========================================================================
+
+  async getArchivePolicy(
+    ctx: TenantContext,
+    policyId: string
+  ): Promise<ServiceResult<ArchivePolicyResponse>> {
+    const row = await this.repository.getArchivePolicyById(ctx, policyId);
+    if (!row) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Archive policy not found",
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: this.formatArchivePolicy(row),
+    };
+  }
+
+  // ===========================================================================
+  // List Archive Policies (TODO-225)
+  // ===========================================================================
+
+  async listArchivePolicies(
+    ctx: TenantContext,
+    pagination: PaginationQuery
+  ): Promise<{
+    items: ArchivePolicyResponse[];
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> {
+    const result = await this.repository.listArchivePolicies(ctx, pagination);
+
+    return {
+      items: result.items.map((row) => this.formatArchivePolicy(row)),
+      nextCursor: result.nextCursor,
+      hasMore: result.hasMore,
+    };
+  }
+
+  // ===========================================================================
+  // Update Archive Policy (TODO-225)
+  // ===========================================================================
+
+  async updateArchivePolicy(
+    ctx: TenantContext,
+    policyId: string,
+    updates: {
+      sourceTable?: string;
+      archiveAfterDays?: number;
+      statusFilter?: string | null;
+      enabled?: boolean;
+      description?: string | null;
+    }
+  ): Promise<ServiceResult<ArchivePolicyResponse>> {
+    const existing = await this.repository.getArchivePolicyById(ctx, policyId);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Archive policy not found",
+        },
+      };
+    }
+
+    return await this.db.withTransaction(ctx, async (tx) => {
+      // If source_table is changing, check for conflicts
+      if (updates.sourceTable && updates.sourceTable !== existing.sourceTable) {
+        const conflict = await this.repository.archivePolicyExistsForTable(
+          tx,
+          updates.sourceTable,
+          policyId
+        );
+        if (conflict) {
+          return {
+            success: false,
+            error: {
+              code: ErrorCodes.CONFLICT,
+              message: `An archive policy already exists for source table '${updates.sourceTable}'`,
+            },
+          };
+        }
+      }
+
+      const row = await this.repository.updateArchivePolicy(
+        tx,
+        policyId,
+        updates
+      );
+      if (!row) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: "Failed to update archive policy",
+          },
+        };
+      }
+
+      await this.emitEvent(
+        tx,
+        ctx,
+        policyId,
+        "data.archival.policy_updated",
+        { policyId, updates }
+      );
+
+      return {
+        success: true,
+        data: this.formatArchivePolicy(row),
+      };
+    });
+  }
+
+  // ===========================================================================
+  // Delete Archive Policy (TODO-225)
+  // ===========================================================================
+
+  async deleteArchivePolicy(
+    ctx: TenantContext,
+    policyId: string
+  ): Promise<ServiceResult<{ success: true; message: string }>> {
+    const existing = await this.repository.getArchivePolicyById(ctx, policyId);
+    if (!existing) {
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Archive policy not found",
+        },
+      };
+    }
+
+    return await this.db.withTransaction(ctx, async (tx) => {
+      const deleted = await this.repository.deleteArchivePolicy(tx, policyId);
+      if (!deleted) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: "Failed to delete archive policy",
+          },
+        };
+      }
+
+      await this.emitEvent(
+        tx,
+        ctx,
+        policyId,
+        "data.archival.policy_deleted",
+        {
+          policyId,
+          sourceTable: existing.sourceTable,
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          success: true as const,
+          message: `Archive policy for '${existing.sourceTable}' deleted successfully`,
+        },
+      };
+    });
+  }
+
+  // ===========================================================================
+  // List Archive Log (TODO-225)
+  // ===========================================================================
+
+  async listArchiveLog(
+    ctx: TenantContext,
+    filters: ArchiveLogQuery
+  ): Promise<{
+    items: ArchiveLogEntryResponse[];
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> {
+    const result = await this.repository.listArchiveLog(ctx, filters);
+
+    return {
+      items: result.items.map((row) => this.formatArchiveLogEntry(row)),
+      nextCursor: result.nextCursor,
+      hasMore: result.hasMore,
+    };
+  }
+
+  // ===========================================================================
+  // Run Policy-Based Archival (TODO-225)
+  // ===========================================================================
+
+  /**
+   * Execute a policy-based archival run.
+   * For each enabled archive_policy, finds eligible records and moves them
+   * to the archive.{table_name} tables preserving structure.
+   */
+  async runPolicyArchival(
+    ctx: TenantContext,
+    options: {
+      policyId?: string;
+      dryRun?: boolean;
+    }
+  ): Promise<ServiceResult<PolicyArchivalRunResult>> {
+    const dryRun = options.dryRun ?? false;
+
+    return await this.db.withTransaction(ctx, async (tx) => {
+      let policies;
+      if (options.policyId) {
+        const allPolicies = await this.repository.getEnabledArchivePolicies(tx);
+        policies = allPolicies.filter((p) => p.id === options.policyId);
+        if (policies.length === 0) {
+          return {
+            success: false,
+            error: {
+              code: ErrorCodes.NOT_FOUND,
+              message: "Archive policy not found or not enabled",
+            },
+          };
+        }
+      } else {
+        policies = await this.repository.getEnabledArchivePolicies(tx);
+      }
+
+      if (policies.length === 0) {
+        return {
+          success: true,
+          data: {
+            policyId: options.policyId || null,
+            recordsArchived: 0,
+            recordsSkipped: 0,
+            dryRun,
+            details: [],
+            logEntries: [],
+          },
+        };
+      }
+
+      let totalArchived = 0;
+      let totalSkipped = 0;
+      const details: Array<{
+        policyId: string;
+        sourceTable: string;
+        count: number;
+      }> = [];
+      const logEntries: ArchiveLogEntryResponse[] = [];
+
+      for (const policy of policies) {
+        let archivedCount = 0;
+        let skippedCount = 0;
+        let errorMsg: string | null = null;
+
+        try {
+          // Ensure the archive mirror table exists
+          if (!dryRun) {
+            await this.repository.ensureArchiveTable(tx, policy.sourceTable);
+          }
+
+          // Find eligible records
+          const eligible = await this.repository.findEligibleForPolicy(
+            tx,
+            policy,
+            500
+          );
+
+          if (eligible.length === 0) {
+            continue;
+          }
+
+          if (dryRun) {
+            details.push({
+              policyId: policy.id,
+              sourceTable: policy.sourceTable,
+              count: eligible.length,
+            });
+            totalArchived += eligible.length;
+            continue;
+          }
+
+          // Archive each eligible record
+          for (const record of eligible) {
+            try {
+              // Check if already in archive table
+              const alreadyArchived =
+                await this.repository.isRecordInArchiveTable(
+                  tx,
+                  policy.sourceTable,
+                  record.id
+                );
+              if (alreadyArchived) {
+                skippedCount++;
+                continue;
+              }
+
+              // Copy to archive table
+              const copied = await this.repository.copyToArchiveTable(
+                tx,
+                policy.sourceTable,
+                record.id,
+                ctx.userId || null,
+                policy.id
+              );
+
+              if (!copied) {
+                skippedCount++;
+                continue;
+              }
+
+              // Delete from source table
+              const deleted = await this.repository.deleteSourceRecord(
+                tx,
+                policy.sourceTable,
+                record.id
+              );
+
+              if (!deleted) {
+                console.warn(
+                  `[DataArchival] Could not delete source record ${record.id} from ${policy.sourceTable}`
+                );
+                skippedCount++;
+                continue;
+              }
+
+              archivedCount++;
+            } catch {
+              skippedCount++;
+            }
+          }
+
+          if (archivedCount > 0) {
+            details.push({
+              policyId: policy.id,
+              sourceTable: policy.sourceTable,
+              count: archivedCount,
+            });
+          }
+        } catch (err) {
+          errorMsg =
+            err instanceof Error ? err.message : "Unknown error during archival";
+          console.warn(
+            `[DataArchival] Policy ${policy.id} (${policy.sourceTable}) failed:`,
+            err
+          );
+        }
+
+        totalArchived += archivedCount;
+        totalSkipped += skippedCount;
+
+        // Create log entry for this policy run
+        if (!dryRun) {
+          const logId = crypto.randomUUID();
+          const logRow = await this.repository.createArchiveLogEntry(tx, {
+            id: logId,
+            tenantId: ctx.tenantId,
+            policyId: policy.id,
+            sourceTable: policy.sourceTable,
+            recordsArchived: archivedCount,
+            recordsSkipped: skippedCount,
+            recordsRestored: 0,
+            errorMessage: errorMsg,
+          });
+          logEntries.push(this.formatArchiveLogEntry(logRow));
+        }
+      }
+
+      // Emit domain event for the run
+      if (!dryRun && totalArchived > 0) {
+        await this.emitEvent(
+          tx,
+          ctx,
+          ctx.tenantId,
+          "data.archival.policy_run_completed",
+          {
+            policyId: options.policyId || "all",
+            recordsArchived: totalArchived,
+            recordsSkipped: totalSkipped,
+            details,
+            dryRun,
+          }
+        );
+      }
+
+      return {
+        success: true,
+        data: {
+          policyId: options.policyId || null,
+          recordsArchived: totalArchived,
+          recordsSkipped: totalSkipped,
+          dryRun,
+          details,
+          logEntries,
+        },
+      };
+    });
+  }
+
+  // ===========================================================================
+  // Restore from Archive (Policy-based — TODO-225)
+  // ===========================================================================
+
+  /**
+   * Restore a record from the archive.{table_name} table back to the
+   * source table. This reverses the schema-based archival process.
+   */
+  async restoreFromArchive(
+    ctx: TenantContext,
+    data: {
+      sourceTable: string;
+      sourceId: string;
+      reason: string;
+    }
+  ): Promise<
+    ServiceResult<{
+      success: true;
+      message: string;
+      sourceTable: string;
+      sourceId: string;
+    }>
+  > {
+    return await this.db.withTransaction(ctx, async (tx) => {
+      // Check if the record exists in the archive table
+      const inArchive = await this.repository.isRecordInArchiveTable(
+        tx,
+        data.sourceTable,
+        data.sourceId
+      );
+
+      if (!inArchive) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.NOT_FOUND,
+            message: `Record ${data.sourceId} not found in archive.${data.sourceTable}`,
+          },
+        };
+      }
+
+      // Restore: copy back from archive to source, then delete from archive
+      const restored = await this.repository.restoreFromArchiveTable(
+        tx,
+        data.sourceTable,
+        data.sourceId
+      );
+
+      if (!restored) {
+        return {
+          success: false,
+          error: {
+            code: ErrorCodes.VALIDATION_ERROR,
+            message:
+              "Failed to restore record from archive. The table schema may have changed " +
+              "since the record was archived, or the record ID may conflict with an existing row.",
+          },
+        };
+      }
+
+      // Create a log entry for the restore if a policy exists for this table
+      const policies = await this.repository.getEnabledArchivePolicies(
+        tx,
+        data.sourceTable
+      );
+      if (policies.length > 0) {
+        const logId = crypto.randomUUID();
+        await this.repository.createArchiveLogEntry(tx, {
+          id: logId,
+          tenantId: ctx.tenantId,
+          policyId: policies[0].id,
+          sourceTable: data.sourceTable,
+          recordsArchived: 0,
+          recordsSkipped: 0,
+          recordsRestored: 1,
+          errorMessage: null,
+        });
+      }
+
+      // Emit domain event
+      await this.emitEvent(
+        tx,
+        ctx,
+        data.sourceId,
+        "data.archival.policy_restore_completed",
+        {
+          sourceTable: data.sourceTable,
+          sourceId: data.sourceId,
+          reason: data.reason,
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          success: true as const,
+          message: `Record ${data.sourceId} restored from archive.${data.sourceTable} to ${data.sourceTable} successfully`,
+          sourceTable: data.sourceTable,
+          sourceId: data.sourceId,
+        },
+      };
+    });
+  }
 }

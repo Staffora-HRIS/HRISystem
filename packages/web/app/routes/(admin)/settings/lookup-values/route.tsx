@@ -1,5 +1,11 @@
+/**
+ * Lookup Values Admin Page
+ *
+ * Two-level drill-down: categories list -> values list within a category.
+ * Supports CRUD for both lookup categories and their values.
+ */
+
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings,
   Plus,
@@ -23,239 +29,60 @@ import {
   DataTable,
   type ColumnDef,
   Input,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface LookupCategory {
-  id: string;
-  tenantId: string;
-  code: string;
-  name: string;
-  description: string | null;
-  isSystem: boolean;
-  isActive: boolean;
-  valueCount?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface LookupValue {
-  id: string;
-  tenantId: string;
-  categoryId: string;
-  categoryCode?: string;
-  code: string;
-  label: string;
-  description: string | null;
-  sortOrder: number;
-  isDefault: boolean;
-  isActive: boolean;
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface PaginatedResponse<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
+import type { LookupCategory, LookupValue } from "./types";
+import { useLookupValues } from "./use-lookup-values";
+import { CreateCategoryModal } from "./CreateCategoryModal";
+import { EditCategoryModal } from "./EditCategoryModal";
+import { CreateValueModal } from "./CreateValueModal";
+import { EditValueModal } from "./EditValueModal";
 
 export default function LookupValuesPage() {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-
-  // Navigation state: null = category list, string = category id (viewing values)
-  const [selectedCategory, setSelectedCategory] = useState<LookupCategory | null>(null);
+  // Navigation state: null = category list, LookupCategory = viewing values
+  const [selectedCategory, setSelectedCategory] =
+    useState<LookupCategory | null>(null);
 
   // Category state
   const [catSearch, setCatSearch] = useState("");
   const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<LookupCategory | null>(null);
+  const [editingCategory, setEditingCategory] =
+    useState<LookupCategory | null>(null);
 
   // Value state
   const [valSearch, setValSearch] = useState("");
   const [showCreateValue, setShowCreateValue] = useState(false);
   const [editingValue, setEditingValue] = useState<LookupValue | null>(null);
 
-  // ===========================================================================
-  // Category Queries & Mutations
-  // ===========================================================================
-
-  const categoriesQuery = useQuery({
-    queryKey: ["lookup-categories", catSearch],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (catSearch) params.set("search", catSearch);
-      params.set("limit", "100");
-      return api.get<PaginatedResponse<LookupCategory>>(
-        `/lookup-values/categories?${params}`
-      );
-    },
-  });
-
-  const createCategoryMutation = useMutation({
-    mutationFn: (data: { code: string; name: string; description?: string }) =>
-      api.post<LookupCategory>("/lookup-values/categories", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Category created successfully");
-      setShowCreateCategory(false);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to create category");
-    },
-  });
-
-  const updateCategoryMutation = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: { name?: string; description?: string | null; isActive?: boolean };
-    }) => api.patch<LookupCategory>(`/lookup-values/categories/${id}`, data),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Category updated");
+  const {
+    categoriesQuery,
+    valuesQuery,
+    categories,
+    values,
+    stats,
+    createCategoryMutation,
+    updateCategoryMutation,
+    deleteCategoryMutation,
+    seedMutation,
+    createValueMutation,
+    updateValueMutation,
+    deleteValueMutation,
+  } = useLookupValues({
+    catSearch,
+    valSearch,
+    selectedCategory,
+    onCategoryCreated: () => setShowCreateCategory(false),
+    onCategoryUpdated: (updated) => {
       setEditingCategory(null);
-      // If we updated the currently selected category, refresh it
-      if (selectedCategory && updated && selectedCategory.id === updated.id) {
+      if (selectedCategory && selectedCategory.id === updated.id) {
         setSelectedCategory(updated);
       }
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update category");
-    },
-  });
-
-  const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) =>
-      api.delete(`/lookup-values/categories/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Category deleted");
+    onCategoryDeleted: () => {
       if (selectedCategory) setSelectedCategory(null);
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to delete category");
-    },
+    onValueCreated: () => setShowCreateValue(false),
+    onValueUpdated: () => setEditingValue(null),
   });
-
-  const seedMutation = useMutation({
-    mutationFn: () => api.post("/lookup-values/seed", {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Default categories seeded successfully");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to seed defaults");
-    },
-  });
-
-  // ===========================================================================
-  // Value Queries & Mutations
-  // ===========================================================================
-
-  const valuesQuery = useQuery({
-    queryKey: ["lookup-values", selectedCategory?.id, valSearch],
-    queryFn: async () => {
-      if (!selectedCategory) return { items: [], nextCursor: null, hasMore: false };
-      const params = new URLSearchParams();
-      if (valSearch) params.set("search", valSearch);
-      params.set("limit", "100");
-      return api.get<PaginatedResponse<LookupValue>>(
-        `/lookup-values/categories/${selectedCategory.id}/values?${params}`
-      );
-    },
-    enabled: !!selectedCategory,
-  });
-
-  const createValueMutation = useMutation({
-    mutationFn: (data: {
-      code: string;
-      label: string;
-      description?: string;
-      sortOrder?: number;
-      isDefault?: boolean;
-    }) =>
-      api.post<LookupValue>(
-        `/lookup-values/categories/${selectedCategory!.id}/values`,
-        data
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-values"] });
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Value created successfully");
-      setShowCreateValue(false);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to create value");
-    },
-  });
-
-  const updateValueMutation = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: {
-        label?: string;
-        description?: string | null;
-        sortOrder?: number;
-        isDefault?: boolean;
-        isActive?: boolean;
-      };
-    }) => api.patch<LookupValue>(`/lookup-values/values/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-values"] });
-      toast.success("Value updated");
-      setEditingValue(null);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update value");
-    },
-  });
-
-  const deleteValueMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/lookup-values/values/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lookup-values"] });
-      queryClient.invalidateQueries({ queryKey: ["lookup-categories"] });
-      toast.success("Value deleted");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to delete value");
-    },
-  });
-
-  // ===========================================================================
-  // Computed
-  // ===========================================================================
-
-  const categories = categoriesQuery.data?.items ?? [];
-  const values = valuesQuery.data?.items ?? [];
-
-  const stats = {
-    totalCategories: categories.length,
-    activeCategories: categories.filter((c) => c.isActive).length,
-    systemCategories: categories.filter((c) => c.isSystem).length,
-    totalValues: categories.reduce((sum, c) => sum + (c.valueCount ?? 0), 0),
-  };
 
   // ===========================================================================
   // Category Table Columns
@@ -722,456 +549,5 @@ export default function LookupValuesPage() {
         />
       )}
     </div>
-  );
-}
-
-// ===========================================================================
-// Create Category Modal
-// ===========================================================================
-
-function CreateCategoryModal({
-  open,
-  onClose,
-  onSubmit,
-  isPending,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: { code: string; name: string; description?: string }) => void;
-  isPending: boolean;
-}) {
-  const toast = useToast();
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-
-  function reset() {
-    setCode("");
-    setName("");
-    setDescription("");
-  }
-
-  function handleClose() {
-    if (!isPending) {
-      reset();
-      onClose();
-    }
-  }
-
-  function handleSubmit() {
-    const trimmedCode = code.trim();
-    const trimmedName = name.trim();
-
-    if (!trimmedCode) {
-      toast.error("Code is required");
-      return;
-    }
-    if (!/^[a-z][a-z0-9_]*$/.test(trimmedCode)) {
-      toast.error(
-        "Code must start with a lowercase letter and contain only lowercase letters, digits, and underscores"
-      );
-      return;
-    }
-    if (!trimmedName) {
-      toast.error("Name is required");
-      return;
-    }
-
-    onSubmit({
-      code: trimmedCode,
-      name: trimmedName,
-      description: description.trim() || undefined,
-    });
-    reset();
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} size="md">
-      <ModalHeader title="Add Lookup Category" />
-      <ModalBody>
-        <div className="space-y-4">
-          <Input
-            label="Code"
-            placeholder="e.g. employment_type"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            required
-            id="cat-code"
-          />
-          <p className="text-xs text-gray-500 -mt-2">
-            Lowercase letters, digits, underscores only. Used as a machine-readable key.
-          </p>
-          <Input
-            label="Name"
-            placeholder="e.g. Employment Type"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            id="cat-name"
-          />
-          <Input
-            label="Description"
-            placeholder="Optional description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            id="cat-description"
-          />
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <Button variant="outline" onClick={handleClose} disabled={isPending}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={!code.trim() || !name.trim() || isPending}
-          loading={isPending}
-        >
-          {isPending ? "Creating..." : "Create Category"}
-        </Button>
-      </ModalFooter>
-    </Modal>
-  );
-}
-
-// ===========================================================================
-// Edit Category Modal
-// ===========================================================================
-
-function EditCategoryModal({
-  category,
-  open,
-  onClose,
-  onSubmit,
-  isPending,
-}: {
-  category: LookupCategory;
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: {
-    name?: string;
-    description?: string | null;
-    isActive?: boolean;
-  }) => void;
-  isPending: boolean;
-}) {
-  const [name, setName] = useState(category.name);
-  const [description, setDescription] = useState(category.description || "");
-  const [isActive, setIsActive] = useState(category.isActive);
-
-  function handleClose() {
-    if (!isPending) onClose();
-  }
-
-  function handleSubmit() {
-    const changes: Record<string, unknown> = {};
-    if (name.trim() !== category.name) changes.name = name.trim();
-    if ((description.trim() || null) !== category.description)
-      changes.description = description.trim() || null;
-    if (isActive !== category.isActive) changes.isActive = isActive;
-
-    if (Object.keys(changes).length === 0) {
-      onClose();
-      return;
-    }
-    onSubmit(changes as any);
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} size="md">
-      <ModalHeader title={`Edit Category: ${category.code}`} />
-      <ModalBody>
-        <div className="space-y-4">
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            id="edit-cat-name"
-          />
-          <Input
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            id="edit-cat-description"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              id="edit-cat-active"
-              className="h-4 w-4 rounded border-gray-300"
-            />
-            <label htmlFor="edit-cat-active" className="text-sm">
-              Active
-            </label>
-          </div>
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <Button variant="outline" onClick={handleClose} disabled={isPending}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} disabled={isPending} loading={isPending}>
-          {isPending ? "Saving..." : "Save Changes"}
-        </Button>
-      </ModalFooter>
-    </Modal>
-  );
-}
-
-// ===========================================================================
-// Create Value Modal
-// ===========================================================================
-
-function CreateValueModal({
-  open,
-  onClose,
-  onSubmit,
-  isPending,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: {
-    code: string;
-    label: string;
-    description?: string;
-    sortOrder?: number;
-    isDefault?: boolean;
-  }) => void;
-  isPending: boolean;
-}) {
-  const toast = useToast();
-  const [code, setCode] = useState("");
-  const [label, setLabel] = useState("");
-  const [description, setDescription] = useState("");
-  const [sortOrder, setSortOrder] = useState("0");
-  const [isDefault, setIsDefault] = useState(false);
-
-  function reset() {
-    setCode("");
-    setLabel("");
-    setDescription("");
-    setSortOrder("0");
-    setIsDefault(false);
-  }
-
-  function handleClose() {
-    if (!isPending) {
-      reset();
-      onClose();
-    }
-  }
-
-  function handleSubmit() {
-    const trimmedCode = code.trim();
-    const trimmedLabel = label.trim();
-
-    if (!trimmedCode) {
-      toast.error("Code is required");
-      return;
-    }
-    if (!/^[a-z][a-z0-9_]*$/.test(trimmedCode)) {
-      toast.error(
-        "Code must start with a lowercase letter and contain only lowercase letters, digits, and underscores"
-      );
-      return;
-    }
-    if (!trimmedLabel) {
-      toast.error("Label is required");
-      return;
-    }
-
-    onSubmit({
-      code: trimmedCode,
-      label: trimmedLabel,
-      description: description.trim() || undefined,
-      sortOrder: Number(sortOrder) || 0,
-      isDefault,
-    });
-    reset();
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} size="md">
-      <ModalHeader title="Add Lookup Value" />
-      <ModalBody>
-        <div className="space-y-4">
-          <Input
-            label="Code"
-            placeholder="e.g. full_time"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            required
-            id="val-code"
-          />
-          <p className="text-xs text-gray-500 -mt-2">
-            Machine-readable key. Lowercase, digits, underscores.
-          </p>
-          <Input
-            label="Label"
-            placeholder="e.g. Full Time"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            required
-            id="val-label"
-          />
-          <Input
-            label="Description"
-            placeholder="Optional description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            id="val-description"
-          />
-          <Input
-            label="Sort Order"
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-            id="val-sort-order"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-              id="val-is-default"
-              className="h-4 w-4 rounded border-gray-300"
-            />
-            <label htmlFor="val-is-default" className="text-sm">
-              Default selection
-            </label>
-          </div>
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <Button variant="outline" onClick={handleClose} disabled={isPending}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={!code.trim() || !label.trim() || isPending}
-          loading={isPending}
-        >
-          {isPending ? "Creating..." : "Add Value"}
-        </Button>
-      </ModalFooter>
-    </Modal>
-  );
-}
-
-// ===========================================================================
-// Edit Value Modal
-// ===========================================================================
-
-function EditValueModal({
-  value,
-  open,
-  onClose,
-  onSubmit,
-  isPending,
-}: {
-  value: LookupValue;
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: {
-    label?: string;
-    description?: string | null;
-    sortOrder?: number;
-    isDefault?: boolean;
-    isActive?: boolean;
-  }) => void;
-  isPending: boolean;
-}) {
-  const [label, setLabel] = useState(value.label);
-  const [description, setDescription] = useState(value.description || "");
-  const [sortOrder, setSortOrder] = useState(String(value.sortOrder));
-  const [isDefault, setIsDefault] = useState(value.isDefault);
-  const [isActive, setIsActive] = useState(value.isActive);
-
-  function handleClose() {
-    if (!isPending) onClose();
-  }
-
-  function handleSubmit() {
-    const changes: Record<string, unknown> = {};
-    if (label.trim() !== value.label) changes.label = label.trim();
-    if ((description.trim() || null) !== value.description)
-      changes.description = description.trim() || null;
-    if (Number(sortOrder) !== value.sortOrder)
-      changes.sortOrder = Number(sortOrder) || 0;
-    if (isDefault !== value.isDefault) changes.isDefault = isDefault;
-    if (isActive !== value.isActive) changes.isActive = isActive;
-
-    if (Object.keys(changes).length === 0) {
-      onClose();
-      return;
-    }
-    onSubmit(changes as any);
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} size="md">
-      <ModalHeader title={`Edit Value: ${value.code}`} />
-      <ModalBody>
-        <div className="space-y-4">
-          <Input
-            label="Label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            required
-            id="edit-val-label"
-          />
-          <Input
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            id="edit-val-description"
-          />
-          <Input
-            label="Sort Order"
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-            id="edit-val-sort-order"
-          />
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
-                id="edit-val-default"
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <label htmlFor="edit-val-default" className="text-sm">
-                Default
-              </label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                id="edit-val-active"
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <label htmlFor="edit-val-active" className="text-sm">
-                Active
-              </label>
-            </div>
-          </div>
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <Button variant="outline" onClick={handleClose} disabled={isPending}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} disabled={isPending} loading={isPending}>
-          {isPending ? "Saving..." : "Save Changes"}
-        </Button>
-      </ModalFooter>
-    </Modal>
   );
 }

@@ -1186,3 +1186,31 @@ export function requireCsrf() {
       return {};
     });
 }
+
+// =============================================================================
+// API Key Scope Enforcement
+// =============================================================================
+
+/**
+ * Enforce API key scope restrictions on a route.
+ * When the request is authenticated via API key, checks that the key
+ * has been granted a scope matching resource:action. Session-based
+ * requests are not affected (RBAC handles those).
+ */
+export function requireApiKeyScope(resource: string, action: string) {
+  return (ctx: any) => {
+    if (!ctx.apiKeyAuth) return;
+    const scopes: string[] = ctx.apiKeyScopes || [];
+    if (scopes.length === 0) return;
+    const requiredKey = `${resource}:${action}`;
+    for (const scope of scopes) {
+      if (scope === "*" || scope === "*:*") return;
+      if (scope === requiredKey) return;
+      const [scopeResource, scopeAction] = scope.split(":");
+      if (scopeResource === "*" && scopeAction === action) return;
+      if (scopeResource === resource && scopeAction === "*") return;
+      if (scopeResource === resource && scopeAction === "read" && action === "list") return;
+    }
+    throw new AuthError("PERMISSION_DENIED" as any, `API key does not have the required scope: ${requiredKey}`, 403);
+  };
+}

@@ -323,6 +323,111 @@ export const ComplianceReportQuerySchema = t.Object({
   includeArchived: t.Optional(t.String()),
 });
 
+// =============================================================================
+// Team Training Overview Schemas (Manager Portal)
+// =============================================================================
+
+export const TeamMemberTrainingSchema = t.Object({
+  employeeId: UuidSchema,
+  employeeName: t.String(),
+  employeeNumber: t.String(),
+  photoUrl: t.Union([t.String(), t.Null()]),
+  totalEnrolled: t.Number(),
+  completedCount: t.Number(),
+  inProgressCount: t.Number(),
+  notStartedCount: t.Number(),
+  overdueCount: t.Number(),
+  completionRate: t.Number(),
+  enrollments: t.Array(
+    t.Object({
+      enrollmentId: UuidSchema,
+      courseId: UuidSchema,
+      courseTitle: t.String(),
+      status: EnrollmentStatusSchema,
+      dueDate: t.Union([t.String(), t.Null()]),
+      progress: t.Number(),
+      isOverdue: t.Boolean(),
+      isMandatory: t.Boolean(),
+    })
+  ),
+});
+
+export const TeamTrainingOverviewResponseSchema = t.Object({
+  members: t.Array(TeamMemberTrainingSchema),
+  count: t.Number(),
+});
+
+export const TeamTrainingStatsResponseSchema = t.Object({
+  teamSize: t.Number(),
+  totalEnrollments: t.Number(),
+  completedCount: t.Number(),
+  inProgressCount: t.Number(),
+  notStartedCount: t.Number(),
+  overdueCount: t.Number(),
+  teamCompletionRate: t.Number(),
+  upcomingDeadlines: t.Array(
+    t.Object({
+      employeeId: UuidSchema,
+      employeeName: t.String(),
+      courseTitle: t.String(),
+      dueDate: t.String(),
+      daysUntilDue: t.Number(),
+    })
+  ),
+});
+
+export const TeamTrainingQuerySchema = t.Object({
+  filter: t.Optional(
+    t.Union([
+      t.Literal("all"),
+      t.Literal("overdue"),
+      t.Literal("in_progress"),
+    ])
+  ),
+});
+
+// =============================================================================
+// Course Prerequisite Schemas (TODO-245)
+// =============================================================================
+
+export const AddCoursePrerequisiteSchema = t.Object({
+  prerequisiteCourseId: t.String({ format: "uuid" }),
+  isMandatory: t.Optional(t.Boolean({ default: true })),
+});
+
+export const CoursePrerequisiteResponseSchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  courseId: UuidSchema,
+  prerequisiteCourseId: UuidSchema,
+  prerequisiteCourseTitle: t.Optional(t.String()),
+  isMandatory: t.Boolean(),
+  createdAt: t.String(),
+});
+
+export const CoursePrerequisiteListResponseSchema = t.Object({
+  items: t.Array(CoursePrerequisiteResponseSchema),
+  count: t.Number(),
+});
+
+export const PrerequisiteDeleteParamsSchema = t.Object({
+  courseId: UuidSchema,
+  prereqId: UuidSchema,
+});
+
+export const UnmetPrerequisiteSchema = t.Object({
+  courseId: UuidSchema,
+  courseTitle: t.String(),
+  isMandatory: t.Boolean(),
+  status: t.Union([
+    t.Literal("not_enrolled"),
+    t.Literal("in_progress"),
+    t.Literal("not_started"),
+    t.Literal("expired"),
+    t.Literal("cancelled"),
+  ]),
+});
+
 // Export types
 export type CreateCourse = typeof CreateCourseSchema.static;
 export type UpdateCourse = typeof UpdateCourseSchema.static;
@@ -335,3 +440,8 @@ export type LearningPathResponse = typeof LearningPathResponseSchema.static;
 export type ComplianceReport = typeof ComplianceReportResponseSchema.static;
 export type MandatoryCourseCompliance = typeof MandatoryCourseComplianceSchema.static;
 export type DepartmentCompliance = typeof DepartmentComplianceSchema.static;
+export type TeamMemberTraining = typeof TeamMemberTrainingSchema.static;
+export type TeamTrainingOverviewResponse = typeof TeamTrainingOverviewResponseSchema.static;
+export type TeamTrainingStatsResponse = typeof TeamTrainingStatsResponseSchema.static;
+export type AddCoursePrerequisite = typeof AddCoursePrerequisiteSchema.static;
+export type CoursePrerequisiteResponse = typeof CoursePrerequisiteResponseSchema.static;

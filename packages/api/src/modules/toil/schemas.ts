@@ -1,37 +1,33 @@
 /**
- * TOIL (Time Off In Lieu) Module Schemas
+ * Time Off In Lieu (TOIL) Module - TypeBox Schemas
  *
- * TypeBox validation schemas for TOIL balance and transaction endpoints.
+ * Defines validation schemas for the TOIL management API.
+ * TOIL allows employees to accrue time off instead of overtime pay.
+ *
+ * Transaction types:
+ *   accrual    - Hours earned from approved overtime
+ *   usage      - Hours taken as time off
+ *   expiry     - Hours expired (e.g. end-of-year policy)
+ *   adjustment - Manual HR adjustment with mandatory reason
  */
 
 import { t, type Static } from "elysia";
 
 // =============================================================================
-// Shared primitives
+// Common
 // =============================================================================
 
-export const UuidSchema = t.String({ format: "uuid" });
-export const DateSchema = t.String({ format: "date" });
+export const UuidSchema = t.String({
+  format: "uuid",
+  pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+});
 
 export const PaginationQuerySchema = t.Object({
-  cursor: t.Optional(t.String()),
+  cursor: t.Optional(t.String({ minLength: 1 })),
   limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
 });
 
-export const IdParamsSchema = t.Object({
-  id: UuidSchema,
-});
-export type IdParams = Static<typeof IdParamsSchema>;
-
-export const EmployeeIdParamsSchema = t.Object({
-  employeeId: UuidSchema,
-});
-export type EmployeeIdParams = Static<typeof EmployeeIdParamsSchema>;
-
-export const IdempotencyHeaderSchema = t.Object({
-  "idempotency-key": t.String({ minLength: 1 }),
-});
-export type IdempotencyHeader = Static<typeof IdempotencyHeaderSchema>;
+export type PaginationQuery = Static<typeof PaginationQuerySchema>;
 
 // =============================================================================
 // Enums
@@ -40,94 +36,116 @@ export type IdempotencyHeader = Static<typeof IdempotencyHeaderSchema>;
 export const ToilTransactionTypeSchema = t.Union([
   t.Literal("accrual"),
   t.Literal("usage"),
+  t.Literal("expiry"),
+  t.Literal("adjustment"),
 ]);
+
 export type ToilTransactionType = Static<typeof ToilTransactionTypeSchema>;
 
 // =============================================================================
-// TOIL Balance Schemas
+// Params
 // =============================================================================
 
-export const CreateToilBalanceSchema = t.Object({
+export const EmployeeIdParamsSchema = t.Object({
   employeeId: UuidSchema,
-  periodStart: DateSchema,
-  periodEnd: DateSchema,
-  expiryDays: t.Optional(t.Number({ minimum: 1, maximum: 365, default: 90 })),
 });
-export type CreateToilBalance = Static<typeof CreateToilBalanceSchema>;
 
+export type EmployeeIdParams = Static<typeof EmployeeIdParamsSchema>;
+
+// =============================================================================
+// Headers
+// =============================================================================
+
+export const OptionalIdempotencyHeaderSchema = t.Object({
+  "idempotency-key": t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+});
+
+export type OptionalIdempotencyHeader = Static<typeof OptionalIdempotencyHeaderSchema>;
+
+// =============================================================================
+// Request Schemas
+// =============================================================================
+
+/**
+ * Accrue TOIL hours from approved overtime.
+ */
+export const AccrueToilSchema = t.Object({
+  employeeId: UuidSchema,
+  hours: t.Number({ minimum: 0.25, maximum: 999 }),
+  referenceId: t.Optional(UuidSchema),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export type AccrueToil = Static<typeof AccrueToilSchema>;
+
+/**
+ * Use TOIL hours (take time off).
+ */
+export const UseToilSchema = t.Object({
+  employeeId: UuidSchema,
+  hours: t.Number({ minimum: 0.25, maximum: 999 }),
+  referenceId: t.Optional(UuidSchema),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export type UseToil = Static<typeof UseToilSchema>;
+
+/**
+ * Manual TOIL adjustment by HR.
+ */
+export const AdjustToilSchema = t.Object({
+  employeeId: UuidSchema,
+  hours: t.Number({ minimum: -999, maximum: 999 }),
+  notes: t.String({ minLength: 1, maxLength: 2000 }),
+});
+
+export type AdjustToil = Static<typeof AdjustToilSchema>;
+
+// =============================================================================
+// Query Schemas
+// =============================================================================
+
+export const ToilTransactionFiltersSchema = t.Object({
+  type: t.Optional(ToilTransactionTypeSchema),
+  cursor: t.Optional(t.String({ minLength: 1 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
+});
+
+export type ToilTransactionFilters = Static<typeof ToilTransactionFiltersSchema>;
+
+// =============================================================================
+// Response Schemas
+// =============================================================================
+
+/**
+ * TOIL balance response
+ */
 export const ToilBalanceResponseSchema = t.Object({
   id: UuidSchema,
   tenantId: UuidSchema,
   employeeId: UuidSchema,
   accruedHours: t.Number(),
   usedHours: t.Number(),
+  expiredHours: t.Number(),
   balanceHours: t.Number(),
-  periodStart: t.String(),
-  periodEnd: t.String(),
-  expiryDays: t.Number(),
-  createdAt: t.String(),
   updatedAt: t.String(),
 });
+
 export type ToilBalanceResponse = Static<typeof ToilBalanceResponseSchema>;
 
-export const ToilBalanceQuerySchema = t.Object({
-  employeeId: t.Optional(UuidSchema),
-  activeOnly: t.Optional(t.String({ pattern: "^(true|false)$" })),
-  ...PaginationQuerySchema.properties,
-});
-export type ToilBalanceQuery = Static<typeof ToilBalanceQuerySchema>;
-
-// =============================================================================
-// TOIL Accrual Schemas (manager accrues TOIL for overtime worked)
-// =============================================================================
-
-export const CreateToilAccrualSchema = t.Object({
-  employeeId: UuidSchema,
-  balanceId: UuidSchema,
-  hours: t.Number({ minimum: 0.25, maximum: 24 }),
-  reason: t.String({ minLength: 1, maxLength: 1000 }),
-  date: DateSchema,
-});
-export type CreateToilAccrual = Static<typeof CreateToilAccrualSchema>;
-
-// =============================================================================
-// TOIL Usage Schemas (employee requests to use TOIL)
-// =============================================================================
-
-export const CreateToilUsageSchema = t.Object({
-  employeeId: UuidSchema,
-  balanceId: UuidSchema,
-  hours: t.Number({ minimum: 0.25, maximum: 24 }),
-  reason: t.Optional(t.String({ maxLength: 1000 })),
-  date: DateSchema,
-});
-export type CreateToilUsage = Static<typeof CreateToilUsageSchema>;
-
-// =============================================================================
-// TOIL Transaction Response
-// =============================================================================
-
+/**
+ * TOIL transaction response
+ */
 export const ToilTransactionResponseSchema = t.Object({
   id: UuidSchema,
   tenantId: UuidSchema,
   employeeId: UuidSchema,
-  balanceId: UuidSchema,
   type: ToilTransactionTypeSchema,
   hours: t.Number(),
-  reason: t.Nullable(t.String()),
-  authorizedBy: t.Nullable(UuidSchema),
-  date: t.String(),
-  expiresAt: t.Nullable(t.String()),
+  referenceId: t.Union([UuidSchema, t.Null()]),
+  notes: t.Union([t.String(), t.Null()]),
+  createdBy: t.Union([UuidSchema, t.Null()]),
   createdAt: t.String(),
 });
-export type ToilTransactionResponse = Static<typeof ToilTransactionResponseSchema>;
 
-export const ToilTransactionQuerySchema = t.Object({
-  employeeId: t.Optional(UuidSchema),
-  balanceId: t.Optional(UuidSchema),
-  type: t.Optional(ToilTransactionTypeSchema),
-  from: t.Optional(DateSchema),
-  to: t.Optional(DateSchema),
-  ...PaginationQuerySchema.properties,
-});
-export type ToilTransactionQuery = Static<typeof ToilTransactionQuerySchema>;
+export type ToilTransactionResponse = Static<typeof ToilTransactionResponseSchema>;

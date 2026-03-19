@@ -127,6 +127,7 @@ export class OvertimeRequestService {
       tenant_id: row.tenantId,
       employee_id: row.employeeId,
       request_type: row.requestType,
+      authorisation_type: row.authorisationType || "pre_approval",
       date: this.formatDate(row.date) || "",
       planned_hours: Number(row.plannedHours),
       actual_hours: row.actualHours !== null ? Number(row.actualHours) : null,
@@ -135,6 +136,7 @@ export class OvertimeRequestService {
       approver_id: row.approverId,
       approved_at: this.formatTimestamp(row.approvedAt),
       rejection_reason: row.rejectionReason,
+      manager_notes: row.managerNotes || null,
       created_at: this.formatTimestampRequired(row.createdAt),
       updated_at: this.formatTimestampRequired(row.updatedAt),
     };
@@ -199,6 +201,7 @@ export class OvertimeRequestService {
         {
           employeeId: data.employee_id,
           requestType: data.request_type ?? "planned",
+          authorisationType: data.authorisation_type ?? "pre_approval",
           date: data.date,
           plannedHours: data.planned_hours,
           actualHours: data.actual_hours ?? null,
@@ -331,6 +334,7 @@ export class OvertimeRequestService {
         id,
         approverId,
         data.actual_hours ?? null,
+        data.manager_notes ?? null,
         tx
       );
 
@@ -400,6 +404,7 @@ export class OvertimeRequestService {
         id,
         approverId,
         data.rejection_reason,
+        data.manager_notes ?? null,
         tx
       );
 

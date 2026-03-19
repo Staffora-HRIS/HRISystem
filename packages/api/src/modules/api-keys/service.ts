@@ -79,7 +79,8 @@ function extractKeyPrefix(key: string): string {
 type ApiKeyEventType =
   | "api-key.created"
   | "api-key.updated"
-  | "api-key.revoked";
+  | "api-key.revoked"
+  | "api-key.rotated";
 
 // =============================================================================
 // Mappers
@@ -343,6 +344,48 @@ export class ApiKeyService {
     });
 
     return { success: true, data: { revoked: true } };
+  }
+
+  // ===========================================================================
+  // Rotate
+  // ===========================================================================
+
+  async rotateApiKey(ctx: TenantContext, id: string): Promise<ServiceResult<ApiKeyCreatedResponse>> {
+    if (!ctx.userId) {
+      return { success: false, error: { code: ErrorCodes.UNAUTHORIZED, message: "User context required to rotate an API key" } };
+    }
+    const existing = await this.repository.getById(ctx, id);
+    if (!existing) {
+      return { success: false, error: { code: ErrorCodes.NOT_FOUND, message: "API key not found", details: { id } } };
+    }
+    if (existing.revokedAt) {
+      return { success: false, error: { code: ErrorCodes.CONFLICT, message: "Cannot rotate a revoked API key", details: { id } } };
+    }
+    const newFullKey = generateApiKey();
+    const newKeyHash = hashApiKey(newFullKey);
+    const newKeyPrefix = extractKeyPrefix(newFullKey);
+    const newRow = await this.db.withTransaction(ctx, async (tx) => {
+      await this.repository.revoke(ctx, id, tx);
+      const created = await this.repository.create(ctx, {
+        name: existing.name, keyHash: newKeyHash, keyPrefix: newKeyPrefix,
+        scopes: Array.isArray(existing.scopes) ? existing.scopes : [],
+        expiresAt: existing.expiresAt?.toISOString() ?? null, createdBy: ctx.userId!,
+      }, tx);
+      await this.emitEvent(tx, ctx, created.id, "api-key.rotated", {
+        newApiKeyId: created.id, previousApiKeyId: id, name: existing.name,
+        scopes: Array.isArray(existing.scopes) ? existing.scopes : [],
+      });
+      return created;
+    });
+    return {
+      success: true,
+      data: {
+        id: newRow.id, tenant_id: newRow.tenantId, name: newRow.name, key: newFullKey, key_prefix: newKeyPrefix,
+        scopes: Array.isArray(newRow.scopes) ? newRow.scopes : [],
+        expires_at: newRow.expiresAt?.toISOString() ?? null,
+        created_by: newRow.createdBy, created_at: newRow.createdAt.toISOString(),
+      },
+    };
   }
 
   // ===========================================================================

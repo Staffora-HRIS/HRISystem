@@ -24,6 +24,7 @@ export { payrollRoutes, type PayrollRoutes } from "./routes";
 
 // Export service
 export { PayrollService } from "./service";
+export { SubmissionService } from "./submission.service";
 
 // Export repository
 export {
@@ -36,7 +37,14 @@ export {
   type ActiveEmployeeRow,
   type PeriodLockRow,
   type JournalEntryRow,
+  type PayAssignmentRow,
+  type PayScheduleRow,
 } from "./repository";
+export {
+  SubmissionRepository,
+  type SubmissionRow,
+  type SubmissionItemRow,
+} from "./submission.repository";
 
 // Export schemas
 export {
@@ -78,6 +86,11 @@ export {
   GenerateJournalEntriesSchema,
   JournalEntriesQuerySchema,
   JournalEntriesListResponseSchema,
+  // Pay Schedule Assignments (TODO-124)
+  CreatePayScheduleAssignmentSchema,
+  UpdatePayScheduleAssignmentSchema,
+  PayScheduleAssignmentResponseSchema,
+  PayScheduleAssignmentFiltersSchema,
   // Types
   type PayrollRunStatus,
   type PayrollRunType,
@@ -104,4 +117,56 @@ export {
   type JournalEntryResponse,
   type GenerateJournalEntries,
   type JournalEntriesQuery,
+  type CreatePayScheduleAssignment,
+  type UpdatePayScheduleAssignment,
+  type PayScheduleAssignmentResponse,
+  type PayScheduleAssignmentFilters,
+  // PAYE/RTI Submission (TODO-064)
+  PayrollSubmissionTypeSchema,
+  PayrollSubmissionStatusSchema,
+  SUBMISSION_STATUS_TRANSITIONS,
+  CreateFpsSubmissionSchema,
+  CreateEpsSubmissionSchema,
+  SubmissionListQuerySchema,
+  SubmissionItemResponseSchema,
+  SubmissionResponseSchema,
+  SubmissionDetailResponseSchema,
+  SubmissionValidationResponseSchema,
+  type PayrollSubmissionType,
+  type PayrollSubmissionStatus,
+  type CreateFpsSubmission,
+  type CreateEpsSubmission,
+  type SubmissionListQuery,
+  type SubmissionItemResponse,
+  type SubmissionResponse,
+  type SubmissionDetailResponse,
+  type SubmissionValidationResponse,
 } from "./schemas";
+
+// Submission routes (TODO-064)
+export { submissionRoutes, type SubmissionRoutes } from "./submission.routes";
+
+// Salary Sacrifice (TODO-232)
+export { SalarySacrificeService } from "./salary-sacrifice.service";
+export { SalarySacrificeRepository, type SalarySacrificeRow } from "./salary-sacrifice.repository";
+export { salarySacrificeRoutes, type SalarySacrificeRoutes } from "./salary-sacrifice.routes";
+export {
+  // Schemas
+  CreateSalarySacrificeSchema,
+  UpdateSalarySacrificeSchema,
+  SalarySacrificeResponseSchema,
+  SalarySacrificeImpactSchema,
+  SalarySacrificeFiltersSchema,
+  SacrificeTypeSchema,
+  SacrificeFrequencySchema,
+  SacrificeStatusSchema,
+  // Types
+  type CreateSalarySacrifice,
+  type UpdateSalarySacrifice,
+  type SalarySacrificeResponse,
+  type SalarySacrificeImpact,
+  type SalarySacrificeFilters,
+  type SacrificeType,
+  type SacrificeFrequency,
+  type SacrificeStatus,
+} from "./salary-sacrifice.schemas";

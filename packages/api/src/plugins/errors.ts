@@ -105,6 +105,9 @@ export const ErrorCodes = {
 
   // Document errors
   VIRUS_DETECTED: "VIRUS_DETECTED",
+
+  // Payroll period lock errors (TODO-234)
+  PAYROLL_PERIOD_FINALIZED: "PAYROLL_PERIOD_FINALIZED",
 } as const;
 
 export type ErrorCode = keyof typeof ErrorCodes;

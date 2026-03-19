@@ -20,8 +20,13 @@
 // Export routes
 export { hrRoutes, type HRRoutes } from "./routes";
 
-// Export service
+// Export service facade (backwards compatible)
 export { HRService } from "./service";
+
+// Export focused sub-services for direct use
+export { EmployeeService } from "./employee.service";
+export { OrgUnitService } from "./org-unit.service";
+export { PositionService } from "./position.service";
 export { AddressService, isValidUkPostcode } from "./address.service";
 export type { AddressResponse } from "./address.service";
 export type { ServiceResult, PaginatedServiceResult, TenantContext as ServiceTenantContext } from "../../types/service-result";
