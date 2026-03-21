@@ -44,7 +44,7 @@ export default function WorkflowsAdminPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["workflow-definitions"],
-    queryFn: () => api.get<{ items: WorkflowDefinition[]; nextCursor: string | null; hasMore: boolean }>("/workflows/definitions"),
+    queryFn: () => api.get<{ data: WorkflowDefinition[]; cursor: string | null; hasMore: boolean }>("/workflows/definitions"),
   });
 
   const createMutation = useMutation({
@@ -78,17 +78,16 @@ export default function WorkflowsAdminPage() {
       steps: [
         {
           stepKey: "start",
+          stepType: "approval",
           name: "Start",
-          type: "approval",
           assigneeType: "role",
           assigneeValue: "admin",
-          order: 1,
         },
       ],
     });
   };
 
-  const definitions = data?.items || [];
+  const definitions = data?.data || [];
 
   const stats = {
     total: definitions.length,
@@ -195,10 +194,11 @@ export default function WorkflowsAdminPage() {
                   id="wf-code"
                   type="text"
                   value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
                   className="w-full rounded-md border border-gray-300 p-2"
                   placeholder="leave-approval"
                 />
+                <p className="text-xs text-gray-500 mt-1">Lowercase letters, numbers, and hyphens only</p>
               </div>
               <div>
                 <label htmlFor="wf-name" className="block text-sm font-medium text-gray-700 mb-1">Name *</label>

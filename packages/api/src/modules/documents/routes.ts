@@ -217,10 +217,10 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
             description: r.description,
             category: r.documentType,
             format: "pdf",
-            is_active: r.isActive,
+            isActive: r.isActive,
             version: 1,
-            created_at: r.createdAt?.toISOString?.() || r.createdAt,
-            updated_at: r.updatedAt?.toISOString?.() || r.updatedAt,
+            createdAt: r.createdAt?.toISOString?.() || r.createdAt,
+            updatedAt: r.updatedAt?.toISOString?.() || r.updatedAt,
           })),
           nextCursor: null,
           hasMore: false,
@@ -272,10 +272,10 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
           description: row.description,
           category: row.documentType,
           format: body.format || "pdf",
-          is_active: row.isActive,
+          isActive: row.isActive,
           version: 1,
-          created_at: row.createdAt?.toISOString?.() || row.createdAt,
-          updated_at: row.updatedAt?.toISOString?.() || row.updatedAt,
+          createdAt: row.createdAt?.toISOString?.() || row.createdAt,
+          updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt,
         };
       } catch (error: any) {
         set.status = 500;
@@ -293,6 +293,67 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
       detail: {
         tags: ["Documents"],
         summary: "Create document template",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // PUT /documents/templates/:id - Update document template
+  .put(
+    "/templates/:id",
+    async (ctx) => {
+      const { db, params, body, tenantContext, set } = ctx as any;
+      try {
+        const [row] = await db.withTransaction(tenantContext, async (tx: any) => {
+          return tx<any[]>`
+            UPDATE app.document_templates
+            SET
+              name = COALESCE(${body.name ?? null}, name),
+              document_type = COALESCE(${body.category ?? null}, document_type),
+              description = CASE
+                WHEN ${body.description !== undefined} THEN ${body.description ?? null}
+                ELSE description
+              END,
+              updated_at = now()
+            WHERE id = ${params.id}::uuid
+              AND tenant_id = ${tenantContext.tenantId}::uuid
+            RETURNING *
+          `;
+        });
+
+        if (!row) {
+          set.status = 404;
+          return { error: { code: "NOT_FOUND", message: "Document template not found" } };
+        }
+
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          category: row.documentType,
+          format: body.format || "pdf",
+          isActive: row.isActive,
+          version: 1,
+          createdAt: row.createdAt?.toISOString?.() || row.createdAt,
+          updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt,
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return { error: { code: "INTERNAL_ERROR", message: error.message } };
+      }
+    },
+    {
+      beforeHandle: [requirePermission("documents", "write")],
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      body: t.Object({
+        name: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
+        description: t.Optional(t.String({ maxLength: 2000 })),
+        category: t.Optional(t.String()),
+        format: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ["Documents"],
+        summary: "Update document template",
         security: [{ bearerAuth: [] }],
       },
     }

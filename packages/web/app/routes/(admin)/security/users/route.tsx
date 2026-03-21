@@ -18,7 +18,7 @@ import {
   Select,
   useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 import { invalidationPatterns, queryKeys } from "~/lib/query-client";
 
 interface TenantUserRow {
@@ -55,6 +55,19 @@ interface RoleAssignment {
   assignedBy: string | null;
 }
 
+interface InviteUserPayload {
+  email: string;
+  name: string;
+  password: string;
+  roleId?: string;
+}
+
+interface InviteUserResponse {
+  success: boolean;
+  user: { id: string; email: string; name: string };
+  roleAssigned: boolean;
+}
+
 async function fetchUsers(params: {
   cursor: string | null;
   limit: number;
@@ -85,6 +98,20 @@ export default function AdminUsersPage() {
 
   const [activeUser, setActiveUser] = useState<TenantUserRow | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+
+  // Invite modal state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteRoleId, setInviteRoleId] = useState("");
+
+  const resetInviteForm = () => {
+    setInviteEmail("");
+    setInviteName("");
+    setInvitePassword("");
+    setInviteRoleId("");
+  };
 
   const usersQuery = useQuery({
     queryKey: queryKeys.security.users({ cursor: pagination.cursor, limit: pagination.limit, search }),
@@ -123,6 +150,34 @@ export default function AdminUsersPage() {
     setHasMore(data.length >= pagination.limit);
   }, [usersQuery.data, pagination.cursor, pagination.limit]);
 
+  const inviteUserMutation = useMutation({
+    mutationFn: async (payload: InviteUserPayload) => {
+      return api.post<InviteUserResponse>("/security/users/invite", payload);
+    },
+    onSuccess: async (data) => {
+      await qc.invalidateQueries({ queryKey: queryKeys.security.all() });
+      await Promise.all(
+        invalidationPatterns.security().map((key) => qc.invalidateQueries({ queryKey: key }))
+      );
+      // Reset pagination to show the new user at the top
+      setItems([]);
+      setHasMore(true);
+      setPagination((p) => ({ ...p, cursor: null }));
+      toast.success(`User ${data.user.email} has been invited successfully`);
+      setShowInviteModal(false);
+      resetInviteForm();
+    },
+    onError: (err: Error) => {
+      if (err instanceof ApiError && err.isConflict) {
+        toast.error("A user with this email already exists");
+      } else if (err instanceof ApiError && err.isValidationError) {
+        toast.error(err.message || "Please check the form fields");
+      } else {
+        toast.error(err.message || "Failed to invite user");
+      }
+    },
+  });
+
   const assignRoleMutation = useMutation({
     mutationFn: async (params: { userId: string; roleId: string }) => {
       return api.post(`/security/users/${params.userId}/roles`, { roleId: params.roleId, constraints: {} });
@@ -147,6 +202,24 @@ export default function AdminUsersPage() {
     },
     onError: () => toast.error("Failed to revoke role"),
   });
+
+  const handleInviteSubmit = () => {
+    const payload: InviteUserPayload = {
+      email: inviteEmail.trim(),
+      name: inviteName.trim(),
+      password: invitePassword,
+    };
+    if (inviteRoleId) {
+      payload.roleId = inviteRoleId;
+    }
+    inviteUserMutation.mutate(payload);
+  };
+
+  const isInviteFormValid =
+    inviteEmail.trim().length > 0 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim()) &&
+    inviteName.trim().length > 0 &&
+    invitePassword.length >= 12;
 
   const columns = useMemo<ColumnDef<TenantUserRow>[]>(
     () => [
@@ -217,6 +290,9 @@ export default function AdminUsersPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Users</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Tenant members and their RBAC roles</p>
         </div>
+        <Button onClick={() => setShowInviteModal(true)}>
+          Invite User
+        </Button>
       </div>
 
       <Card>
@@ -260,6 +336,95 @@ export default function AdminUsersPage() {
         </CardBody>
       </Card>
 
+      {/* Invite User Modal */}
+      <Modal
+        open={showInviteModal}
+        onClose={() => {
+          if (!inviteUserMutation.isPending) {
+            setShowInviteModal(false);
+            resetInviteForm();
+          }
+        }}
+        size="md"
+        aria-label="Invite user"
+      >
+        <ModalHeader
+          title="Invite User"
+          subtitle="Create a new user account and add them to this tenant"
+        />
+        <ModalBody>
+          <form
+            id="invite-user-form"
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (isInviteFormValid) handleInviteSubmit();
+            }}
+          >
+            <Input
+              label="Email"
+              type="email"
+              placeholder="user@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              required
+              autoFocus
+            />
+            <Input
+              label="Full Name"
+              type="text"
+              placeholder="Jane Smith"
+              value={inviteName}
+              onChange={(e) => setInviteName(e.target.value)}
+              required
+            />
+            <div>
+              <Input
+                label="Password"
+                type="password"
+                placeholder="Minimum 12 characters"
+                value={invitePassword}
+                onChange={(e) => setInvitePassword(e.target.value)}
+                required
+              />
+              {invitePassword.length > 0 && invitePassword.length < 12 && (
+                <p className="mt-1 text-xs text-red-500">
+                  Password must be at least 12 characters
+                </p>
+              )}
+            </div>
+            <Select
+              label="Role (optional)"
+              options={roleOptions}
+              placeholder="No role assigned"
+              value={inviteRoleId}
+              onChange={(e) => setInviteRoleId(e.target.value)}
+            />
+          </form>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowInviteModal(false);
+              resetInviteForm();
+            }}
+            disabled={inviteUserMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="invite-user-form"
+            disabled={!isInviteFormValid || inviteUserMutation.isPending}
+            loading={inviteUserMutation.isPending}
+          >
+            Invite User
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Manage Roles Modal */}
       <Modal
         open={!!activeUser}
         onClose={() => {

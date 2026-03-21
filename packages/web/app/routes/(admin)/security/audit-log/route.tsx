@@ -33,7 +33,7 @@ export default function AdminAuditLogPage() {
   const [items, setItems] = useState<AuditLogEntry[]>([]);
   const [hasMore, setHasMore] = useState(true);
 
-  const { data, isFetching, refetch } = useQuery({
+  const { data, isFetching, isError, error, refetch } = useQuery({
     queryKey: queryKeys.security.auditLog({ cursor: pagination.cursor, limit: pagination.limit }),
     queryFn: () => fetchAuditLog({ cursor: pagination.cursor, limit: pagination.limit }),
     staleTime: 30 * 1000,
@@ -122,6 +122,30 @@ export default function AdminAuditLogPage() {
           </Button>
         </div>
       </div>
+
+      {isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+          <div className="flex items-start gap-3">
+            <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <div>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Failed to load audit log</h3>
+              <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                {error instanceof Error ? error.message : "An unexpected error occurred while loading audit entries."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => void refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader title="Audit Events" bordered />

@@ -42,7 +42,7 @@ interface ScheduleAssignment {
 
 const statusLabels: Record<string, string> = {
   draft: "Draft",
-  active: "Active",
+  published: "Published",
   archived: "Archived",
 };
 
@@ -194,7 +194,7 @@ export default function SchedulesPage() {
                       <h3 className="font-semibold">{schedule.name}</h3>
                       {schedule.isTemplate && <Badge variant="secondary">Template</Badge>}
                     </div>
-                    <Badge variant={schedule.status === "active" ? "success" : "secondary"}>
+                    <Badge variant={schedule.status === "published" ? "success" : "secondary"}>
                       {statusLabels[schedule.status] || schedule.status}
                     </Badge>
                   </CardHeader>

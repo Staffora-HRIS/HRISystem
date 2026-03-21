@@ -239,25 +239,41 @@ export class RbacSecurityService {
     ctx: TenantContext,
     data: { name: string; description: string | null }
   ): Promise<ServiceResult<{ id: string; name: string; description: string | null; isSystem: boolean; tenantId: string }>> {
-    const created = await this.repository.createRole(ctx, data);
+    try {
+      const created = await this.repository.createRole(ctx, data);
 
-    if (!created?.id) {
+      // Handle duplicate role name error from repository
+      if (created && (created as any).error === "DUPLICATE_ROLE_NAME") {
+        return {
+          success: false,
+          error: { code: ErrorCodes.CONFLICT, message: `A role with the name "${data.name}" already exists` },
+        };
+      }
+
+      if (!created?.id) {
+        return {
+          success: false,
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create role" },
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          id: created.id,
+          name: data.name,
+          description: data.description,
+          isSystem: false,
+          tenantId: ctx.tenantId,
+        },
+      };
+    } catch (err: any) {
+      console.error("[RbacService] createRole error:", err?.message ?? err);
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create role" },
       };
     }
-
-    return {
-      success: true,
-      data: {
-        id: created.id,
-        name: data.name,
-        description: data.description,
-        isSystem: false,
-        tenantId: ctx.tenantId,
-      },
-    };
   }
 
   async updateRole(

@@ -18,6 +18,7 @@ import {
   DataTable,
   type ColumnDef,
   Input,
+  Select,
   Checkbox,
   Modal,
   ModalHeader,
@@ -49,9 +50,22 @@ interface LeaveTypeListResponse {
   hasMore: boolean;
 }
 
+const LEAVE_TYPE_CATEGORIES = [
+  { value: "annual", label: "Annual Leave" },
+  { value: "sick", label: "Sick Leave" },
+  { value: "personal", label: "Personal" },
+  { value: "parental", label: "Parental" },
+  { value: "bereavement", label: "Bereavement" },
+  { value: "jury_duty", label: "Jury Duty" },
+  { value: "military", label: "Military" },
+  { value: "unpaid", label: "Unpaid" },
+  { value: "other", label: "Other" },
+] as const;
+
 interface CreateLeaveTypeForm {
   name: string;
   code: string;
+  category: string;
   description: string;
   isPaid: boolean;
   requiresApproval: boolean;
@@ -64,6 +78,7 @@ interface CreateLeaveTypeForm {
 const initialFormState: CreateLeaveTypeForm = {
   name: "",
   code: "",
+  category: "other",
   description: "",
   isPaid: true,
   requiresApproval: true,
@@ -163,7 +178,8 @@ export default function AdminLeaveTypesPage() {
     }
     const payload = {
       name: formData.name.trim(),
-      code: formData.code.trim(),
+      code: formData.code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+      category: formData.category || "other",
       description: formData.description.trim() || undefined,
       isPaid: formData.isPaid,
       requiresApproval: formData.requiresApproval,
@@ -189,6 +205,7 @@ export default function AdminLeaveTypesPage() {
     setFormData({
       name: leaveType.name,
       code: leaveType.code,
+      category: (leaveType as any).category ?? "other",
       description: leaveType.description ?? "",
       isPaid: leaveType.isPaid,
       requiresApproval: leaveType.requiresApproval,
@@ -434,10 +451,24 @@ export default function AdminLeaveTypesPage() {
                   required
                   value={formData.code}
                   onChange={(e) =>
-                    setFormData({ ...formData, code: e.target.value })
+                    setFormData({
+                      ...formData,
+                      code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+                    })
                   }
                 />
               </div>
+              <Select
+                label="Category"
+                value={formData.category}
+                onChange={(e) =>
+                  setFormData({ ...formData, category: e.target.value })
+                }
+                options={LEAVE_TYPE_CATEGORIES.map((c) => ({
+                  value: c.value,
+                  label: c.label,
+                }))}
+              />
               <Input
                 label="Description"
                 placeholder="Describe this leave type..."

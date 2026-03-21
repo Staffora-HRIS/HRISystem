@@ -99,6 +99,60 @@ export const TimeEventFiltersSchema = t.Object({
 export type TimeEventFilters = Static<typeof TimeEventFiltersSchema>;
 
 // =============================================================================
+// Time Policy Schemas
+// =============================================================================
+
+export const TimePolicyTypeSchema = t.Union([
+  t.Literal("standard"),
+  t.Literal("flexible"),
+  t.Literal("shift"),
+  t.Literal("compressed"),
+]);
+export type TimePolicyType = Static<typeof TimePolicyTypeSchema>;
+
+export const CreateTimePolicySchema = t.Object({
+  name: t.String({ minLength: 1, maxLength: 255 }),
+  description: t.Optional(t.Nullable(t.String({ maxLength: 2000 }))),
+  type: t.Optional(TimePolicyTypeSchema),
+  workHoursPerDay: t.Optional(t.Number({ minimum: 0.5, maximum: 24, default: 8 })),
+  workDaysPerWeek: t.Optional(t.Number({ minimum: 1, maximum: 7, default: 5 })),
+  breakDurationMinutes: t.Optional(t.Number({ minimum: 0, maximum: 480, default: 60 })),
+  overtimeEnabled: t.Optional(t.Boolean({ default: true })),
+  overtimeThresholdDaily: t.Optional(t.Nullable(t.Number({ minimum: 0.5, maximum: 24 }))),
+  overtimeThresholdWeekly: t.Optional(t.Nullable(t.Number({ minimum: 1, maximum: 168 }))),
+  overtimeRateMultiplier: t.Optional(t.Number({ minimum: 1.0, maximum: 10.0, default: 1.5 })),
+  defaultStartTime: t.Optional(t.Nullable(t.String({ pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$" }))),
+  defaultEndTime: t.Optional(t.Nullable(t.String({ pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$" }))),
+  isDefault: t.Optional(t.Boolean({ default: false })),
+});
+export type CreateTimePolicy = Static<typeof CreateTimePolicySchema>;
+
+export const UpdateTimePolicySchema = t.Partial(CreateTimePolicySchema);
+export type UpdateTimePolicy = Static<typeof UpdateTimePolicySchema>;
+
+export const TimePolicyResponseSchema = t.Object({
+  id: UuidSchema,
+  tenantId: UuidSchema,
+  name: t.String(),
+  description: t.Nullable(t.String()),
+  type: t.String(),
+  workHoursPerDay: t.Number(),
+  workDaysPerWeek: t.Number(),
+  breakDurationMinutes: t.Number(),
+  overtimeEnabled: t.Boolean(),
+  overtimeThresholdDaily: t.Nullable(t.Number()),
+  overtimeThresholdWeekly: t.Nullable(t.Number()),
+  overtimeRateMultiplier: t.Number(),
+  defaultStartTime: t.Nullable(t.String()),
+  defaultEndTime: t.Nullable(t.String()),
+  isDefault: t.Boolean(),
+  isActive: t.Boolean(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+export type TimePolicyResponse = Static<typeof TimePolicyResponseSchema>;
+
+// =============================================================================
 // Schedule Schemas
 // =============================================================================
 
@@ -320,65 +374,6 @@ export const PendingApprovalsFiltersSchema = t.Object({
   ...PaginationQuerySchema.properties,
 });
 export type PendingApprovalsFilters = Static<typeof PendingApprovalsFiltersSchema>;
-
-// =============================================================================
-// Approval Hierarchy Schemas (Configurable per-department chain templates)
-// =============================================================================
-
-export const ApprovalLevelSchema = t.Object({
-  level: t.Number({ minimum: 1, maximum: 10 }),
-  role: t.String({ minLength: 1, maxLength: 100 }),
-  approverId: t.Optional(t.Nullable(UuidSchema)),
-});
-export type ApprovalLevel = Static<typeof ApprovalLevelSchema>;
-
-export const CreateApprovalHierarchySchema = t.Object({
-  name: t.String({ minLength: 1, maxLength: 150 }),
-  description: t.Optional(t.String({ maxLength: 500 })),
-  departmentId: t.Optional(t.Nullable(UuidSchema)),
-  approvalLevels: t.Array(ApprovalLevelSchema, { minItems: 1, maxItems: 10 }),
-  isActive: t.Optional(t.Boolean({ default: true })),
-});
-export type CreateApprovalHierarchy = Static<typeof CreateApprovalHierarchySchema>;
-
-export const UpdateApprovalHierarchySchema = t.Partial(CreateApprovalHierarchySchema);
-export type UpdateApprovalHierarchy = Static<typeof UpdateApprovalHierarchySchema>;
-
-export const ApprovalHierarchyResponseSchema = t.Object({
-  id: UuidSchema,
-  tenantId: UuidSchema,
-  departmentId: t.Nullable(UuidSchema),
-  name: t.String(),
-  description: t.Nullable(t.String()),
-  isActive: t.Boolean(),
-  approvalLevels: t.Array(ApprovalLevelSchema),
-  createdAt: t.String(),
-  updatedAt: t.String(),
-});
-export type ApprovalHierarchyResponse = Static<typeof ApprovalHierarchyResponseSchema>;
-
-export const ApprovalHierarchyFiltersSchema = t.Object({
-  departmentId: t.Optional(UuidSchema),
-  isActive: t.Optional(t.Boolean()),
-  ...PaginationQuerySchema.properties,
-});
-export type ApprovalHierarchyFilters = Static<typeof ApprovalHierarchyFiltersSchema>;
-
-export const SubmitForApprovalSchema = t.Object({
-  approverIds: t.Optional(t.Array(UuidSchema, { minItems: 1, maxItems: 10 })),
-});
-export type SubmitForApproval = Static<typeof SubmitForApprovalSchema>;
-
-export const ApproveTimesheetSchema = t.Object({
-  comments: t.Optional(t.String({ maxLength: 500 })),
-});
-export type ApproveTimesheet = Static<typeof ApproveTimesheetSchema>;
-
-export const RejectTimesheetSchema = t.Object({
-  comments: t.Optional(t.String({ maxLength: 500 })),
-  reason: t.Optional(t.String({ maxLength: 1000 })),
-});
-export type RejectTimesheet = Static<typeof RejectTimesheetSchema>;
 
 // =============================================================================
 // Params Schemas

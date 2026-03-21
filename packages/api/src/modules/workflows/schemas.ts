@@ -89,6 +89,8 @@ export const UuidSchema = t.String({ format: "uuid" });
 export const PaginationQuerySchema = t.Object({
   cursor: t.Optional(t.String()),
   limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
+  category: t.Optional(t.String({ maxLength: 50 })),
+  status: t.Optional(t.Union([t.Literal("active"), t.Literal("inactive")])),
 });
 
 // Workflow Definition Schemas
@@ -254,49 +256,3 @@ export const IdempotencyHeaderSchema = t.Object({
   "idempotency-key": t.String({ minLength: 1 }),
 });
 export type IdempotencyHeader = Static<typeof IdempotencyHeaderSchema>;
-
-// =============================================================================
-// Escalation Schemas (TODO-156: Auto-escalation on workflow timeout)
-// =============================================================================
-
-/** Query parameters for listing escalation history */
-export const EscalationHistoryQuerySchema = t.Object({
-  entityType: t.Optional(t.Union([t.Literal("workflow_task"), t.Literal("case")])),
-  entityId: t.Optional(UuidSchema),
-  slaId: t.Optional(UuidSchema),
-  fromDate: t.Optional(t.String({ description: "ISO 8601 datetime filter start" })),
-  toDate: t.Optional(t.String({ description: "ISO 8601 datetime filter end" })),
-  cursor: t.Optional(t.String()),
-  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
-});
-export type EscalationHistoryQuery = Static<typeof EscalationHistoryQuerySchema>;
-
-/** Shape of a single escalation log entry in the API response */
-export const EscalationLogEntrySchema = t.Object({
-  id: UuidSchema,
-  tenantId: UuidSchema,
-  entityType: t.String(),
-  entityId: UuidSchema,
-  actionTaken: t.String(),
-  previousAssigneeId: t.Nullable(UuidSchema),
-  previousAssigneeName: t.Nullable(t.String()),
-  newAssigneeId: t.Nullable(UuidSchema),
-  newAssigneeName: t.Nullable(t.String()),
-  previousLevel: t.Nullable(t.String()),
-  newLevel: t.Nullable(t.String()),
-  escalationLevel: t.Nullable(t.Number()),
-  reason: t.String(),
-  slaId: t.Nullable(UuidSchema),
-  slaEventId: t.Nullable(UuidSchema),
-  escalationRuleId: t.Nullable(UuidSchema),
-  createdAt: t.String(),
-});
-export type EscalationLogEntry = Static<typeof EscalationLogEntrySchema>;
-
-/** Response shape for the escalation history endpoint */
-export const EscalationHistoryResponseSchema = t.Object({
-  data: t.Array(EscalationLogEntrySchema),
-  cursor: t.Nullable(t.String()),
-  hasMore: t.Boolean(),
-});
-export type EscalationHistoryResponse = Static<typeof EscalationHistoryResponseSchema>;

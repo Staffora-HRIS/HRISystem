@@ -46,9 +46,22 @@ export class AbsenceService {
   // Leave Types
   async createLeaveType(ctx: TenantContext, input: CreateLeaveType): Promise<ServiceResult<unknown>> {
     try {
+      // Uppercase the code to match DB constraint: ^[A-Z][A-Z0-9_]*$
+      const normalizedCode = input.code.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+      if (!normalizedCode || !/^[A-Z][A-Z0-9_]*$/.test(normalizedCode)) {
+        return {
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Code must start with a letter and contain only uppercase letters, numbers, and underscores",
+          },
+        };
+      }
+
       const leaveType = await this.repo.createLeaveType(ctx, {
-        code: input.code,
+        code: normalizedCode,
         name: input.name,
+        category: (input as any).category,
         description: input.description,
         isPaid: input.isPaid,
         requiresApproval: input.requiresApproval,
@@ -56,7 +69,7 @@ export class AbsenceService {
         maxConsecutiveDays: input.maxConsecutiveDays,
         minNoticeDays: input.minNoticeDays,
         color: input.color,
-      });
+      } as any);
       return { success: true, data: this.formatLeaveType(leaveType) };
     } catch (error) {
       console.error("Error creating leave type:", error);
@@ -102,8 +115,23 @@ export class AbsenceService {
 
   async updateLeaveType(ctx: TenantContext, id: string, input: Partial<CreateLeaveType>): Promise<ServiceResult<unknown>> {
     try {
+      // Uppercase the code if provided to match DB constraint: ^[A-Z][A-Z0-9_]*$
+      let normalizedCode = input.code;
+      if (normalizedCode) {
+        normalizedCode = normalizedCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+        if (!/^[A-Z][A-Z0-9_]*$/.test(normalizedCode)) {
+          return {
+            success: false,
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Code must start with a letter and contain only uppercase letters, numbers, and underscores",
+            },
+          };
+        }
+      }
+
       const updated = await this.repo.updateLeaveType(ctx, id, {
-        code: input.code,
+        code: normalizedCode,
         name: input.name,
         description: input.description,
         isPaid: input.isPaid,
@@ -435,6 +463,7 @@ export class AbsenceService {
       tenantId: type.tenantId,
       code: type.code,
       name: type.name,
+      category: type.category ?? "other",
       description: type.description,
       isPaid: type.isPaid,
       requiresApproval: type.requiresApproval,

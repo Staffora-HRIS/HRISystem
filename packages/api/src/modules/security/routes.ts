@@ -12,6 +12,7 @@ import { requireAuthContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { RbacRepository } from "./rbac.repository";
 import { RbacSecurityService } from "./rbac.service";
 import type { TenantContext } from "../../types/service-result";
@@ -72,7 +73,7 @@ export const securityRoutes = new Elysia({ prefix: "/security" })
         roles: Array.from(roles),
       };
     } catch (error) {
-      console.error("Security /my-permissions error:", error);
+      logger.error({ err: error, module: "security", route: "/my-permissions" }, "Failed to load permissions");
       set.status = 500;
       return {
         error: {
@@ -222,7 +223,15 @@ securityRoutes
       });
 
       if (!result.success) {
-        return error(500, {
+        const statusMap: Record<string, number> = {
+          [ErrorCodes.CONFLICT]: 409,
+          [ErrorCodes.VALIDATION_ERROR]: 400,
+          [ErrorCodes.FORBIDDEN]: 403,
+          [ErrorCodes.NOT_FOUND]: 404,
+          [ErrorCodes.INTERNAL_ERROR]: 500,
+        };
+        const status = statusMap[result.error.code] ?? 500;
+        return error(status, {
           error: { code: result.error.code, message: result.error.message, requestId },
         });
       }
@@ -538,6 +547,158 @@ securityRoutes
       detail: {
         tags: ["Security"],
         summary: "Revoke role assignment",
+      },
+    }
+  );
+
+// ===========================================================================
+// User Invitation
+// ===========================================================================
+
+securityRoutes
+  .post(
+    "/users/invite",
+    async (ctx) => {
+      const { securityService, tenantContext, body, audit, requestId, error, user } = ctx as any;
+      const db = (ctx as any).db;
+
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const name = String(body.name ?? "").trim();
+      const password = String(body.password ?? "");
+      const roleId = body.roleId ? String(body.roleId).trim() : null;
+
+      // Validate required fields
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return error(400, {
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "A valid email address is required", requestId },
+        });
+      }
+      if (!name) {
+        return error(400, {
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Name is required", requestId },
+        });
+      }
+      if (!password || password.length < 12) {
+        return error(400, {
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Password must be at least 12 characters", requestId },
+        });
+      }
+      if (password.length > 128) {
+        return error(400, {
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Password must be at most 128 characters", requestId },
+        });
+      }
+
+      try {
+        const { getBetterAuth: getAuth } = await import("../../lib/better-auth-handler");
+        const auth = getAuth();
+
+        let newUser: { id: string; email: string; name: string };
+        try {
+          const signUpResult = await auth.api.signUpEmail({
+            body: { email, password, name },
+          });
+          newUser = signUpResult.user as { id: string; email: string; name: string };
+        } catch (signUpError: any) {
+          const msg = signUpError?.message ?? signUpError?.body?.message ?? String(signUpError);
+          if (/already exists|duplicate|user with this email/i.test(msg)) {
+            return error(409, {
+              error: { code: "CONFLICT", message: "A user with this email already exists", requestId },
+            });
+          }
+          throw signUpError;
+        }
+
+        await db.withTransaction(tenantContext, async (tx: any) => {
+          await tx`
+            INSERT INTO user_tenants (tenant_id, user_id, is_primary, status, invited_by)
+            VALUES (
+              ${tenantContext.tenantId}::uuid,
+              ${newUser.id}::uuid,
+              false,
+              'active',
+              ${user.id}::uuid
+            )
+            ON CONFLICT (tenant_id, user_id) DO UPDATE
+            SET status = 'active', invited_by = ${user.id}::uuid, updated_at = now()
+          `;
+
+          await tx`
+            INSERT INTO domain_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, payload, created_at)
+            VALUES (
+              ${crypto.randomUUID()},
+              ${tenantContext.tenantId}::uuid,
+              'user',
+              ${newUser.id},
+              'security.user.invited',
+              ${JSON.stringify({
+                userId: newUser.id,
+                email: newUser.email,
+                name: newUser.name,
+                tenantId: tenantContext.tenantId,
+                invitedBy: user.id,
+              })}::jsonb,
+              now()
+            )
+          `;
+        });
+
+        let roleAssignmentId: string | null = null;
+        if (roleId) {
+          const roleResult = await securityService.assignRoleToUser(
+            tenantContext,
+            newUser.id,
+            roleId,
+            {}
+          );
+          if (roleResult.success) {
+            roleAssignmentId = roleResult.data.id;
+          }
+        }
+
+        if (audit) {
+          await audit.log({
+            action: AuditActions.USER_CREATED ?? "user.created",
+            resourceType: "user",
+            resourceId: newUser.id,
+            newValues: {
+              id: newUser.id,
+              email: newUser.email,
+              name: newUser.name,
+              roleId,
+              roleAssignmentId,
+            },
+            metadata: { requestId },
+          });
+        }
+
+        return {
+          success: true,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            name: newUser.name,
+          },
+          roleAssigned: !!roleAssignmentId,
+        };
+      } catch (err: any) {
+        console.error("Invite user error:", err instanceof Error ? err.message : String(err));
+        return error(500, {
+          error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to invite user", requestId },
+        });
+      }
+    },
+    {
+      beforeHandle: [requirePermission("users", "write")],
+      body: t.Object({
+        email: t.String(),
+        name: t.String(),
+        password: t.String(),
+        roleId: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ["Security"],
+        summary: "Invite a new user to the tenant",
       },
     }
   );

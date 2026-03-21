@@ -8,6 +8,8 @@
 import { TimeRepository, type TenantContext } from "./repository";
 import type {
   CreateTimeEvent,
+  CreateTimePolicy,
+  UpdateTimePolicy,
   CreateSchedule,
   UpdateSchedule,
   CreateShift,
@@ -31,6 +33,7 @@ type PaginatedResult = ServiceResult<{ items: unknown[]; cursor: string | null; 
 // =============================================================================
 
 export const TimeErrorCodes = {
+  TIME_POLICY_NOT_FOUND: "TIME_POLICY_NOT_FOUND",
   TIME_EVENT_NOT_FOUND: "TIME_EVENT_NOT_FOUND",
   SCHEDULE_NOT_FOUND: "SCHEDULE_NOT_FOUND",
   SHIFT_NOT_FOUND: "SHIFT_NOT_FOUND",
@@ -52,6 +55,175 @@ export const TimeErrorCodes = {
 
 export class TimeService {
   constructor(private repo: TimeRepository) {}
+
+  // ===========================================================================
+  // Time Policies
+  // ===========================================================================
+
+  async createTimePolicy(
+    ctx: TenantContext,
+    input: CreateTimePolicy
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const policy = await this.repo.createTimePolicy(ctx, {
+        name: input.name,
+        description: input.description,
+        policyType: input.type,
+        workingHoursPerDay: input.workHoursPerDay,
+        workingDaysPerWeek: input.workDaysPerWeek,
+        breakDurationMinutes: input.breakDurationMinutes,
+        overtimeEnabled: input.overtimeEnabled,
+        overtimeThresholdDaily: input.overtimeThresholdDaily,
+        overtimeThresholdWeekly: input.overtimeThresholdWeekly,
+        overtimeRateMultiplier: input.overtimeRateMultiplier,
+        defaultStartTime: input.defaultStartTime,
+        defaultEndTime: input.defaultEndTime,
+        isDefault: input.isDefault,
+        createdBy: ctx.userId,
+      });
+
+      return { success: true, data: this.formatTimePolicy(policy) };
+    } catch (error) {
+      console.error("Error creating time policy:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to create time policy",
+        },
+      };
+    }
+  }
+
+  async getTimePolicies(
+    ctx: TenantContext,
+    filters: { status?: string; cursor?: string; limit?: number }
+  ): Promise<ServiceResult<{ items: unknown[]; cursor: string | null; hasMore: boolean }>> {
+    try {
+      const result = await this.repo.getTimePolicies(ctx, filters);
+      return {
+        success: true,
+        data: {
+          items: result.data.map(this.formatTimePolicy),
+          cursor: result.cursor,
+          hasMore: result.hasMore,
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching time policies:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to fetch time policies",
+        },
+      };
+    }
+  }
+
+  async getTimePolicyById(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const policy = await this.repo.getTimePolicyById(ctx, id);
+      if (!policy) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIME_POLICY_NOT_FOUND,
+            message: "Time policy not found",
+          },
+        };
+      }
+
+      return { success: true, data: this.formatTimePolicy(policy) };
+    } catch (error) {
+      console.error("Error fetching time policy:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to fetch time policy",
+        },
+      };
+    }
+  }
+
+  async updateTimePolicy(
+    ctx: TenantContext,
+    id: string,
+    input: UpdateTimePolicy
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const policy = await this.repo.updateTimePolicy(ctx, id, {
+        name: input.name,
+        description: input.description,
+        policyType: input.type,
+        workingHoursPerDay: input.workHoursPerDay,
+        workingDaysPerWeek: input.workDaysPerWeek,
+        breakDurationMinutes: input.breakDurationMinutes,
+        overtimeEnabled: input.overtimeEnabled,
+        overtimeThresholdDaily: input.overtimeThresholdDaily,
+        overtimeThresholdWeekly: input.overtimeThresholdWeekly,
+        overtimeRateMultiplier: input.overtimeRateMultiplier,
+        defaultStartTime: input.defaultStartTime,
+        defaultEndTime: input.defaultEndTime,
+        isDefault: input.isDefault,
+        updatedBy: ctx.userId,
+      });
+
+      if (!policy) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIME_POLICY_NOT_FOUND,
+            message: "Time policy not found",
+          },
+        };
+      }
+
+      return { success: true, data: this.formatTimePolicy(policy) };
+    } catch (error) {
+      console.error("Error updating time policy:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to update time policy",
+        },
+      };
+    }
+  }
+
+  async deleteTimePolicy(
+    ctx: TenantContext,
+    id: string
+  ): Promise<ServiceResult<unknown>> {
+    try {
+      const policy = await this.repo.deleteTimePolicy(ctx, id);
+      if (!policy) {
+        return {
+          success: false,
+          error: {
+            code: TimeErrorCodes.TIME_POLICY_NOT_FOUND,
+            message: "Time policy not found or already inactive",
+          },
+        };
+      }
+
+      return { success: true, data: this.formatTimePolicy(policy) };
+    } catch (error) {
+      console.error("Error deleting time policy:", error);
+      return {
+        success: false,
+        error: {
+          code: ErrorCodes.INTERNAL_ERROR,
+          message: "Failed to delete time policy",
+        },
+      };
+    }
+  }
 
   // ===========================================================================
   // Time Events
@@ -938,6 +1110,29 @@ export class TimeService {
   // ===========================================================================
   // Helpers
   // ===========================================================================
+
+  private formatTimePolicy(policy: any) {
+    return {
+      id: policy.id,
+      tenantId: policy.tenantId,
+      name: policy.name,
+      description: policy.description ?? null,
+      type: policy.policyType ?? "standard",
+      workHoursPerDay: Number(policy.workingHoursPerDay ?? 8),
+      workDaysPerWeek: Number(policy.workingDaysPerWeek ?? 5),
+      breakDurationMinutes: Number(policy.breakDurationMinutes ?? 60),
+      overtimeEnabled: policy.overtimeEnabled ?? true,
+      overtimeThresholdDaily: policy.overtimeThresholdDaily != null ? Number(policy.overtimeThresholdDaily) : null,
+      overtimeThresholdWeekly: policy.overtimeThresholdWeekly != null ? Number(policy.overtimeThresholdWeekly) : null,
+      overtimeRateMultiplier: Number(policy.overtimeRateMultiplier ?? 1.5),
+      defaultStartTime: policy.defaultStartTime ?? null,
+      defaultEndTime: policy.defaultEndTime ?? null,
+      isDefault: policy.isDefault ?? false,
+      isActive: policy.status === "active",
+      createdAt: policy.createdAt instanceof Date ? policy.createdAt.toISOString() : policy.createdAt,
+      updatedAt: policy.updatedAt instanceof Date ? policy.updatedAt.toISOString() : policy.updatedAt,
+    };
+  }
 
   private formatApprovalChainEntry(entry: any) {
     return {

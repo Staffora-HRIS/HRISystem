@@ -44,21 +44,21 @@ interface TimePolicy {
 const POLICY_TYPE_LABELS: Record<string, string> = {
   standard: "Standard",
   flexible: "Flexible",
-  shift_based: "Shift Based",
+  shift: "Shift Based",
   compressed: "Compressed",
 };
 
 const POLICY_TYPE_VARIANTS: Record<string, "primary" | "info" | "warning" | "secondary"> = {
   standard: "primary",
   flexible: "info",
-  shift_based: "warning",
+  shift: "warning",
   compressed: "secondary",
 };
 
 const POLICY_TYPE_OPTIONS = [
   { value: "standard", label: "Standard" },
   { value: "flexible", label: "Flexible" },
-  { value: "shift_based", label: "Shift Based" },
+  { value: "shift", label: "Shift Based" },
   { value: "compressed", label: "Compressed" },
 ];
 
@@ -72,20 +72,20 @@ export default function TimePoliciesPage() {
     queryKey: ["admin-time-policies"],
     queryFn: async () => {
       try {
-        const response = await api.get<{ data?: TimePolicy[]; items?: TimePolicy[] }>("/api/v1/time/schedules");
+        const response = await api.get<{ data?: TimePolicy[]; items?: TimePolicy[] }>("/api/v1/time/policies");
         const items = response?.data ?? response?.items ?? [];
         return {
           items: items.map((item: any) => ({
             id: item.id,
             name: item.name ?? "",
             description: item.description ?? null,
-            type: item.type ?? item.scheduleType ?? "standard",
-            workHoursPerDay: item.workHoursPerDay ?? item.hoursPerDay ?? 8,
-            workDaysPerWeek: item.workDaysPerWeek ?? item.daysPerWeek ?? 5,
+            type: item.type ?? "standard",
+            workHoursPerDay: item.workHoursPerDay ?? 8,
+            workDaysPerWeek: item.workDaysPerWeek ?? 5,
             overtimeEnabled: item.overtimeEnabled ?? false,
             overtimeThresholdDaily: item.overtimeThresholdDaily ?? null,
             overtimeThresholdWeekly: item.overtimeThresholdWeekly ?? null,
-            breakDurationMinutes: item.breakDurationMinutes ?? item.breakMinutes ?? 60,
+            breakDurationMinutes: item.breakDurationMinutes ?? 60,
             isDefault: item.isDefault ?? false,
             isActive: item.isActive ?? true,
           } as TimePolicy)),
@@ -193,7 +193,7 @@ export default function TimePoliciesPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      return api.post("/api/v1/time/schedules", payload);
+      return api.post("/api/v1/time/policies", payload);
     },
     onSuccess: () => {
       toast.success("Policy created successfully");

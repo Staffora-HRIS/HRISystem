@@ -2,8 +2,8 @@
  * Workflows Service
  */
 
-import { WorkflowRepository, type TenantContext, type WorkflowDefinitionRow, type WorkflowInstanceRow, type StepInstanceRow, type EscalationLogRow } from "./repository";
-import type { CreateWorkflowDefinition, UpdateWorkflowDefinition, CreateWorkflowInstance, ProcessStepAction, ReassignStep, WorkflowInstanceFilters, EscalationHistoryQuery } from "./schemas";
+import { WorkflowRepository, type TenantContext, type WorkflowDefinitionRow, type WorkflowInstanceRow, type StepInstanceRow } from "./repository";
+import type { CreateWorkflowDefinition, UpdateWorkflowDefinition, CreateWorkflowInstance, ProcessStepAction, ReassignStep, WorkflowInstanceFilters } from "./schemas";
 import { validateConditionRules } from "./condition-evaluator";
 
 export class WorkflowService {
@@ -229,27 +229,25 @@ export class WorkflowService {
     return this.formatInstance(instance);
   }
 
-  // Escalation History (TODO-156)
-  async getEscalationHistory(ctx: TenantContext, filters: EscalationHistoryQuery) {
-    const result = await this.repository.getEscalationHistory(ctx, {
-      entityType: filters.entityType,
-      entityId: filters.entityId,
-      slaId: filters.slaId,
-      fromDate: filters.fromDate,
-      toDate: filters.toDate,
-      cursor: filters.cursor,
-      limit: filters.limit,
-    });
-
-    return {
-      data: result.data.map((e: EscalationLogRow) => this.formatEscalationLog(e)),
-      cursor: result.cursor,
-      hasMore: result.hasMore,
-    };
-  }
-
   // Formatters
   private formatDefinition(row: WorkflowDefinitionRow) {
+    // Derive a meaningful combined status:
+    // - If definition is inactive -> "inactive"
+    // - If definition is active but version is draft (no active version) -> "draft"
+    // - If definition is active and version is active -> "active"
+    // - If definition is active and version is archived -> "archived"
+    let status: string;
+    if (!row.isActive) {
+      status = 'inactive';
+    } else if (row.versionStatus === 'active') {
+      status = 'active';
+    } else if (row.versionStatus === 'archived') {
+      status = 'archived';
+    } else {
+      // draft or no version yet
+      status = 'draft';
+    }
+
     return {
       id: row.id,
       tenantId: row.tenantId,
@@ -260,7 +258,7 @@ export class WorkflowService {
       triggerType: row.triggerType,
       triggerConfig: row.triggerConfig,
       steps: row.steps || [],
-      status: row.isActive ? 'active' : 'inactive',
+      status,
       version: row.version || null,
       versionId: row.versionId || null,
       createdAt: row.createdAt?.toISOString?.() || row.createdAt,
@@ -306,28 +304,6 @@ export class WorkflowService {
       completionComment: row.completionComment,
       conditionRules: row.conditionRules || null,
       conditionResult: row.conditionResult ?? null,
-      createdAt: row.createdAt?.toISOString?.() || row.createdAt,
-    };
-  }
-
-  private formatEscalationLog(row: EscalationLogRow) {
-    return {
-      id: row.id,
-      tenantId: row.tenantId,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      actionTaken: row.actionTaken,
-      previousAssigneeId: row.previousAssigneeId,
-      previousAssigneeName: row.previousAssigneeName || null,
-      newAssigneeId: row.newAssigneeId,
-      newAssigneeName: row.newAssigneeName || null,
-      previousLevel: row.previousLevel || null,
-      newLevel: row.newLevel || null,
-      escalationLevel: row.escalationLevelNum ?? null,
-      reason: row.reason,
-      slaId: row.slaId,
-      slaEventId: row.slaEventId || null,
-      escalationRuleId: row.escalationRuleId || null,
       createdAt: row.createdAt?.toISOString?.() || row.createdAt,
     };
   }
