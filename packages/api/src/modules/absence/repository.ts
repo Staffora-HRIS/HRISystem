@@ -116,7 +116,7 @@ export class AbsenceRepository {
     return this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       const rows = await tx<LeaveTypeRow[]>`
         SELECT
-          id, tenant_id, code, name, description, is_paid,
+          id, tenant_id, code, name, category, description, is_paid,
           requires_approval, requires_attachment, max_consecutive_days,
           min_notice_days, color, is_active, created_at, updated_at
         FROM app.leave_types
@@ -131,7 +131,7 @@ export class AbsenceRepository {
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
       return tx<LeaveTypeRow[]>`
         SELECT
-          id, tenant_id, code, name, description, is_paid,
+          id, tenant_id, code, name, category, description, is_paid,
           requires_approval, requires_attachment, max_consecutive_days,
           min_notice_days, color, is_active, created_at, updated_at
         FROM app.leave_types

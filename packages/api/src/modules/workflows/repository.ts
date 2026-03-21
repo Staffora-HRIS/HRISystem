@@ -75,26 +75,6 @@ export interface StepInstanceRow {
   createdAt: Date;
 }
 
-export interface EscalationLogRow {
-  id: string;
-  tenantId: string;
-  entityType: string;
-  entityId: string;
-  actionTaken: string;
-  previousAssigneeId: string | null;
-  previousAssigneeName: string | null;
-  newAssigneeId: string | null;
-  newAssigneeName: string | null;
-  previousLevel: string | null;
-  newLevel: string | null;
-  escalationLevelNum: number | null;
-  reason: string;
-  slaId: string | null;
-  slaEventId: string | null;
-  escalationRuleId: string | null;
-  createdAt: Date;
-}
-
 export class WorkflowRepository {
   constructor(private db: DatabaseClient) {}
 
@@ -156,7 +136,13 @@ export class WorkflowRepository {
       return tx<WorkflowDefinitionRow[]>`
         SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
         FROM app.workflow_definitions wd
-        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        LEFT JOIN LATERAL (
+          SELECT v.id, v.steps, v.version, v.status
+          FROM app.workflow_versions v
+          WHERE v.definition_id = wd.id
+          ORDER BY (v.status = 'active') DESC, v.version DESC
+          LIMIT 1
+        ) wv ON true
         WHERE wd.id = ${id}::uuid AND wd.tenant_id = ${ctx.tenantId}::uuid
       `;
     });
@@ -168,7 +154,13 @@ export class WorkflowRepository {
       return tx<WorkflowDefinitionRow[]>`
         SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
         FROM app.workflow_definitions wd
-        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        LEFT JOIN LATERAL (
+          SELECT v.id, v.steps, v.version, v.status
+          FROM app.workflow_versions v
+          WHERE v.definition_id = wd.id
+          ORDER BY (v.status = 'active') DESC, v.version DESC
+          LIMIT 1
+        ) wv ON true
         WHERE wd.code = ${code} AND wd.tenant_id = ${ctx.tenantId}::uuid AND wd.is_active = true
       `;
     });
@@ -178,10 +170,18 @@ export class WorkflowRepository {
   async getDefinitions(ctx: TenantContext, filters: { category?: string; status?: string; cursor?: string; limit?: number }): Promise<PaginatedResult<WorkflowDefinitionRow>> {
     const limit = filters.limit || 20;
     const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
+      // Use LATERAL join to get the best version for each definition:
+      // prefer the active version, otherwise fall back to the latest by version number.
       return tx<WorkflowDefinitionRow[]>`
         SELECT wd.*, wv.steps, wv.version, wv.id as version_id, wv.status as version_status
         FROM app.workflow_definitions wd
-        LEFT JOIN app.workflow_versions wv ON wv.definition_id = wd.id AND wv.status = 'active'
+        LEFT JOIN LATERAL (
+          SELECT v.id, v.steps, v.version, v.status
+          FROM app.workflow_versions v
+          WHERE v.definition_id = wd.id
+          ORDER BY (v.status = 'active') DESC, v.version DESC
+          LIMIT 1
+        ) wv ON true
         WHERE wd.tenant_id = ${ctx.tenantId}::uuid
         ${filters.category ? tx`AND wd.category = ${filters.category}` : tx``}
         ${filters.status === 'active' ? tx`AND wd.is_active = true` : filters.status === 'inactive' ? tx`AND wd.is_active = false` : tx``}
@@ -610,62 +610,6 @@ export class WorkflowRepository {
 
       return row as WorkflowInstanceRow | null;
     });
-  }
-
-  // ===========================================================================
-  // Escalation History (TODO-156)
-  // ===========================================================================
-
-  async getEscalationHistory(ctx: TenantContext, filters: {
-    entityType?: string;
-    entityId?: string;
-    slaId?: string;
-    fromDate?: string;
-    toDate?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<PaginatedResult<EscalationLogRow>> {
-    const limit = filters.limit || 20;
-    const rows = await this.db.withTransaction(ctx, async (tx: TransactionSql) => {
-      return tx<EscalationLogRow[]>`
-        SELECT
-          sel.id,
-          sel.tenant_id,
-          sel.entity_type,
-          sel.entity_id,
-          sel.action_taken,
-          sel.previous_assignee_id,
-          u_prev.name AS previous_assignee_name,
-          sel.new_assignee_id,
-          u_new.name AS new_assignee_name,
-          sel.previous_level,
-          sel.new_level,
-          sel.escalation_level_num,
-          sel.reason,
-          sel.sla_id,
-          sel.sla_event_id,
-          sel.escalation_rule_id,
-          sel.created_at
-        FROM sla_escalation_log sel
-        LEFT JOIN users u_prev ON u_prev.id = sel.previous_assignee_id
-        LEFT JOIN users u_new ON u_new.id = sel.new_assignee_id
-        WHERE sel.tenant_id = ${ctx.tenantId}::uuid
-        ${filters.entityType ? tx`AND sel.entity_type = ${filters.entityType}` : tx``}
-        ${filters.entityId ? tx`AND sel.entity_id = ${filters.entityId}::uuid` : tx``}
-        ${filters.slaId ? tx`AND sel.sla_id = ${filters.slaId}::uuid` : tx``}
-        ${filters.fromDate ? tx`AND sel.created_at >= ${filters.fromDate}::timestamptz` : tx``}
-        ${filters.toDate ? tx`AND sel.created_at <= ${filters.toDate}::timestamptz` : tx``}
-        ${filters.cursor ? tx`AND sel.id < ${filters.cursor}::uuid` : tx``}
-        ORDER BY sel.created_at DESC, sel.id DESC
-        LIMIT ${limit + 1}
-      `;
-    });
-
-    const hasMore = rows.length > limit;
-    const data = hasMore ? rows.slice(0, limit) : rows;
-    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
-
-    return { data: data as EscalationLogRow[], cursor, hasMore };
   }
 
   // ===========================================================================

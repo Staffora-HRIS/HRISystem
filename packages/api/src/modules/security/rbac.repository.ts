@@ -228,16 +228,25 @@ export class RbacRepository {
   async createRole(
     ctx: TenantContext,
     data: { name: string; description: string | null }
-  ): Promise<{ id: string } | null> {
-    const rows = await this.db.withTransaction(ctx, async (tx: any) => {
-      return await tx<{ id: string }[]>`
-        INSERT INTO app.roles (id, tenant_id, name, description, is_system, permissions)
-        VALUES (gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.name}, ${data.description}, false, '{}'::jsonb)
-        RETURNING id::text as id
-      `;
-    });
+  ): Promise<{ id: string; error?: string } | null> {
+    try {
+      const rows = await this.db.withTransaction(ctx, async (tx: any) => {
+        return await tx<{ id: string }[]>`
+          INSERT INTO app.roles (id, tenant_id, name, description, is_system, permissions)
+          VALUES (gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.name}, ${data.description}, false, '{}'::jsonb)
+          RETURNING id::text as id
+        `;
+      });
 
-    return rows[0] ?? null;
+      return rows[0] ?? null;
+    } catch (err: any) {
+      // Handle unique constraint violation (duplicate role name for this tenant)
+      const message = typeof err?.message === "string" ? err.message : String(err);
+      if (message.includes("roles_name_unique") || message.includes("unique") || message.includes("duplicate key")) {
+        return { id: "", error: "DUPLICATE_ROLE_NAME" };
+      }
+      throw err;
+    }
   }
 
   async updateRole(

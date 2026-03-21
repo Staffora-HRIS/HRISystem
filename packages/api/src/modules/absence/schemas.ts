@@ -31,15 +31,30 @@ export const PaginationQuerySchema = t.Object({
   limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
 });
 
+// Leave Type Category
+export const LeaveTypeCategorySchema = t.Union([
+  t.Literal("annual"),
+  t.Literal("sick"),
+  t.Literal("personal"),
+  t.Literal("parental"),
+  t.Literal("bereavement"),
+  t.Literal("jury_duty"),
+  t.Literal("military"),
+  t.Literal("unpaid"),
+  t.Literal("other"),
+]);
+export type LeaveTypeCategory = Static<typeof LeaveTypeCategorySchema>;
+
 // Leave Type Schemas
 export const CreateLeaveTypeSchema = t.Object({
   code: t.String({ minLength: 1, maxLength: 20 }),
   name: t.String({ minLength: 1, maxLength: 100 }),
+  category: t.Optional(LeaveTypeCategorySchema),
   description: t.Optional(t.String({ maxLength: 500 })),
   isPaid: t.Optional(t.Boolean({ default: true })),
   requiresApproval: t.Optional(t.Boolean({ default: true })),
   requiresAttachment: t.Optional(t.Boolean({ default: false })),
-  maxConsecutiveDays: t.Optional(t.Number({ minimum: 0.5, maximum: 365 })),
+  maxConsecutiveDays: t.Optional(t.Number({ minimum: 1, maximum: 365 })),
   minNoticeDays: t.Optional(t.Number({ minimum: 0, maximum: 365, default: 0 })),
   color: t.Optional(t.String({ pattern: "^#[0-9A-Fa-f]{6}$" })),
 });

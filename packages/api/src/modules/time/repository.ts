@@ -164,6 +164,220 @@ export class TimeRepository {
   constructor(private db: DatabaseClient) {}
 
   // ===========================================================================
+  // Time Policies
+  // ===========================================================================
+
+  async createTimePolicy(
+    ctx: TenantContext,
+    data: {
+      name: string;
+      description?: string | null;
+      policyType?: string;
+      workingHoursPerDay?: number;
+      workingDaysPerWeek?: number;
+      breakDurationMinutes?: number;
+      overtimeEnabled?: boolean;
+      overtimeThresholdDaily?: number | null;
+      overtimeThresholdWeekly?: number | null;
+      overtimeRateMultiplier?: number;
+      defaultStartTime?: string | null;
+      defaultEndTime?: string | null;
+      isDefault?: boolean;
+      createdBy?: string;
+    }
+  ): Promise<any> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      const id = crypto.randomUUID();
+
+      // If setting as default, unset any existing default first
+      if (data.isDefault) {
+        await tx`
+          UPDATE app.time_policies
+          SET is_default = false, updated_at = now()
+          WHERE tenant_id = ${ctx.tenantId}::uuid
+            AND is_default = true
+            AND status = 'active'
+        `;
+      }
+
+      const [row] = await tx`
+        INSERT INTO app.time_policies (
+          id, tenant_id, name, description, policy_type,
+          working_hours_per_day, working_days_per_week,
+          break_duration_minutes,
+          overtime_enabled, overtime_threshold_daily, overtime_threshold_weekly,
+          overtime_rate_multiplier,
+          default_start_time, default_end_time,
+          is_default, status, created_by
+        ) VALUES (
+          ${id}::uuid, ${ctx.tenantId}::uuid,
+          ${data.name}, ${data.description ?? null},
+          ${data.policyType ?? "standard"}::app.time_policy_type,
+          ${data.workingHoursPerDay ?? 8}, ${data.workingDaysPerWeek ?? 5},
+          ${data.breakDurationMinutes ?? 60},
+          ${data.overtimeEnabled ?? true},
+          ${data.overtimeThresholdDaily ?? null},
+          ${data.overtimeThresholdWeekly ?? null},
+          ${data.overtimeRateMultiplier ?? 1.5},
+          ${data.defaultStartTime ?? null}::time,
+          ${data.defaultEndTime ?? null}::time,
+          ${data.isDefault ?? false},
+          'active',
+          ${data.createdBy ?? null}::uuid
+        )
+        RETURNING *
+      `;
+
+      await this.writeOutbox(tx, ctx.tenantId, "time_policy", id, "time.policy.created", {
+        policyId: id,
+        name: data.name,
+        policyType: data.policyType ?? "standard",
+      });
+
+      return row;
+    });
+  }
+
+  async getTimePolicies(
+    ctx: TenantContext,
+    filters: { status?: string; cursor?: string; limit?: number }
+  ): Promise<PaginatedResult<any>> {
+    const limit = filters.limit || 50;
+
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx`
+        SELECT
+          id, tenant_id, name, description, policy_type,
+          working_hours_per_day, working_days_per_week,
+          break_duration_minutes,
+          overtime_enabled, overtime_threshold_daily, overtime_threshold_weekly,
+          overtime_rate_multiplier,
+          default_start_time, default_end_time,
+          is_default, status,
+          created_at, updated_at
+        FROM app.time_policies
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+        ${filters.status ? tx`AND status = ${filters.status}::app.time_policy_status` : tx``}
+        ${filters.cursor ? tx`AND id < ${filters.cursor}::uuid` : tx``}
+        ORDER BY is_default DESC, name ASC, id DESC
+        LIMIT ${limit + 1}
+      `;
+    });
+
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
+
+    return { data, cursor, hasMore };
+  }
+
+  async getTimePolicyById(ctx: TenantContext, id: string): Promise<any | null> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx`
+        SELECT
+          id, tenant_id, name, description, policy_type,
+          working_hours_per_day, working_days_per_week,
+          break_duration_minutes,
+          overtime_enabled, overtime_threshold_daily, overtime_threshold_weekly,
+          overtime_rate_multiplier,
+          default_start_time, default_end_time,
+          is_default, status,
+          created_at, updated_at
+        FROM app.time_policies
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+      `;
+    });
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  async updateTimePolicy(
+    ctx: TenantContext,
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string | null;
+      policyType: string;
+      workingHoursPerDay: number;
+      workingDaysPerWeek: number;
+      breakDurationMinutes: number;
+      overtimeEnabled: boolean;
+      overtimeThresholdDaily: number | null;
+      overtimeThresholdWeekly: number | null;
+      overtimeRateMultiplier: number;
+      defaultStartTime: string | null;
+      defaultEndTime: string | null;
+      isDefault: boolean;
+      updatedBy: string;
+    }>
+  ): Promise<any | null> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      // If setting as default, unset any existing default first
+      if (data.isDefault) {
+        await tx`
+          UPDATE app.time_policies
+          SET is_default = false, updated_at = now()
+          WHERE tenant_id = ${ctx.tenantId}::uuid
+            AND is_default = true
+            AND status = 'active'
+            AND id != ${id}::uuid
+        `;
+      }
+
+      const [row] = await tx`
+        UPDATE app.time_policies SET
+          name = COALESCE(${data.name ?? null}, name),
+          description = COALESCE(${data.description ?? null}, description),
+          policy_type = COALESCE(${data.policyType ?? null}::app.time_policy_type, policy_type),
+          working_hours_per_day = COALESCE(${data.workingHoursPerDay ?? null}, working_hours_per_day),
+          working_days_per_week = COALESCE(${data.workingDaysPerWeek ?? null}, working_days_per_week),
+          break_duration_minutes = COALESCE(${data.breakDurationMinutes ?? null}, break_duration_minutes),
+          overtime_enabled = COALESCE(${data.overtimeEnabled ?? null}, overtime_enabled),
+          overtime_threshold_daily = COALESCE(${data.overtimeThresholdDaily ?? null}, overtime_threshold_daily),
+          overtime_threshold_weekly = COALESCE(${data.overtimeThresholdWeekly ?? null}, overtime_threshold_weekly),
+          overtime_rate_multiplier = COALESCE(${data.overtimeRateMultiplier ?? null}, overtime_rate_multiplier),
+          default_start_time = COALESCE(${data.defaultStartTime ?? null}::time, default_start_time),
+          default_end_time = COALESCE(${data.defaultEndTime ?? null}::time, default_end_time),
+          is_default = COALESCE(${data.isDefault ?? null}, is_default),
+          updated_by = COALESCE(${data.updatedBy ?? null}::uuid, updated_by),
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+        RETURNING *
+      `;
+
+      if (row) {
+        await this.writeOutbox(tx, ctx.tenantId, "time_policy", id, "time.policy.updated", {
+          policyId: id,
+          changes: data,
+        });
+      }
+
+      return row ?? null;
+    });
+  }
+
+  async deleteTimePolicy(ctx: TenantContext, id: string): Promise<any | null> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      // Soft-delete by setting status to inactive
+      const [row] = await tx`
+        UPDATE app.time_policies SET
+          status = 'inactive',
+          is_default = false,
+          updated_at = now()
+        WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid AND status = 'active'
+        RETURNING *
+      `;
+
+      if (row) {
+        await this.writeOutbox(tx, ctx.tenantId, "time_policy", id, "time.policy.deleted", {
+          policyId: id,
+        });
+      }
+
+      return row ?? null;
+    });
+  }
+
+  // ===========================================================================
   // Time Events
   // ===========================================================================
 
@@ -282,11 +496,11 @@ export class TimeRepository {
       const [row] = await tx<ScheduleRow[]>`
         INSERT INTO app.schedules (
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, status
+          org_unit_id, is_template, status
         ) VALUES (
           ${id}::uuid, ${ctx.tenantId}::uuid, ${data.name}, ${data.description || null},
           ${data.startDate}, ${data.endDate}, ${data.orgUnitId || null}::uuid,
-          'draft'
+          ${data.isTemplate ?? false}, 'draft'
         )
         RETURNING *
       `;
@@ -310,10 +524,11 @@ export class TimeRepository {
       return tx<ScheduleRow[]>`
         SELECT
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, status, created_at, updated_at
+          org_unit_id, is_template, status, created_at, updated_at
         FROM app.schedules
         WHERE tenant_id = ${ctx.tenantId}::uuid
         ${filters.orgUnitId ? tx`AND org_unit_id = ${filters.orgUnitId}::uuid` : tx``}
+        ${(filters as any).isTemplate !== undefined ? tx`AND is_template = ${(filters as any).isTemplate}` : tx``}
         ${filters.cursor ? tx`AND id < ${filters.cursor}::uuid` : tx``}
         ORDER BY start_date DESC, id DESC
         LIMIT ${limit + 1}
@@ -332,7 +547,7 @@ export class TimeRepository {
       return tx<ScheduleRow[]>`
         SELECT
           id, tenant_id, name, description, start_date, end_date,
-          org_unit_id, status, created_at, updated_at
+          org_unit_id, is_template, status, created_at, updated_at
         FROM app.schedules
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
       `;
@@ -360,6 +575,7 @@ export class TimeRepository {
           start_date = COALESCE(${data.startDate || null}, start_date),
           end_date = COALESCE(${data.endDate || null}, end_date),
           org_unit_id = COALESCE(${data.orgUnitId || null}::uuid, org_unit_id),
+          is_template = COALESCE(${data.isTemplate ?? null}, is_template),
           updated_at = now()
         WHERE id = ${id}::uuid AND tenant_id = ${ctx.tenantId}::uuid
         RETURNING *

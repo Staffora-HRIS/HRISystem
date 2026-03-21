@@ -248,20 +248,27 @@ export class AuditService {
    * Write an audit log entry
    */
   async log(context: AuditContext, options: AuditLogOptions): Promise<string> {
+    // Sanitize all UUID parameters: pass NULL for non-UUID strings to
+    // prevent "invalid input syntax for type uuid" errors that would
+    // silently break audit logging.
+    const safeSessionId = safeUuid(context.sessionId);
+    const safeResourceId = safeUuid(options.resourceId);
+    const safeUserId = safeUuid(context.userId);
+
     const result = await this.db.withSystemContext(async (tx) => {
       return await tx<{ id: string }[]>`
         SELECT app.write_audit_log(
           ${context.tenantId}::uuid,
-          ${context.userId}::uuid,
+          ${safeUserId}::uuid,
           ${options.action},
           ${options.resourceType},
-          ${options.resourceId || null}::uuid,
+          ${safeResourceId}::uuid,
           ${options.oldValue ? JSON.stringify(options.oldValue) : null}::jsonb,
           ${options.newValue ? JSON.stringify(options.newValue) : null}::jsonb,
           ${context.ipAddress},
           ${context.userAgent},
           ${context.requestId},
-          ${context.sessionId}::uuid,
+          ${safeSessionId}::uuid,
           ${JSON.stringify(options.metadata || {})}::jsonb
         ) as id
       `;
@@ -279,22 +286,26 @@ export class AuditService {
     context: AuditContext,
     options: AuditLogOptions
   ): Promise<string> {
+    const safeSessionId = safeUuid(context.sessionId);
+    const safeResourceId = safeUuid(options.resourceId);
+    const safeUserId = safeUuid(context.userId);
+
     // Enable system context for the insert
     await tx`SELECT app.enable_system_context()`;
 
     const result = await tx<{ id: string }[]>`
       SELECT app.write_audit_log(
         ${context.tenantId}::uuid,
-        ${context.userId}::uuid,
+        ${safeUserId}::uuid,
         ${options.action},
         ${options.resourceType},
-        ${options.resourceId || null}::uuid,
+        ${safeResourceId}::uuid,
         ${options.oldValue ? JSON.stringify(options.oldValue) : null}::jsonb,
         ${options.newValue ? JSON.stringify(options.newValue) : null}::jsonb,
         ${context.ipAddress},
         ${context.userAgent},
         ${context.requestId},
-        ${context.sessionId}::uuid,
+        ${safeSessionId}::uuid,
         ${JSON.stringify(options.metadata || {})}::jsonb
       ) as id
     `;
@@ -397,6 +408,20 @@ export class AuditService {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/** Regex matching a standard UUID (v4 or any variant) */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Return the value if it is a valid UUID string, otherwise NULL.
+ * This prevents "invalid input syntax for type uuid" errors when
+ * non-UUID identifiers (e.g., API key synthetic session IDs) are
+ * passed to functions that cast to ::uuid.
+ */
+function safeUuid(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return UUID_REGEX.test(value) ? value : null;
+}
 
 /**
  * Extract client IP from request headers
@@ -557,6 +582,7 @@ export function sanitizeAuditData(
 export function auditPlugin() {
   // Singleton: created once when plugin is initialized, reused across all requests
   let auditServiceSingleton: AuditService | null = null;
+  let partitionCheckDone = false;
 
   return new Elysia({ name: "audit" })
     // Audit service for direct access (singleton)
@@ -564,6 +590,23 @@ export function auditPlugin() {
       const { db } = ctx as any;
       if (!auditServiceSingleton) {
         auditServiceSingleton = new AuditService(db);
+      }
+
+      // Lazily ensure audit_log partitions exist on the first request.
+      // Fire-and-forget to avoid blocking the request.
+      if (!partitionCheckDone) {
+        partitionCheckDone = true;
+        db.withSystemContext(async (tx: TransactionSql) => {
+          await tx`SELECT app.ensure_audit_log_partition()`;
+        }).catch((err: unknown) => {
+          // Non-fatal: the DEFAULT partition (migration 0221) will catch rows
+          // even if this fails. Reset flag so it retries on next request.
+          partitionCheckDone = false;
+          console.warn(
+            "[Audit] Failed to ensure audit_log partitions:",
+            err instanceof Error ? err.message : String(err)
+          );
+        });
       }
       return {
         auditService: auditServiceSingleton,
@@ -585,14 +628,25 @@ export function auditPlugin() {
       const audit: AuditHelper = {
         log: async (options) => {
           if (!context.tenantId) return "";
-          return auditService.log(context, {
-            action: options.action,
-            resourceType: options.resourceType,
-            resourceId: options.resourceId,
-            oldValue: options.oldValues,
-            newValue: options.newValues,
-            metadata: options.metadata,
-          });
+          try {
+            return await auditService.log(context, {
+              action: options.action,
+              resourceType: options.resourceType,
+              resourceId: options.resourceId,
+              oldValue: options.oldValues,
+              newValue: options.newValues,
+              metadata: options.metadata,
+            });
+          } catch (error) {
+            // Log but do not crash the request — audit failures must not
+            // break business operations.
+            console.error(
+              `[Audit] Failed to write audit entry: action=${options.action} ` +
+              `resource=${options.resourceType} tenant=${context.tenantId}`,
+              error instanceof Error ? error.message : String(error)
+            );
+            return "";
+          }
         },
       };
 
