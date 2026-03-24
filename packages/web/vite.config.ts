@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => ({
   },
   // Vitest configuration — exclude Playwright E2E tests
   test: {
+    environment: "jsdom",
     exclude: ["node_modules", "build", "e2e/**"],
     alias: {
       "~/": new URL("./app/", import.meta.url).pathname,
