@@ -136,51 +136,56 @@ export class AuthService {
       return null;
     }
 
-    const result = await this.db.query<{
-      id: string;
-      email: string;
-      emailVerified: boolean;
-      name: string | null;
-      image: string | null;
-      createdAt: Date;
-      updatedAt: Date;
-      status: string;
-      mfaEnabled: boolean;
-      tenants: Array<{
+    // Use system context to bypass RLS — user_tenants has tenant-scoped
+    // RLS policies but we need cross-tenant access to resolve which tenants
+    // the user belongs to (before any tenant context is set).
+    const result = await this.db.withSystemContext(async (tx) => {
+      return await tx<{
         id: string;
-        name: string;
-        slug: string;
-        is_primary: boolean;
-      }>;
-    }>`
-      SELECT 
-        u.id::text,
-        u.email,
-        u."emailVerified" as email_verified,
-        u.name,
-        u.image,
-        u."createdAt" as created_at,
-        u."updatedAt" as updated_at,
-        COALESCE(u.status, 'active') as status,
-        COALESCE(u."mfaEnabled", false) as mfa_enabled,
-        COALESCE(
-          (
-            SELECT json_agg(json_build_object(
-              'id', t.id,
-              'name', t.name,
-              'slug', t.slug,
-              'is_primary', ut.is_primary
-            ))
-            FROM app.user_tenants ut
-            JOIN app.tenants t ON t.id = ut.tenant_id
-            WHERE ut.user_id = ${userId}::uuid
-            AND ut.status = 'active'
-          ),
-          '[]'::json
-        ) as tenants
-      FROM app."user" u
-      WHERE u.id = ${userId}
-    `;
+        email: string;
+        emailVerified: boolean;
+        name: string | null;
+        image: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        status: string;
+        mfaEnabled: boolean;
+        tenants: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          is_primary: boolean;
+        }>;
+      }[]>`
+        SELECT
+          u.id::text,
+          u.email,
+          u."emailVerified" as email_verified,
+          u.name,
+          u.image,
+          u."createdAt" as created_at,
+          u."updatedAt" as updated_at,
+          COALESCE(u.status, 'active') as status,
+          COALESCE(u."mfaEnabled", false) as mfa_enabled,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object(
+                'id', t.id,
+                'name', t.name,
+                'slug', t.slug,
+                'is_primary', ut.is_primary
+              ))
+              FROM app.user_tenants ut
+              JOIN app.tenants t ON t.id = ut.tenant_id
+              WHERE ut.user_id = ${userId}::uuid
+              AND ut.status = 'active'
+            ),
+            '[]'::json
+          ) as tenants
+        FROM app."user" u
+        WHERE u.id = ${userId}
+      `;
+    });
 
     if (result.length === 0) {
       return null;
@@ -207,7 +212,7 @@ export class AuthService {
   }
 
   /**
-   * Check if user has MFA enabled
+   * Check if user has MFA enabled by looking for a record in the twoFactor table.
    */
   async userHasMfa(userId: string): Promise<boolean> {
     const result = await this.db.query<{ has_mfa: boolean }>`
@@ -216,6 +221,65 @@ export class AuthService {
       ) as has_mfa
     `;
     return result[0]?.has_mfa ?? false;
+  }
+
+  /**
+   * Check whether a session was created after the user enabled MFA.
+   *
+   * Better Auth's two-factor plugin enforces MFA at sign-in time: when a user
+   * with twoFactorEnabled=true signs in, the plugin deletes the initial session
+   * and only creates a new one after successful TOTP verification. Therefore,
+   * any session created AFTER MFA was enabled has already been verified.
+   *
+   * However, sessions that existed BEFORE MFA was enabled are pre-MFA sessions
+   * that never went through 2FA verification. This method detects that case by
+   * comparing session.createdAt against the twoFactor record's createdAt.
+   *
+   * Returns true if the session is considered MFA-verified (created after 2FA setup).
+   * Returns false if the session pre-dates 2FA setup (user should re-authenticate).
+   * Returns true if no twoFactor record exists (user doesn't have MFA — caller
+   * should have checked userHasMfa first).
+   */
+  async isSessionMfaVerified(userId: string, sessionId: string): Promise<boolean> {
+    try {
+      const result = await this.db.query<{
+        session_created_at: Date;
+        mfa_created_at: Date | null;
+      }>`
+        SELECT
+          s."createdAt" as session_created_at,
+          tf."createdAt" as mfa_created_at
+        FROM app."session" s
+        LEFT JOIN app."twoFactor" tf ON tf."userId" = s."userId"
+        WHERE s.id = ${sessionId}
+          AND s."userId" = ${userId}
+        LIMIT 1
+      `;
+
+      if (result.length === 0) {
+        // Session not found — not verified
+        return false;
+      }
+
+      const row = result[0];
+
+      if (!row.mfa_created_at) {
+        // No twoFactor record — MFA not actually set up; consider verified
+        // (caller should have checked userHasMfa first)
+        return true;
+      }
+
+      // Session was created after MFA was set up — Better Auth would have
+      // enforced 2FA verification before creating this session
+      return new Date(row.session_created_at) >= new Date(row.mfa_created_at);
+    } catch (error) {
+      console.error(
+        `[AuthService.isSessionMfaVerified] Error checking MFA verification for session ${sessionId}:`,
+        error
+      );
+      // Fail closed: if we can't determine MFA status, treat as unverified
+      return false;
+    }
   }
 
   /**
@@ -260,24 +324,30 @@ export class AuthService {
         return null;
       }
 
-      const primary = await this.db.query<{ tenant_id: string }>`
-        SELECT tenant_id::text as tenant_id
-        FROM app.user_tenants
-        WHERE user_id = ${userId}::uuid
-          AND is_primary = true
-          AND status = 'active'
-        LIMIT 1
-      `;
+      // Use system context to bypass RLS — we're resolving the tenant BEFORE
+      // any tenant context is set, so RLS would block the user_tenants query.
+      const primary = await this.db.withSystemContext(async (tx) => {
+        return await tx<{ tenantId: string }[]>`
+          SELECT tenant_id::text as "tenantId"
+          FROM app.user_tenants
+          WHERE user_id = ${userId}::uuid
+            AND is_primary = true
+            AND status = 'active'
+          LIMIT 1
+        `;
+      });
 
-      const tenantId = primary[0]?.tenant_id ?? null;
+      const tenantId = primary[0]?.tenantId ?? null;
 
       // Persist fallback onto session so future requests can resolve from session alone
       if (tenantId) {
-        await this.db.query`
-          UPDATE app."session"
-          SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
-          WHERE id = ${sessionId}
-        `;
+        await this.db.withSystemContext(async (tx) => {
+          await tx`
+            UPDATE app."session"
+            SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+            WHERE id = ${sessionId}
+          `;
+        });
       }
 
       // Cache the result
@@ -371,24 +441,30 @@ export class AuthService {
    */
   async switchTenant(userId: string, sessionId: string, tenantId: string): Promise<boolean> {
     // Verify user has access to this tenant
-    const result = await this.db.query<{ has_access: boolean }>`
-      SELECT EXISTS (
-        SELECT 1 FROM app.user_tenants
-        WHERE user_id = ${userId}::uuid
-        AND tenant_id = ${tenantId}::uuid
-        AND status = 'active'
-      ) as has_access
-    `;
+    // Use system context to bypass RLS — tenant context is not yet set
+    // so RLS would block the user_tenants query
+    const result = await this.db.withSystemContext(async (tx) => {
+      return await tx<{ has_access: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM app.user_tenants
+          WHERE user_id = ${userId}::uuid
+          AND tenant_id = ${tenantId}::uuid
+          AND status = 'active'
+        ) as has_access
+      `;
+    });
 
     const hasAccess = result[0]?.has_access ?? false;
     if (!hasAccess) return false;
 
-    // Persist selection onto Better Auth session
-    await this.db.query`
-      UPDATE app."session"
-      SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
-      WHERE id = ${sessionId}
-    `;
+    // Persist selection onto Better Auth session (system context for session table too)
+    await this.db.withSystemContext(async (tx) => {
+      await tx`
+        UPDATE app."session"
+        SET "currentTenantId" = ${tenantId}::uuid, "updatedAt" = now()
+        WHERE id = ${sessionId}
+      `;
+    });
 
     if (this.cache) {
       await this.cache.set(`session:tenant:${sessionId}`, tenantId, 300);
@@ -453,7 +529,9 @@ class SessionCache {
   private readonly maxSize: number;
   private readonly ttlMs: number;
 
-  constructor(maxSize: number = 2000, ttlSeconds: number = 30) {
+  // NOTE: For multi-replica deployments, consider Redis pub/sub invalidation
+  // to propagate session revocations across instances with minimal delay.
+  constructor(maxSize: number = 2000, ttlSeconds: number = 5) {
     this.maxSize = maxSize;
     this.ttlMs = ttlSeconds * 1000;
   }
@@ -494,8 +572,8 @@ function extractSessionToken(request: Request): string | null {
   const cookieHeader = request.headers.get("cookie");
   if (!cookieHeader) return null;
 
-  // Match the Better Auth session cookie name
-  const cookieNames = ["better-auth.session_token", "better-auth.session_token"];
+  // Match the Better Auth session cookie name (cookiePrefix: "staffora" in config)
+  const cookieNames = ["staffora.session_token", "__Secure-staffora.session_token", "better-auth.session_token"];
   for (const name of cookieNames) {
     const regex = new RegExp(`(?:^|;\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=([^;]+)`);
     const match = cookieHeader.match(regex);
@@ -846,7 +924,22 @@ export function requireAuthContext(ctx: any): void {
 }
 
 /**
- * Require MFA verification
+ * Require MFA verification.
+ *
+ * Behavior:
+ * - Users WITHOUT MFA enabled: passes through (mfaVerified = false).
+ *   Use this guard on routes where MFA is required IF the user has it enabled.
+ * - Users WITH MFA enabled whose session was created AFTER MFA setup:
+ *   passes through (mfaVerified = true). Better Auth enforces TOTP verification
+ *   at sign-in time, so these sessions are already MFA-verified.
+ * - Users WITH MFA enabled whose session PRE-DATES their MFA setup:
+ *   returns 403 AUTH_MFA_REQUIRED. The user must re-authenticate to get a
+ *   session that has gone through 2FA verification.
+ *
+ * Note: Better Auth's two-factor plugin does NOT store a `twoFactorVerified`
+ * flag on the session. Instead, it destroys the initial session on sign-in
+ * and only creates a new session after successful TOTP verification. Therefore,
+ * we verify MFA by comparing session creation time against 2FA setup time.
  */
 export function requireMfa() {
   return new Elysia({ name: "require-mfa" })
@@ -854,7 +947,7 @@ export function requireMfa() {
       const { user, session, authService } = ctx as any;
       const { set } = ctx;
 
-      if (!user) {
+      if (!user || !session) {
         set.status = 401;
         throw new AuthError(
           AuthErrorCodes.INVALID_SESSION,
@@ -863,34 +956,33 @@ export function requireMfa() {
         );
       }
 
-      // Check if user has MFA enabled
-      const hasMfa = await authService.userHasMfa(user.id);
+      // Check if user has MFA enabled (has a record in the twoFactor table)
+      const hasMfa = await (authService as AuthService).userHasMfa(user.id);
 
-      if (hasMfa) {
-        // Verify MFA was completed for this session by checking session metadata.
-        // Better Auth's two-factor plugin sets "twoFactorVerified" on the session
-        // object after successful TOTP verification. If the field is not populated,
-        // MFA is considered not verified and access is denied.
-        // See: https://www.better-auth.com/docs/plugins/two-factor
-        const sessionData = session as { twoFactorVerified?: boolean };
-        if (!sessionData?.twoFactorVerified) {
-          // Log a warning since twoFactorVerified may not be populated by Better Auth
-          // depending on plugin configuration. This helps operators diagnose MFA
-          // enforcement issues without silently bypassing the guard.
-          console.warn(
-            "[MFA] twoFactorVerified check may not be enforced - verify Better Auth MFA plugin configuration. " +
-            `Session ${session?.id} for user ${user.id} does not have twoFactorVerified set.`
-          );
-          set.status = 403;
-          throw new AuthError(
-            AuthErrorCodes.MFA_REQUIRED,
-            "MFA verification required for this action",
-            403
-          );
-        }
+      if (!hasMfa) {
+        // User does not have MFA set up — no MFA enforcement needed
+        return { user: user as User, mfaVerified: false };
       }
 
-      return { user: user as User, mfaVerified: hasMfa ? true : false };
+      // User has MFA enabled — verify this session was created after MFA setup.
+      // Better Auth enforces 2FA at sign-in: it destroys the pre-2FA session and
+      // creates a new one only after successful TOTP verification. So any session
+      // created after the twoFactor record was inserted is implicitly MFA-verified.
+      const isMfaVerified = await (authService as AuthService).isSessionMfaVerified(
+        user.id,
+        session.id
+      );
+
+      if (!isMfaVerified) {
+        set.status = 403;
+        throw new AuthError(
+          AuthErrorCodes.MFA_REQUIRED,
+          "MFA verification required. Please re-authenticate to complete two-factor verification.",
+          403
+        );
+      }
+
+      return { user: user as User, mfaVerified: true };
     });
 }
 
@@ -1027,19 +1119,26 @@ export function requireAdminMfa() {
         return { user: user as User, adminMfaVerified: false };
       }
 
-      // Admin has MFA set up -- check if it's verified for this session
-      const sessionData = session as { twoFactorVerified?: boolean };
-      if (!sessionData?.twoFactorVerified) {
+      // Admin has MFA set up -- verify this session was created after MFA setup.
+      // Better Auth enforces 2FA at sign-in by destroying the initial session and
+      // creating a new one only after successful TOTP verification. We compare
+      // session creation time against the twoFactor record to confirm.
+      const isMfaVerified = await (authService as AuthService).isSessionMfaVerified(
+        user.id,
+        session.id
+      );
+
+      if (!isMfaVerified) {
         if (enforceAdminMfa) {
           set.status = 403;
           throw new AuthError(
             AuthErrorCodes.MFA_REQUIRED,
-            `MFA verification required for admin access (role: ${roleName}). Please complete two-factor authentication.`,
+            `MFA verification required for admin access (role: ${roleName}). Please re-authenticate to complete two-factor verification.`,
             403
           );
         }
         console.warn(
-          `[AdminMFA] Admin user ${user.id} (role: ${roleName}) has MFA enabled but session is not verified. ` +
+          `[AdminMFA] Admin user ${user.id} (role: ${roleName}) has MFA enabled but session pre-dates MFA setup. ` +
           `This would be blocked in production. Set ENFORCE_ADMIN_MFA=true to enforce in dev.`
         );
         return { user: user as User, adminMfaVerified: false };
@@ -1201,7 +1300,9 @@ export function requireApiKeyScope(resource: string, action: string) {
   return (ctx: any) => {
     if (!ctx.apiKeyAuth) return;
     const scopes: string[] = ctx.apiKeyScopes || [];
-    if (scopes.length === 0) return;
+    if (scopes.length === 0) {
+      throw new AuthError("PERMISSION_DENIED" as any, "API key has no scopes granted", 403);
+    }
     const requiredKey = `${resource}:${action}`;
     for (const scope of scopes) {
       if (scope === "*" || scope === "*:*") return;
