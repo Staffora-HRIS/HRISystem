@@ -44,8 +44,8 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: "jsdom",
     exclude: ["node_modules", "build", "e2e/**"],
-    alias: {
-      "~/": new URL("./app/", import.meta.url).pathname,
-    },
+    alias: [
+      { find: /^~\/(.*)/, replacement: `${import.meta.dirname}/app/$1` },
+    ],
   },
 }));
