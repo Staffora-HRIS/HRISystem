@@ -110,7 +110,7 @@ export const authApi = {
    * Confirm password reset via Better Auth
    */
   async confirmPasswordReset(data: { token: string; password: string }): Promise<void> {
-    await (authClient as any).resetPassword({ newPassword: data.password });
+    await (authClient as any).resetPassword({ newPassword: data.password, token: data.token });
   },
 };
 
@@ -194,10 +194,16 @@ export function useAuth() {
     },
   });
 
-  // Logout mutation
+  // Logout mutation — always redirect to login even if sign-out API fails
+  // (e.g. session already expired/invalid returns 401)
   const logoutMutation = useMutation({
     mutationFn: signOutUser,
     onSuccess: () => {
+      queryClient.clear();
+      navigate("/login");
+    },
+    onError: () => {
+      // Session was already invalid — clear local state and redirect anyway
       queryClient.clear();
       navigate("/login");
     },
@@ -284,11 +290,13 @@ export function useMfa() {
   });
 
   const verifyMfaMutation = useMutation({
-    mutationFn: twoFactor.verifyTotp,
+    mutationFn: ({ code, trustDevice }: { code: string; trustDevice?: boolean }) =>
+      twoFactor.verifyTotp(code, { trustDevice }),
   });
 
   const verifyBackupCodeMutation = useMutation({
-    mutationFn: twoFactor.verifyBackupCode,
+    mutationFn: ({ code, trustDevice }: { code: string; trustDevice?: boolean }) =>
+      twoFactor.verifyBackupCode(code, { trustDevice }),
   });
 
   const disableMfaMutation = useMutation({

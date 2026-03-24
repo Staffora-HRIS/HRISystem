@@ -34,6 +34,9 @@ export { CacheClient } from "./cache";
 export { rateLimitPlugin } from "./rate-limit";
 export type { RateLimitPluginOptions } from "./rate-limit";
 
+export { ipAllowlistPlugin } from "./ip-allowlist";
+export type { IpAllowlistPluginOptions } from "./ip-allowlist";
+
 export { securityHeadersPlugin, apiSecurityHeaders, webAppSecurityHeaders } from "./security-headers";
 export type { SecurityHeadersOptions, ContentSecurityPolicy } from "./security-headers";
 
@@ -80,6 +83,11 @@ export type {
   IdempotencyContext,
   IdempotencyPluginOptions,
 } from "./idempotency";
+
+// Feature Flags
+export { featureFlagsPlugin, requireFeatureFlag } from "./feature-flags";
+export { FeatureFlagService } from "../lib/feature-flags";
+export type { FeatureFlag, FeatureFlagContext, CreateFeatureFlagInput, UpdateFeatureFlagInput } from "../lib/feature-flags";
 
 // Better Auth integration
 export {
