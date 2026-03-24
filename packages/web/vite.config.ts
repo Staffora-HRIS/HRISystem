@@ -4,7 +4,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    mode === "test" ? null : reactRouter(),
+    mode === "test" || process.env.STORYBOOK ? null : reactRouter(),
     tsconfigPaths(),
     // Bundle analysis: run `bun run build:analyze` to generate stats.html
     mode !== "test" && process.env.VITE_BUNDLE_ANALYZE === "true"
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: process.env.VITE_API_URL || "http://localhost:3000",
         changeOrigin: true,
       },
     },
@@ -39,5 +39,12 @@ export default defineConfig(({ mode }) => ({
   // Pre-bundle better-auth dependencies
   optimizeDeps: {
     include: ["better-auth/react", "better-auth/client/plugins"],
+  },
+  // Vitest configuration — exclude Playwright E2E tests
+  test: {
+    exclude: ["node_modules", "build", "e2e/**"],
+    alias: {
+      "~/": new URL("./app/", import.meta.url).pathname,
+    },
   },
 }));
