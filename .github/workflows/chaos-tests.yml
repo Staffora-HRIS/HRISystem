@@ -1,0 +1,250 @@
+# =============================================================================
+# Staffora Platform - Chaos Engineering Tests
+# =============================================================================
+#
+# Runs chaos tests weekly to validate system resilience under failure
+# conditions. Tests cover database failures, connection failures, and
+# data integrity under adverse conditions.
+#
+# Tests:
+#   - packages/api/src/test/chaos/database-failures.test.ts
+#   - packages/api/src/test/chaos/connection-failures.test.ts
+#   - packages/api/src/test/chaos/data-integrity.test.ts
+#
+# Schedule: Sundays at 02:00 UTC
+# Manual trigger: Actions tab -> Chaos Engineering Tests -> Run workflow
+# =============================================================================
+
+name: Chaos Engineering Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 2am UTC
+  workflow_dispatch:       # Allow manual trigger
+
+concurrency:
+  group: chaos-tests
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  chaos-tests:
+    name: Chaos Engineering Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hris
+          POSTGRES_PASSWORD: hris_dev_password
+          POSTGRES_DB: hris
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hris"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: bitnami/redis:7.4
+        ports:
+          - 6379:6379
+        env:
+          REDIS_PASSWORD: staffora_redis_dev
+        options: >-
+          --health-cmd "redis-cli -a staffora_redis_dev --no-auth-warning ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # --- Database (admin user for migrations) ---
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: hris
+      DB_USER: hris
+      DB_PASSWORD: hris_dev_password
+
+      # --- Database (app user for tests — NOBYPASSRLS so RLS is enforced) ---
+      TEST_DB_HOST: localhost
+      TEST_DB_PORT: '5432'
+      TEST_DB_NAME: hris
+      TEST_DB_USER: hris_app
+      TEST_DB_PASSWORD: hris_app_dev_password
+      TEST_DB_ADMIN_USER: hris
+      TEST_DB_ADMIN_PASSWORD: hris_dev_password
+
+      # --- Redis ---
+      REDIS_URL: redis://:staffora_redis_dev@localhost:6379
+      REDIS_PASSWORD: staffora_redis_dev
+      TEST_REDIS_HOST: localhost
+      TEST_REDIS_PORT: '6379'
+      TEST_REDIS_PASSWORD: staffora_redis_dev
+
+      # --- Auth secrets (32+ chars each) ---
+      BETTER_AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+      SESSION_SECRET: test-session-secret-32-characters-long
+      CSRF_SECRET: test-csrf-secret-that-is-32-chars
+
+      # --- Runtime ---
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Initialize database schema
+        run: |
+          PGPASSWORD=hris_dev_password psql -h localhost -U hris -d hris -f docker/postgres/init.sql
+        env:
+          PGCLIENTENCODING: UTF8
+
+      - name: Run migrations
+        run: bun run migrate:up
+
+      # -----------------------------------------------------------------------
+      # Start the API server for chaos tests that need a live endpoint
+      # -----------------------------------------------------------------------
+      - name: Start API server
+        run: bun run packages/api/src/app.ts &
+        env:
+          PORT: '3000'
+          DATABASE_APP_URL: postgres://hris_app:hris_app_dev_password@localhost:5432/hris
+          DATABASE_URL: postgres://hris:hris_dev_password@localhost:5432/hris
+
+      - name: Wait for API server to be ready
+        run: |
+          echo "Waiting for API server at http://localhost:3000/health ..."
+          timeout 60 bash -c '
+            until curl -sf http://localhost:3000/health > /dev/null 2>&1; do
+              sleep 2
+            done
+          '
+          echo "API server is ready."
+
+      # -----------------------------------------------------------------------
+      # Run chaos test suites individually for granular reporting
+      # -----------------------------------------------------------------------
+      - name: 'Chaos: Database Failures'
+        id: db_failures
+        continue-on-error: true
+        run: bun test packages/api/src/test/chaos/database-failures.test.ts 2>&1 | tee chaos-db-failures.log
+
+      - name: 'Chaos: Connection Failures'
+        id: conn_failures
+        continue-on-error: true
+        run: bun test packages/api/src/test/chaos/connection-failures.test.ts 2>&1 | tee chaos-conn-failures.log
+
+      - name: 'Chaos: Data Integrity'
+        id: data_integrity
+        continue-on-error: true
+        run: bun test packages/api/src/test/chaos/data-integrity.test.ts 2>&1 | tee chaos-data-integrity.log
+
+      # -----------------------------------------------------------------------
+      # Publish results to GitHub Step Summary
+      # -----------------------------------------------------------------------
+      - name: Publish Chaos Test Results
+        if: always()
+        run: |
+          echo "## Chaos Engineering Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run date**: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: [\`${GITHUB_SHA::8}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Track overall status
+          FAILED=0
+
+          echo "### Test Suite Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.db_failures.outcome }}" = "success" ]; then
+            echo "| Database Failures | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Database Failures | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=1
+          fi
+
+          if [ "${{ steps.conn_failures.outcome }}" = "success" ]; then
+            echo "| Connection Failures | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Connection Failures | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=1
+          fi
+
+          if [ "${{ steps.data_integrity.outcome }}" = "success" ]; then
+            echo "| Data Integrity | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Data Integrity | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Include failure details if any suite failed
+          if [ "$FAILED" = "1" ]; then
+            echo "### Failure Details" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            for LOG_FILE in chaos-db-failures.log chaos-conn-failures.log chaos-data-integrity.log; do
+              if [ -f "$LOG_FILE" ]; then
+                SUITE_NAME=$(echo "$LOG_FILE" | sed 's/chaos-//;s/.log//;s/-/ /g')
+                # Only show logs for failed suites (check for FAIL in output)
+                if grep -q "FAIL\|fail\|Error" "$LOG_FILE" 2>/dev/null; then
+                  echo "<details>" >> $GITHUB_STEP_SUMMARY
+                  echo "<summary><strong>${SUITE_NAME}</strong></summary>" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo '```' >> $GITHUB_STEP_SUMMARY
+                  tail -50 "$LOG_FILE" >> $GITHUB_STEP_SUMMARY
+                  echo '```' >> $GITHUB_STEP_SUMMARY
+                  echo "</details>" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                fi
+              fi
+            done
+
+            echo "> **Action required**: Chaos test failures indicate resilience regressions. Review the failure details above and address before the next production deployment." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> All chaos tests passed. The system handles failure conditions correctly." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # -----------------------------------------------------------------------
+      # Upload test logs as artifacts for deeper investigation
+      # -----------------------------------------------------------------------
+      - name: Upload chaos test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-test-logs
+          path: chaos-*.log
+          retention-days: 30
+
+      # -----------------------------------------------------------------------
+      # Fail the workflow if any chaos test suite failed
+      # -----------------------------------------------------------------------
+      - name: Check for failures
+        if: always()
+        run: |
+          if [ "${{ steps.db_failures.outcome }}" != "success" ] || \
+             [ "${{ steps.conn_failures.outcome }}" != "success" ] || \
+             [ "${{ steps.data_integrity.outcome }}" != "success" ]; then
+            echo "::error::One or more chaos test suites failed. See Step Summary for details."
+            exit 1
+          fi

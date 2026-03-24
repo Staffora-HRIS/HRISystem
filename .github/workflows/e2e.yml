@@ -51,7 +51,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: bitnami/redis:7.0
+        image: bitnami/redis:7.4
         ports:
           - 6379:6379
         env:
