@@ -223,6 +223,8 @@ export const RecruitmentBySourceSchema = t.Object({
 export const DiversityFiltersSchema = t.Object({
   org_unit_id: t.Optional(t.String({ format: "uuid" })),
   as_of_date: t.Optional(t.String({ format: "date" })),
+  start_date: t.Optional(t.String({ format: "date" })),
+  end_date: t.Optional(t.String({ format: "date" })),
 });
 
 // =============================================================================
@@ -505,6 +507,15 @@ export type DiversityCompletion = Static<typeof DiversityCompletionSchema>;
 export type GenderPayGapSummary = Static<typeof GenderPayGapSummarySchema>;
 export type DiversityDashboard = Static<typeof DiversityDashboardSchema>;
 
+// Convenience aliases used by service layer
+export type DiversityAnalyticsFilters = DiversityFilters & { start_date?: string; end_date?: string };
+export type DiversityOverview = any;
+export type DiversityByDepartmentResponse = any;
+export type DiversityByGradeResponse = any;
+export type DiversityTrendsResponse = any;
+export type CharacteristicBreakdownItem = { label: string; count: number; percentage: number };
+export type CompensationAnalyticsFilters = CompensationFilters & { department_id?: string; start_date?: string; end_date?: string };
+
 export type CompensationFilters = Static<typeof CompensationFiltersSchema>;
 export type CompensationSummary = Static<typeof CompensationSummarySchema>;
 export type CompensationByBand = Static<typeof CompensationByBandSchema>;
@@ -654,3 +665,130 @@ export type AttritionForecast = Static<typeof AttritionForecastSchema>;
 export type SkillGapItem = Static<typeof SkillGapItemSchema>;
 export type SkillsGapAnalysis = Static<typeof SkillsGapAnalysisSchema>;
 export type WorkforcePlanningDashboard = Static<typeof WorkforcePlanningDashboardSchema>;
+
+// =============================================================================
+// Workforce Analytics - Filters
+// =============================================================================
+
+export const WorkforceAnalyticsFiltersSchema = t.Object({
+  department_id: t.Optional(t.String({ format: "uuid" })),
+  location: t.Optional(t.String()),
+  start_date: t.Optional(t.String({ format: "date" })),
+  end_date: t.Optional(t.String({ format: "date" })),
+  include_inactive: t.Optional(t.Boolean()),
+});
+
+export type WorkforceAnalyticsFilters = Static<typeof WorkforceAnalyticsFiltersSchema>;
+
+// =============================================================================
+// Workforce Analytics - Individual Endpoint Schemas (TODO-198)
+// =============================================================================
+
+export const WorkforceHeadcountTrendsResponseSchema = t.Object({
+  currentHeadcount: t.Number(),
+  trends: t.Array(t.Object({
+    period: t.String(),
+    totalHeadcount: t.Number(),
+    hires: t.Number(),
+    terminations: t.Number(),
+    netChange: t.Number(),
+  })),
+});
+
+export type WorkforceHeadcountTrendsResponse = Static<typeof WorkforceHeadcountTrendsResponseSchema>;
+
+export const WorkforceTurnoverRateResponseSchema = t.Object({
+  overallTurnoverRate: t.Number(),
+  overallVoluntaryRate: t.Number(),
+  overallInvoluntaryRate: t.Number(),
+  totalTerminations: t.Number(),
+  byDepartment: t.Array(t.Object({
+    orgUnitId: t.String(),
+    orgUnitName: t.String(),
+    totalTerminations: t.Number(),
+    voluntaryTerminations: t.Number(),
+    involuntaryTerminations: t.Number(),
+    headcount: t.Number(),
+    turnoverRate: t.Number(),
+  })),
+});
+
+export type WorkforceTurnoverRateResponse = Static<typeof WorkforceTurnoverRateResponseSchema>;
+
+export const WorkforceRetirementProjectionResponseSchema = t.Object({
+  totalActive: t.Number(),
+  employeesWithDob: t.Number(),
+  projections: t.Array(t.Object({
+    retirementAge: t.Number(),
+    yearsToRetirement: t.String(),
+    employeeCount: t.Number(),
+    percentage: t.Number(),
+    departments: t.Array(t.Object({
+      orgUnitId: t.String(),
+      orgUnitName: t.String(),
+      count: t.Number(),
+    })),
+  })),
+});
+
+export type WorkforceRetirementProjectionResponse = Static<typeof WorkforceRetirementProjectionResponseSchema>;
+
+export const WorkforceTenureDistributionResponseSchema = t.Object({
+  totalEmployees: t.Number(),
+  averageTenureMonths: t.Number(),
+  medianTenureMonths: t.Number(),
+  bands: t.Array(t.Object({
+    band: t.String(),
+    employeeCount: t.Number(),
+    percentage: t.Number(),
+  })),
+});
+
+export type WorkforceTenureDistributionResponse = Static<typeof WorkforceTenureDistributionResponseSchema>;
+
+export const WorkforceVacancyRateResponseSchema = t.Object({
+  totalBudgeted: t.Number(),
+  totalFilled: t.Number(),
+  totalOpenRequisitions: t.Number(),
+  overallVacancyRate: t.Number(),
+  byDepartment: t.Array(t.Object({
+    orgUnitId: t.String(),
+    orgUnitName: t.String(),
+    budgetedHeadcount: t.Number(),
+    filledPositions: t.Number(),
+    openRequisitions: t.Number(),
+    vacancyRate: t.Number(),
+  })),
+});
+
+export type WorkforceVacancyRateResponse = Static<typeof WorkforceVacancyRateResponseSchema>;
+
+export const WorkforceSummaryResponseSchema = t.Object({
+  headcount: t.Object({
+    total: t.Number(),
+    active: t.Number(),
+    onLeave: t.Number(),
+    pending: t.Number(),
+  }),
+  turnover: t.Object({
+    rate12m: t.Number(),
+    voluntaryRate12m: t.Number(),
+    involuntaryRate12m: t.Number(),
+  }),
+  tenure: t.Object({
+    averageMonths: t.Number(),
+    medianMonths: t.Number(),
+  }),
+  retirementRisk: t.Object({
+    within2Years: t.Number(),
+    within5Years: t.Number(),
+  }),
+  vacancy: t.Object({
+    budgetedHeadcount: t.Number(),
+    filled: t.Number(),
+    vacancyRate: t.Number(),
+    openRequisitions: t.Number(),
+  }),
+});
+
+export type WorkforceSummaryResponse = Static<typeof WorkforceSummaryResponseSchema>;

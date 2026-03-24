@@ -14,6 +14,7 @@ import {
   type AbsenceSpell,
 } from "@staffora/shared";
 import type { SicknessAnalyticsRepository } from "./repository";
+import { logger } from "../../lib/logger";
 import type {
   SicknessAnalyticsFilters,
   SicknessTrendsResponse,
@@ -104,7 +105,7 @@ export class SicknessAnalyticsService {
         },
       };
     } catch (error) {
-      console.error("Error fetching sickness trends:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to fetch sickness trends");
       return {
         success: false,
         error: {
@@ -166,7 +167,7 @@ export class SicknessAnalyticsService {
         },
       };
     } catch (error) {
-      console.error("Error fetching sickness by reason:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to fetch sickness by reason");
       return {
         success: false,
         error: {
@@ -294,7 +295,7 @@ export class SicknessAnalyticsService {
         },
       };
     } catch (error) {
-      console.error("Error fetching sickness by department:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to fetch sickness by department");
       return {
         success: false,
         error: {
@@ -373,7 +374,7 @@ export class SicknessAnalyticsService {
         },
       };
     } catch (error) {
-      console.error("Error fetching seasonal sickness patterns:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to fetch seasonal sickness patterns");
       return {
         success: false,
         error: {
@@ -464,7 +465,7 @@ export class SicknessAnalyticsService {
         },
       };
     } catch (error) {
-      console.error("Error fetching sickness summary:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to fetch sickness summary");
       return {
         success: false,
         error: {

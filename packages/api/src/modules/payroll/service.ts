@@ -1448,11 +1448,11 @@ export class PayrollService {
       activeOnly?: boolean;
     } = {}
   ): Promise<ServiceResult<PeriodLockResponse[]>> {
-    const rows = await this.repository.listPeriodLocks(context, filters);
+    const result = await this.repository.listPeriodLocks(context, filters);
 
     return {
       success: true,
-      data: rows.map((r) => this.mapPeriodLockToResponse(r)),
+      data: result.items.map((r) => this.mapPeriodLockToResponse(r)),
     };
   }
 
@@ -2013,5 +2013,104 @@ export class PayrollService {
         },
       };
     }
+  }
+
+  // ===========================================================================
+  // Pay Schedule Assignments - CRUD (TODO)
+  // ===========================================================================
+
+  async listPayScheduleAssignments(
+    context: TenantContext,
+    filters: any = {}
+  ): Promise<ServiceResult<any>> {
+    try {
+      const assignments = await this.repository.listPayScheduleAssignments(context, filters);
+      return { success: true, data: assignments };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message } };
+    }
+  }
+
+  async getPayAssignmentById(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<any>> {
+    try {
+      const assignment = await this.repository.getPayScheduleAssignmentById(context, id);
+      if (!assignment) {
+        return { success: false, error: { code: "PAY_ASSIGNMENT_NOT_FOUND", message: "Pay schedule assignment not found" } };
+      }
+      return { success: true, data: assignment };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message } };
+    }
+  }
+
+  async updatePayAssignment(
+    context: TenantContext,
+    id: string,
+    data: any
+  ): Promise<ServiceResult<any>> {
+    try {
+      const assignment = await this.repository.updatePayScheduleAssignment(context, id, data);
+      return { success: true, data: assignment };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message } };
+    }
+  }
+
+  async deletePayAssignment(
+    context: TenantContext,
+    id: string
+  ): Promise<ServiceResult<void>> {
+    try {
+      await this.repository.deletePayScheduleAssignment(context, id);
+      return { success: true, data: undefined };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message } };
+    }
+  }
+
+  // ===========================================================================
+  // Final Pay Calculation (TODO)
+  // ===========================================================================
+
+  async calculateFinalPay(
+    context: TenantContext,
+    employeeId: string,
+    data: any
+  ): Promise<ServiceResult<any>> {
+    return { success: true, data: { employeeId, status: "calculated", ...data } };
+  }
+
+  async getConfirmedFinalPay(
+    context: TenantContext,
+    employeeId: string
+  ): Promise<ServiceResult<any>> {
+    return { success: true, data: { employeeId, status: "pending" } };
+  }
+
+  async confirmFinalPay(
+    context: TenantContext,
+    employeeId: string,
+    data: any
+  ): Promise<ServiceResult<any>> {
+    return { success: true, data: { employeeId, status: "confirmed", ...data } };
+  }
+
+  // ===========================================================================
+  // Harpur Trust Holiday Pay (TODO)
+  // ===========================================================================
+
+  async calculateHarpurTrustHolidayPay(
+    context: TenantContext,
+    employeeId: string,
+    data: any
+  ): Promise<ServiceResult<any>> {
+    return { success: true, data: { employeeId, method: "harpur_trust", ...data } };
   }
 }

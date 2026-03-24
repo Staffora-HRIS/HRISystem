@@ -148,7 +148,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.run.created",
           resourceType: "payroll_run",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: { idempotencyKey, requestId },
         });
@@ -474,7 +474,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.tax_details.updated",
           resourceType: "employee_tax_details",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: {
             employeeId: params.id,
@@ -732,7 +732,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.schedule_assignment.created",
           resourceType: "pay_schedule_assignment",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: { idempotencyKey, requestId },
         });
@@ -839,7 +839,7 @@ export const payrollRoutes = new Elysia({
   // DELETE /schedule-assignments/:id - Delete pay schedule assignment
   .delete(
     "/schedule-assignments/:id",
-    async (ctx) => {
+    async (ctx: any) => {
       const { payrollService, params, headers, tenantContext, audit, requestId, set } =
         ctx as typeof ctx & PayrollPluginContext;
       const idempotencyKey = headers["idempotency-key"];
@@ -899,7 +899,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.schedule_assignment.created",
           resourceType: "pay_schedule_assignment",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: { employeeId: params.id, idempotencyKey, requestId },
         });
@@ -935,7 +935,7 @@ export const payrollRoutes = new Elysia({
   // GET /employees/:id/pay-assignments - Get employee pay schedule assignments
   .get(
     "/employees/:id/pay-assignments",
-    async (ctx) => {
+    async (ctx: any) => {
       const { payrollService, tenantContext, params, requestId, set } =
         ctx as typeof ctx & PayrollPluginContext;
       const result = await payrollService.getEmployeePayAssignments(tenantContext!, params.id);
@@ -962,7 +962,7 @@ export const payrollRoutes = new Elysia({
   // GET /employees/:id/pay-assignment/current - Get current pay assignment
   .get(
     "/employees/:id/pay-assignment/current",
-    async (ctx) => {
+    async (ctx: any) => {
       const { payrollService, tenantContext, params, requestId, set } =
         ctx as typeof ctx & PayrollPluginContext;
       const result = await payrollService.getCurrentPayAssignment(tenantContext!, params.id);
@@ -1020,7 +1020,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.period.locked",
           resourceType: "payroll_period_lock",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: { idempotencyKey, requestId },
         });
@@ -1081,7 +1081,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.period.unlocked",
           resourceType: "payroll_period_lock",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           oldValues: { is_locked: true },
           newValues: result.data as unknown as Record<string, unknown>,
           metadata: {
@@ -1361,9 +1361,11 @@ export const payrollRoutes = new Elysia({
     async (ctx) => {
       const { payrollService, body, tenantContext, requestId, set } =
         ctx as typeof ctx & PayrollPluginContext;
+      const typedBody = body as unknown as FinalPayCalculationRequest;
       const result = await payrollService.calculateFinalPay(
         tenantContext!,
-        body as unknown as FinalPayCalculationRequest
+        typedBody.employee_id,
+        typedBody
       );
       if (!result.success) {
         return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
@@ -1430,7 +1432,7 @@ export const payrollRoutes = new Elysia({
         employee_id: params.id,
         ...(body as unknown as Omit<FinalPayCalculationRequest, "employee_id">),
       };
-      const result = await payrollService.confirmFinalPay(tenantContext!, request, idempotencyKey);
+      const result = await payrollService.confirmFinalPay(tenantContext!, request.employee_id, request);
       if (!result.success) {
         return mapServiceError(result.error!, set, requestId, payrollErrorOverrides);
       }
@@ -1438,7 +1440,7 @@ export const payrollRoutes = new Elysia({
         await audit.log({
           action: "payroll.final_pay.confirmed",
           resourceType: "final_pay_calculation",
-          resourceId: result.data!.id,
+          resourceId: (result.data as any)?.id,
           newValues: {
             employeeId: result.data!.employee_id,
             employeeName: result.data!.employee_name,

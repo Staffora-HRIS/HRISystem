@@ -86,7 +86,7 @@ export const announcementsRoutes = new Elysia({ prefix: "/announcements" })
         const { cursor, limit, ...filters } = query;
         const result = await announcementsService.listAnnouncements(
           tenantContext,
-          filters as { priority?: string; search?: string; published?: boolean },
+          filters as { priority?: "info" | "urgent" | "important"; search?: string; published?: boolean },
           {
             cursor: cursor as string | undefined,
             limit:

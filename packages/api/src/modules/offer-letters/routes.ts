@@ -85,7 +85,7 @@ export const offerLetterRoutes = new Elysia({
       const tenantContext = { tenantId: tenant?.id!, userId: (ctx as any).user?.id };
 
       try {
-        const result = await offerLetterService.createOfferLetter(tenantContext, body);
+        const result = await offerLetterService.createOfferLetter(tenantContext, body as any);
 
         if (!result.success) {
           set.status = mapErrorToStatus(result.error!.code, offerLetterErrorStatusMap);
@@ -243,7 +243,7 @@ export const offerLetterRoutes = new Elysia({
             action: "recruitment.offer_letter.updated",
             resourceType: "offer_letter",
             resourceId: result.data!.id,
-            newValues: body,
+            newValues: body as Record<string, unknown>,
           });
         }
 
@@ -389,7 +389,7 @@ export const offerLetterRoutes = new Elysia({
         const result = await offerLetterService.declineOfferLetter(
           tenantContext,
           params.id,
-          body?.reason
+          (body as any)?.reason
         );
 
         if (!result.success) {
@@ -402,7 +402,7 @@ export const offerLetterRoutes = new Elysia({
             action: "recruitment.offer_letter.declined",
             resourceType: "offer_letter",
             resourceId: result.data!.id,
-            newValues: { status: "declined", reason: body?.reason, respondedAt: result.data!.respondedAt },
+            newValues: { status: "declined", reason: (body as any)?.reason, respondedAt: result.data!.respondedAt },
           });
         }
 

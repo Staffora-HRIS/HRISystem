@@ -32,7 +32,8 @@ import type {
 
 const VALID_TRANSITIONS: Record<AssignmentStatus, AssignmentStatus[]> = {
   planned: ["active", "cancelled"],
-  active: ["completed", "cancelled"],
+  active: ["extended", "completed", "cancelled"],
+  extended: ["completed", "cancelled"],
   completed: [],
   cancelled: [],
 };

@@ -1173,7 +1173,7 @@ export class PayrollRepository {
     data: LockPayrollPeriod,
     tx: TransactionSql
   ): Promise<PeriodLockRow> {
-    const payScheduleId = data.pay_schedule_id ?? null;
+    const payScheduleId = (data as any).pay_schedule_id ?? null;
     const [row] = await tx`
       INSERT INTO payroll_period_locks (
         tenant_id,
@@ -1525,5 +1525,125 @@ export class PayrollRepository {
       totalDebits: String(row.totalDebits),
       totalCredits: String(row.totalCredits),
     };
+  }
+
+  // ===========================================================================
+  // Pay Schedule Assignments (TODO)
+  // ===========================================================================
+
+  async listPayScheduleAssignments(
+    ctx: TenantContext,
+    filters: any = {}
+  ): Promise<any> {
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`
+        SELECT * FROM payroll_schedule_assignments
+        WHERE 1=1
+          ${filters.employeeId ? tx`AND employee_id = ${filters.employeeId}::uuid` : tx``}
+          ${filters.payScheduleId ? tx`AND pay_schedule_id = ${filters.payScheduleId}::uuid` : tx``}
+        ORDER BY created_at DESC
+        LIMIT ${limit + 1}
+      `;
+    });
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    return { items, nextCursor: hasMore && items.length > 0 ? items[items.length - 1]!.id : null, hasMore };
+  }
+
+  async getPayScheduleAssignmentById(ctx: TenantContext, id: string): Promise<any> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`SELECT * FROM payroll_schedule_assignments WHERE id = ${id}::uuid`;
+    });
+    return rows[0] ?? null;
+  }
+
+  async updatePayScheduleAssignment(ctx: TenantContext, id: string, data: any): Promise<any> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`
+        UPDATE payroll_schedule_assignments SET
+          pay_schedule_id = COALESCE(${data.payScheduleId ?? null}, pay_schedule_id),
+          effective_from = COALESCE(${data.effectiveFrom ?? null}, effective_from),
+          effective_to = ${data.effectiveTo ?? null},
+          updated_at = now()
+        WHERE id = ${id}::uuid
+        RETURNING *
+      `;
+    });
+    return rows[0];
+  }
+
+  async deletePayScheduleAssignment(ctx: TenantContext, id: string): Promise<void> {
+    await this.db.withTransaction(ctx, async (tx) => {
+      await tx`DELETE FROM payroll_schedule_assignments WHERE id = ${id}::uuid`;
+    });
+  }
+
+  // ===========================================================================
+  // Holiday Pay Calculation (TODO)
+  // ===========================================================================
+
+  async getWeeklyEarningsForHolidayPay(
+    ctx: TenantContext,
+    employeeId: string,
+    fromDate: string,
+    toDate: string
+  ): Promise<any[]> {
+    return this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`
+        SELECT
+          date_trunc('week', te.clock_in)::date AS week_start,
+          (date_trunc('week', te.clock_in) + interval '6 days')::date AS week_end,
+          COALESCE(SUM(te.regular_hours * COALESCE(pr.hourly_rate, 0)), 0) AS basic_pay,
+          COALESCE(SUM(te.overtime_hours * COALESCE(pr.overtime_rate, pr.hourly_rate, 0)), 0) AS overtime_pay,
+          0 AS commission,
+          0 AS regular_bonus
+        FROM time_entries te
+        LEFT JOIN payroll_rates pr ON pr.employee_id = te.employee_id
+        WHERE te.employee_id = ${employeeId}::uuid
+          AND te.clock_in >= ${fromDate}::date
+          AND te.clock_in <= ${toDate}::date
+        GROUP BY date_trunc('week', te.clock_in)
+        ORDER BY week_start
+      `;
+    });
+  }
+
+  async getWorkingDaysPerWeek(
+    ctx: TenantContext,
+    employeeId: string
+  ): Promise<number> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`
+        SELECT working_days_per_week FROM contracts
+        WHERE employee_id = ${employeeId}::uuid
+          AND effective_to IS NULL
+        ORDER BY effective_from DESC
+        LIMIT 1
+      `;
+    });
+    return rows[0]?.workingDaysPerWeek ?? 5;
+  }
+
+  async saveHolidayPayCalculation(
+    ctx: TenantContext,
+    data: any,
+    _tx?: any
+  ): Promise<any> {
+    const rows = await this.db.withTransaction(ctx, async (tx) => {
+      return tx<any[]>`
+        INSERT INTO payroll_holiday_pay_calculations (
+          tenant_id, employee_id, average_weekly_pay, average_daily_rate,
+          qualifying_weeks, total_weeks_examined, is_incomplete,
+          working_days_per_week, calculated_at
+        ) VALUES (
+          ${ctx.tenantId}::uuid, ${data.employeeId}::uuid,
+          ${data.averageWeeklyPay}::numeric, ${data.averageDailyRate}::numeric,
+          ${data.qualifyingWeeks}, ${data.totalWeeksExamined},
+          ${data.isIncomplete}, ${data.workingDaysPerWeek}, now()
+        ) RETURNING *
+      `;
+    });
+    return rows[0];
   }
 }

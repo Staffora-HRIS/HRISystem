@@ -85,6 +85,11 @@ export const CreateProcessingActivitySchema = t.Object({
   organisational_measures: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 500 }))),
   dpia_required: t.Optional(t.Boolean()),
   dpia_id: t.Optional(UuidSchema),
+  lawful_basis_detail: t.Optional(t.String({ maxLength: 5000 })),
+  security_measures: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 500 }))),
+  controller_name: t.Optional(t.String({ maxLength: 255 })),
+  controller_contact: t.Optional(t.String({ maxLength: 500 })),
+  dpo_contact: t.Optional(t.String({ maxLength: 500 })),
 });
 
 export type CreateProcessingActivity = Static<typeof CreateProcessingActivitySchema>;
@@ -108,6 +113,11 @@ export const UpdateProcessingActivitySchema = t.Object({
   dpia_required: t.Optional(t.Boolean()),
   dpia_id: t.Optional(t.Union([UuidSchema, t.Null()])),
   status: t.Optional(RopaStatusSchema),
+  lawful_basis_detail: t.Optional(t.Union([t.String({ maxLength: 5000 }), t.Null()])),
+  security_measures: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 500 }))),
+  controller_name: t.Optional(t.Union([t.String({ maxLength: 255 }), t.Null()])),
+  controller_contact: t.Optional(t.Union([t.String({ maxLength: 500 }), t.Null()])),
+  dpo_contact: t.Optional(t.Union([t.String({ maxLength: 500 }), t.Null()])),
 });
 
 export type UpdateProcessingActivity = Static<typeof UpdateProcessingActivitySchema>;

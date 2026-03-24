@@ -90,10 +90,11 @@ export class DashboardRepository {
    * RLS is enforced for the live fallback; MVs filter by tenant_id in WHERE.
    */
   async getAdminStats(ctx: TenantContext): Promise<AdminStatsData> {
-    return await this.db.withTransaction(ctx, async (tx) => {
-      // Try materialized view first
-      try {
-        const [mvRow] = await tx`
+    // Try materialized view first (separate transaction so a failure
+    // doesn't abort the fallback query).
+    try {
+      const mvResult = await this.db.withTransaction(ctx, async (tx) => {
+        const [mvRow]: any[] = await tx`
           SELECT
             total_employees,
             active_employees,
@@ -103,9 +104,7 @@ export class DashboardRepository {
         `;
 
         if (mvRow && mvRow.refreshedAt !== null) {
-          // MV has data. Still need live counts for departments, positions, workflows
-          // (these are smaller tables and cheaper to count live).
-          const [liveRow] = await tx`
+          const [liveRow]: any[] = await tx`
             WITH dept AS (
               SELECT count(*)::int AS departments
               FROM org_units
@@ -138,15 +137,20 @@ export class DashboardRepository {
             pendingApprovals: liveRow?.pendingApprovals ?? 0,
           };
         }
-      } catch (err) {
-        // MV might not exist yet (migration not run). Fall back gracefully.
-        logger.warn(
-          { err, tenantId: ctx.tenantId },
-          "dashboard MV query failed, falling back to live query",
-        );
-      }
+        return null;
+      });
 
-      // Fallback: live query (original CTE approach)
+      if (mvResult) return mvResult;
+    } catch (err) {
+      // MV might not exist yet (migration not run). Fall back gracefully.
+      logger.warn(
+        { err, tenantId: ctx.tenantId },
+        "dashboard MV query failed, falling back to live query",
+      );
+    }
+
+    // Fallback: live query (separate transaction)
+    return await this.db.withTransaction(ctx, async (tx) => {
       return await this.getLiveAdminStats(tx);
     });
   }
@@ -159,10 +163,11 @@ export class DashboardRepository {
    * if MVs are not populated.
    */
   async getExtendedStats(ctx: TenantContext): Promise<DashboardExtendedStats> {
-    return await this.db.withTransaction(ctx, async (tx) => {
-      try {
-        // Query all four MVs plus live dept/pos/workflow in a single round-trip
-        const [row] = await tx`
+    // Try materialized views first (separate transaction so a failure
+    // doesn't abort the fallback query).
+    try {
+      const mvResult = await this.db.withTransaction(ctx, async (tx) => {
+        const [row]: any[] = await tx`
           WITH emp_mv AS (
             SELECT * FROM mv_dashboard_employee_stats WHERE tenant_id = ${ctx.tenantId}
           ),
@@ -240,32 +245,37 @@ export class DashboardRepository {
             refreshedAt: row.empRefreshedAt,
           };
         }
-      } catch (err) {
-        logger.warn(
-          { err, tenantId: ctx.tenantId },
-          "dashboard extended MV query failed, falling back to live query",
-        );
-      }
+        return null;
+      });
 
-      // Fallback: use live admin stats with zero-filled extended fields
-      const liveStats = await this.getLiveAdminStats(tx);
-      return {
-        ...liveStats,
-        pendingEmployees: 0,
-        terminatedEmployees: 0,
-        onLeaveEmployees: 0,
-        newHires30d: 0,
-        pendingLeaveRequests: 0,
-        approvedUpcomingLeave: 0,
-        currentlyOnLeave: 0,
-        openCases: 0,
-        pendingCases: 0,
-        slaBreachedCases: 0,
-        activeOnboardings: 0,
-        avgOnboardingProgress: 0,
-        refreshedAt: null,
-      };
+      if (mvResult) return mvResult;
+    } catch (err) {
+      logger.warn(
+        { err, tenantId: ctx.tenantId },
+        "dashboard extended MV query failed, falling back to live query",
+      );
+    }
+
+    // Fallback: use live admin stats with zero-filled extended fields
+    const liveStats = await this.db.withTransaction(ctx, async (tx) => {
+      return await this.getLiveAdminStats(tx);
     });
+    return {
+      ...liveStats,
+      pendingEmployees: 0,
+      terminatedEmployees: 0,
+      onLeaveEmployees: 0,
+      newHires30d: 0,
+      pendingLeaveRequests: 0,
+      approvedUpcomingLeave: 0,
+      currentlyOnLeave: 0,
+      openCases: 0,
+      pendingCases: 0,
+      slaBreachedCases: 0,
+      activeOnboardings: 0,
+      avgOnboardingProgress: 0,
+      refreshedAt: null,
+    };
   }
 
   /**

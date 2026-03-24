@@ -30,8 +30,7 @@ import type {
 // =============================================================================
 
 const VALID_TRANSITIONS: Record<SecondmentStatus, SecondmentStatus[]> = {
-  proposed: ["approved", "cancelled"],
-  approved: ["active", "cancelled"],
+  planned: ["active", "cancelled"],
   active: ["extended", "completed", "cancelled"],
   extended: ["completed", "cancelled"],
   completed: [],
@@ -55,17 +54,17 @@ function mapToResponse(row: SecondmentRow): SecondmentResponse {
     employee_id: row.employeeId,
     employee_name: row.employeeName,
     employee_number: row.employeeNumber,
-    from_org_unit_id: row.fromOrgUnitId,
-    from_org_unit_name: row.fromOrgUnitName,
-    to_org_unit_id: row.toOrgUnitId,
-    to_org_unit_name: row.toOrgUnitName,
-    to_external_org: row.toExternalOrg,
+    home_department_id: row.fromOrgUnitId ?? row.homeDepartmentId,
+    home_department_name: row.fromOrgUnitName ?? row.homeDepartmentName,
+    host_department_id: row.toOrgUnitId ?? row.hostDepartmentId,
+    host_department_name: row.toOrgUnitName ?? row.hostDepartmentName,
+    host_organisation: row.toExternalOrg ?? row.hostOrganisation ?? null,
     start_date: formatDate(row.startDate) ?? "",
     expected_end_date: formatDate(row.expectedEndDate) ?? "",
     actual_end_date: formatDate(row.actualEndDate),
-    reason: row.reason,
     terms: row.terms,
     status: row.status as SecondmentStatus,
+    created_by: row.createdBy ?? null,
     approved_by: row.approvedBy,
     created_at: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
     updated_at: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
@@ -126,7 +125,7 @@ export class SecondmentService {
     }
 
     // Cannot second to the same org unit
-    if (data.from_org_unit_id === data.to_org_unit_id && !data.to_external_org) {
+    if (data.home_department_id === data.host_department_id && !data.host_organisation) {
       return {
         success: false,
         error: {
@@ -137,7 +136,7 @@ export class SecondmentService {
     }
 
     return await this.db.withTransaction(ctx, async (tx) => {
-      const secondment = await this.repository.createSecondment(ctx, data, tx);
+      const secondment = await this.repository.createSecondment(ctx, data, ctx.userId, tx);
 
       await emitDomainEvent(tx, {
         tenantId: ctx.tenantId,
@@ -232,7 +231,7 @@ export class SecondmentService {
         expectedEndDate?: string | null;
       } = {};
 
-      if (transition.status === "approved") {
+      if (transition.status === "active") {
         updates.approvedBy = ctx.userId ?? null;
       }
       if (transition.status === "completed") {

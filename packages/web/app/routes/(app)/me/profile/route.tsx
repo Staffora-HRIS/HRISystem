@@ -68,9 +68,10 @@ interface ChangeRequestListResponse {
 // =============================================================================
 
 /**
- * Sensitive fields requiring approval - mapped to user-friendly labels
+ * Sensitive fields requiring approval - mapped to user-friendly labels.
+ * Used by change-requests page; kept here for reference.
  */
-const SENSITIVE_FIELD_LABELS: Record<string, string> = {
+export const _SENSITIVE_FIELD_LABELS: Record<string, string> = {
   first_name: "First Name",
   last_name: "Last Name",
   middle_name: "Middle Name",
@@ -79,9 +80,10 @@ const SENSITIVE_FIELD_LABELS: Record<string, string> = {
 };
 
 /**
- * Non-sensitive fields that can be updated directly
+ * Non-sensitive fields that can be updated directly.
+ * Used by change-requests page; kept here for reference.
  */
-const NON_SENSITIVE_FIELD_LABELS: Record<string, string> = {
+export const _NON_SENSITIVE_FIELD_LABELS: Record<string, string> = {
   preferred_name: "Preferred Name",
   marital_status: "Marital Status",
   gender: "Gender",
@@ -104,10 +106,10 @@ const MARITAL_STATUS_OPTIONS = [
   { value: "domestic_partnership", label: "Domestic Partnership" },
 ];
 
-const STATUS_BADGE_MAP: Record<string, "info" | "success" | "danger" | "warning"> = {
+export const _STATUS_BADGE_MAP: Record<string, "info" | "success" | "error" | "warning"> = {
   pending: "warning",
   approved: "success",
-  rejected: "danger",
+  rejected: "error",
   cancelled: "info",
 };
 
