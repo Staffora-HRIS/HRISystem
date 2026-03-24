@@ -7,34 +7,33 @@
 # =============================================================================
 # Stage 1: Install ALL dependencies (needed for build)
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS deps
+FROM oven/bun:1.3-alpine AS deps
 
 WORKDIR /app
 
-# Copy only the package files needed for API and its workspace dependency (shared).
-# We create a trimmed workspace config so bun install resolves only what the API needs,
-# avoiding installation of packages/web dependencies entirely.
-COPY bun.lock ./
+# Copy the root package.json (full workspace definition) and lockfile so Bun's
+# frozen-lockfile check passes. All workspace package.json files must be present
+# for the lockfile to be consistent, even though only api + shared are installed.
+COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/web/package.json ./packages/web/
 
-# Create a workspace-scoped package.json that only includes api + shared.
-# This avoids pulling in web/website dependencies and allows lockfile resolution
-# for the subset of packages the API actually depends on.
-RUN echo '{"name":"staffora-platform","private":true,"workspaces":["packages/api","packages/shared"]}' > package.json
-
-# Install all dependencies (including devDependencies needed for the build step)
+# Install all dependencies (including devDependencies needed for the build step).
+# Only api + shared packages are actually used in subsequent stages.
 RUN bun install --ignore-scripts
 
 # =============================================================================
 # Stage 2: Build the API bundle
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS builder
+FROM oven/bun:1.3-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependencies from deps stage (Bun hoists to root node_modules)
+# Copy dependencies from deps stage (Bun hoists most to root, some to package-level)
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy source code (only api + shared, no web/website)
 COPY tsconfig.base.json ./
@@ -49,15 +48,15 @@ RUN bun build src/app.ts --outdir dist --target bun --define "process.env.NODE_E
 # =============================================================================
 # Stage 3: Production dependencies only
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS prod-deps
+FROM oven/bun:1.3-alpine AS prod-deps
 
 WORKDIR /app
 
-# Copy the same trimmed workspace config
-COPY bun.lock ./
+# Copy the full workspace config so the lockfile is consistent
+COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
-RUN echo '{"name":"staffora-platform","private":true,"workspaces":["packages/api","packages/shared"]}' > package.json
+COPY packages/web/package.json ./packages/web/
 
 # Install production dependencies only — excludes devDependencies
 # (@faker-js/faker, @types/*, typescript, etc.)
@@ -66,7 +65,7 @@ RUN bun install --production --ignore-scripts
 # =============================================================================
 # Stage 4: Production runtime
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS runner
+FROM oven/bun:1.3-alpine AS runner
 
 WORKDIR /app
 
@@ -74,15 +73,19 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 staffora && \
     adduser --system --uid 1001 --ingroup staffora staffora
 
-# Copy production-only node_modules (no devDependencies, Bun hoists to root)
+# Copy production-only node_modules (Bun hoists most to root, some to package-level)
 COPY --from=prod-deps --chown=staffora:staffora /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=staffora:staffora /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=prod-deps --chown=staffora:staffora /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy built bundle (used by the API server)
-COPY --from=builder --chown=staffora:staffora /app/packages/api/dist ./dist
+COPY --from=builder --chown=staffora:staffora /app/packages/api/dist ./packages/api/dist
 
-# Copy source files for the worker (which runs from src/worker.ts, not from dist).
+# Copy source files for the worker (which runs from packages/api/src/worker.ts,
+# not from dist). Files must stay inside packages/api/ so Bun resolves
+# dependencies from packages/api/node_modules/.
 # Test files are excluded via .dockerignore so they never enter the build context.
-COPY --from=builder --chown=staffora:staffora /app/packages/api/src ./src
+COPY --from=builder --chown=staffora:staffora /app/packages/api/src ./packages/api/src
 
 # Copy shared package source (needed for workspace imports if any module uses @staffora/shared)
 COPY --from=builder --chown=staffora:staffora /app/packages/shared/src ./packages/shared/src
@@ -119,4 +122,4 @@ LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.description="Staffora HRIS Platform API"
 
 # Start the API server (worker overrides this via docker-compose command)
-CMD ["bun", "./dist/app.js"]
+CMD ["bun", "./packages/api/dist/app.js"]

@@ -18,7 +18,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
 
 # Install all dependencies (dev deps needed for build step)
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun install --ignore-scripts --frozen-lockfile
 
 # =============================================================================
 # Stage 2: Build the application
@@ -64,7 +64,7 @@ COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
 
-RUN bun install --frozen-lockfile --ignore-scripts --production && \
+RUN bun install --ignore-scripts --production --frozen-lockfile && \
     rm -rf /tmp/* ~/.bun/install/cache
 
 # Copy the shared package (needed at runtime for imports)
