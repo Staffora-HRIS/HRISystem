@@ -128,6 +128,15 @@ export const CacheKeys = {
 
   /** Lock key pattern (for distributed locking) */
   lock: (resource: string) => `lock:${resource}`,
+
+  /** Leave types list per tenant */
+  leaveTypes: (tenantId: string) => `tenant:${tenantId}:leave-types`,
+
+  /** Positions list per tenant */
+  positions: (tenantId: string) => `tenant:${tenantId}:positions`,
+
+  /** Course catalog per tenant */
+  courseCatalog: (tenantId: string) => `tenant:${tenantId}:course-catalog`,
 } as const;
 
 // =============================================================================

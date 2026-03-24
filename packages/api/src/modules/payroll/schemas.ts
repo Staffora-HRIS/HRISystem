@@ -919,3 +919,269 @@ export const HarpurTrustResponseSchema = t.Object({
 
 export type HarpurTrustResponse = Static<typeof HarpurTrustResponseSchema>;
 
+// =============================================================================
+// Payroll Submission Schemas (TODO-064)
+// =============================================================================
+
+/**
+ * Payroll submission status lifecycle.
+ * State machine: draft -> validated -> submitted -> accepted/rejected
+ * Rejected submissions can be re-drafted: rejected -> draft
+ */
+export const PayrollSubmissionStatusSchema = t.Union([
+  t.Literal("draft"),
+  t.Literal("validated"),
+  t.Literal("submitted"),
+  t.Literal("accepted"),
+  t.Literal("rejected"),
+]);
+
+export type PayrollSubmissionStatus = Static<typeof PayrollSubmissionStatusSchema>;
+
+/**
+ * Alias for index.ts export compatibility.
+ * Maps to the RTI submission types already defined above.
+ */
+export const PayrollSubmissionTypeSchema = RtiSubmissionTypeSchema;
+export type PayrollSubmissionType = Static<typeof PayrollSubmissionTypeSchema>;
+
+/**
+ * Valid submission status transitions.
+ * draft -> validated (via validation pass)
+ * validated -> submitted (queue for HMRC)
+ * submitted -> accepted | rejected (HMRC response)
+ * rejected -> draft (re-draft for correction)
+ */
+export const SUBMISSION_STATUS_TRANSITIONS: Record<PayrollSubmissionStatus, PayrollSubmissionStatus[]> = {
+  draft: ["validated"],
+  validated: ["submitted"],
+  submitted: ["accepted", "rejected"],
+  accepted: [],
+  rejected: ["draft"],
+};
+
+/**
+ * Create FPS (Full Payment Submission) request body
+ */
+export const CreateFpsSubmissionSchema = t.Object({
+  payroll_run_id: UuidSchema,
+  tax_year: t.Optional(t.String({
+    pattern: "^\\d{4}-\\d{2}$",
+    description: "UK tax year in format YYYY-YY (e.g. 2025-26). Defaults to current tax year.",
+  })),
+  period: t.Optional(t.Number({
+    minimum: 1,
+    maximum: 12,
+    description: "Tax period (month 1-12)",
+  })),
+  employer_paye_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Employer PAYE reference (e.g. 123/AB12345)",
+  })),
+  accounts_office_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Accounts Office Reference",
+  })),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export type CreateFpsSubmission = Static<typeof CreateFpsSubmissionSchema>;
+
+/**
+ * Create EPS (Employer Payment Summary) request body
+ */
+export const CreateEpsSubmissionSchema = t.Object({
+  payroll_run_id: t.Optional(UuidSchema),
+  tax_year: t.Optional(t.String({
+    pattern: "^\\d{4}-\\d{2}$",
+    description: "UK tax year in format YYYY-YY (e.g. 2025-26). Defaults to current tax year.",
+  })),
+  period: t.Optional(t.Number({
+    minimum: 1,
+    maximum: 12,
+    description: "Tax period (month 1-12)",
+  })),
+  employer_paye_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Employer PAYE reference (e.g. 123/AB12345)",
+  })),
+  accounts_office_ref: t.Optional(t.String({
+    maxLength: 20,
+    description: "Accounts Office Reference",
+  })),
+  no_payment_from: t.Optional(t.Union([DateSchema, t.Null()])),
+  no_payment_to: t.Optional(t.Union([DateSchema, t.Null()])),
+  final_submission_for_year: t.Optional(t.Boolean({ default: false })),
+  notes: t.Optional(t.String({ maxLength: 2000 })),
+});
+
+export type CreateEpsSubmission = Static<typeof CreateEpsSubmissionSchema>;
+
+/**
+ * Submission list query parameters (cursor-based pagination with filters)
+ */
+export const SubmissionListQuerySchema = t.Object({
+  cursor: t.Optional(t.String({ minLength: 1 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
+  submission_type: t.Optional(RtiSubmissionTypeSchema),
+  status: t.Optional(PayrollSubmissionStatusSchema),
+  tax_year: t.Optional(t.String({
+    pattern: "^\\d{4}-\\d{2}$",
+    description: "UK tax year in format YYYY-YY",
+  })),
+  payroll_run_id: t.Optional(UuidSchema),
+});
+
+export type SubmissionListQuery = Static<typeof SubmissionListQuerySchema>;
+
+/**
+ * Submission response schema — matches the mapSubmissionToResponse output
+ */
+export const SubmissionResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  submission_type: t.String(),
+  tax_year: t.String(),
+  period: t.Union([t.Number(), t.Null()]),
+  status: t.String(),
+  payroll_run_id: t.Union([UuidSchema, t.Null()]),
+  employer_paye_ref: t.Union([t.String(), t.Null()]),
+  accounts_office_ref: t.Union([t.String(), t.Null()]),
+  hmrc_correlation_id: t.Union([t.String(), t.Null()]),
+  validation_errors: t.Union([t.Array(t.String()), t.Null()]),
+  validated_at: t.Union([t.String(), t.Null()]),
+  submitted_at: t.Union([t.String(), t.Null()]),
+  submitted_by: t.Union([t.String(), t.Null()]),
+  response_received_at: t.Union([t.String(), t.Null()]),
+  notes: t.Union([t.String(), t.Null()]),
+  created_at: t.String(),
+  updated_at: t.String(),
+});
+
+export type SubmissionResponse = Static<typeof SubmissionResponseSchema>;
+
+/**
+ * Per-employee submission item response (FPS line items)
+ */
+export const SubmissionItemResponseSchema = t.Object({
+  id: t.String(),
+  submission_id: t.String(),
+  employee_id: t.String(),
+  employee_ni_number: t.Union([t.String(), t.Null()]),
+  employee_tax_code: t.Union([t.String(), t.Null()]),
+  ni_category: t.Union([t.String(), t.Null()]),
+  gross_pay: t.String(),
+  tax_deducted: t.String(),
+  ni_employee: t.String(),
+  ni_employer: t.String(),
+  student_loan: t.String(),
+  pension_employee: t.String(),
+  pension_employer: t.String(),
+  net_pay: t.String(),
+  taxable_pay_ytd: t.Union([t.String(), t.Null()]),
+  tax_deducted_ytd: t.Union([t.String(), t.Null()]),
+  ni_employee_ytd: t.Union([t.String(), t.Null()]),
+  ni_employer_ytd: t.Union([t.String(), t.Null()]),
+  student_loan_ytd: t.Union([t.String(), t.Null()]),
+  created_at: t.String(),
+});
+
+export type SubmissionItemResponse = Static<typeof SubmissionItemResponseSchema>;
+
+/**
+ * Submission detail response — extends SubmissionResponse with items array
+ */
+export const SubmissionDetailResponseSchema = t.Object({
+  ...SubmissionResponseSchema.properties,
+  items: t.Array(SubmissionItemResponseSchema),
+});
+
+export type SubmissionDetailResponse = Static<typeof SubmissionDetailResponseSchema>;
+
+/**
+ * Submission validation response
+ */
+export const SubmissionValidationResponseSchema = t.Object({
+  id: t.String(),
+  status: t.String(),
+  is_valid: t.Boolean(),
+  errors: t.Array(t.String()),
+  validated_at: t.String(),
+});
+
+export type SubmissionValidationResponse = Static<typeof SubmissionValidationResponseSchema>;
+
+// =============================================================================
+// Pay Schedule Assignment Schemas (TODO-124)
+// =============================================================================
+
+/**
+ * Create pay schedule assignment request body
+ */
+export const CreatePayScheduleAssignmentSchema = t.Object({
+  employee_id: UuidSchema,
+  pay_schedule_id: UuidSchema,
+  effective_from: DateSchema,
+  effective_to: t.Optional(t.Union([DateSchema, t.Null()])),
+});
+
+export type CreatePayScheduleAssignment = Static<typeof CreatePayScheduleAssignmentSchema>;
+
+/**
+ * Update pay schedule assignment request body
+ */
+export const UpdatePayScheduleAssignmentSchema = t.Object({
+  pay_schedule_id: t.Optional(UuidSchema),
+  effective_from: t.Optional(DateSchema),
+  effective_to: t.Optional(t.Union([DateSchema, t.Null()])),
+});
+
+export type UpdatePayScheduleAssignment = Static<typeof UpdatePayScheduleAssignmentSchema>;
+
+/**
+ * Pay schedule assignment response
+ */
+export const PayScheduleAssignmentResponseSchema = t.Object({
+  id: UuidSchema,
+  tenant_id: UuidSchema,
+  employee_id: UuidSchema,
+  pay_schedule_id: UuidSchema,
+  effective_from: t.String(),
+  effective_to: t.Union([t.String(), t.Null()]),
+  schedule_name: t.Optional(t.String()),
+  schedule_frequency: t.Optional(t.String()),
+  created_at: t.String(),
+});
+
+export type PayScheduleAssignmentResponse = Static<typeof PayScheduleAssignmentResponseSchema>;
+
+/**
+ * Pay schedule assignment filters
+ */
+export const PayScheduleAssignmentFiltersSchema = t.Object({
+  employee_id: t.Optional(UuidSchema),
+  pay_schedule_id: t.Optional(UuidSchema),
+  current_only: t.Optional(t.String({ pattern: "^(true|false)$" })),
+  cursor: t.Optional(t.String({ minLength: 1 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
+});
+
+export type PayScheduleAssignmentFilters = Static<typeof PayScheduleAssignmentFiltersSchema>;
+
+// =============================================================================
+// Confirmed Final Pay Schemas (TODO-132)
+// =============================================================================
+
+/**
+ * Confirmed final pay response — extends the calculation response with a
+ * persistence ID and confirmation metadata.
+ */
+export const ConfirmedFinalPayResponseSchema = t.Object({
+  id: UuidSchema,
+  ...FinalPayCalculationResponseSchema.properties,
+  confirmed_at: t.String(),
+  confirmed_by: t.Union([UuidSchema, t.Null()]),
+});
+
+export type ConfirmedFinalPayResponse = Static<typeof ConfirmedFinalPayResponseSchema>;
+
