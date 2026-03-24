@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 import {
   Card,
-  CardHeader,
   CardBody,
   Button,
   Badge,
+  ConfirmModal,
   useToast,
 } from "~/components/ui";
 import { Spinner } from "~/components/ui/spinner";
@@ -53,10 +53,10 @@ interface ChangeRequestListResponse {
 // Helpers
 // =============================================================================
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "warning" | "success" | "danger" | "info"; icon: typeof Clock }> = {
+const STATUS_CONFIG: Record<string, { label: string; variant: "warning" | "success" | "error" | "info"; icon: typeof Clock }> = {
   pending: { label: "Pending", variant: "warning", icon: Clock },
   approved: { label: "Approved", variant: "success", icon: CheckCircle },
-  rejected: { label: "Rejected", variant: "danger", icon: XCircle },
+  rejected: { label: "Rejected", variant: "error", icon: XCircle },
   cancelled: { label: "Cancelled", variant: "info", icon: X },
 };
 
@@ -134,6 +134,7 @@ export default function ChangeRequestsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
 
   // Fetch change requests
   const {
@@ -220,7 +221,7 @@ export default function ChangeRequestsPage() {
         ].map((tab) => (
           <Button
             key={tab.value}
-            variant={statusFilter === tab.value ? "default" : "outline"}
+            variant={statusFilter === tab.value ? "primary" : "outline"}
             size="sm"
             onClick={() => setStatusFilter(tab.value)}
           >
@@ -307,11 +308,7 @@ export default function ChangeRequestsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          if (window.confirm("Cancel this change request?")) {
-                            cancelMutation.mutate(request.id);
-                          }
-                        }}
+                        onClick={() => setCancelConfirmId(request.id)}
                         disabled={cancelMutation.isPending}
                         aria-label="Cancel request"
                       >
@@ -325,6 +322,22 @@ export default function ChangeRequestsPage() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={cancelConfirmId !== null}
+        onClose={() => setCancelConfirmId(null)}
+        onConfirm={() => {
+          if (cancelConfirmId) {
+            cancelMutation.mutate(cancelConfirmId);
+          }
+          setCancelConfirmId(null);
+        }}
+        title="Cancel Change Request"
+        message="Are you sure you want to cancel this change request?"
+        confirmLabel="Cancel Request"
+        danger
+        loading={cancelMutation.isPending}
+      />
     </div>
   );
 }
