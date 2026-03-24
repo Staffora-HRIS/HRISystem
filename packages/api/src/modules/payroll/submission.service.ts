@@ -578,7 +578,7 @@ export class SubmissionService {
       }
 
       // Only draft submissions can be validated
-      if (!this.canTransitionTo(submission.status, "validated") && submission.status !== "draft") {
+      if (!this.canTransitionTo(submission.status as PayrollSubmissionStatus, "validated") && submission.status !== "draft") {
         return {
           success: false,
           error: {
@@ -670,7 +670,7 @@ export class SubmissionService {
       }
 
       // Only validated submissions can be submitted
-      if (!this.canTransitionTo(submission.status, "submitted")) {
+      if (!this.canTransitionTo(submission.status as PayrollSubmissionStatus, "submitted")) {
         return {
           success: false,
           error: {

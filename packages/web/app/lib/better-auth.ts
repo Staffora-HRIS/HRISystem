@@ -8,7 +8,6 @@
 
 import { createAuthClient } from "better-auth/react";
 import { twoFactorClient, organizationClient } from "better-auth/client/plugins";
-import { sentinelClient } from "@better-auth/infra/client";
 
 /**
  * Get the API base URL
@@ -33,7 +32,7 @@ function getBaseURL(): string {
  */
 export const authClient = createAuthClient({
   baseURL: getBaseURL(),
-  plugins: [twoFactorClient(), sentinelClient(), organizationClient()],
+  plugins: [twoFactorClient(), organizationClient()],
   fetchOptions: {
     credentials: "include",
   },
@@ -98,17 +97,12 @@ export const twoFactor = {
   /**
    * Verify 2FA TOTP code during login
    */
-  verifyTotp: async (code: string) => {
-    return authClient.twoFactor.verifyTotp({ code });
+  verifyTotp: async (code: string, options?: { trustDevice?: boolean }) => {
+    return authClient.twoFactor.verifyTotp({ code, trustDevice: options?.trustDevice });
   },
 
-  /**
-   * Verify a backup/recovery code during login.
-   * Uses Better Auth's built-in backup code verification endpoint
-   * (POST /two-factor/verify-backup-code).
-   */
-  verifyBackupCode: async (code: string) => {
-    return authClient.twoFactor.verifyBackupCode({ code });
+  verifyBackupCode: async (code: string, options?: { trustDevice?: boolean }) => {
+    return authClient.twoFactor.verifyBackupCode({ code, trustDevice: options?.trustDevice });
   },
 
   /**

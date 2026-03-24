@@ -8,6 +8,8 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "rootDirs": ["./app", "./.react-router/types/app"],
     "baseUrl": ".",
     "paths": {

@@ -146,6 +146,14 @@ export {
 // Submission routes (TODO-064)
 export { submissionRoutes, type SubmissionRoutes } from "./submission.routes";
 
+// P45/P60 Statutory Documents (TODO-129, TODO-130)
+export {
+  p45P60AdminRoutes,
+  p45P60PortalRoutes,
+  type P45P60AdminRoutes,
+  type P45P60PortalRoutes,
+} from "./p45-p60.routes";
+
 // Salary Sacrifice (TODO-232)
 export { SalarySacrificeService } from "./salary-sacrifice.service";
 export { SalarySacrificeRepository, type SalarySacrificeRow } from "./salary-sacrifice.repository";
