@@ -121,6 +121,8 @@ jobs:
 
       - name: Run migrations
         run: bun run migrate:up
+        env:
+          DATABASE_URL: postgres://hris:hris_dev_password@localhost:5432/hris
 
       - name: Build all packages
         run: bun run build

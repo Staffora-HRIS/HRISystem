@@ -124,6 +124,13 @@ jobs:
           TEST_DB_PASSWORD: hris_dev_password
           TEST_DB_ADMIN_USER: hris
           TEST_DB_ADMIN_PASSWORD: hris_dev_password
+          DATABASE_APP_URL: postgres://hris_app:hris_dev_password@localhost:5432/hris
+          DATABASE_URL: postgres://hris:hris_dev_password@localhost:5432/hris
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: hris
+          DB_USER: hris
+          DB_PASSWORD: hris_dev_password
           TEST_REDIS_HOST: localhost
           TEST_REDIS_PORT: '6379'
           TEST_REDIS_PASSWORD: ''
