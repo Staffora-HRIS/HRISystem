@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   Building2,
   Users,
@@ -117,6 +117,7 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgUnit; level?: number }) {
 }
 
 export default function AdminOrganizationPage() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<"tree" | "chart">("tree");
 
   const { data: orgUnitsData, isLoading } = useQuery({
@@ -260,9 +261,12 @@ export default function AdminOrganizationPage() {
             <div className="text-center py-12">
               <Network className="h-12 w-12 mx-auto text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900">Org Chart View</h3>
-              <p className="text-gray-500">
-                Interactive org chart visualization coming soon.
+              <p className="text-gray-500 mb-4">
+                View the full interactive organizational chart.
               </p>
+              <Button onClick={() => navigate("/admin/hr/org-chart")}>
+                Open Org Chart
+              </Button>
             </div>
           )}
         </CardBody>

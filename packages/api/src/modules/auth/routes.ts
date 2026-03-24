@@ -9,6 +9,7 @@
 import { Elysia, t } from "elysia";
 import { AuthService, requireAuthContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { ErrorResponseSchema } from "../../lib/route-helpers";
 
 // =============================================================================
@@ -119,7 +120,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           tenants: userWithTenants?.tenants || [],
         };
       } catch (error) {
-        console.error("Get me error:", error instanceof Error ? error.message : "Unknown error");
+        logger.error({ err: error, module: "auth", route: "/me" }, "Failed to get user info");
         set.status = 500;
         return {
           error: {
@@ -163,7 +164,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           role: t.isPrimary ? "primary" : "member",
         }));
       } catch (error) {
-        console.error("Get tenants error:", error instanceof Error ? error.message : "Unknown error");
+        logger.error({ err: error, module: "auth", route: "/tenants" }, "Failed to get tenants");
         set.status = 500;
         return {
           error: {
@@ -219,7 +220,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           totalGenerated: 10,
         };
       } catch (error) {
-        console.error("Backup code status error:", error);
+        logger.error({ err: error, module: "auth" }, "Failed to get backup code status");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get backup code status", requestId: requestId || "" } };
       }
@@ -286,7 +287,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
           message: "Store these codes securely. They will not be shown again.",
         };
       } catch (error) {
-        console.error("Backup code regeneration error:", error);
+        logger.error({ err: error, module: "auth" }, "Failed to regenerate backup codes");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to regenerate backup codes", requestId: requestId || "" } };
       }
@@ -334,7 +335,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
 
         return { success: true as const, tenantId };
       } catch (error) {
-        console.error("Switch tenant error:", error instanceof Error ? error.message : "Unknown error");
+        logger.error({ err: error, module: "auth", route: "/switch-tenant" }, "Failed to switch tenant");
         set.status = 500;
         return {
           error: {

@@ -16,6 +16,7 @@ import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import {
   CreateLifeEvent,
   ReviewLifeEvent,
@@ -237,7 +238,7 @@ export const lifeEventRoutes = new Elysia({ name: "benefits-life-event-routes" }
           })),
         };
       } catch (error) {
-        console.error("Benefits /my-life-events error:", error);
+        logger.error({ err: error, module: "benefits" }, "Benefits /my-life-events error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get life events" } };
       }

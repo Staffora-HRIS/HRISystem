@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Stethoscope,
   Search,
@@ -20,7 +20,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from "~/components/ui";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface SspRecord {
@@ -72,9 +78,59 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+interface CreateSspForm {
+  employeeId: string;
+  sicknessStartDate: string;
+  sicknessEndDate: string;
+  reason: string;
+  fitNoteReference: string;
+  notes: string;
+}
+
+const initialCreateForm: CreateSspForm = {
+  employeeId: "",
+  sicknessStartDate: "",
+  sicknessEndDate: "",
+  reason: "",
+  fitNoteReference: "",
+  notes: "",
+};
+
 export default function AdminSspTrackingPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateSspForm>(initialCreateForm);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateSspForm) =>
+      api.post("/ssp/records", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-ssp-records"] });
+      toast.success("SSP record created successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to create SSP record", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (
+      !formData.employeeId.trim() ||
+      !formData.sicknessStartDate ||
+      !formData.reason.trim()
+    ) {
+      toast.warning("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate(formData);
+  };
 
   const { data: sspData, isLoading } = useQuery({
     queryKey: ["admin-ssp-records", statusFilter],
@@ -175,7 +231,7 @@ export default function AdminSspTrackingPage() {
             Track Statutory Sick Pay records and entitlements
           </p>
         </div>
-        <Button disabled title="Coming soon">
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Record
         </Button>
@@ -270,6 +326,109 @@ export default function AdminSspTrackingPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create SSP Record Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+          aria-label="Add SSP record"
+        >
+          <ModalHeader title="Add SSP Record" />
+          <ModalBody>
+            <form
+              id="ssp-create-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Employee"
+                placeholder="Employee ID or name"
+                required
+                value={formData.employeeId}
+                onChange={(e) =>
+                  setFormData({ ...formData, employeeId: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Sickness Start Date"
+                  type="date"
+                  required
+                  value={formData.sicknessStartDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, sicknessStartDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="Sickness End Date"
+                  type="date"
+                  value={formData.sicknessEndDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, sicknessEndDate: e.target.value })
+                  }
+                />
+              </div>
+              <Input
+                label="Reason / Diagnosis"
+                placeholder="Reason for sickness absence"
+                required
+                value={formData.reason}
+                onChange={(e) =>
+                  setFormData({ ...formData, reason: e.target.value })
+                }
+              />
+              <Input
+                label="Fit Note Reference"
+                placeholder="Fit note reference number (optional)"
+                value={formData.fitNoteReference}
+                onChange={(e) =>
+                  setFormData({ ...formData, fitNoteReference: e.target.value })
+                }
+              />
+              <Textarea
+                label="Notes"
+                placeholder="Any additional details..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="ssp-create-form"
+              disabled={
+                !formData.employeeId.trim() ||
+                !formData.sicknessStartDate ||
+                !formData.reason.trim() ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." : "Add Record"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

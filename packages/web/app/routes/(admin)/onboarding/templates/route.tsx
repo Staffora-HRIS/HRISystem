@@ -23,6 +23,8 @@ export default function OnboardingTemplatesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<OnboardingTemplate | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", templateType: "onboarding" as "onboarding" | "offboarding" | "transition" });
   const [newTemplate, setNewTemplate] = useState({
     name: "",
     description: "",
@@ -49,6 +51,28 @@ export default function OnboardingTemplatesPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-onboarding-templates"] });
     },
   });
+
+  const editMutation = useMutation({
+    mutationFn: (data: { id: string; name: string; description: string; templateType: string }) =>
+      api.patch(`/onboarding/checklists/${data.id}`, {
+        name: data.name,
+        description: data.description,
+        templateType: data.templateType,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-onboarding-templates"] });
+      setEditingTemplate(null);
+    },
+  });
+
+  const handleOpenEdit = (template: OnboardingTemplate) => {
+    setEditForm({
+      name: template.name,
+      description: template.description ?? "",
+      templateType: template.templateType,
+    });
+    setEditingTemplate(template);
+  };
 
   const templates = data?.checklists || [];
 
@@ -115,7 +139,7 @@ export default function OnboardingTemplatesPage() {
                   <span>Created {new Date(template.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEdit(template)}>
                     <Edit className="h-4 w-4 mr-1" />
                     Edit
                   </Button>
@@ -191,6 +215,69 @@ export default function OnboardingTemplatesPage() {
                   disabled={!newTemplate.name.trim() || createMutation.isPending}
                 >
                   {createMutation.isPending ? "Creating..." : "Create"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingTemplate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <h3 className="font-semibold">Edit Template</h3>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Template Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="New Employee Onboarding"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Standard onboarding checklist for new hires..."
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-template-type-select" className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  id="edit-template-type-select"
+                  value={editForm.templateType}
+                  onChange={(e) => setEditForm({ ...editForm, templateType: e.target.value as typeof editForm.templateType })}
+                  className="w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="onboarding">Onboarding</option>
+                  <option value="offboarding">Offboarding</option>
+                  <option value="transition">Role Transition</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setEditingTemplate(null)}
+                  disabled={editMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => editMutation.mutate({ id: editingTemplate.id, ...editForm })}
+                  disabled={!editForm.name.trim() || editMutation.isPending}
+                >
+                  {editMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </CardBody>

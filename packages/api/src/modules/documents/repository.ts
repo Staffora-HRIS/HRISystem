@@ -126,7 +126,7 @@ export class DocumentsRepository {
           d.valid_until as "expiresAt",
           d.tags,
           d.uploaded_by as "uploadedBy",
-          app.get_user_display_name(d.uploaded_by) as "uploadedByName",
+          COALESCE((SELECT u.name FROM app."user" u WHERE u.id = d.uploaded_by::text), 'Unknown') as "uploadedByName",
           d.created_at as "createdAt",
           d.updated_at as "updatedAt"
         FROM app.documents d
@@ -182,7 +182,7 @@ export class DocumentsRepository {
           d.valid_until as "expiresAt",
           d.tags,
           d.uploaded_by as "uploadedBy",
-          app.get_user_display_name(d.uploaded_by) as "uploadedByName",
+          COALESCE((SELECT u.name FROM app."user" u WHERE u.id = d.uploaded_by::text), 'Unknown') as "uploadedByName",
           d.created_at as "createdAt",
           d.updated_at as "updatedAt"
         FROM app.documents d
@@ -207,7 +207,7 @@ export class DocumentsRepository {
           dv.file_path as "fileKey",
           dv.file_size as "fileSize",
           dv.created_by as "uploadedBy",
-          app.get_user_display_name(dv.created_by) as "uploadedByName",
+          COALESCE((SELECT u.name FROM app."user" u WHERE u.id = dv.created_by::text), 'Unknown') as "uploadedByName",
           dv.created_at as "createdAt"
         FROM app.document_versions dv
         INNER JOIN app.documents d ON dv.document_id = d.id

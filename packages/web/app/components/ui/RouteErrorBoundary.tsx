@@ -48,7 +48,7 @@ export function RouteErrorBoundary() {
   // eslint-disable-next-line no-console
   console.error("[RouteErrorBoundary]", error);
 
-  const isDev = import.meta.env.DEV;
+  const isDev = !!import.meta.env?.DEV;
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {

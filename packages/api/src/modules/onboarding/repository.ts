@@ -589,7 +589,7 @@ export class OnboardingRepository {
             COUNT(*) as total_instances,
             COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_count,
             COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
-            AVG(EXTRACT(DAY FROM (completed_at - start_date))) FILTER (WHERE status = 'completed') as average_completion_days
+            AVG(actual_completion_date - start_date) FILTER (WHERE status = 'completed') as average_completion_days
           FROM app.onboarding_instances
           WHERE tenant_id = ${ctx.tenantId}::uuid
         `;

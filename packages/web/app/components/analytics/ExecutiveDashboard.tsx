@@ -5,6 +5,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { Users, TrendingDown, Clock, Briefcase } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { api } from "~/lib/api-client";
@@ -145,18 +146,18 @@ export function ExecutiveDashboard({ className }: ExecutiveDashboardProps) {
         <div className="rounded-lg border bg-white p-6 shadow-sm">
           <h3 className="text-sm font-medium text-gray-500">Quick Actions</h3>
           <div className="mt-4 space-y-2">
-            <a
-              href="/admin/hr/employees"
+            <Link
+              to="/admin/hr/employees"
               className="block w-full rounded-lg border border-gray-200 px-4 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               View All Employees
-            </a>
-            <a
-              href="/admin/reports"
+            </Link>
+            <Link
+              to="/admin/reports"
               className="block w-full rounded-lg border border-gray-200 px-4 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               View Reports
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -25,6 +25,7 @@ import type {
   TenantContext,
 } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { emitDomainEvent } from "../../lib/outbox";
 import type {
   TotalRewardStatementResponse,
@@ -273,7 +274,7 @@ export class TotalRewardService {
 
       return { success: true, data: response };
     } catch (error) {
-      console.error("[TotalRewardService] generateStatement error:", error);
+      logger.error({ err: error, tenantId: context.tenantId, employeeId }, "Failed to generate total reward statement");
       return {
         success: false,
         error: {
@@ -313,7 +314,7 @@ export class TotalRewardService {
         data: this.mapStatementToResponse(statement),
       };
     } catch (error) {
-      console.error("[TotalRewardService] getStatementById error:", error);
+      logger.error({ err: error, tenantId: context.tenantId, statementId: id }, "Failed to retrieve total reward statement");
       return {
         success: false,
         error: {
@@ -393,7 +394,7 @@ export class TotalRewardService {
         },
       };
     } catch (error) {
-      console.error("[TotalRewardService] requestPdfGeneration error:", error);
+      logger.error({ err: error, tenantId: context.tenantId, employeeId }, "Failed to request PDF generation");
       return {
         success: false,
         error: {

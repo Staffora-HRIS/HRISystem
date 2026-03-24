@@ -96,7 +96,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   private renderSectionError(): ReactNode {
     const sectionLabel = this.props.sectionLabel || "This section";
-    const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+    const isDev = !!(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 
     return (
       <div
@@ -154,7 +154,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   private renderPageError(): ReactNode {
     const sectionLabel = this.props.sectionLabel || "This page";
-    const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+    const isDev = !!(typeof import.meta !== "undefined" && import.meta.env?.DEV);
 
     return (
       <div

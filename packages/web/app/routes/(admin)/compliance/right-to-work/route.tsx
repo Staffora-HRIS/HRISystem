@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   FileCheck,
@@ -21,8 +21,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface RightToWorkCheck {
   id: string;
@@ -79,9 +84,32 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function RightToWorkPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [documentTypeFilter, setDocumentTypeFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [checkForm, setCheckForm] = useState({
+    employeeId: "",
+    documentType: "uk_passport",
+    expiryDate: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post("/compliance/right-to-work/checks", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["compliance-right-to-work"] });
+      toast.success("Right-to-work check recorded");
+      setShowCreateModal(false);
+      setCheckForm({ employeeId: "", documentType: "uk_passport", expiryDate: "" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to record check";
+      toast.error(message);
+    },
+  });
 
   const { data: checksData, isLoading } = useQuery({
     queryKey: ["compliance-right-to-work", search, statusFilter, documentTypeFilter],
@@ -188,7 +216,7 @@ export default function RightToWorkPage() {
               Employee right-to-work verification and document tracking
             </p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Check
           </Button>
@@ -277,7 +305,7 @@ export default function RightToWorkPage() {
                   : "Record your first right-to-work check to get started"}
               </p>
               {!search && !statusFilter && !documentTypeFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Check
                 </Button>
@@ -292,6 +320,77 @@ export default function RightToWorkPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Check Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => !createMutation.isPending && setShowCreateModal(false)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">New Right-to-Work Check</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="rtw-employee" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Employee ID <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="rtw-employee"
+                  value={checkForm.employeeId}
+                  onChange={(e) => setCheckForm({ ...checkForm, employeeId: e.target.value })}
+                  placeholder="Enter employee ID"
+                />
+              </div>
+              <div>
+                <label htmlFor="rtw-doc-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Document Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="rtw-doc-type"
+                  value={checkForm.documentType}
+                  onChange={(e) => setCheckForm({ ...checkForm, documentType: e.target.value })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                >
+                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="rtw-expiry" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Expiry Date
+                </label>
+                <Input
+                  id="rtw-expiry"
+                  type="date"
+                  value={checkForm.expiryDate}
+                  onChange={(e) => setCheckForm({ ...checkForm, expiryDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!checkForm.employeeId.trim()) {
+                  toast.error("Employee ID is required");
+                  return;
+                }
+                createMutation.mutate({
+                  employeeId: checkForm.employeeId.trim(),
+                  documentType: checkForm.documentType,
+                  expiryDate: checkForm.expiryDate || undefined,
+                });
+              }}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Recording..." : "Record Check"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

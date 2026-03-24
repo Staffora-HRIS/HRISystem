@@ -2,7 +2,7 @@ export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorB
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Plus, Target, Calendar, Users, BarChart, Clock } from "lucide-react";
+import { ArrowLeft, Plus, Target, Calendar, Users, BarChart, Clock, Eye, X } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -35,6 +35,7 @@ export default function PerformanceManagementPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [newCycle, setNewCycle] = useState({
     name: "",
     description: "",
@@ -64,6 +65,7 @@ export default function PerformanceManagementPage() {
 
   const cycles = data?.items || [];
   const activeCycles = cycles.filter(c => !["completed", "archived", "draft"].includes(c.status));
+  const selectedCycle = cycles.find(c => c.id === selectedCycleId) ?? null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -156,11 +158,11 @@ export default function PerformanceManagementPage() {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Performance dashboard will be available in a future update." })}>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => setSelectedCycleId(selectedCycleId === cycle.id ? null : cycle.id)}>
                             <BarChart className="h-4 w-4 mr-1" />
                             Dashboard
                           </Button>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Performance reviews will be available in a future update." })}>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/admin/talent/performance?cycleId=${cycle.id}`)}>
                             <Users className="h-4 w-4 mr-1" />
                             Reviews
                           </Button>
@@ -199,7 +201,10 @@ export default function PerformanceManagementPage() {
                           </td>
                           <td className="px-6 py-4">{getStatusBadge(cycle.status)}</td>
                           <td className="px-6 py-4 text-right">
-                            <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Cycle details view will be available in a future update." })}>View</Button>
+                            <Button variant="outline" size="sm" onClick={() => setSelectedCycleId(selectedCycleId === cycle.id ? null : cycle.id)}>
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -207,6 +212,76 @@ export default function PerformanceManagementPage() {
                 </table>
               </div>
             </div>
+          )}
+
+          {/* Cycle Detail Panel */}
+          {selectedCycle && (
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">{selectedCycle.name}</h3>
+                  <div className="mt-1">{getStatusBadge(selectedCycle.status)}</div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedCycleId(null)}
+                  aria-label="Close detail panel"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardBody>
+                {selectedCycle.description && (
+                  <p className="text-sm text-gray-600 mb-4">{selectedCycle.description}</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <span className="block text-sm font-medium text-gray-500">Period Start</span>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCycle.periodStart)}</p>
+                  </div>
+                  <div>
+                    <span className="block text-sm font-medium text-gray-500">Period End</span>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCycle.periodEnd)}</p>
+                  </div>
+                  <div>
+                    <span className="block text-sm font-medium text-gray-500">Self-Review Deadline</span>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCycle.selfReviewDeadline)}</p>
+                  </div>
+                  <div>
+                    <span className="block text-sm font-medium text-gray-500">Manager Review Deadline</span>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCycle.managerReviewDeadline)}</p>
+                  </div>
+                  {selectedCycle.calibrationDeadline && (
+                    <div>
+                      <span className="block text-sm font-medium text-gray-500">Calibration Deadline</span>
+                      <p className="text-sm text-gray-900">{formatDate(selectedCycle.calibrationDeadline)}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="block text-sm font-medium text-gray-500">Created</span>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCycle.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/admin/talent?cycleId=${selectedCycle.id}`)}
+                  >
+                    <Users className="h-4 w-4 mr-1" />
+                    View Reviews
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedCycleId(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
           )}
         </div>
       )}

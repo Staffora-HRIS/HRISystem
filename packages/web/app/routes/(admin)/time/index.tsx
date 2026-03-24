@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { Clock, Calendar, FileSpreadsheet, AlertTriangle, CheckCircle, Shield } from "lucide-react";
@@ -49,7 +50,7 @@ export default function TimeAdminPage() {
       case "draft": return <Badge variant="secondary">Draft</Badge>;
       case "submitted": return <Badge variant="warning">Pending</Badge>;
       case "approved": return <Badge variant="success">Approved</Badge>;
-      case "rejected": return <Badge variant="destructive">Rejected</Badge>;
+      case "rejected": return <Badge variant="error">Rejected</Badge>;
       default: return <Badge>{status}</Badge>;
     }
   };

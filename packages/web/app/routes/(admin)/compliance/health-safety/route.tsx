@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   HardHat,
@@ -21,8 +21,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface Incident {
   id: string;
@@ -98,10 +103,35 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function HealthSafetyPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [incidentForm, setIncidentForm] = useState({
+    type: "accident",
+    severity: "minor",
+    location: "",
+    description: "",
+    employeeId: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post("/compliance/health-safety/incidents", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["compliance-health-safety"] });
+      toast.success("Incident reported successfully");
+      setShowCreateModal(false);
+      setIncidentForm({ type: "accident", severity: "minor", location: "", description: "", employeeId: "" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to report incident";
+      toast.error(message);
+    },
+  });
 
   const { data: incidentsData, isLoading } = useQuery({
     queryKey: [
@@ -228,7 +258,7 @@ export default function HealthSafetyPage() {
               Workplace incidents, accidents, and RIDDOR reporting
             </p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Report Incident
           </Button>
@@ -334,6 +364,110 @@ export default function HealthSafetyPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Incident Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => !createMutation.isPending && setShowCreateModal(false)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Report Incident</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="incident-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Incident Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="incident-type"
+                  value={incidentForm.type}
+                  onChange={(e) => setIncidentForm({ ...incidentForm, type: e.target.value })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                >
+                  <option value="accident">Accident</option>
+                  <option value="near_miss">Near Miss</option>
+                  <option value="riddor">RIDDOR Reportable</option>
+                  <option value="dangerous_occurrence">Dangerous Occurrence</option>
+                  <option value="occupational_disease">Occupational Disease</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="incident-severity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Severity <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="incident-severity"
+                  value={incidentForm.severity}
+                  onChange={(e) => setIncidentForm({ ...incidentForm, severity: e.target.value })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                >
+                  <option value="minor">Minor</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="major">Major</option>
+                  <option value="fatal">Fatal</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="incident-location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Location <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="incident-location"
+                  value={incidentForm.location}
+                  onChange={(e) => setIncidentForm({ ...incidentForm, location: e.target.value })}
+                  placeholder="e.g. Warehouse floor, Office B2"
+                />
+              </div>
+              <div>
+                <label htmlFor="incident-employee" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Employee ID
+                </label>
+                <Input
+                  id="incident-employee"
+                  value={incidentForm.employeeId}
+                  onChange={(e) => setIncidentForm({ ...incidentForm, employeeId: e.target.value })}
+                  placeholder="Employee involved (if applicable)"
+                />
+              </div>
+              <div>
+                <label htmlFor="incident-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  id="incident-description"
+                  rows={3}
+                  value={incidentForm.description}
+                  onChange={(e) => setIncidentForm({ ...incidentForm, description: e.target.value })}
+                  placeholder="Describe what happened..."
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!incidentForm.location.trim() || !incidentForm.description.trim()) {
+                  toast.error("Location and description are required");
+                  return;
+                }
+                createMutation.mutate({
+                  type: incidentForm.type,
+                  severity: incidentForm.severity,
+                  location: incidentForm.location.trim(),
+                  description: incidentForm.description.trim(),
+                  employeeId: incidentForm.employeeId.trim() || undefined,
+                });
+              }}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Reporting..." : "Report Incident"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

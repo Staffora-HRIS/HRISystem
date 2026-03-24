@@ -130,7 +130,7 @@ export default function NotificationSettingsPage() {
     refetch,
   } = useQuery({
     queryKey: queryKeys.tenant.current(),
-    queryFn: () => api.get<TenantData>("/api/v1/tenant/current"),
+    queryFn: () => api.get<TenantData>("/tenant/current"),
   });
 
   // Sync prefs from server data
@@ -177,7 +177,7 @@ export default function NotificationSettingsPage() {
         ...existingSettings,
         notifications: notifPrefs,
       };
-      return api.put<TenantData>("/api/v1/tenant/settings", {
+      return api.put<TenantData>("/tenant/settings", {
         settings: mergedSettings,
       });
     },

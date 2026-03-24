@@ -65,7 +65,7 @@ const settingsSections: SettingsSection[] = [
     name: "Data Management",
     description: "Import, export, and data retention policies",
     icon: Database,
-    href: "/admin/settings/tenant",
+    href: "/admin/compliance/data-retention",
     available: true,
   },
 ];

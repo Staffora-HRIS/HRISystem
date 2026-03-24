@@ -31,12 +31,12 @@ const variantStyles: Record<ButtonVariant, string> = {
     "disabled:bg-primary-300"
   ),
   secondary: cn(
-    "bg-gray-100 text-gray-900",
-    "hover:bg-gray-200",
+    "bg-gray-200 text-gray-800",
+    "hover:bg-gray-300",
     "focus:ring-gray-500",
-    "disabled:bg-gray-50 disabled:text-gray-400",
-    "dark:bg-gray-700 dark:text-gray-100",
-    "dark:hover:bg-gray-600",
+    "disabled:bg-gray-100 disabled:text-gray-400",
+    "dark:bg-gray-600 dark:text-gray-100",
+    "dark:hover:bg-gray-500",
     "dark:disabled:bg-gray-800 dark:disabled:text-gray-500"
   ),
   outline: cn(

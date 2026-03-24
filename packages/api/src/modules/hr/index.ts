@@ -25,6 +25,10 @@ export { HRService } from "./service";
 
 // Export focused sub-services for direct use
 export { EmployeeService } from "./employee.service";
+export { EmployeeLifecycleService } from "./employee-lifecycle.service";
+export { EmployeeChangesService } from "./employee-changes.service";
+export { EmployeeOrgChartService } from "./employee-org-chart.service";
+export { EmployeePositionsService } from "./employee-positions.service";
 export { OrgUnitService } from "./org-unit.service";
 export { PositionService } from "./position.service";
 export { AddressService, isValidUkPostcode } from "./address.service";

@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
@@ -128,7 +129,7 @@ export default function AbsenceAdminPage() {
       case "pending": return <Badge variant="warning">Pending</Badge>;
       case "under_review": return <Badge variant="info">Under Review</Badge>;
       case "approved": return <Badge variant="success">Approved</Badge>;
-      case "rejected": return <Badge variant="destructive">Rejected</Badge>;
+      case "rejected": return <Badge variant="error">Rejected</Badge>;
       case "cancelled": return <Badge variant="secondary">Cancelled</Badge>;
       default: return <Badge>{status}</Badge>;
     }
@@ -142,13 +143,13 @@ export default function AbsenceAdminPage() {
           <p className="text-gray-600">Manage leave requests and policies</p>
         </div>
         <div className="flex gap-2">
-          <Link to="/admin/absence/calendar">
+          <Link to="/admin/leave/requests">
             <Button variant="outline">
               <Calendar className="h-4 w-4 mr-2" />
-              Calendar
+              Leave Requests
             </Button>
           </Link>
-          <Link to="/admin/absence/policies">
+          <Link to="/admin/leave/policies">
             <Button variant="outline">
               <Settings className="h-4 w-4 mr-2" />
               Policies
@@ -183,7 +184,7 @@ export default function AbsenceAdminPage() {
       <Card>
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">Leave Requests Pending Approval</h2>
-          <Link to="/admin/absence/requests">
+          <Link to="/admin/leave/requests">
             <Button variant="outline" size="sm">View All</Button>
           </Link>
         </div>

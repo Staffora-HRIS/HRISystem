@@ -20,6 +20,7 @@ import {
 import type { ServiceResult } from "../../types/service-result";
 import type { CreateDelegation } from "./schemas";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // Error Codes
@@ -194,7 +195,7 @@ export class DelegationService {
 
       return { success: true, data: this.formatDelegation(delegation) };
     } catch (error) {
-      console.error("Error creating delegation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: ctx.userId }, "Failed to create delegation");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create delegation" },
@@ -220,7 +221,7 @@ export class DelegationService {
       const rows = await this.repo.listMyDelegations(ctx, userId);
       return { success: true, data: rows.map((r) => this.formatDelegationListItem(r)) };
     } catch (error) {
-      console.error("Error listing delegations:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: ctx.userId }, "Failed to list delegations");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list delegations" },
@@ -251,7 +252,7 @@ export class DelegationService {
 
       return { success: true, data: this.formatActiveDelegation(row) };
     } catch (error) {
-      console.error("Error fetching active delegation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: ctx.userId }, "Failed to fetch active delegation");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch active delegation" },
@@ -289,7 +290,7 @@ export class DelegationService {
         },
       };
     } catch (error) {
-      console.error("Error resolving approver:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, approverId }, "Failed to resolve approver");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to resolve approver" },
@@ -326,7 +327,7 @@ export class DelegationService {
 
       return { success: true, data: this.formatDelegation(revoked) };
     } catch (error) {
-      console.error("Error revoking delegation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, delegationId }, "Failed to revoke delegation");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to revoke delegation" },
@@ -376,7 +377,7 @@ export class DelegationService {
       const entries = await this.repo.getLogEntries(ctx, delegationId);
       return { success: true, data: entries.map((e) => this.formatLogEntry(e)) };
     } catch (error) {
-      console.error("Error fetching delegation log:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, delegationId }, "Failed to fetch delegation log");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch delegation log" },
@@ -393,7 +394,7 @@ export class DelegationService {
       const count = await this.repo.autoExpirePastDelegations(ctx);
       return { success: true, data: { expiredCount: count } };
     } catch (error) {
-      console.error("Error auto-expiring delegations:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to auto-expire delegations");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to auto-expire delegations" },

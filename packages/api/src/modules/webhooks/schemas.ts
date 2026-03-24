@@ -134,8 +134,37 @@ export const WebhookDeliveryListResponseSchema = t.Object({
 // Export Types
 // =============================================================================
 
+// =============================================================================
+// Query Schemas (used by routes)
+// =============================================================================
+
+/**
+ * GET /webhooks/subscriptions - Query parameters
+ */
+export const ListSubscriptionsQuerySchema = t.Object({
+  cursor: t.Optional(t.String()),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+});
+
+/**
+ * GET /webhooks/deliveries - Query parameters
+ */
+export const ListDeliveriesQuerySchema = t.Object({
+  cursor: t.Optional(t.String()),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+  subscriptionId: t.Optional(UuidSchema),
+  status: t.Optional(WebhookDeliveryStatusSchema),
+  eventType: t.Optional(t.String()),
+});
+
+// =============================================================================
+// Export Types
+// =============================================================================
+
 export type CreateWebhookSubscription = typeof CreateWebhookSubscriptionSchema.static;
 export type UpdateWebhookSubscription = typeof UpdateWebhookSubscriptionSchema.static;
 export type WebhookSubscriptionResponse = typeof WebhookSubscriptionResponseSchema.static;
 export type WebhookDeliveryStatus = typeof WebhookDeliveryStatusSchema.static;
 export type WebhookDeliveryResponse = typeof WebhookDeliveryResponseSchema.static;
+export type ListSubscriptionsQuery = typeof ListSubscriptionsQuerySchema.static;
+export type ListDeliveriesQuery = typeof ListDeliveriesQuerySchema.static;

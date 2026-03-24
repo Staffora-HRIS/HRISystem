@@ -158,6 +158,29 @@ export function createBetterAuth() {
     baseURL: config.baseURL,
     trustedOrigins: config.trustedOrigins,
 
+    // Trusted reverse proxies for client IP detection.
+    // Without this, Better Auth cannot determine the client IP address when
+    // running behind nginx (or any reverse proxy), and rate limiting is skipped
+    // with the warning: "Rate limiting skipped: could not determine client IP address."
+    //
+    // These ranges cover:
+    //   - 127.0.0.1/8:      Loopback (direct development access)
+    //   - 10.0.0.0/8:       Class A private (cloud VPCs, Kubernetes pods)
+    //   - 172.16.0.0/12:    Class B private (Docker bridge networks, including
+    //                        our staffora-network at 172.28.0.0/16)
+    //   - 192.168.0.0/16:   Class C private (local Docker Desktop, home networks)
+    //   - ::1:              IPv6 loopback
+    //
+    // Nginx sets X-Real-IP and X-Forwarded-For headers (see docker/nginx/nginx.conf).
+    // Better Auth reads these headers to extract the real client IP for rate limiting.
+    trustedProxies: [
+      "127.0.0.1/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "::1",
+    ],
+
     // Use pg Pool with app schema
     database: pool,
 
@@ -362,6 +385,28 @@ export function createBetterAuth() {
             } catch (error) {
               // Non-fatal: don't block login if reset fails (e.g., migration not applied)
               console.warn("[Auth] reset_failed_logins failed:", error);
+            }
+
+            // Auto-set currentTenantId from user's primary tenant on session creation.
+            // This ensures the session immediately has tenant context, preventing
+            // MISSING_TENANT errors when the admin layout loader checks permissions.
+            try {
+              const tenantResult = await pool.query<{ tenant_id: string }>(
+                `SELECT tenant_id::text FROM app.user_tenants
+                 WHERE user_id = $1::uuid AND is_primary = true AND status = 'active'
+                 LIMIT 1`,
+                [session.userId]
+              );
+              const primaryTenantId = tenantResult.rows[0]?.tenant_id;
+              if (primaryTenantId) {
+                await pool.query(
+                  `UPDATE app."session" SET "currentTenantId" = $1::uuid WHERE id = $2`,
+                  [primaryTenantId, session.id]
+                );
+              }
+            } catch (error) {
+              // Non-fatal: tenant resolution will fall back to getSessionTenant
+              console.warn("[Auth] session.create.after: failed to set currentTenantId:", error);
             }
           },
         },

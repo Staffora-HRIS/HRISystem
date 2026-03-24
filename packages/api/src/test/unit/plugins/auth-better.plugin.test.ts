@@ -275,6 +275,77 @@ describe("AuthService", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("isSessionMfaVerified", () => {
+    it("should return true when session was created after MFA setup", async () => {
+      const mfaCreatedAt = new Date("2026-01-01T00:00:00Z");
+      const sessionCreatedAt = new Date("2026-01-02T00:00:00Z"); // after MFA
+      const db = createMockDb([{
+        session_created_at: sessionCreatedAt,
+        mfa_created_at: mfaCreatedAt,
+      }]);
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "session-1");
+      expect(result).toBe(true);
+    });
+
+    it("should return false when session was created before MFA setup", async () => {
+      const sessionCreatedAt = new Date("2026-01-01T00:00:00Z");
+      const mfaCreatedAt = new Date("2026-01-02T00:00:00Z"); // MFA set up after session
+      const db = createMockDb([{
+        session_created_at: sessionCreatedAt,
+        mfa_created_at: mfaCreatedAt,
+      }]);
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "session-1");
+      expect(result).toBe(false);
+    });
+
+    it("should return true when session and MFA were created at the same time", async () => {
+      const sameTime = new Date("2026-01-01T12:00:00Z");
+      const db = createMockDb([{
+        session_created_at: sameTime,
+        mfa_created_at: sameTime,
+      }]);
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "session-1");
+      expect(result).toBe(true);
+    });
+
+    it("should return true when no twoFactor record exists (MFA not set up)", async () => {
+      const db = createMockDb([{
+        session_created_at: new Date(),
+        mfa_created_at: null,
+      }]);
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "session-1");
+      expect(result).toBe(true);
+    });
+
+    it("should return false when session is not found", async () => {
+      const db = createMockDb([]);
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "nonexistent-session");
+      expect(result).toBe(false);
+    });
+
+    it("should return false (fail closed) on database errors", async () => {
+      const db = {
+        query: mock(async () => {
+          throw new Error("Connection refused");
+        }),
+      };
+      const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0]);
+
+      const result = await service.isSessionMfaVerified("user-1", "session-1");
+      expect(result).toBe(false);
+    });
+  });
 });
 
 // =============================================================================

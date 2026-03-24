@@ -1,5 +1,5 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -198,6 +198,8 @@ export default function BenefitsEnrollmentsPage() {
     },
   });
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Bulk approve pending enrollments
   const bulkApproveMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -225,8 +227,6 @@ export default function BenefitsEnrollmentsPage() {
       setSelectedIds(new Set());
     },
   });
-
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleCreateEnrollment = () => {
     if (!enrollForm.employeeId.trim()) {
@@ -269,6 +269,53 @@ export default function BenefitsEnrollmentsPage() {
     if (ids.length === 0) return;
     bulkApproveMutation.mutate(ids);
   };
+
+  const handleExportEnrollments = useCallback(() => {
+    if (!enrollments.length) {
+      toast.info("No data to export");
+      return;
+    }
+    const headers = [
+      "Employee Name",
+      "Plan Name",
+      "Plan Type",
+      "Coverage Level",
+      "Status",
+      "Effective Date",
+      "Termination Date",
+      "Employee Contribution",
+      "Employer Contribution",
+      "Created At",
+    ];
+    const rows = enrollments.map((e) => [
+      e.employeeName ?? "",
+      e.planName ?? "",
+      e.planType ?? "",
+      COVERAGE_LABELS[e.coverageLevel] || e.coverageLevel,
+      STATUS_LABELS[e.status] || e.status,
+      e.effectiveDate,
+      e.terminationDate ?? "",
+      e.employeeContribution !== null ? String(e.employeeContribution) : "",
+      e.employerContribution !== null ? String(e.employerContribution) : "",
+      e.createdAt,
+    ]);
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `benefits-enrollments-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Enrollments data exported");
+  }, [enrollments, toast]);
 
   const stats = useMemo(() => ({
     total: enrollments.length,
@@ -419,14 +466,7 @@ export default function BenefitsEnrollmentsPage() {
             <Plus className="h-4 w-4 mr-2" />
             Enroll Employee
           </Button>
-          <Button
-            variant="outline"
-            onClick={() =>
-              toast.info("Coming Soon", {
-                message: "Enrollment export will be available in a future update.",
-              })
-            }
-          >
+          <Button variant="outline" onClick={handleExportEnrollments}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

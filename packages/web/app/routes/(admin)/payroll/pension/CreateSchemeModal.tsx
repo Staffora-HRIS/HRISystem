@@ -53,6 +53,10 @@ export function CreateSchemeModal({
       toast.error("Employee contribution must be 0% or more");
       return;
     }
+    if (employerPct + employeePct < 8) {
+      toast.error("Total contribution (employer + employee) must be at least 8% under UK auto-enrolment law");
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       name: form.name.trim(),

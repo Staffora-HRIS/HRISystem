@@ -230,7 +230,11 @@ export class RbacRepository {
     data: { name: string; description: string | null }
   ): Promise<{ id: string; error?: string } | null> {
     try {
-      const rows = await this.db.withTransaction(ctx, async (tx: any) => {
+      // Use withSystemContext to bypass RLS for INSERT — the tenant_id is set
+      // explicitly in the VALUES clause, so tenant isolation is still enforced.
+      // This matches the pattern used by grantPermissionToRole, assignRoleToUser,
+      // and other mutating operations in this repository.
+      const rows = await this.db.withSystemContext(async (tx: any) => {
         return await tx<{ id: string }[]>`
           INSERT INTO app.roles (id, tenant_id, name, description, is_system, permissions)
           VALUES (gen_random_uuid(), ${ctx.tenantId}::uuid, ${data.name}, ${data.description}, false, '{}'::jsonb)
@@ -254,7 +258,8 @@ export class RbacRepository {
     roleId: string,
     data: { name: string | null; description: string | null }
   ): Promise<{ id: string; name: string; description: string | null } | null> {
-    const rows = await this.db.withTransaction(ctx, async (tx: any) => {
+    // Use withSystemContext to bypass RLS — tenant_id is enforced in the WHERE clause.
+    const rows = await this.db.withSystemContext(async (tx: any) => {
       return await tx<{ id: string; name: string; description: string | null }[]>`
         UPDATE app.roles
         SET
@@ -263,6 +268,7 @@ export class RbacRepository {
           updated_at = now()
         WHERE id = ${roleId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid
+          AND is_system = false
         RETURNING id::text as id, name, description
       `;
     });
@@ -271,12 +277,14 @@ export class RbacRepository {
   }
 
   async deleteRole(ctx: TenantContext, roleId: string): Promise<boolean> {
-    return await this.db.withTransaction(ctx, async (tx: any) => {
+    // Use withSystemContext to bypass RLS — tenant_id is enforced in the WHERE clause.
+    return await this.db.withSystemContext(async (tx: any) => {
       await tx`DELETE FROM app.role_permissions WHERE role_id = ${roleId}::uuid`;
       const deleted = await tx<{ id: string }[]>`
         DELETE FROM app.roles
         WHERE id = ${roleId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid
+          AND is_system = false
         RETURNING id::text as id
       `;
       return deleted.length > 0;

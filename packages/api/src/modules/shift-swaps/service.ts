@@ -21,6 +21,7 @@ import type {
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // Error Codes
@@ -175,7 +176,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(swapRequest) };
     } catch (error) {
-      console.error("Error creating shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: ctx.userId }, "Failed to create shift swap request");
       return {
         success: false,
         error: {
@@ -225,7 +226,7 @@ export class ShiftSwapService {
         },
       };
     } catch (error) {
-      console.error("Error listing shift swap requests:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: ctx.userId }, "Failed to list shift swap requests");
       return {
         success: false,
         error: {
@@ -258,7 +259,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(swapRequest) };
     } catch (error) {
-      console.error("Error fetching shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to fetch shift swap request");
       return {
         success: false,
         error: {
@@ -329,7 +330,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(updated) };
     } catch (error) {
-      console.error("Error accepting shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to accept shift swap request");
       return {
         success: false,
         error: {
@@ -397,7 +398,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(updated) };
     } catch (error) {
-      console.error("Error rejecting shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to reject shift swap request by target");
       return {
         success: false,
         error: {
@@ -459,7 +460,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(updated) };
     } catch (error) {
-      console.error("Error approving shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to approve shift swap request");
       return {
         success: false,
         error: {
@@ -521,7 +522,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(updated) };
     } catch (error) {
-      console.error("Error rejecting shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to reject shift swap request by manager");
       return {
         success: false,
         error: {
@@ -595,7 +596,7 @@ export class ShiftSwapService {
 
       return { success: true, data: this.formatSwapRequest(updated) };
     } catch (error) {
-      console.error("Error cancelling shift swap request:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, swapRequestId: id }, "Failed to cancel shift swap request");
       return {
         success: false,
         error: {

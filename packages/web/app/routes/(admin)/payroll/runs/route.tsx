@@ -135,10 +135,12 @@ function getDefaultPeriod(): { start: string; end: string; payDate: string } {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0);
   const payDate = new Date(year, month, 25);
-  // If pay date is past or in a weekend, push to next valid day
   if (payDate < now) {
     payDate.setMonth(payDate.getMonth() + 1);
   }
+  const day = payDate.getDay();
+  if (day === 6) payDate.setDate(payDate.getDate() + 2);
+  else if (day === 0) payDate.setDate(payDate.getDate() + 1);
   return {
     start: start.toISOString().split("T")[0],
     end: end.toISOString().split("T")[0],

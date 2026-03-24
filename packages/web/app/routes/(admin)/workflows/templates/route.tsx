@@ -1,8 +1,10 @@
-import { Link } from "react-router";
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
+import { Link, useNavigate } from "react-router";
 import { GitBranch, ArrowRight, Clock, UserCheck, FileText, Briefcase } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
+import { useToast } from "~/components/ui/toast";
 
 const templates = [
   {
@@ -62,6 +64,14 @@ const templates = [
 ];
 
 export default function WorkflowTemplatesPage() {
+  const toast = useToast();
+  const navigate = useNavigate();
+
+  const handleUseTemplate = (templateId: string, templateName: string) => {
+    toast.success(`Creating workflow from "${templateName}" template`);
+    navigate(`/admin/workflows/builder?template=${templateId}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -98,7 +108,7 @@ export default function WorkflowTemplatesPage() {
                 <p className="text-sm text-gray-600 mb-4">{template.description}</p>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500">{template.steps} steps</span>
-                  <Button size="sm">
+                  <Button size="sm" onClick={() => handleUseTemplate(template.id, template.name)}>
                     Use Template
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>

@@ -14,6 +14,7 @@ import {
   Input,
   Select,
   Button,
+  useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
 
@@ -54,6 +55,7 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function PrivacyNoticesPage() {
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -139,7 +141,7 @@ export default function PrivacyNoticesPage() {
             Manage privacy notices and policies with version tracking.
           </p>
         </div>
-        <Button>
+        <Button onClick={() => toast.info("Notice creation is not yet available.")}>
           <Plus className="h-4 w-4 mr-2" />
           Add Notice
         </Button>

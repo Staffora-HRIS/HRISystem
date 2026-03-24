@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -72,7 +73,7 @@ export default function TimePoliciesPage() {
     queryKey: ["admin-time-policies"],
     queryFn: async () => {
       try {
-        const response = await api.get<{ data?: TimePolicy[]; items?: TimePolicy[] }>("/api/v1/time/policies");
+        const response = await api.get<{ data?: TimePolicy[]; items?: TimePolicy[] }>("/time/policies");
         const items = response?.data ?? response?.items ?? [];
         return {
           items: items.map((item: any) => ({
@@ -193,7 +194,7 @@ export default function TimePoliciesPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      return api.post("/api/v1/time/policies", payload);
+      return api.post("/time/policies", payload);
     },
     onSuccess: () => {
       toast.success("Policy created successfully");

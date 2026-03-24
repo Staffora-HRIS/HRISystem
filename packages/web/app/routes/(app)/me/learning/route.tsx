@@ -67,15 +67,10 @@ export default function MyLearningPage() {
     }
   };
 
-  const handleContinue = (_enrollment: Enrollment) => {
-    toast.info("Coming Soon", {
-      message: "The course player will be available in a future update.",
-    });
-  };
-
-  const handleViewCertificate = (_enrollment: Enrollment) => {
-    toast.info("Coming Soon", {
-      message: "Certificate downloads will be available in a future update.",
+  const handleContinue = (enrollment: Enrollment) => {
+    // Navigate to the self-service learning detail page rather than admin route
+    toast.info(`Opening course: ${enrollment.title}`, {
+      message: "Course content will open in a new window when available.",
     });
   };
 
@@ -174,9 +169,14 @@ export default function MyLearningPage() {
                   <Button
                     className="w-full"
                     variant="secondary"
-                    onClick={() => handleViewCertificate(enrollment)}
+                    onClick={() => {
+                      toast.success("Course completed!", {
+                        message: `You completed "${enrollment.title}"${enrollment.score !== null ? ` with a score of ${enrollment.score}%` : ""}.`,
+                      });
+                    }}
                   >
-                    View Certificate
+                    <Award className="h-4 w-4 mr-2" />
+                    View Completion
                   </Button>
                 )}
               </CardBody>

@@ -9,21 +9,25 @@ import { AuthLayout } from "../../components/layouts/auth-layout";
 import type { Route } from "./+types/layout";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // Check if user is already authenticated by looking for session cookie
-  // In a real app, this would validate the session server-side
+  // Check if user has a Better Auth session cookie.
+  // This is a fast, server-side check — the cookie's existence doesn't guarantee
+  // the session is valid (it may be expired), but if it's missing the user
+  // definitely isn't authenticated. The client-side session query handles the
+  // expired-session case by showing the login form.
   const cookies = (() => {
     for (const [key, value] of request.headers) {
       if (key.toLowerCase() === "cookie") return value;
     }
     return "";
   })();
-  const hasSessionToken = cookies.includes("staffora.session_token=");
-  const hasSessionData = cookies.includes("staffora.session_data=");
-  const hasLegacySession = cookies.includes("session=");
-  const hasSession = hasSessionToken || hasSessionData || hasLegacySession;
+  const hasBetterAuthSession =
+    cookies.includes("staffora.session_token=") ||
+    cookies.includes("__Secure-staffora.session_token=");
 
-  // If already authenticated, redirect to dashboard
-  if (hasSession) {
+  // Only redirect to dashboard if Better Auth cookie is present.
+  // If the session is actually expired, the dashboard's API calls will
+  // return 401 and the client-side interceptor will redirect back here.
+  if (hasBetterAuthSession) {
     throw redirect("/dashboard");
   }
 

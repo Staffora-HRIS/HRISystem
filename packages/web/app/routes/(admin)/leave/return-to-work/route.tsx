@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ClipboardCheck,
   Search,
@@ -20,7 +20,14 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Textarea,
+  Checkbox,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from "~/components/ui";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface ReturnToWorkInterview {
@@ -67,9 +74,62 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateReturnToWorkForm {
+  employeeId: string;
+  interviewDate: string;
+  conductedBy: string;
+  absenceType: string;
+  fitForWork: boolean;
+  adjustmentsNeeded: string;
+  notes: string;
+}
+
+const initialCreateForm: CreateReturnToWorkForm = {
+  employeeId: "",
+  interviewDate: "",
+  conductedBy: "",
+  absenceType: "",
+  fitForWork: false,
+  adjustmentsNeeded: "",
+  notes: "",
+};
+
 export default function AdminReturnToWorkPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateReturnToWorkForm>(initialCreateForm);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateReturnToWorkForm) =>
+      api.post("/return-to-work/interviews", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-return-to-work"] });
+      toast.success("Return to work interview scheduled successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to schedule interview", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (
+      !formData.employeeId.trim() ||
+      !formData.interviewDate ||
+      !formData.conductedBy.trim() ||
+      !formData.absenceType
+    ) {
+      toast.warning("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate(formData);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-return-to-work", statusFilter],
@@ -180,7 +240,7 @@ export default function AdminReturnToWorkPage() {
             Manage return to work interviews following employee absences
           </p>
         </div>
-        <Button disabled title="Coming soon">
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Schedule Interview
         </Button>
@@ -284,6 +344,123 @@ export default function AdminReturnToWorkPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Schedule Return to Work Interview Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+          aria-label="Schedule return to work interview"
+        >
+          <ModalHeader title="Schedule Return to Work Interview" />
+          <ModalBody>
+            <form
+              id="rtw-create-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Employee"
+                placeholder="Employee ID or name"
+                required
+                value={formData.employeeId}
+                onChange={(e) =>
+                  setFormData({ ...formData, employeeId: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Interview Date"
+                  type="date"
+                  required
+                  value={formData.interviewDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, interviewDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="Interviewer Name"
+                  placeholder="Name of interviewer"
+                  required
+                  value={formData.conductedBy}
+                  onChange={(e) =>
+                    setFormData({ ...formData, conductedBy: e.target.value })
+                  }
+                />
+              </div>
+              <Select
+                label="Absence Type"
+                required
+                value={formData.absenceType}
+                onChange={(e) =>
+                  setFormData({ ...formData, absenceType: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select absence type" },
+                  { value: "sickness", label: "Sickness" },
+                  { value: "maternity", label: "Maternity" },
+                  { value: "other", label: "Other" },
+                ]}
+              />
+              <Checkbox
+                label="Fit for work"
+                checked={formData.fitForWork}
+                onChange={(e) =>
+                  setFormData({ ...formData, fitForWork: e.target.checked })
+                }
+              />
+              <Textarea
+                label="Adjustments Needed"
+                placeholder="Any workplace adjustments required (optional)"
+                value={formData.adjustmentsNeeded}
+                onChange={(e) =>
+                  setFormData({ ...formData, adjustmentsNeeded: e.target.value })
+                }
+              />
+              <Textarea
+                label="Notes"
+                placeholder="Any additional details..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="rtw-create-form"
+              disabled={
+                !formData.employeeId.trim() ||
+                !formData.interviewDate ||
+                !formData.conductedBy.trim() ||
+                !formData.absenceType ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Scheduling..." : "Schedule Interview"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

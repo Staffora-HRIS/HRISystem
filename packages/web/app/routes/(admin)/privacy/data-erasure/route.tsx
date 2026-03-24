@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { UserX, Search, ArrowLeft, Plus } from "lucide-react";
 import {
@@ -14,8 +14,14 @@ import {
   Input,
   Select,
   Button,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Textarea,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface ErasureRequest {
   id: string;
@@ -58,8 +64,30 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function DataErasurePage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    employeeId: "",
+    reason: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post("/data-erasure/requests", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["privacy-data-erasure"] });
+      toast.success("Erasure request created successfully");
+      setShowCreateModal(false);
+      setRequestForm({ employeeId: "", reason: "" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to create erasure request";
+      toast.error(message);
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["privacy-data-erasure", search, statusFilter],
@@ -143,7 +171,7 @@ export default function DataErasurePage() {
             Process and track right-to-be-forgotten requests.
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Request
         </Button>
@@ -202,6 +230,61 @@ export default function DataErasurePage() {
           )}
         </CardBody>
       </Card>
+
+      {showCreateModal && (
+        <Modal open onClose={() => !createMutation.isPending && setShowCreateModal(false)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">New Erasure Request</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="erasure-employee" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Employee ID <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="erasure-employee"
+                  value={requestForm.employeeId}
+                  onChange={(e) => setRequestForm({ ...requestForm, employeeId: e.target.value })}
+                  placeholder="Enter employee ID"
+                />
+              </div>
+              <div>
+                <label htmlFor="erasure-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Reason <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  id="erasure-reason"
+                  rows={3}
+                  value={requestForm.reason}
+                  onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
+                  placeholder="Reason for data erasure request..."
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!requestForm.employeeId.trim() || !requestForm.reason.trim()) {
+                  toast.error("Employee ID and reason are required");
+                  return;
+                }
+                createMutation.mutate({
+                  employeeId: requestForm.employeeId.trim(),
+                  reason: requestForm.reason.trim(),
+                });
+              }}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Submitting..." : "Submit Request"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

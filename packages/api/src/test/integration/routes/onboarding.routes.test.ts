@@ -105,8 +105,8 @@ describe("Onboarding Routes Integration", () => {
   describe("POST /api/v1/onboarding/templates/:id/tasks", () => {
     it("should add task to template", async () => {
       const requestBody = {
-        title: "Complete I-9 form",
-        description: "Employment eligibility verification",
+        title: "Complete Right to Work check",
+        description: "UK Right to Work verification",
         category: "compliance",
         assigneeType: "employee",
         daysOffset: 1,

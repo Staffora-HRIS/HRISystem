@@ -27,6 +27,7 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { PersonalDetailChangeRepository } from "./repository";
 import { PersonalDetailChangeService } from "./service";
@@ -127,7 +128,7 @@ export const personalDetailChangePortalRoutes = new Elysia({
         set.status = 201;
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("Portal personal-detail-changes POST error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "Portal personal-detail-changes POST error");
         set.status = 500;
         return {
           error: {
@@ -185,7 +186,7 @@ export const personalDetailChangePortalRoutes = new Elysia({
           hasMore: result.data!.hasMore,
         };
       } catch (error: any) {
-        console.error("Portal personal-detail-changes GET error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "Portal personal-detail-changes GET error");
         set.status = 500;
         return {
           error: {
@@ -233,7 +234,7 @@ export const personalDetailChangePortalRoutes = new Elysia({
         );
         return { count };
       } catch (error: any) {
-        console.error("Portal personal-detail-changes pending-count error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "Portal personal-detail-changes pending-count error");
         set.status = 500;
         return {
           error: {
@@ -276,7 +277,7 @@ export const personalDetailChangePortalRoutes = new Elysia({
 
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("Portal personal-detail-changes PATCH cancel error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "Portal personal-detail-changes PATCH cancel error");
         set.status = 500;
         return {
           error: {
@@ -347,7 +348,7 @@ export const personalDetailChangeAdminRoutes = new Elysia({
           hasMore: result.hasMore,
         };
       } catch (error: any) {
-        console.error("HR personal-detail-changes GET error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "HR personal-detail-changes GET error");
         set.status = 500;
         return {
           error: {
@@ -387,7 +388,7 @@ export const personalDetailChangeAdminRoutes = new Elysia({
         const count = await pdcService.getPendingReviewCount(tenantContext);
         return { count };
       } catch (error: any) {
-        console.error("HR personal-detail-changes count error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "HR personal-detail-changes count error");
         set.status = 500;
         return {
           error: {
@@ -430,7 +431,7 @@ export const personalDetailChangeAdminRoutes = new Elysia({
 
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("HR personal-detail-changes GET/:id error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "HR personal-detail-changes GET/:id error");
         set.status = 500;
         return {
           error: {
@@ -479,7 +480,7 @@ export const personalDetailChangeAdminRoutes = new Elysia({
 
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("HR personal-detail-changes PATCH review error:", error);
+        logger.error({ err: error, module: "personal-detail-changes" }, "HR personal-detail-changes PATCH review error");
         set.status = 500;
         return {
           error: {

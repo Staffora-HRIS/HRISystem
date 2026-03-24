@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Plus, MapPin, AlertCircle, RefreshCw } from "lucide-react";
 import {
@@ -9,6 +10,12 @@ import {
   CardBody,
   CardHeader,
   DataTable,
+  Input,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
   type ColumnDef,
 } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
@@ -34,8 +41,28 @@ interface GeofenceLocationsResponse {
   count: number;
 }
 
+interface CreateGeofenceForm {
+  name: string;
+  description: string;
+  latitude: string;
+  longitude: string;
+  radius: string;
+}
+
+const initialGeofenceForm: CreateGeofenceForm = {
+  name: "",
+  description: "",
+  latitude: "",
+  longitude: "",
+  radius: "100",
+};
+
 export default function GeofencePage() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateGeofenceForm>(initialGeofenceForm);
 
   const {
     data,
@@ -46,8 +73,57 @@ export default function GeofencePage() {
   } = useQuery({
     queryKey: ["admin-geofence-locations"],
     queryFn: () =>
-      api.get<GeofenceLocationsResponse>("/geofences/locations"),
+      api.get<GeofenceLocationsResponse>("/time/geofence-zones"),
   });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      name: string;
+      description?: string;
+      latitude: number;
+      longitude: number;
+      radiusMeters: number;
+    }) => api.post("/time/geofence-zones", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-geofence-locations"] });
+      toast.success("Geofence zone created successfully");
+      setShowCreateModal(false);
+      setFormData(initialGeofenceForm);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to create geofence zone";
+      toast.error(message);
+    },
+  });
+
+  const handleCreate = () => {
+    if (!formData.name.trim()) {
+      toast.warning("Please enter a zone name");
+      return;
+    }
+    const lat = parseFloat(formData.latitude);
+    const lng = parseFloat(formData.longitude);
+    const radius = parseFloat(formData.radius);
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      toast.warning("Please enter a valid latitude (-90 to 90)");
+      return;
+    }
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      toast.warning("Please enter a valid longitude (-180 to 180)");
+      return;
+    }
+    if (isNaN(radius) || radius <= 0) {
+      toast.warning("Please enter a valid radius greater than 0");
+      return;
+    }
+    createMutation.mutate({
+      name: formData.name.trim(),
+      description: formData.description.trim() || undefined,
+      latitude: lat,
+      longitude: lng,
+      radiusMeters: radius,
+    });
+  };
 
   const locations = data?.items ?? [];
 
@@ -139,7 +215,7 @@ export default function GeofencePage() {
             Manage geofence locations for time and attendance tracking
           </p>
         </div>
-        <Button disabled aria-label="Add geofence zone (coming soon)">
+        <Button onClick={() => setShowCreateModal(true)} aria-label="Add geofence zone">
           <Plus className="h-4 w-4 mr-2" />
           Add Zone
         </Button>
@@ -185,6 +261,103 @@ export default function GeofencePage() {
             />
           </CardBody>
         </Card>
+      )}
+
+      {/* Create Geofence Zone Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialGeofenceForm);
+          }}
+          size="md"
+          aria-label="Add geofence zone"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Add Geofence Zone</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Zone Name"
+                placeholder="e.g. Main Office"
+                required
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+              />
+              <Input
+                label="Description"
+                placeholder="Describe this geofence zone..."
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Latitude"
+                  type="number"
+                  placeholder="e.g. 51.5074"
+                  required
+                  value={formData.latitude}
+                  onChange={(e) =>
+                    setFormData({ ...formData, latitude: e.target.value })
+                  }
+                  hint="-90 to 90"
+                />
+                <Input
+                  label="Longitude"
+                  type="number"
+                  placeholder="e.g. -0.1278"
+                  required
+                  value={formData.longitude}
+                  onChange={(e) =>
+                    setFormData({ ...formData, longitude: e.target.value })
+                  }
+                  hint="-180 to 180"
+                />
+              </div>
+              <Input
+                label="Radius (metres)"
+                type="number"
+                placeholder="e.g. 100"
+                required
+                value={formData.radius}
+                onChange={(e) =>
+                  setFormData({ ...formData, radius: e.target.value })
+                }
+                hint="Distance from centre point in metres"
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialGeofenceForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={
+                !formData.name.trim() ||
+                !formData.latitude ||
+                !formData.longitude ||
+                !formData.radius ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." : "Add Zone"}
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   );

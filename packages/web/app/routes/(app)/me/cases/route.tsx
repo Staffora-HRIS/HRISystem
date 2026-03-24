@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
 import { MessageSquare, Plus, Clock, CheckCircle } from "lucide-react";
 import { Card, CardHeader, CardBody, StatCard } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { api } from "~/lib/api-client";
+import { toast } from "~/components/ui/toast";
+import { api, ApiError } from "~/lib/api-client";
 
 interface HRCase {
   id: string;
@@ -24,7 +24,6 @@ export default function MyCasesPage() {
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState<string>("all");
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-cases"],
@@ -36,7 +35,12 @@ export default function MyCasesPage() {
       api.post("/cases", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-cases"] });
+      toast.success("Case submitted successfully");
       setShowNew(false);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to submit case. Please try again.";
+      toast.error(message);
     },
   });
 
@@ -185,7 +189,16 @@ export default function MyCasesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/admin/cases/${hrCase.id}`)}
+                    onClick={() => {
+                      // Show case details inline (self-service users should not be
+                      // directed to admin routes they cannot access)
+                      toast.info(
+                        `Case ${hrCase.caseNumber}: ${hrCase.subject}`,
+                        {
+                          message: `Status: ${hrCase.status.replace("_", " ")} | Priority: ${hrCase.priority} | Created: ${new Date(hrCase.createdAt).toLocaleDateString()}${hrCase.assigneeName ? ` | Assigned to: ${hrCase.assigneeName}` : ""}`,
+                        }
+                      );
+                    }}
                   >
                     View Details
                   </Button>

@@ -325,11 +325,34 @@ export default function ContractsPage() {
         </div>
         <Button
           variant="outline"
-          onClick={() =>
-            toast.info("Coming Soon", {
-              message: "Contract export will be available in a future update.",
-            })
-          }
+          onClick={() => {
+            if (!filteredContracts?.length) {
+              toast.info("No contracts to export");
+              return;
+            }
+            const headers = ["Employee Number", "Name", "Contract Type", "Position", "Department", "Start Date", "End Date", "Status"];
+            const rows = filteredContracts.map((c) => [
+              c.employeeNumber,
+              c.employeeName || "",
+              CONTRACT_TYPE_LABELS[c.contractType] || c.contractType,
+              c.positionTitle || "",
+              c.orgUnitName || "",
+              c.startDate || "",
+              c.endDate || "",
+              STATUS_LABELS[c.status] || c.status,
+            ]);
+            const csv = [headers.join(","), ...rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `contracts-${new Date().toISOString().split("T")[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast.success("Contract data exported");
+          }}
         >
           <Download className="h-4 w-4 mr-2" />
           Export

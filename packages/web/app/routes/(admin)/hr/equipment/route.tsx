@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   Monitor,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface Equipment {
   id: string;
@@ -78,8 +83,18 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function EquipmentPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Create form state
+  const [formAssetTag, setFormAssetTag] = useState("");
+  const [formType, setFormType] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formStatus, setFormStatus] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-equipment", search, statusFilter],
@@ -88,11 +103,72 @@ export default function EquipmentPage() {
       if (search) params.set("search", search);
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "50");
-      return api.get<EquipmentListResponse>(`/equipment/assignments?${params}`);
+      return api.get<EquipmentListResponse>(`/equipment/catalog?${params}`);
     },
   });
 
   const items = data?.items ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      assetTag: string;
+      type: string;
+      description?: string;
+      status: string;
+    }) => api.post("/equipment/catalog", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin-hr-equipment"],
+      });
+      toast.success("Equipment created successfully");
+      resetForm();
+      setShowCreateModal(false);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to create equipment";
+      toast.error(message);
+    },
+  });
+
+  function resetForm() {
+    setFormAssetTag("");
+    setFormType("");
+    setFormDescription("");
+    setFormStatus("");
+  }
+
+  function handleCreate() {
+    const trimmedAssetTag = formAssetTag.trim();
+    const trimmedDescription = formDescription.trim();
+
+    if (!trimmedAssetTag) {
+      toast.error("Asset tag is required");
+      return;
+    }
+    if (!formType) {
+      toast.error("Equipment type is required");
+      return;
+    }
+    if (!formStatus) {
+      toast.error("Status is required");
+      return;
+    }
+
+    createMutation.mutate({
+      assetTag: trimmedAssetTag,
+      type: formType,
+      description: trimmedDescription || undefined,
+      status: formStatus,
+    });
+  }
+
+  function handleCloseModal() {
+    if (!createMutation.isPending) {
+      setShowCreateModal(false);
+      resetForm();
+    }
+  }
 
   const columns: ColumnDef<Equipment>[] = [
     {
@@ -168,7 +244,7 @@ export default function EquipmentPage() {
             <h1 className="text-2xl font-bold text-gray-900">Equipment Provisioning</h1>
             <p className="text-gray-600">Track and manage employee equipment assignments</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Equipment
           </Button>
@@ -217,7 +293,7 @@ export default function EquipmentPage() {
                   : "Start by adding your first equipment item"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Equipment
                 </Button>
@@ -232,6 +308,75 @@ export default function EquipmentPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Modal */}
+      <Modal open={showCreateModal} onClose={handleCloseModal} size="lg">
+        <ModalHeader title="Add Equipment" />
+        <ModalBody>
+          <div className="space-y-4">
+            <Input
+              label="Asset Tag"
+              placeholder="e.g. LAP-001"
+              value={formAssetTag}
+              onChange={(e) => setFormAssetTag(e.target.value)}
+              required
+              id="eq-asset-tag"
+            />
+            <Select
+              label="Type"
+              value={formType}
+              onChange={(e) => setFormType(e.target.value)}
+              options={Object.entries(TYPE_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              placeholder="Select equipment type"
+              required
+              id="eq-type"
+            />
+            <Input
+              label="Description (Optional)"
+              placeholder="e.g. Dell Latitude 5520"
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              id="eq-description"
+            />
+            <Select
+              label="Status"
+              value={formStatus}
+              onChange={(e) => setFormStatus(e.target.value)}
+              options={Object.entries(STATUS_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              placeholder="Select status"
+              required
+              id="eq-status"
+            />
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={handleCloseModal}
+            disabled={createMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={
+              !formAssetTag.trim() ||
+              !formType ||
+              !formStatus ||
+              createMutation.isPending
+            }
+            loading={createMutation.isPending}
+          >
+            {createMutation.isPending ? "Creating..." : "Add Equipment"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

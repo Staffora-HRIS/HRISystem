@@ -39,6 +39,7 @@ interface Dependent {
 
 interface EnrollmentWizardProps {
   plan: BenefitPlan;
+  employeeId?: string;
   onComplete: () => void;
   onCancel: () => void;
   className?: string;
@@ -77,6 +78,7 @@ function formatCurrency(amount: number): string {
 
 export function EnrollmentWizard({
   plan,
+  employeeId,
   onComplete,
   onCancel,
   className,
@@ -96,17 +98,29 @@ export function EnrollmentWizard({
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      return api.post("/benefits/enrollments", {
-        planId: plan.id,
-        coverageLevel,
-        dependents: dependents.length > 0 ? dependents : undefined,
-        beneficiaries: beneficiaries.length > 0 ? beneficiaries : undefined,
-      });
+      const payload: Record<string, unknown> = {
+        plan_id: plan.id,
+        coverage_level: coverageLevel,
+        effective_from: new Date().toISOString().split("T")[0],
+      };
+      if (employeeId) {
+        payload.employee_id = employeeId;
+      }
+      if (dependents.length > 0) {
+        payload.dependents = dependents;
+      }
+      if (beneficiaries.length > 0) {
+        payload.beneficiaries = beneficiaries;
+      }
+      return api.post("/benefits/enrollments", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["benefits"] });
       queryClient.invalidateQueries({ queryKey: ["enrollments"] });
       onComplete();
+    },
+    onError: () => {
+      // Error is displayed inline via enrollMutation.isError below
     },
   });
 

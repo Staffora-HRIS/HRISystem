@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   Clock,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface FlexibleWorkingRequest {
   id: string;
@@ -80,8 +85,17 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function FlexibleWorkingPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Create form state
+  const [formEmployeeId, setFormEmployeeId] = useState("");
+  const [formRequestType, setFormRequestType] = useState("");
+  const [formReason, setFormReason] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-flexible-working", search, statusFilter],
@@ -95,6 +109,64 @@ export default function FlexibleWorkingPage() {
   });
 
   const requests = data?.items ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      employeeId: string;
+      requestType: string;
+      reason: string;
+    }) => api.post("/flexible-working/requests", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin-hr-flexible-working"],
+      });
+      toast.success("Flexible working request created successfully");
+      resetForm();
+      setShowCreateModal(false);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to create flexible working request";
+      toast.error(message);
+    },
+  });
+
+  function resetForm() {
+    setFormEmployeeId("");
+    setFormRequestType("");
+    setFormReason("");
+  }
+
+  function handleCreate() {
+    const trimmedEmployeeId = formEmployeeId.trim();
+    const trimmedReason = formReason.trim();
+
+    if (!trimmedEmployeeId) {
+      toast.error("Employee ID is required");
+      return;
+    }
+    if (!formRequestType) {
+      toast.error("Request type is required");
+      return;
+    }
+    if (!trimmedReason) {
+      toast.error("Reason is required");
+      return;
+    }
+
+    createMutation.mutate({
+      employeeId: trimmedEmployeeId,
+      requestType: formRequestType,
+      reason: trimmedReason,
+    });
+  }
+
+  function handleCloseModal() {
+    if (!createMutation.isPending) {
+      setShowCreateModal(false);
+      resetForm();
+    }
+  }
 
   const columns: ColumnDef<FlexibleWorkingRequest>[] = [
     {
@@ -170,7 +242,7 @@ export default function FlexibleWorkingPage() {
             <h1 className="text-2xl font-bold text-gray-900">Flexible Working Requests</h1>
             <p className="text-gray-600">Manage employee flexible working arrangements</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Request
           </Button>
@@ -220,7 +292,7 @@ export default function FlexibleWorkingPage() {
                   : "No flexible working requests submitted"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Request
                 </Button>
@@ -235,6 +307,73 @@ export default function FlexibleWorkingPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Modal */}
+      <Modal open={showCreateModal} onClose={handleCloseModal} size="lg">
+        <ModalHeader title="New Flexible Working Request" />
+        <ModalBody>
+          <div className="space-y-4">
+            <Input
+              label="Employee ID"
+              placeholder="Enter employee ID"
+              value={formEmployeeId}
+              onChange={(e) => setFormEmployeeId(e.target.value)}
+              required
+              id="fw-employee-id"
+            />
+            <Select
+              label="Request Type"
+              value={formRequestType}
+              onChange={(e) => setFormRequestType(e.target.value)}
+              options={Object.entries(REQUEST_TYPE_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              placeholder="Select request type"
+              required
+              id="fw-request-type"
+            />
+            <div>
+              <label
+                htmlFor="fw-reason"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="fw-reason"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                rows={4}
+                placeholder="Explain the reason for this flexible working request"
+                value={formReason}
+                onChange={(e) => setFormReason(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={handleCloseModal}
+            disabled={createMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={
+              !formEmployeeId.trim() ||
+              !formRequestType ||
+              !formReason.trim() ||
+              createMutation.isPending
+            }
+            loading={createMutation.isPending}
+          >
+            {createMutation.isPending ? "Submitting..." : "Submit Request"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -1,9 +1,16 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { Link } from "react-router";
 import {
   Calendar,
   FileText,
   Shield,
   ArrowRight,
+  Baby,
+  Stethoscope,
+  Heart,
+  HandHelping,
+  Users,
+  ClipboardCheck,
 } from "lucide-react";
 import { Card, CardBody } from "~/components/ui/card";
 
@@ -28,6 +35,48 @@ const leaveModules = [
     href: "/admin/leave/policies",
     icon: Shield,
     color: "text-purple-600 bg-purple-100",
+  },
+  {
+    title: "Family / Statutory Leave",
+    description: "Manage maternity, paternity, shared parental, and adoption leave entitlements.",
+    href: "/admin/leave/statutory",
+    icon: Baby,
+    color: "text-pink-600 bg-pink-100",
+  },
+  {
+    title: "Statutory Sick Pay",
+    description: "Track SSP records, qualifying days, and weekly rate calculations.",
+    href: "/admin/leave/ssp",
+    icon: Stethoscope,
+    color: "text-red-600 bg-red-100",
+  },
+  {
+    title: "Bereavement Leave",
+    description: "Manage bereavement leave requests and SPBP eligibility.",
+    href: "/admin/leave/bereavement",
+    icon: Heart,
+    color: "text-gray-600 bg-gray-100",
+  },
+  {
+    title: "Carer's Leave",
+    description: "Manage carer's leave requests and entitlements.",
+    href: "/admin/leave/carers",
+    icon: HandHelping,
+    color: "text-teal-600 bg-teal-100",
+  },
+  {
+    title: "Parental Leave",
+    description: "Manage parental leave requests and entitlements.",
+    href: "/admin/leave/parental",
+    icon: Users,
+    color: "text-indigo-600 bg-indigo-100",
+  },
+  {
+    title: "Return to Work",
+    description: "Schedule and manage return to work interviews following absences.",
+    href: "/admin/leave/return-to-work",
+    icon: ClipboardCheck,
+    color: "text-orange-600 bg-orange-100",
   },
 ];
 

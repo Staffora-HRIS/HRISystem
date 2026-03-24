@@ -9,8 +9,8 @@
  *  GET    /lookup-values/categories/:id                      - Get category by ID
  *  PATCH  /lookup-values/categories/:id                      - Update category
  *  DELETE /lookup-values/categories/:id                      - Delete category
- *  GET    /lookup-values/categories/:categoryId/values       - List values in category
- *  POST   /lookup-values/categories/:categoryId/values       - Create value
+ *  GET    /lookup-values/categories/:id/values       - List values in category
+ *  POST   /lookup-values/categories/:id/values       - Create value
  *  GET    /lookup-values/values/:id                          - Get value by ID
  *  PATCH  /lookup-values/values/:id                          - Update value
  *  DELETE /lookup-values/values/:id                          - Delete value
@@ -208,13 +208,13 @@ export const lookupValuesRoutes = new Elysia({
   // ===========================================================================
 
   .get(
-    "/categories/:categoryId/values",
+    "/categories/:id/values",
     async (ctx) => {
       const { lookupService, tenantContext, params, query } = ctx as any;
       const { cursor, limit, ...filters } = query;
       const result = await lookupService.listValues(
         tenantContext,
-        params.categoryId,
+        params.id,
         filters,
         {
           cursor,
@@ -224,7 +224,7 @@ export const lookupValuesRoutes = new Elysia({
       return result;
     },
     {
-      params: t.Object({ categoryId: UuidSchema }),
+      params: t.Object({ id: UuidSchema }),
       query: t.Object({
         search: t.Optional(t.String()),
         isActive: t.Optional(t.Boolean()),
@@ -240,13 +240,13 @@ export const lookupValuesRoutes = new Elysia({
   )
 
   .post(
-    "/categories/:categoryId/values",
+    "/categories/:id/values",
     async (ctx) => {
       const { lookupService, tenantContext, params, body, set } = ctx as any;
 
       const result = await lookupService.createValue(
         tenantContext,
-        params.categoryId,
+        params.id,
         body
       );
 
@@ -259,7 +259,7 @@ export const lookupValuesRoutes = new Elysia({
       return result.data;
     },
     {
-      params: t.Object({ categoryId: UuidSchema }),
+      params: t.Object({ id: UuidSchema }),
       body: t.Object({
         code: t.String({ minLength: 1, maxLength: 100, pattern: "^[a-z][a-z0-9_]*$" }),
         label: t.String({ minLength: 1, maxLength: 200 }),

@@ -1,11 +1,12 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Upload } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { api } from "~/lib/api-client";
+import { useToast } from "~/components/ui/toast";
+import { api, ApiError } from "~/lib/api-client";
 
 export default function CreateCoursePage() {
   const navigate = useNavigate();
@@ -17,12 +18,22 @@ export default function CreateCoursePage() {
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [contentType, setContentType] = useState("video");
   const [contentUrl, setContentUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const toast = useToast();
 
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.post("/lms/courses", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-courses"] });
+      toast.success("Course created successfully");
       navigate("/admin/lms");
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to create course";
+      toast.error(message);
     },
   });
 
@@ -141,11 +152,51 @@ export default function CreateCoursePage() {
                 placeholder="https://..."
               />
             </div>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file) setSelectedFile(file);
+              }}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                isDragOver
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-300 hover:border-gray-400"
+              }`}
+            >
               <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">Drag and drop files here, or click to upload</p>
+              {selectedFile ? (
+                <p className="text-sm text-gray-900 font-medium">{selectedFile.name}</p>
+              ) : (
+                <p className="text-sm text-gray-600">Drag and drop files here, or click to upload</p>
+              )}
               <p className="text-xs text-gray-500 mt-1">Supports: MP4, PDF, SCORM (max 500MB)</p>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".mp4,.pdf,.zip"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setSelectedFile(file);
+              }}
+            />
           </CardBody>
         </Card>
 

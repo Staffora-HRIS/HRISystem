@@ -75,4 +75,26 @@ export class TenantService {
   async getTenantSettings(tenantId: string) {
     return this.repository.getSettings(tenantId);
   }
+
+  /**
+   * Update the current tenant's name and/or settings.
+   * Returns the updated tenant data, or null if not found.
+   */
+  async updateTenantSettings(
+    tenantId: string,
+    updates: { name?: string; settings?: Record<string, unknown> }
+  ) {
+    const row = await this.repository.updateSettings(tenantId, updates);
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      status: row.status,
+      settings: row.settings ?? {},
+      createdAt: toIso(row.createdAt),
+      updatedAt: toIso(row.updatedAt),
+    };
+  }
 }

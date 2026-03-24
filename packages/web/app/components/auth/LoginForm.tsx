@@ -98,7 +98,14 @@ export function LoginForm({ onSuccess, onMfaRequired }: LoginFormProps) {
       </div>
 
       <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading ? <Spinner size="sm" /> : "Sign In"}
+        {isLoading ? (
+          <>
+            <Spinner size="sm" />
+            <span className="ml-2">Signing in...</span>
+          </>
+        ) : (
+          "Sign In"
+        )}
       </Button>
     </form>
   );

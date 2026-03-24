@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -12,7 +13,6 @@ import {
   Card,
   CardBody,
   Button,
-  useToast,
 } from "~/components/ui";
 
 interface ReportType {
@@ -77,10 +77,9 @@ const REPORT_TYPES: ReportType[] = [
 
 export default function TimeReportsPage() {
   const navigate = useNavigate();
-  const toast = useToast();
 
-  const handleGenerate = (_report: ReportType) => {
-    toast.info("Report generation coming soon");
+  const handleGenerate = (report: ReportType) => {
+    navigate(`/admin/reports/new?type=${encodeURIComponent(report.id)}`);
   };
 
   return (

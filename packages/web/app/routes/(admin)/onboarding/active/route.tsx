@@ -7,7 +7,7 @@ import {
   ClipboardList,
   CheckCircle,
   Clock,
-  MoreHorizontal,
+  Mail,
   ArrowLeft,
   Plus,
   X,
@@ -138,6 +138,19 @@ export default function ActiveOnboardingPage() {
     },
   });
 
+  const sendReminderMutation = useMutation({
+    mutationFn: (instanceId: string) =>
+      api.post(`/onboarding/instances/${instanceId}/remind`),
+    onSuccess: () => {
+      toast.success("Reminder sent successfully");
+    },
+    onError: () => {
+      toast.error("Failed to send reminder", {
+        message: "Please try again in a moment.",
+      });
+    },
+  });
+
   const handleStartOnboarding = () => {
     if (!formData.employeeId.trim()) {
       toast.warning("Please enter an employee ID");
@@ -257,22 +270,37 @@ export default function ActiveOnboardingPage() {
     {
       id: "actions",
       header: "",
-      cell: () => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            toast.info("Coming Soon", {
-              message: "Onboarding instance detail view will be available in a future update.",
-            });
-          }}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/admin/onboarding/active/${row.id}`);
+            }}
+            aria-label={`View onboarding details for ${row.employeeName || "employee"}`}
+          >
+            <ClipboardList className="h-4 w-4" />
+          </Button>
+          {row.status !== "completed" && row.status !== "cancelled" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                sendReminderMutation.mutate(row.id);
+              }}
+              disabled={sendReminderMutation.isPending}
+              aria-label={`Send reminder to ${row.employeeName || "employee"}`}
+            >
+              <Mail className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       ),
     },
-  ], [toast]);
+  ], [navigate, sendReminderMutation]);
 
   return (
     <div className="space-y-6">

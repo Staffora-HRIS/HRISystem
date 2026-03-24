@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { AlertOctagon, Search, ArrowLeft, Plus } from "lucide-react";
 import {
@@ -14,8 +14,14 @@ import {
   Input,
   Select,
   Button,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Textarea,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface DataBreachRecord {
   id: string;
@@ -73,9 +79,32 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function DataBreachPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [breachForm, setBreachForm] = useState({
+    severity: "medium",
+    description: "",
+    affectedCount: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post("/data-breach/incidents", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["privacy-data-breach"] });
+      toast.success("Breach reported successfully");
+      setShowCreateModal(false);
+      setBreachForm({ severity: "medium", description: "", affectedCount: "" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to report breach";
+      toast.error(message);
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["privacy-data-breach", search, statusFilter, severityFilter],
@@ -169,7 +198,7 @@ export default function DataBreachPage() {
             Log and manage data breach incidents with ICO notification tracking.
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Report Breach
         </Button>
@@ -239,6 +268,80 @@ export default function DataBreachPage() {
           )}
         </CardBody>
       </Card>
+
+      {showCreateModal && (
+        <Modal open onClose={() => !createMutation.isPending && setShowCreateModal(false)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Report Data Breach</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="breach-severity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Severity <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="breach-severity"
+                  value={breachForm.severity}
+                  onChange={(e) => setBreachForm({ ...breachForm, severity: e.target.value })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="breach-affected" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Number of Individuals Affected
+                </label>
+                <Input
+                  id="breach-affected"
+                  type="number"
+                  min="0"
+                  value={breachForm.affectedCount}
+                  onChange={(e) => setBreachForm({ ...breachForm, affectedCount: e.target.value })}
+                  placeholder="Estimated number"
+                />
+              </div>
+              <div>
+                <label htmlFor="breach-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  id="breach-description"
+                  rows={3}
+                  value={breachForm.description}
+                  onChange={(e) => setBreachForm({ ...breachForm, description: e.target.value })}
+                  placeholder="Describe the breach..."
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!breachForm.description.trim()) {
+                  toast.error("Description is required");
+                  return;
+                }
+                createMutation.mutate({
+                  severity: breachForm.severity,
+                  description: breachForm.description.trim(),
+                  affectedCount: breachForm.affectedCount ? Number(breachForm.affectedCount) : 0,
+                });
+              }}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Reporting..." : "Report Breach"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

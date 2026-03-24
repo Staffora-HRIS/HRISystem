@@ -20,7 +20,13 @@
  * - OTEL_SERVICE_NAME: Service name (default: "staffora-api")
  * - OTEL_SERVICE_VERSION: Service version (default: "0.1.0")
  * - OTEL_CONSOLE_EXPORTER: "true" to also log spans to console
- * - OTEL_SAMPLE_RATE: Sampling rate 0.0-1.0 (default: "1.0")
+ * - OTEL_SAMPLE_RATE: Sampling rate 0.0-1.0 (overrides environment default)
+ * - OTEL_TRACES_SAMPLER_ARG: Alternative env var for sampling ratio (standard OTel name)
+ *
+ * Sampling Defaults (when neither OTEL_SAMPLE_RATE nor OTEL_TRACES_SAMPLER_ARG is set):
+ * - production: 0.1 (10% of traces)
+ * - staging:    1.0 (100% of traces)
+ * - development/test: 1.0 (100% of traces)
  */
 
 import {
@@ -63,6 +69,29 @@ export interface TelemetryConfig {
   sampleRate: number;
 }
 
+/**
+ * Resolve the sampling rate from environment variables with sensible defaults.
+ *
+ * Priority:
+ *   1. OTEL_SAMPLE_RATE (Staffora-specific, 0.0-1.0)
+ *   2. OTEL_TRACES_SAMPLER_ARG (standard OTel env var, 0.0-1.0)
+ *   3. Environment-based default: production=0.1, staging=1.0, other=1.0
+ */
+function resolveSampleRate(): number {
+  const explicit =
+    process.env["OTEL_SAMPLE_RATE"] ||
+    process.env["OTEL_TRACES_SAMPLER_ARG"];
+  if (explicit) {
+    const parsed = parseFloat(explicit);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+  }
+  // Environment-aware defaults
+  const env = process.env["NODE_ENV"] || "development";
+  if (env === "production") return 0.1;
+  // staging, development, test => 100%
+  return 1.0;
+}
+
 export function loadTelemetryConfig(): TelemetryConfig {
   const isProd = process.env["NODE_ENV"] === "production";
   return {
@@ -75,7 +104,7 @@ export function loadTelemetryConfig(): TelemetryConfig {
     consoleExporter:
       process.env["OTEL_CONSOLE_EXPORTER"] === "true" ||
       (!isProd && process.env["OTEL_CONSOLE_EXPORTER"] !== "false"),
-    sampleRate: parseFloat(process.env["OTEL_SAMPLE_RATE"] || "1.0"),
+    sampleRate: resolveSampleRate(),
   };
 }
 

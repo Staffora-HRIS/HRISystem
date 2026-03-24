@@ -47,7 +47,9 @@ export class AbsenceService {
   async createLeaveType(ctx: TenantContext, input: CreateLeaveType): Promise<ServiceResult<unknown>> {
     try {
       // Uppercase the code to match DB constraint: ^[A-Z][A-Z0-9_]*$
-      const normalizedCode = input.code.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+      // Auto-generate from name if code is empty
+      const rawCode = input.code?.trim() || input.name?.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "") || "";
+      const normalizedCode = rawCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
       if (!normalizedCode || !/^[A-Z][A-Z0-9_]*$/.test(normalizedCode)) {
         return {
           success: false,

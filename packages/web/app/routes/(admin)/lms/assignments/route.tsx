@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, BookOpen, Calendar, Send } from "lucide-react";
@@ -19,6 +20,17 @@ interface Enrollment {
   score: number | null;
 }
 
+interface Course {
+  id: string;
+  title: string;
+}
+
+interface Employee {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 export default function LmsAssignmentsPage() {
   const [showAssign, setShowAssign] = useState(false);
   const queryClient = useQueryClient();
@@ -26,6 +38,18 @@ export default function LmsAssignmentsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-enrollments"],
     queryFn: () => api.get<{ enrollments: Enrollment[]; count: number }>("/lms/enrollments"),
+  });
+
+  const { data: coursesData } = useQuery({
+    queryKey: ["admin-courses-for-assign"],
+    queryFn: () => api.get<{ courses: Course[] }>("/lms/courses"),
+    enabled: showAssign,
+  });
+
+  const { data: employeesData } = useQuery({
+    queryKey: ["admin-employees-for-assign"],
+    queryFn: () => api.get<{ employees: Employee[] }>("/hr/employees?limit=100"),
+    enabled: showAssign,
   });
 
   const assignMutation = useMutation({
@@ -100,12 +124,18 @@ export default function LmsAssignmentsPage() {
                   <label htmlFor="assign-course" className="block text-sm font-medium text-gray-700 mb-1">Course</label>
                   <select id="assign-course" name="courseId" required aria-label="Select course" className="w-full rounded-md border border-gray-300 p-2">
                     <option value="">Select course...</option>
+                    {(coursesData?.courses || []).map((course) => (
+                      <option key={course.id} value={course.id}>{course.title}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label htmlFor="assign-employee" className="block text-sm font-medium text-gray-700 mb-1">Employee</label>
                   <select id="assign-employee" name="employeeId" required aria-label="Select employee" className="w-full rounded-md border border-gray-300 p-2">
                     <option value="">Select employee...</option>
+                    {(employeesData?.employees || []).map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

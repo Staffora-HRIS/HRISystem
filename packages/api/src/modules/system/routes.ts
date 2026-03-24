@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // User Table Sync Health Check
@@ -115,10 +116,7 @@ async function checkUserSyncHealth(db: any): Promise<{
       };
     });
   } catch (error) {
-    console.error(
-      "[System] User sync health check failed:",
-      error instanceof Error ? error.message : String(error)
-    );
+    logger.error({ err: error, module: "system" }, "User sync health check failed");
     return {
       status: "error" as const,
       betterAuthUserCount: 0,

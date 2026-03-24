@@ -1,3 +1,5 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +27,7 @@ import {
 } from "~/components/ui";
 import { Spinner } from "~/components/ui/spinner";
 import { api, ApiError } from "~/lib/api-client";
+import { useDirectReports } from "~/hooks/use-manager";
 
 type Schedule = {
   id: string;
@@ -44,6 +47,7 @@ type SchedulesResponse = {
 
 export default function ManagerSchedulesPage() {
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const { team: teamMembers } = useDirectReports();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [currentWeek, setCurrentWeek] = useState(new Date());
@@ -178,8 +182,8 @@ export default function ManagerSchedulesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team Schedules</h1>
-          <p className="text-gray-600">View and manage team work schedules</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Team Schedules</h1>
+          <p className="text-gray-600 dark:text-gray-400">View and manage team work schedules</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -219,7 +223,7 @@ export default function ManagerSchedulesPage() {
         />
         <StatCard
           title="Team Members"
-          value="12"
+          value={String(teamMembers.length)}
           icon={<Users className="h-5 w-5" />}
         />
       </div>
@@ -270,8 +274,8 @@ export default function ManagerSchedulesPage() {
             <Card>
               <CardBody className="text-center py-12">
                 <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900">No schedules found</h3>
-                <p className="text-gray-500">Create a schedule to get started.</p>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">No schedules found</h3>
+                <p className="text-gray-500 dark:text-gray-400">Create a schedule to get started.</p>
               </CardBody>
             </Card>
           ) : (
@@ -281,16 +285,16 @@ export default function ManagerSchedulesPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{schedule.name}</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{schedule.name}</h3>
                         {getStatusBadge(schedule.status)}
                         {schedule.isTemplate && (
                           <Badge variant="outline">Template</Badge>
                         )}
                       </div>
                       {schedule.description && (
-                        <p className="text-sm text-gray-600 mb-2">{schedule.description}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{schedule.description}</p>
                       )}
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
                           {new Date(schedule.startDate).toLocaleDateString()} –{" "}

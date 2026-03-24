@@ -29,6 +29,7 @@ import {
 } from "./jobs";
 import { getDbClient } from "./plugins/db";
 import { getCacheClient } from "./plugins/cache";
+import { initTelemetry, shutdownTelemetry } from "./lib/telemetry";
 
 // =============================================================================
 // Utilities
@@ -202,6 +203,10 @@ function stopOutboxPoller(): void {
 // =============================================================================
 
 async function main(): Promise<void> {
+  // Initialize OpenTelemetry distributed tracing for the worker process.
+  // No-op when OTEL_ENABLED !== "true".
+  initTelemetry({ serviceName: "staffora-worker" });
+
   console.log("===========================================");
   console.log("Staffora Background Worker");
   console.log("===========================================");
@@ -224,6 +229,9 @@ async function main(): Promise<void> {
 
     // Then shutdown worker (drains active jobs)
     await worker.shutdown(signal);
+
+    // Flush pending telemetry spans before exiting
+    await shutdownTelemetry();
 
     process.exit(0);
   };

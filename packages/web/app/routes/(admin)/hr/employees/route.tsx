@@ -280,7 +280,33 @@ export default function AdminEmployeesPage() {
           <p className="text-gray-600">Manage your workforce</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Employee export will be available in a future update." })}>
+          <Button variant="outline" onClick={() => {
+            if (!employees?.length) {
+              toast.info("No employees to export");
+              return;
+            }
+            const headers = ["Employee Number", "Name", "Position", "Department", "Manager", "Hire Date", "Status"];
+            const rows = employees.map((e) => [
+              e.employeeNumber,
+              e.displayName || e.fullName,
+              e.positionTitle || "",
+              e.orgUnitName || "",
+              e.managerName || "",
+              e.hireDate || "",
+              STATUS_LABELS[e.status] || e.status,
+            ]);
+            const csv = [headers.join(","), ...rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `employees-${new Date().toISOString().split("T")[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast.success("Employee data exported");
+          }}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

@@ -46,7 +46,7 @@ const statusLabels: Record<string, string> = {
   archived: "Archived",
 };
 
-interface CreateScheduleForm {
+interface ScheduleForm {
   name: string;
   description: string;
   startDate: string;
@@ -54,12 +54,26 @@ interface CreateScheduleForm {
   isTemplate: boolean;
 }
 
-const initialCreateForm: CreateScheduleForm = {
+const initialScheduleForm: ScheduleForm = {
   name: "",
   description: "",
   startDate: "",
   endDate: "",
   isTemplate: false,
+};
+
+interface AssignForm {
+  employeeId: string;
+  scheduleId: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+}
+
+const initialAssignForm: AssignForm = {
+  employeeId: "",
+  scheduleId: "",
+  effectiveFrom: "",
+  effectiveTo: "",
 };
 
 export default function SchedulesPage() {
@@ -68,7 +82,13 @@ export default function SchedulesPage() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"schedules" | "assignments">("schedules");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [formData, setFormData] = useState<CreateScheduleForm>(initialCreateForm);
+  const [formData, setFormData] = useState<ScheduleForm>(initialScheduleForm);
+
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [editForm, setEditForm] = useState<ScheduleForm>(initialScheduleForm);
+
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignForm, setAssignForm] = useState<AssignForm>(initialAssignForm);
 
   const { data: schedulesData, isLoading: schedulesLoading } = useQuery({
     queryKey: ["admin-schedules"],
@@ -80,7 +100,12 @@ export default function SchedulesPage() {
     queryFn: () => api.get<{ assignments: ScheduleAssignment[]; count: number }>("/time/schedule-assignments"),
   });
 
-  // Create schedule mutation
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-schedules"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-schedule-assignments"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.time.schedules() });
+  };
+
   const createScheduleMutation = useMutation({
     mutationFn: (data: {
       name: string;
@@ -90,11 +115,10 @@ export default function SchedulesPage() {
       isTemplate?: boolean;
     }) => api.post("/time/schedules", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-schedules"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.time.schedules() });
+      invalidateAll();
       toast.success("Schedule created successfully");
       setShowCreateModal(false);
-      setFormData(initialCreateForm);
+      setFormData(initialScheduleForm);
     },
     onError: () => {
       toast.error("Failed to create schedule", {
@@ -103,19 +127,73 @@ export default function SchedulesPage() {
     },
   });
 
-  const handleCreateSchedule = () => {
-    if (!formData.name.trim()) {
+  const updateScheduleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ScheduleForm> }) =>
+      api.put(`/time/schedules/${id}`, data),
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Schedule updated successfully");
+      setEditingSchedule(null);
+      setEditForm(initialScheduleForm);
+    },
+    onError: () => {
+      toast.error("Failed to update schedule", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const copyScheduleMutation = useMutation({
+    mutationFn: (data: {
+      name: string;
+      description?: string;
+      startDate: string;
+      endDate: string;
+      isTemplate?: boolean;
+    }) => api.post("/time/schedules", data),
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Schedule copied successfully");
+    },
+    onError: () => {
+      toast.error("Failed to copy schedule");
+    },
+  });
+
+  const assignScheduleMutation = useMutation({
+    mutationFn: (data: AssignForm) =>
+      api.post("/time/schedule-assignments", data),
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Schedule assigned successfully");
+      setShowAssignModal(false);
+      setAssignForm(initialAssignForm);
+    },
+    onError: () => {
+      toast.error("Failed to assign schedule", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  function validateScheduleForm(form: ScheduleForm): boolean {
+    if (!form.name.trim()) {
       toast.warning("Please enter a schedule name");
-      return;
+      return false;
     }
-    if (!formData.startDate || !formData.endDate) {
+    if (!form.startDate || !form.endDate) {
       toast.warning("Please select start and end dates");
-      return;
+      return false;
     }
-    if (new Date(formData.endDate) <= new Date(formData.startDate)) {
+    if (new Date(form.endDate) <= new Date(form.startDate)) {
       toast.warning("End date must be after start date");
-      return;
+      return false;
     }
+    return true;
+  }
+
+  const handleCreateSchedule = () => {
+    if (!validateScheduleForm(formData)) return;
     createScheduleMutation.mutate({
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
@@ -125,12 +203,62 @@ export default function SchedulesPage() {
     });
   };
 
+  const handleEditSchedule = () => {
+    if (!editingSchedule || !validateScheduleForm(editForm)) return;
+    updateScheduleMutation.mutate({
+      id: editingSchedule.id,
+      data: {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || undefined,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        isTemplate: editForm.isTemplate || undefined,
+      },
+    });
+  };
+
+  const handleCopySchedule = (schedule: Schedule) => {
+    copyScheduleMutation.mutate({
+      name: `${schedule.name} (Copy)`,
+      description: schedule.description || undefined,
+      startDate: schedule.startDate,
+      endDate: schedule.endDate,
+      isTemplate: schedule.isTemplate || undefined,
+    });
+  };
+
+  const openEditModal = (schedule: Schedule) => {
+    setEditingSchedule(schedule);
+    setEditForm({
+      name: schedule.name,
+      description: schedule.description || "",
+      startDate: schedule.startDate.split("T")[0],
+      endDate: schedule.endDate.split("T")[0],
+      isTemplate: schedule.isTemplate,
+    });
+  };
+
+  const handleAssignSchedule = () => {
+    if (!assignForm.employeeId.trim()) {
+      toast.warning("Please enter an employee ID");
+      return;
+    }
+    if (!assignForm.scheduleId) {
+      toast.warning("Please select a schedule");
+      return;
+    }
+    if (!assignForm.effectiveFrom) {
+      toast.warning("Please select an effective from date");
+      return;
+    }
+    assignScheduleMutation.mutate(assignForm);
+  };
+
   const schedules = schedulesData?.items || [];
   const assignments = assignmentsData?.assignments || [];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" onClick={() => navigate("/admin/time")}>
           <ArrowLeft className="h-4 w-4" />
@@ -145,7 +273,6 @@ export default function SchedulesPage() {
         </Button>
       </div>
 
-      {/* View Tabs */}
       <div className="flex gap-2 border-b">
         <button
           onClick={() => setView("schedules")}
@@ -171,7 +298,6 @@ export default function SchedulesPage() {
         </button>
       </div>
 
-      {/* Schedules List */}
       {view === "schedules" && (
         <>
           {schedulesLoading ? (
@@ -209,11 +335,16 @@ export default function SchedulesPage() {
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Coming Soon", { message: "Schedule editing will be available in a future update." })}>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditModal(schedule)}>
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Schedule duplication will be available in a future update." })}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopySchedule(schedule)}
+                        disabled={copyScheduleMutation.isPending}
+                      >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
@@ -225,7 +356,6 @@ export default function SchedulesPage() {
         </>
       )}
 
-      {/* Assignments List */}
       {view === "assignments" && (
         <>
           {assignmentsLoading ? (
@@ -236,12 +366,18 @@ export default function SchedulesPage() {
                 <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900">No schedule assignments</h3>
                 <p className="text-gray-500 mb-4">Assign schedules to employees.</p>
-                <Button onClick={() => toast.info("Coming Soon", { message: "Schedule assignment will be available in a future update." })}>Assign Schedule</Button>
+                <Button onClick={() => setShowAssignModal(true)}>Assign Schedule</Button>
               </CardBody>
             </Card>
           ) : (
             <Card>
               <CardBody className="p-0">
+                <div className="flex justify-end p-4 pb-0">
+                  <Button size="sm" onClick={() => setShowAssignModal(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Assign Schedule
+                  </Button>
+                </div>
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -256,9 +392,6 @@ export default function SchedulesPage() {
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Effective To
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
                       </th>
                     </tr>
                   </thead>
@@ -280,9 +413,6 @@ export default function SchedulesPage() {
                             : <span className="text-gray-400">Current</span>
                           }
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Assignment editing will be available in a future update." })}>Edit</Button>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -293,13 +423,12 @@ export default function SchedulesPage() {
         </>
       )}
 
-      {/* Create Schedule Modal */}
       {showCreateModal && (
         <Modal
           open
           onClose={() => {
             setShowCreateModal(false);
-            setFormData(initialCreateForm);
+            setFormData(initialScheduleForm);
           }}
           size="md"
         >
@@ -359,7 +488,7 @@ export default function SchedulesPage() {
               variant="outline"
               onClick={() => {
                 setShowCreateModal(false);
-                setFormData(initialCreateForm);
+                setFormData(initialScheduleForm);
               }}
               disabled={createScheduleMutation.isPending}
             >
@@ -375,6 +504,180 @@ export default function SchedulesPage() {
               }
             >
               {createScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {editingSchedule && (
+        <Modal
+          open
+          onClose={() => {
+            setEditingSchedule(null);
+            setEditForm(initialScheduleForm);
+          }}
+          size="md"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Edit Schedule</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Schedule Name"
+                placeholder="e.g. Standard Monday-Friday"
+                required
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+              />
+              <Input
+                label="Description"
+                placeholder="Describe this schedule..."
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Start Date"
+                  type="date"
+                  required
+                  value={editForm.startDate}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, startDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="End Date"
+                  type="date"
+                  required
+                  value={editForm.endDate}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, endDate: e.target.value })
+                  }
+                />
+              </div>
+              <Checkbox
+                label="Save as template"
+                checked={editForm.isTemplate}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, isTemplate: e.target.checked })
+                }
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingSchedule(null);
+                setEditForm(initialScheduleForm);
+              }}
+              disabled={updateScheduleMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditSchedule}
+              disabled={
+                !editForm.name.trim() ||
+                !editForm.startDate ||
+                !editForm.endDate ||
+                updateScheduleMutation.isPending
+              }
+            >
+              {updateScheduleMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {showAssignModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowAssignModal(false);
+            setAssignForm(initialAssignForm);
+          }}
+          size="md"
+        >
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Assign Schedule</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee ID"
+                required
+                value={assignForm.employeeId}
+                onChange={(e) =>
+                  setAssignForm({ ...assignForm, employeeId: e.target.value })
+                }
+              />
+              <div>
+                <label htmlFor="assign-schedule" className="block text-sm font-medium text-gray-700 mb-1">
+                  Schedule <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="assign-schedule"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={assignForm.scheduleId}
+                  onChange={(e) =>
+                    setAssignForm({ ...assignForm, scheduleId: e.target.value })
+                  }
+                >
+                  <option value="">Select a schedule</option>
+                  {schedules.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Effective From"
+                  type="date"
+                  required
+                  value={assignForm.effectiveFrom}
+                  onChange={(e) =>
+                    setAssignForm({ ...assignForm, effectiveFrom: e.target.value })
+                  }
+                />
+                <Input
+                  label="Effective To"
+                  type="date"
+                  value={assignForm.effectiveTo}
+                  onChange={(e) =>
+                    setAssignForm({ ...assignForm, effectiveTo: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignModal(false);
+                setAssignForm(initialAssignForm);
+              }}
+              disabled={assignScheduleMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignSchedule}
+              disabled={
+                !assignForm.employeeId.trim() ||
+                !assignForm.scheduleId ||
+                !assignForm.effectiveFrom ||
+                assignScheduleMutation.isPending
+              }
+            >
+              {assignScheduleMutation.isPending ? "Assigning..." : "Assign Schedule"}
             </Button>
           </ModalFooter>
         </Modal>

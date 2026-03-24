@@ -17,6 +17,7 @@
 import type { BulkOperationsRepository } from "./repository";
 import type { TenantContext } from "../../types/service-result";
 import type { ServiceResult } from "../../types/service-result";
+import { logger } from "../../lib/logger";
 import type {
   BulkCreateEmployeeItem,
   BulkUpdateEmployeeItem,
@@ -99,7 +100,7 @@ export class BulkOperationsService {
         },
       };
     } catch (error) {
-      console.error("Bulk create employees failed:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Bulk create employees failed");
       return {
         success: false,
         error: {
@@ -187,7 +188,7 @@ export class BulkOperationsService {
         },
       };
     } catch (error) {
-      console.error("Bulk update employees failed:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Bulk update employees failed");
       return {
         success: false,
         error: {
@@ -261,7 +262,7 @@ export class BulkOperationsService {
         },
       };
     } catch (error) {
-      console.error("Bulk leave request actions failed:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Bulk leave request actions failed");
       return {
         success: false,
         error: {
@@ -308,7 +309,7 @@ export class BulkOperationsService {
       const failed = results.filter((r) => !r.success).length;
       return { success: true, data: { total: results.length, succeeded, failed, results } };
     } catch (error) {
-      console.error("Generic bulk operations failed:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Generic bulk operations failed");
       return { success: false, error: { code: "INTERNAL_ERROR", message: "Bulk operations execution failed" } };
     }
   }

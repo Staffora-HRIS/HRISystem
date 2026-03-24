@@ -1,5 +1,5 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -13,101 +13,22 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { useToast } from "~/components/ui/toast";
 import { Button } from "~/components/ui/button";
-import { Modal, ModalHeader, ModalBody, ModalFooter } from "~/components/ui/modal";
-import { api, ApiError } from "~/lib/api-client";
 
-interface AssessmentTemplate {
-  id: string;
-  name: string;
-  type: "skills_test" | "psychometric" | "technical" | "situational" | "presentation";
-  description: string | null;
-  timeLimitMinutes: number | null;
-  passMark: number | null;
-  active: boolean;
-  createdAt: string;
-}
-
-interface CandidateAssessment {
-  id: string;
-  candidateId: string;
-  templateId: string;
-  scheduledAt: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  score: number | null;
-  passed: boolean | null;
-  assessorId: string | null;
-  feedback: string | null;
-  status: "scheduled" | "in_progress" | "completed" | "cancelled";
-  createdAt: string;
-  templateName?: string;
-  templateType?: string;
-}
-
-interface CreateTemplateData {
-  name: string;
-  type: string;
-  description: string;
-  timeLimitMinutes: string;
-  passMark: string;
-}
-
-interface ScheduleAssessmentData {
-  candidateId: string;
-  templateId: string;
-  scheduledAt: string;
-}
-
-const emptyTemplateForm: CreateTemplateData = {
-  name: "",
-  type: "skills_test",
-  description: "",
-  timeLimitMinutes: "",
-  passMark: "",
-};
-
-const emptyScheduleForm: ScheduleAssessmentData = {
-  candidateId: "",
-  templateId: "",
-  scheduledAt: "",
-};
-
-const typeLabels: Record<string, string> = {
-  skills_test: "Skills Test",
-  psychometric: "Psychometric",
-  technical: "Technical",
-  situational: "Situational",
-  presentation: "Presentation",
-};
-
-const typeColors: Record<string, string> = {
-  skills_test: "bg-blue-100 text-blue-700",
-  psychometric: "bg-purple-100 text-purple-700",
-  technical: "bg-orange-100 text-orange-700",
-  situational: "bg-teal-100 text-teal-700",
-  presentation: "bg-pink-100 text-pink-700",
-};
-
-const assessmentStatusLabels: Record<string, string> = {
-  scheduled: "Scheduled",
-  in_progress: "In Progress",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-const assessmentStatusColors: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  completed: "bg-green-100 text-green-700",
-  cancelled: "bg-gray-100 text-gray-700",
-};
+import type { CandidateAssessment } from "./types";
+import {
+  typeLabels,
+  typeColors,
+  assessmentStatusLabels,
+  assessmentStatusColors,
+} from "./types";
+import { useAssessments } from "./use-assessments";
+import { CreateTemplateModal } from "./CreateTemplateModal";
+import { ScheduleAssessmentModal } from "./ScheduleAssessmentModal";
+import { AssessmentDetailModal } from "./AssessmentDetailModal";
 
 export default function AssessmentsPage() {
   const navigate = useNavigate();
-  const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"templates" | "assessments">("templates");
   const [search, setSearch] = useState("");
@@ -115,111 +36,27 @@ export default function AssessmentsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [templateForm, setTemplateForm] = useState<CreateTemplateData>({ ...emptyTemplateForm });
-  const [scheduleForm, setScheduleForm] = useState<ScheduleAssessmentData>({ ...emptyScheduleForm });
   const [selectedAssessment, setSelectedAssessment] = useState<CandidateAssessment | null>(null);
-  const [showRecordResultModal, setShowRecordResultModal] = useState(false);
-  const [resultData, setResultData] = useState({ score: "", passed: true, feedback: "" });
 
-  // Templates query
-  const { data: templatesData, isLoading: templatesLoading } = useQuery({
-    queryKey: ["admin-assessment-templates", search, typeFilter],
-    queryFn: () =>
-      api.get<{ templates: AssessmentTemplate[]; count: number }>(
-        "/assessments/templates",
-        {
-          params: {
-            search: search || undefined,
-            type: typeFilter || undefined,
-            active: "true",
-          },
-        }
-      ),
-    enabled: activeTab === "templates",
+  const {
+    templates,
+    assessments,
+    templatesLoading,
+    assessmentsLoading,
+    createTemplateMutation,
+    scheduleMutation,
+    recordResultMutation,
+    cancelMutation,
+  } = useAssessments({
+    activeTab,
+    search,
+    typeFilter,
+    statusFilter,
+    onTemplateCreated: () => setShowCreateTemplateModal(false),
+    onAssessmentScheduled: () => setShowScheduleModal(false),
+    onResultRecorded: () => setSelectedAssessment(null),
+    onAssessmentCancelled: () => setSelectedAssessment(null),
   });
-
-  // Candidate assessments query
-  const { data: assessmentsData, isLoading: assessmentsLoading } = useQuery({
-    queryKey: ["admin-candidate-assessments", search, statusFilter],
-    queryFn: () =>
-      api.get<{ assessments: CandidateAssessment[]; count: number }>(
-        "/assessments/candidate-assessments",
-        {
-          params: {
-            search: search || undefined,
-            status: statusFilter || undefined,
-          },
-        }
-      ),
-    enabled: activeTab === "assessments",
-  });
-
-  const createTemplateMutation = useMutation({
-    mutationFn: (data: CreateTemplateData) =>
-      api.post("/assessments/templates", {
-        name: data.name,
-        type: data.type,
-        description: data.description || undefined,
-        timeLimitMinutes: data.timeLimitMinutes ? Number(data.timeLimitMinutes) : undefined,
-        passMark: data.passMark ? Number(data.passMark) : undefined,
-      }),
-    onSuccess: () => {
-      toast.success("Assessment template created");
-      queryClient.invalidateQueries({ queryKey: ["admin-assessment-templates"] });
-      setShowCreateTemplateModal(false);
-      setTemplateForm({ ...emptyTemplateForm });
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create template");
-    },
-  });
-
-  const scheduleMutation = useMutation({
-    mutationFn: (data: ScheduleAssessmentData) =>
-      api.post("/assessments/candidate-assessments", {
-        candidateId: data.candidateId,
-        templateId: data.templateId,
-        scheduledAt: data.scheduledAt || undefined,
-      }),
-    onSuccess: () => {
-      toast.success("Assessment scheduled");
-      queryClient.invalidateQueries({ queryKey: ["admin-candidate-assessments"] });
-      setShowScheduleModal(false);
-      setScheduleForm({ ...emptyScheduleForm });
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Failed to schedule assessment");
-    },
-  });
-
-  const recordResultMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { score: number; passed: boolean; feedback?: string } }) =>
-      api.post(`/assessments/candidate-assessments/${id}/record-result`, data),
-    onSuccess: () => {
-      toast.success("Assessment result recorded");
-      queryClient.invalidateQueries({ queryKey: ["admin-candidate-assessments"] });
-      setShowRecordResultModal(false);
-      setSelectedAssessment(null);
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Failed to record result");
-    },
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/assessments/candidate-assessments/${id}/cancel`, {}),
-    onSuccess: () => {
-      toast.success("Assessment cancelled");
-      queryClient.invalidateQueries({ queryKey: ["admin-candidate-assessments"] });
-      setSelectedAssessment(null);
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Failed to cancel assessment");
-    },
-  });
-
-  const templates = templatesData?.templates || [];
-  const assessments = assessmentsData?.assessments || [];
 
   return (
     <div className="space-y-6">
@@ -449,325 +286,32 @@ export default function AssessmentsPage() {
         </Card>
       )}
 
-      {/* Create Template Modal */}
-      {showCreateTemplateModal && (
-        <Modal open onClose={() => setShowCreateTemplateModal(false)} size="md">
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">New Assessment Template</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="tmpl-name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="tmpl-name"
-                  type="text"
-                  value={templateForm.name}
-                  onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  placeholder="Technical Interview Assessment"
-                />
-              </div>
-              <div>
-                <label htmlFor="tmpl-type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="tmpl-type"
-                  value={templateForm.type}
-                  onChange={(e) => setTemplateForm({ ...templateForm, type: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                >
-                  {Object.entries(typeLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="tmpl-desc" className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  id="tmpl-desc"
-                  value={templateForm.description}
-                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  rows={3}
-                  placeholder="Describe the assessment..."
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="tmpl-time" className="block text-sm font-medium text-gray-700 mb-1">
-                    Time Limit (minutes)
-                  </label>
-                  <input
-                    id="tmpl-time"
-                    type="number"
-                    value={templateForm.timeLimitMinutes}
-                    onChange={(e) => setTemplateForm({ ...templateForm, timeLimitMinutes: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 p-2"
-                    min="1"
-                    placeholder="60"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tmpl-pass" className="block text-sm font-medium text-gray-700 mb-1">
-                    Pass Mark (%)
-                  </label>
-                  <input
-                    id="tmpl-pass"
-                    type="number"
-                    value={templateForm.passMark}
-                    onChange={(e) => setTemplateForm({ ...templateForm, passMark: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 p-2"
-                    min="0"
-                    max="100"
-                    placeholder="70"
-                  />
-                </div>
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="outline" onClick={() => setShowCreateTemplateModal(false)} disabled={createTemplateMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => createTemplateMutation.mutate(templateForm)}
-              disabled={!templateForm.name.trim() || createTemplateMutation.isPending}
-            >
-              {createTemplateMutation.isPending ? "Creating..." : "Create Template"}
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
+      {/* Modals */}
+      <CreateTemplateModal
+        open={showCreateTemplateModal}
+        onClose={() => setShowCreateTemplateModal(false)}
+        onSubmit={(data) => createTemplateMutation.mutate(data)}
+        isPending={createTemplateMutation.isPending}
+      />
 
-      {/* Schedule Assessment Modal */}
-      {showScheduleModal && (
-        <Modal open onClose={() => setShowScheduleModal(false)} size="md">
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">Schedule Assessment</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="sched-candidate" className="block text-sm font-medium text-gray-700 mb-1">
-                  Candidate ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="sched-candidate"
-                  type="text"
-                  value={scheduleForm.candidateId}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, candidateId: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  placeholder="Enter candidate UUID"
-                />
-              </div>
-              <div>
-                <label htmlFor="sched-template" className="block text-sm font-medium text-gray-700 mb-1">
-                  Template ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="sched-template"
-                  type="text"
-                  value={scheduleForm.templateId}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, templateId: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  placeholder="Enter template UUID"
-                />
-              </div>
-              <div>
-                <label htmlFor="sched-date" className="block text-sm font-medium text-gray-700 mb-1">
-                  Scheduled Date/Time
-                </label>
-                <input
-                  id="sched-date"
-                  type="datetime-local"
-                  value={scheduleForm.scheduledAt}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, scheduledAt: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                />
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="outline" onClick={() => setShowScheduleModal(false)} disabled={scheduleMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => scheduleMutation.mutate(scheduleForm)}
-              disabled={
-                !scheduleForm.candidateId.trim() ||
-                !scheduleForm.templateId.trim() ||
-                scheduleMutation.isPending
-              }
-            >
-              {scheduleMutation.isPending ? "Scheduling..." : "Schedule"}
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
+      <ScheduleAssessmentModal
+        open={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onSubmit={(data) => scheduleMutation.mutate(data)}
+        isPending={scheduleMutation.isPending}
+      />
 
-      {/* Assessment Detail Modal */}
-      {selectedAssessment && !showRecordResultModal && (
-        <Modal open onClose={() => setSelectedAssessment(null)} size="md">
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">{selectedAssessment.templateName || "Assessment"}</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${assessmentStatusColors[selectedAssessment.status]}`}>
-                  {assessmentStatusLabels[selectedAssessment.status]}
-                </span>
-                {selectedAssessment.templateType && (
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeColors[selectedAssessment.templateType] || "bg-gray-100"}`}>
-                    {typeLabels[selectedAssessment.templateType] || selectedAssessment.templateType}
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {selectedAssessment.scheduledAt && (
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-500">Scheduled</div>
-                    <div className="text-sm">{new Date(selectedAssessment.scheduledAt).toLocaleString()}</div>
-                  </div>
-                )}
-                {selectedAssessment.completedAt && (
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-500">Completed</div>
-                    <div className="text-sm">{new Date(selectedAssessment.completedAt).toLocaleString()}</div>
-                  </div>
-                )}
-                {selectedAssessment.score !== null && (
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-500">Score</div>
-                    <div className="text-sm font-medium">{selectedAssessment.score}</div>
-                  </div>
-                )}
-                {selectedAssessment.passed !== null && (
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-500">Result</div>
-                    <div className={`text-sm font-medium ${selectedAssessment.passed ? "text-green-600" : "text-red-600"}`}>
-                      {selectedAssessment.passed ? "Passed" : "Failed"}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {selectedAssessment.feedback && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="text-xs text-gray-500 mb-1">Feedback</div>
-                  <div className="text-sm">{selectedAssessment.feedback}</div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="border-t pt-4 flex flex-wrap gap-2">
-                {(selectedAssessment.status === "scheduled" || selectedAssessment.status === "in_progress") && (
-                  <>
-                    <Button
-                      onClick={() => {
-                        setResultData({ score: "", passed: true, feedback: "" });
-                        setShowRecordResultModal(true);
-                      }}
-                    >
-                      Record Result
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => cancelMutation.mutate(selectedAssessment.id)}
-                      disabled={cancelMutation.isPending}
-                    >
-                      {cancelMutation.isPending ? "Cancelling..." : "Cancel Assessment"}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="outline" onClick={() => setSelectedAssessment(null)}>Close</Button>
-          </ModalFooter>
-        </Modal>
-      )}
-
-      {/* Record Result Modal */}
-      {showRecordResultModal && selectedAssessment && (
-        <Modal open onClose={() => setShowRecordResultModal(false)} size="sm">
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">Record Assessment Result</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="res-score" className="block text-sm font-medium text-gray-700 mb-1">
-                  Score <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="res-score"
-                  type="number"
-                  value={resultData.score}
-                  onChange={(e) => setResultData({ ...resultData, score: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  min="0"
-                  placeholder="85"
-                />
-              </div>
-              <div>
-                <label htmlFor="res-passed" className="block text-sm font-medium text-gray-700 mb-1">
-                  Result <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="res-passed"
-                  value={resultData.passed ? "true" : "false"}
-                  onChange={(e) => setResultData({ ...resultData, passed: e.target.value === "true" })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                >
-                  <option value="true">Passed</option>
-                  <option value="false">Failed</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="res-feedback" className="block text-sm font-medium text-gray-700 mb-1">
-                  Feedback
-                </label>
-                <textarea
-                  id="res-feedback"
-                  value={resultData.feedback}
-                  onChange={(e) => setResultData({ ...resultData, feedback: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 p-2"
-                  rows={3}
-                  placeholder="Assessor feedback..."
-                />
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="outline" onClick={() => setShowRecordResultModal(false)} disabled={recordResultMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() =>
-                recordResultMutation.mutate({
-                  id: selectedAssessment.id,
-                  data: {
-                    score: Number(resultData.score),
-                    passed: resultData.passed,
-                    feedback: resultData.feedback || undefined,
-                  },
-                })
-              }
-              disabled={!resultData.score || recordResultMutation.isPending}
-            >
-              {recordResultMutation.isPending ? "Recording..." : "Record Result"}
-            </Button>
-          </ModalFooter>
-        </Modal>
+      {selectedAssessment && (
+        <AssessmentDetailModal
+          assessment={selectedAssessment}
+          onClose={() => setSelectedAssessment(null)}
+          onRecordResult={(data) =>
+            recordResultMutation.mutate({ id: selectedAssessment.id, data })
+          }
+          onCancel={() => cancelMutation.mutate(selectedAssessment.id)}
+          isRecordingResult={recordResultMutation.isPending}
+          isCancelling={cancelMutation.isPending}
+        />
       )}
     </div>
   );

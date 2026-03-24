@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   FilePenLine,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface ContractAmendment {
   id: string;
@@ -79,9 +84,28 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateAmendmentFormState {
+  employeeId: string;
+  amendmentType: string;
+  reason: string;
+  effectiveDate: string;
+}
+
+const INITIAL_AMENDMENT_FORM: CreateAmendmentFormState = {
+  employeeId: "",
+  amendmentType: "",
+  reason: "",
+  effectiveDate: "",
+};
+
 export default function ContractAmendmentsPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateAmendmentFormState>(INITIAL_AMENDMENT_FORM);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-contract-amendments", search, statusFilter],
@@ -93,6 +117,32 @@ export default function ContractAmendmentsPage() {
       return api.get<ContractAmendmentListResponse>(`/contract-amendments?${params}`);
     },
   });
+
+  const createAmendmentMutation = useMutation({
+    mutationFn: (formData: CreateAmendmentFormState) =>
+      api.post("/contract-amendments", {
+        employee_id: formData.employeeId,
+        amendment_type: formData.amendmentType,
+        reason: formData.reason,
+        effective_date: formData.effectiveDate,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-hr-contract-amendments"] });
+      toast.success("Contract amendment created successfully");
+      setShowCreateModal(false);
+      setCreateForm(INITIAL_AMENDMENT_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to create amendment", {
+        message: err instanceof ApiError ? err.message : "Please try again.",
+      });
+    },
+  });
+
+  const handleCreateSubmit = () => {
+    if (!createForm.employeeId || !createForm.amendmentType || !createForm.effectiveDate) return;
+    createAmendmentMutation.mutate(createForm);
+  };
 
   const amendments = data?.items ?? [];
 
@@ -179,7 +229,7 @@ export default function ContractAmendmentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Contract Amendments</h1>
             <p className="text-gray-600">Manage changes to employee contracts and terms</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Amendment
           </Button>
@@ -229,7 +279,7 @@ export default function ContractAmendmentsPage() {
                   : "No contract amendments have been created"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Amendment
                 </Button>
@@ -244,6 +294,61 @@ export default function ContractAmendmentsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Amendment Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => { setShowCreateModal(false); setCreateForm(INITIAL_AMENDMENT_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">New Contract Amendment</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee ID"
+                required
+                value={createForm.employeeId}
+                onChange={(e) => setCreateForm((f) => ({ ...f, employeeId: e.target.value }))}
+              />
+              <Select
+                label="Amendment Type"
+                required
+                value={createForm.amendmentType}
+                onChange={(e) => setCreateForm((f) => ({ ...f, amendmentType: e.target.value }))}
+                options={[
+                  { value: "", label: "Select amendment type" },
+                  ...Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+              <Input
+                label="Reason"
+                placeholder="Reason for the amendment"
+                value={createForm.reason}
+                onChange={(e) => setCreateForm((f) => ({ ...f, reason: e.target.value }))}
+              />
+              <Input
+                label="Effective Date"
+                type="date"
+                required
+                value={createForm.effectiveDate}
+                onChange={(e) => setCreateForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setCreateForm(INITIAL_AMENDMENT_FORM); }} disabled={createAmendmentMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!createForm.employeeId || !createForm.amendmentType || !createForm.effectiveDate || createAmendmentMutation.isPending}
+              loading={createAmendmentMutation.isPending}
+              onClick={handleCreateSubmit}
+            >
+              {createAmendmentMutation.isPending ? "Creating..." : "Create Amendment"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

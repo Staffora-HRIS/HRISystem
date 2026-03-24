@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   Briefcase,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface Job {
   id: string;
@@ -40,6 +45,28 @@ interface JobListResponse {
   nextCursor: string | null;
   hasMore: boolean;
 }
+
+interface CreateJobFormState {
+  code: string;
+  title: string;
+  family: string;
+  level: string;
+  grade: string;
+  salaryMin: string;
+  salaryMax: string;
+  currency: string;
+}
+
+const INITIAL_JOB_FORM: CreateJobFormState = {
+  code: "",
+  title: "",
+  family: "",
+  level: "",
+  grade: "",
+  salaryMin: "",
+  salaryMax: "",
+  currency: "GBP",
+};
 
 const STATUS_BADGE: Record<string, BadgeVariant> = {
   active: "success",
@@ -64,8 +91,13 @@ function formatCurrency(min: number | null, max: number | null, currency: string
 }
 
 export default function JobCatalogPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [jobForm, setJobForm] = useState<CreateJobFormState>(INITIAL_JOB_FORM);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-jobs", search, statusFilter],
@@ -75,6 +107,31 @@ export default function JobCatalogPage() {
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "50");
       return api.get<JobListResponse>(`/hr/jobs?${params}`);
+    },
+  });
+
+  const createJobMutation = useMutation({
+    mutationFn: (formData: CreateJobFormState) =>
+      api.post("/hr/jobs", {
+        code: formData.code,
+        title: formData.title,
+        ...(formData.family ? { family: formData.family } : {}),
+        ...(formData.level ? { level: formData.level } : {}),
+        ...(formData.grade ? { grade: formData.grade } : {}),
+        ...(formData.salaryMin ? { salary_min: Number(formData.salaryMin) } : {}),
+        ...(formData.salaryMax ? { salary_max: Number(formData.salaryMax) } : {}),
+        currency: formData.currency || "GBP",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-hr-jobs"] });
+      toast.success("Job created successfully");
+      setShowCreateModal(false);
+      setJobForm(INITIAL_JOB_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to create job", {
+        message: err instanceof ApiError ? err.message : "Please try again.",
+      });
     },
   });
 
@@ -152,7 +209,7 @@ export default function JobCatalogPage() {
             <h1 className="text-2xl font-bold text-gray-900">Job Catalog</h1>
             <p className="text-gray-600">Manage job definitions, families, and salary ranges</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Job
           </Button>
@@ -199,7 +256,7 @@ export default function JobCatalogPage() {
                   : "Start by adding your first job definition"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Job
                 </Button>
@@ -214,6 +271,85 @@ export default function JobCatalogPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Job Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => { setShowCreateModal(false); setJobForm(INITIAL_JOB_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Create Job</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Job Code"
+                placeholder="e.g., SWE-001"
+                required
+                value={jobForm.code}
+                onChange={(e) => setJobForm((f) => ({ ...f, code: e.target.value }))}
+              />
+              <Input
+                label="Title"
+                placeholder="Enter job title"
+                required
+                value={jobForm.title}
+                onChange={(e) => setJobForm((f) => ({ ...f, title: e.target.value }))}
+              />
+              <Input
+                label="Family"
+                placeholder="e.g., Engineering, Finance"
+                value={jobForm.family}
+                onChange={(e) => setJobForm((f) => ({ ...f, family: e.target.value }))}
+              />
+              <Input
+                label="Level"
+                placeholder="e.g., Senior, Junior"
+                value={jobForm.level}
+                onChange={(e) => setJobForm((f) => ({ ...f, level: e.target.value }))}
+              />
+              <Input
+                label="Grade"
+                placeholder="e.g., L5, Band 3"
+                value={jobForm.grade}
+                onChange={(e) => setJobForm((f) => ({ ...f, grade: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Min Salary"
+                  type="number"
+                  placeholder="0"
+                  value={jobForm.salaryMin}
+                  onChange={(e) => setJobForm((f) => ({ ...f, salaryMin: e.target.value }))}
+                />
+                <Input
+                  label="Max Salary"
+                  type="number"
+                  placeholder="0"
+                  value={jobForm.salaryMax}
+                  onChange={(e) => setJobForm((f) => ({ ...f, salaryMax: e.target.value }))}
+                />
+              </div>
+              <Input
+                label="Currency"
+                placeholder="GBP"
+                value={jobForm.currency}
+                onChange={(e) => setJobForm((f) => ({ ...f, currency: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setJobForm(INITIAL_JOB_FORM); }} disabled={createJobMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!jobForm.code || !jobForm.title || createJobMutation.isPending}
+              loading={createJobMutation.isPending}
+              onClick={() => createJobMutation.mutate(jobForm)}
+            >
+              {createJobMutation.isPending ? "Creating..." : "Create Job"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

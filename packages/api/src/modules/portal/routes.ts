@@ -8,6 +8,7 @@
 import { Elysia } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { PortalRepository } from "./repository";
 import { PortalService } from "./service";
 import {
@@ -41,7 +42,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getMyProfile(tenantContext, user, tenant);
     } catch (error) {
-      console.error("Portal /me error:", error);
+      logger.error({ err: error, module: "portal", route: "/me" }, "Portal /me error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get profile", requestId: "" } };
     }
@@ -54,7 +55,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getMyTeam(tenantContext);
     } catch (error) {
-      console.error("Portal /my-team error:", error);
+      logger.error({ err: error, module: "portal", route: "/my-team" }, "Portal /my-team error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get team", requestId: "" } };
     }
@@ -67,7 +68,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getMyTasks(tenantContext);
     } catch (error) {
-      console.error("Portal /tasks error:", error);
+      logger.error({ err: error, module: "portal", route: "/tasks" }, "Portal /tasks error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get tasks", requestId: "" } };
     }
@@ -80,7 +81,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getMyApprovals(tenantContext);
     } catch (error) {
-      console.error("Portal /approvals error:", error);
+      logger.error({ err: error, module: "portal", route: "/approvals" }, "Portal /approvals error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get approvals", requestId: "" } };
     }
@@ -98,7 +99,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
         { cursor, limit: limit ? Number(limit) : undefined }
       );
     } catch (error: any) {
-      console.error("Portal /directory error:", error);
+      logger.error({ err: error, module: "portal", route: "/directory" }, "Portal /directory error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to search directory", requestId: "" } };
     }
@@ -118,7 +119,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getDepartments(tenantContext);
     } catch (error: any) {
-      console.error("Portal /directory/departments error:", error);
+      logger.error({ err: error, module: "portal", route: "/directory/departments" }, "Portal /directory/departments error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get departments", requestId: "" } };
     }
@@ -138,7 +139,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
     try {
       return await portalService.getDashboardSummary(tenantContext);
     } catch (error) {
-      console.error("Portal /dashboard error:", error);
+      logger.error({ err: error, module: "portal", route: "/dashboard" }, "Portal /dashboard error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get dashboard", requestId: "" } };
     }
@@ -155,7 +156,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       const depth = query?.depth ? Number(query.depth) : 3;
       return await portalService.getOrgChart(tenantContext, rootEmployeeId, depth);
     } catch (error: any) {
-      console.error("Portal /org-chart error:", error);
+      logger.error({ err: error, module: "portal", route: "/org-chart" }, "Portal /org-chart error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get org chart", requestId: "" } };
     }
@@ -180,7 +181,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
       }
       return result;
     } catch (error: any) {
-      console.error("Portal /org-chart/:employeeId/team error:", error);
+      logger.error({ err: error, module: "portal", route: "/org-chart/team" }, "Portal org-chart team error");
       set.status = 500;
       return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get team", requestId: "" } };
     }

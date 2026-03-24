@@ -11,6 +11,7 @@
 
 import { RbacError } from "../../plugins/rbac";
 import { AuthError } from "../../plugins/auth-better";
+import { logger } from "../../lib/logger";
 import type {
   PermissionCheckContext,
   PermissionCheckResult,
@@ -370,10 +371,8 @@ async function logPermissionGrant(
 }
 
 function logSoDWarnings(ctx: any, violations: SoDViolation[]): void {
-  // Log to server console for now; in production, push to security_alerts table
+  // Log SoD violations; in production, push to security_alerts table
   for (const v of violations) {
-    console.warn(
-      `[SoD ${v.enforcement}] User ${ctx.user?.id}: ${v.ruleName} — ${v.details}`
-    );
+    logger.warn({ module: "security", userId: ctx.user?.id, enforcement: v.enforcement, ruleName: v.ruleName, details: v.details }, "SoD violation detected");
   }
 }

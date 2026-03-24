@@ -20,6 +20,7 @@ import {
   DataTable,
   type ColumnDef,
   Select,
+  useToast,
 } from "~/components/ui";
 import { api } from "~/lib/api-client";
 
@@ -88,6 +89,7 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function GenderPayGapPage() {
+  const toast = useToast();
   const [statusFilter, setStatusFilter] = useState("");
 
   const { data: reportsData, isLoading } = useQuery({
@@ -238,7 +240,7 @@ export default function GenderPayGapPage() {
               Gender pay gap reporting under the Equality Act 2010
             </p>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => toast.info("Export functionality is not yet available.")}>
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>

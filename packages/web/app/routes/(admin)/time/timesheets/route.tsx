@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Modal, ModalHeader, ModalBody, ModalFooter } from "~/components/ui/modal";
+import { Input, Textarea } from "~/components/ui/input";
 import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
@@ -124,6 +126,61 @@ export default function TimesheetsPage() {
     },
   });
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      toast.info("Preparing export...");
+      const exportData = await api.get<{ items: Timesheet[] }>(
+        "/time/timesheets",
+        { params: { limit: 10000 } }
+      );
+      const rows = exportData?.items || [];
+      if (rows.length === 0) {
+        toast.info("No data to export");
+        return;
+      }
+      const csvHeaders = [
+        "Employee",
+        "Period Start",
+        "Period End",
+        "Regular Hours",
+        "Overtime Hours",
+        "Total Hours",
+        "Status",
+        "Submitted At",
+        "Approved At",
+      ];
+      const csvRows = rows.map((row) => [
+        JSON.stringify(row.employeeName || "Unknown"),
+        JSON.stringify(row.periodStart),
+        JSON.stringify(row.periodEnd),
+        (row.totalRegularHours ?? 0).toFixed(1),
+        (row.totalOvertimeHours ?? 0).toFixed(1),
+        ((row.totalRegularHours ?? 0) + (row.totalOvertimeHours ?? 0)).toFixed(1),
+        JSON.stringify(statusLabels[row.status] || row.status),
+        JSON.stringify(row.submittedAt || ""),
+        JSON.stringify(row.approvedAt || ""),
+      ]);
+      const csv = [csvHeaders.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `timesheets-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Export complete");
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const timesheets = data?.items || [];
 
   const submittedTimesheets = timesheets.filter((t) => t.status === "submitted");
@@ -157,11 +214,22 @@ export default function TimesheetsPage() {
     bulkApproveMutation.mutate(ids);
   };
 
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const handleReject = (timesheetId: string) => {
-    const reason = prompt("Enter rejection reason:");
-    if (reason) {
-      rejectMutation.mutate({ timesheetId, reason });
+    setRejectTarget(timesheetId);
+    setRejectReason("");
+  };
+
+  const handleConfirmReject = () => {
+    if (!rejectTarget || !rejectReason.trim()) {
+      toast.warning("Please enter a rejection reason");
+      return;
     }
+    rejectMutation.mutate({ timesheetId: rejectTarget, reason: rejectReason.trim() });
+    setRejectTarget(null);
+    setRejectReason("");
   };
 
   const getStatusBadge = (status: string) => (
@@ -199,9 +267,9 @@ export default function TimesheetsPage() {
               : `Approve ${selectedIds.size} Selected`}
           </Button>
         )}
-        <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Timesheet export will be available in a future update." })}>
+        <Button variant="outline" onClick={handleExport} disabled={isExporting}>
           <Download className="h-4 w-4 mr-2" />
-          Export
+          {isExporting ? "Exporting..." : "Export"}
         </Button>
       </div>
 
@@ -239,12 +307,12 @@ export default function TimesheetsPage() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
+              <Input
                 placeholder="Search by employee name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                className="pl-10"
+                aria-label="Search timesheets by employee name"
               />
             </div>
             <div className="flex gap-2">
@@ -404,6 +472,42 @@ export default function TimesheetsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Rejection Reason Modal */}
+      {rejectTarget && (
+        <Modal open onClose={() => !rejectMutation.isPending && setRejectTarget(null)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900">Reject Timesheet</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Please provide a reason for rejecting this timesheet.
+              </p>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                placeholder="Enter rejection reason..."
+                label="Rejection Reason"
+                required
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={rejectMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmReject}
+              disabled={!rejectReason.trim() || rejectMutation.isPending}
+            >
+              {rejectMutation.isPending ? "Rejecting..." : "Reject"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

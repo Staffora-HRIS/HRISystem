@@ -35,9 +35,9 @@ export const lmsRoutes = new Elysia({ prefix: "/lms" })
 
   // Wire up service and repository via derive
   .derive((ctx) => {
-    const { db } = ctx as any;
+    const { db, cache } = ctx as any;
     const repository = new LMSRepository(db);
-    const service = new LMSService(repository, db);
+    const service = new LMSService(repository, db, cache || null);
 
     const { tenant, user } = ctx as any;
     const tenantContext = {

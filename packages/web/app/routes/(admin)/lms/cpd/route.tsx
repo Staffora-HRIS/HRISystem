@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { BookOpen, CheckCircle, Clock, Award } from "lucide-react";

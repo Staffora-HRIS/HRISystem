@@ -218,6 +218,7 @@ export default function CompetenciesPage() {
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-4 py-2 border rounded-lg"
+              aria-label="Filter by category"
             >
               <option value="">All Categories</option>
               {categories.map((cat) => (

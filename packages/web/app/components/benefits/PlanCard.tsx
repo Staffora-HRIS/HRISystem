@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { Check, X, Clock, DollarSign, Users, Calendar } from "lucide-react";
+import { Check, X, Clock, PoundSterling, Users, Calendar } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 interface BenefitPlan {
@@ -49,8 +49,8 @@ function getPlanTypeColor(planType: string): string {
     life: "bg-green-100 text-green-700 border-green-200",
     disability: "bg-orange-100 text-orange-700 border-orange-200",
     retirement: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    hsa: "bg-teal-100 text-teal-700 border-teal-200",
-    fsa: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    childcare_vouchers: "bg-teal-100 text-teal-700 border-teal-200",
+    cycle_to_work: "bg-indigo-100 text-indigo-700 border-indigo-200",
     other: "bg-gray-100 text-gray-700 border-gray-200",
   };
   return colors[planType] || colors.other;
@@ -146,12 +146,12 @@ export const PlanCard = React.memo(function PlanCard({
             Coverage
           </div>
           <p className="mt-1 font-medium capitalize text-gray-900">
-            {plan.coverageLevel.replace("_", " + ")}
+            {plan.coverageLevel.replace(/_/g, " + ")}
           </p>
         </div>
         <div className="rounded-lg bg-gray-50 p-3">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <DollarSign className="h-4 w-4" />
+            <PoundSterling className="h-4 w-4" />
             Your Cost
           </div>
           <p className="mt-1 font-medium text-gray-900">

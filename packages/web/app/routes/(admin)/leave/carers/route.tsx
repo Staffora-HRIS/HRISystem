@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   HandHelping,
   Search,
@@ -20,7 +20,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from "~/components/ui";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface CarersLeaveRequest {
@@ -64,9 +70,61 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateCarersLeaveForm {
+  employeeId: string;
+  careRecipientRelationship: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  notes: string;
+}
+
+const initialCreateForm: CreateCarersLeaveForm = {
+  employeeId: "",
+  careRecipientRelationship: "",
+  startDate: "",
+  endDate: "",
+  reason: "",
+  notes: "",
+};
+
 export default function AdminCarersLeavePage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateCarersLeaveForm>(initialCreateForm);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateCarersLeaveForm) =>
+      api.post("/carers-leave/requests", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-carers-leave-requests"] });
+      toast.success("Carer's leave request created successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to create carer's leave request", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (
+      !formData.employeeId.trim() ||
+      !formData.careRecipientRelationship ||
+      !formData.startDate ||
+      !formData.endDate ||
+      !formData.reason.trim()
+    ) {
+      toast.warning("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate(formData);
+  };
 
   const { data: leaveData, isLoading } = useQuery({
     queryKey: ["admin-carers-leave-requests", statusFilter],
@@ -162,7 +220,7 @@ export default function AdminCarersLeavePage() {
             Manage carer&apos;s leave requests and entitlements
           </p>
         </div>
-        <Button disabled title="Coming soon">
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Request
         </Button>
@@ -257,6 +315,119 @@ export default function AdminCarersLeavePage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Carer's Leave Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+          aria-label="Add carer's leave request"
+        >
+          <ModalHeader title="Add Carer's Leave Request" />
+          <ModalBody>
+            <form
+              id="carers-create-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Employee"
+                placeholder="Employee ID or name"
+                required
+                value={formData.employeeId}
+                onChange={(e) =>
+                  setFormData({ ...formData, employeeId: e.target.value })
+                }
+              />
+              <Select
+                label="Care Recipient Relationship"
+                required
+                value={formData.careRecipientRelationship}
+                onChange={(e) =>
+                  setFormData({ ...formData, careRecipientRelationship: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select relationship" },
+                  { value: "parent", label: "Parent" },
+                  { value: "spouse", label: "Spouse" },
+                  { value: "child", label: "Child" },
+                  { value: "other", label: "Other" },
+                ]}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Start Date"
+                  type="date"
+                  required
+                  value={formData.startDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="End Date"
+                  type="date"
+                  required
+                  value={formData.endDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, endDate: e.target.value })
+                  }
+                />
+              </div>
+              <Textarea
+                label="Reason"
+                placeholder="Reason for carer's leave"
+                required
+                value={formData.reason}
+                onChange={(e) =>
+                  setFormData({ ...formData, reason: e.target.value })
+                }
+              />
+              <Textarea
+                label="Notes"
+                placeholder="Any additional details..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="carers-create-form"
+              disabled={
+                !formData.employeeId.trim() ||
+                !formData.careRecipientRelationship ||
+                !formData.startDate ||
+                !formData.endDate ||
+                !formData.reason.trim() ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." : "Add Request"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

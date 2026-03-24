@@ -91,41 +91,40 @@ export class EmployeeRepository {
           e.id, e.tenant_id, e.employee_number, e.user_id,
           e.status, e.hire_date, e.termination_date, e.termination_reason,
           e.created_at, e.updated_at,
-          app.get_employee_full_name(e.id) as full_name,
-          app.get_employee_display_name(e.id) as display_name,
-          (SELECT p.title FROM app.position_assignments pa
-           JOIN app.positions p ON pa.position_id = p.id
-           WHERE pa.employee_id = e.id AND pa.is_primary = true AND pa.effective_to IS NULL
-           LIMIT 1) as position_title,
-          (SELECT ou.name FROM app.position_assignments pa
-           JOIN app.org_units ou ON pa.org_unit_id = ou.id
-           WHERE pa.employee_id = e.id AND pa.is_primary = true AND pa.effective_to IS NULL
-           LIMIT 1) as org_unit_name,
-          (SELECT app.get_employee_display_name(rl.manager_id) FROM app.reporting_lines rl
-           WHERE rl.employee_id = e.id AND rl.is_primary = true AND rl.effective_to IS NULL
-           LIMIT 1) as manager_name
+          CASE
+            WHEN ep.middle_name IS NOT NULL THEN ep.first_name || ' ' || ep.middle_name || ' ' || ep.last_name
+            ELSE ep.first_name || ' ' || ep.last_name
+          END as full_name,
+          COALESCE(ep.preferred_name, ep.first_name) || ' ' || ep.last_name as display_name,
+          p.title as position_title,
+          ou.name as org_unit_name,
+          CASE
+            WHEN rl.manager_id IS NOT NULL
+            THEN COALESCE(mp.preferred_name, mp.first_name) || ' ' || mp.last_name
+            ELSE NULL
+          END as manager_name
         FROM app.employees e
+        LEFT JOIN app.employee_personal ep
+          ON ep.employee_id = e.id AND ep.effective_to IS NULL
+        LEFT JOIN app.position_assignments pa
+          ON pa.employee_id = e.id AND pa.is_primary = true AND pa.effective_to IS NULL
+        LEFT JOIN app.positions p
+          ON p.id = pa.position_id
+        LEFT JOIN app.org_units ou
+          ON ou.id = pa.org_unit_id
+        LEFT JOIN app.reporting_lines rl
+          ON rl.employee_id = e.id AND rl.is_primary = true AND rl.effective_to IS NULL
+        LEFT JOIN app.employee_personal mp
+          ON mp.employee_id = rl.manager_id AND mp.effective_to IS NULL
         WHERE 1=1
           ${filters.status ? tx`AND e.status = ${filters.status}::app.employee_status` : tx``}
-          ${filters.org_unit_id ? tx`AND EXISTS (
-            SELECT 1 FROM app.position_assignments pa
-            WHERE pa.employee_id = e.id AND pa.org_unit_id = ${filters.org_unit_id}::uuid AND pa.effective_to IS NULL
-          )` : tx``}
-          ${filters.manager_id ? tx`AND EXISTS (
-            SELECT 1 FROM app.reporting_lines rl
-            WHERE rl.employee_id = e.id AND rl.manager_id = ${filters.manager_id}::uuid AND rl.effective_to IS NULL
-          )` : tx``}
-          ${filters.position_id ? tx`AND EXISTS (
-            SELECT 1 FROM app.position_assignments pa
-            WHERE pa.employee_id = e.id AND pa.position_id = ${filters.position_id}::uuid AND pa.effective_to IS NULL
-          )` : tx``}
+          ${filters.org_unit_id ? tx`AND pa.org_unit_id = ${filters.org_unit_id}::uuid` : tx``}
+          ${filters.manager_id ? tx`AND rl.manager_id = ${filters.manager_id}::uuid` : tx``}
+          ${filters.position_id ? tx`AND pa.position_id = ${filters.position_id}::uuid` : tx``}
           ${filters.search ? tx`AND (
             e.employee_number ILIKE ${'%' + filters.search + '%'}
-            OR EXISTS (
-              SELECT 1 FROM app.employee_personal ep
-              WHERE ep.employee_id = e.id AND ep.effective_to IS NULL
-              AND (ep.first_name ILIKE ${'%' + filters.search + '%'} OR ep.last_name ILIKE ${'%' + filters.search + '%'})
-            )
+            OR ep.first_name ILIKE ${'%' + filters.search + '%'}
+            OR ep.last_name ILIKE ${'%' + filters.search + '%'}
           )` : tx``}
           ${filters.hire_date_from ? tx`AND e.hire_date >= ${filters.hire_date_from}::date` : tx``}
           ${filters.hire_date_to ? tx`AND e.hire_date <= ${filters.hire_date_to}::date` : tx``}

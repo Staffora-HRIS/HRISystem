@@ -5,29 +5,16 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { authApi } from "../../../lib/auth";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { useToast } from "../../../components/ui/toast";
 import type { Route } from "./+types/route";
 
-const resetPasswordSchema = z
-  .object({
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-      .regex(/[0-9]/, "Password must contain at least one number"),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  });
-
-type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
+interface ResetPasswordFormData {
+  password: string;
+  confirmPassword: string;
+}
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -56,7 +43,7 @@ export default function ResetPasswordPage() {
   // Password strength indicator
   const getPasswordStrength = (pwd: string) => {
     let strength = 0;
-    if (pwd.length >= 8) strength++;
+    if (pwd.length >= 12) strength++;
     if (/[A-Z]/.test(pwd)) strength++;
     if (/[a-z]/.test(pwd)) strength++;
     if (/[0-9]/.test(pwd)) strength++;
@@ -179,7 +166,13 @@ export default function ResetPasswordPage() {
             autoComplete="new-password"
             placeholder="Enter your new password"
             error={errors.password?.message}
-            {...register("password")}
+            {...register("password", {
+              required: "Password is required",
+              minLength: {
+                value: 12,
+                message: "Password must be at least 12 characters",
+              },
+            })}
           />
 
           {/* Password strength indicator */}
@@ -210,7 +203,11 @@ export default function ResetPasswordPage() {
           autoComplete="new-password"
           placeholder="Confirm your new password"
           error={errors.confirmPassword?.message}
-          {...register("confirmPassword")}
+          {...register("confirmPassword", {
+            required: "Please confirm your password",
+            validate: (value) =>
+              value === password || "Passwords do not match",
+          })}
         />
 
         <Button type="submit" fullWidth loading={isSubmitting}>

@@ -38,6 +38,13 @@ interface OutboxEvent {
   createdAt: Date;
 }
 
+interface FailedEvent {
+  id: string;
+  errorMessage: string;
+  nextRetryAt: Date;
+  retryCount: number;
+}
+
 class OutboxProcessor {
   private sql: postgres.Sql;
   private redis: Redis;
@@ -124,60 +131,143 @@ class OutboxProcessor {
 
     console.log(`[OutboxProcessor] Processing ${events.length} events`);
 
+    // Process all events, collecting results for batch DB updates
+    const successIds: string[] = [];
+    const failures: FailedEvent[] = [];
+
     for (const event of events) {
-      await this.processEvent(event);
+      const handler = this.handlers.get(event.eventType);
+
+      if (!handler) {
+        // No handler registered -- treat as successfully processed (skip)
+        console.log(`[OutboxProcessor] No handler for event type: ${event.eventType}`);
+        successIds.push(event.id);
+        continue;
+      }
+
+      try {
+        await handler(event);
+        successIds.push(event.id);
+        console.log(`[OutboxProcessor] Processed event: ${event.eventType} (${event.id})`);
+      } catch (error: unknown) {
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = rawMessage.substring(0, 500).replace(/password|secret|token|key/gi, "[REDACTED]");
+        console.error(`[OutboxProcessor] Failed to process event ${event.id}:`, errorMessage);
+
+        // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 5 minutes
+        const backoffMs = Math.min(1000 * Math.pow(2, event.retryCount || 0), MAX_RETRY_BACKOFF_MS);
+        const nextRetryAt = new Date(Date.now() + backoffMs);
+
+        failures.push({
+          id: event.id,
+          errorMessage,
+          nextRetryAt,
+          retryCount: event.retryCount || 0,
+        });
+
+        console.log(`[OutboxProcessor] Event ${event.id} scheduled for retry in ${backoffMs}ms (attempt ${(event.retryCount || 0) + 1}/${MAX_RETRIES})`);
+      }
     }
+
+    // Batch-update all successful events in a single query
+    await this.batchMarkProcessed(successIds);
+
+    // Batch-update all failed events in a single query
+    await this.batchMarkFailed(failures);
 
     return true;
   }
 
-  private async processEvent(event: OutboxEvent) {
-    const handler = this.handlers.get(event.eventType);
-
-    if (!handler) {
-      // Mark as processed if no handler (log and skip)
-      console.log(`[OutboxProcessor] No handler for event type: ${event.eventType}`);
-      await this.markProcessed(event.id);
-      return;
-    }
+  /**
+   * Mark multiple events as processed in a single UPDATE query.
+   * Uses WHERE id = ANY($1::uuid[]) to avoid N individual round-trips.
+   */
+  private async batchMarkProcessed(eventIds: string[]): Promise<void> {
+    if (eventIds.length === 0) return;
 
     try {
-      // Process the event
-      await handler(event);
-
-      // Mark as processed
-      await this.markProcessed(event.id);
-      console.log(`[OutboxProcessor] Processed event: ${event.eventType} (${event.id})`);
-    } catch (error: unknown) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      const errorMessage = rawMessage.substring(0, 500).replace(/password|secret|token|key/gi, "[REDACTED]");
-      console.error(`[OutboxProcessor] Failed to process event ${event.id}:`, errorMessage);
-
-      // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 5 minutes
-      const backoffMs = Math.min(1000 * Math.pow(2, event.retryCount || 0), MAX_RETRY_BACKOFF_MS);
-      const nextRetryAt = new Date(Date.now() + backoffMs);
-
-      // Increment retry count and schedule next retry
       await this.sql`
         UPDATE app.domain_outbox
-        SET retry_count = retry_count + 1,
-            error_message = ${errorMessage},
-            next_retry_at = ${nextRetryAt}
-        WHERE id = ${event.id}::uuid
+        SET processed_at = now(),
+            next_retry_at = NULL,
+            error_message = NULL
+        WHERE id = ANY(${eventIds}::uuid[])
       `;
-
-      console.log(`[OutboxProcessor] Event ${event.id} scheduled for retry in ${backoffMs}ms (attempt ${(event.retryCount || 0) + 1}/${MAX_RETRIES})`);
+    } catch (error) {
+      // If batch update fails, fall back to individual updates so we don't
+      // lose track of successfully processed events
+      console.error(
+        "[OutboxProcessor] Batch markProcessed failed, falling back to individual updates:",
+        error instanceof Error ? error.message : String(error)
+      );
+      for (const eventId of eventIds) {
+        try {
+          await this.sql`
+            UPDATE app.domain_outbox
+            SET processed_at = now(),
+                next_retry_at = NULL,
+                error_message = NULL
+            WHERE id = ${eventId}::uuid
+          `;
+        } catch (innerError) {
+          console.error(
+            `[OutboxProcessor] Failed to mark event ${eventId} as processed:`,
+            innerError instanceof Error ? innerError.message : String(innerError)
+          );
+        }
+      }
     }
   }
 
-  private async markProcessed(eventId: string) {
-    await this.sql`
-      UPDATE app.domain_outbox
-      SET processed_at = now(),
-          next_retry_at = NULL,
-          error_message = NULL
-      WHERE id = ${eventId}::uuid
-    `;
+  /**
+   * Mark multiple events as failed in a single query using unnest for
+   * per-row error messages and retry timestamps.
+   * Falls back to individual updates if the batch query fails.
+   */
+  private async batchMarkFailed(failures: FailedEvent[]): Promise<void> {
+    if (failures.length === 0) return;
+
+    try {
+      const ids = failures.map((f) => f.id);
+      const errorMessages = failures.map((f) => f.errorMessage);
+      const nextRetryAts = failures.map((f) => f.nextRetryAt);
+
+      await this.sql`
+        UPDATE app.domain_outbox AS o
+        SET retry_count = o.retry_count + 1,
+            error_message = batch.error_message,
+            next_retry_at = batch.next_retry_at
+        FROM (
+          SELECT
+            unnest(${ids}::uuid[]) AS id,
+            unnest(${errorMessages}::text[]) AS error_message,
+            unnest(${nextRetryAts}::timestamptz[]) AS next_retry_at
+        ) AS batch
+        WHERE o.id = batch.id
+      `;
+    } catch (error) {
+      // If batch update fails, fall back to individual updates
+      console.error(
+        "[OutboxProcessor] Batch markFailed failed, falling back to individual updates:",
+        error instanceof Error ? error.message : String(error)
+      );
+      for (const failure of failures) {
+        try {
+          await this.sql`
+            UPDATE app.domain_outbox
+            SET retry_count = retry_count + 1,
+                error_message = ${failure.errorMessage},
+                next_retry_at = ${failure.nextRetryAt}
+            WHERE id = ${failure.id}::uuid
+          `;
+        } catch (innerError) {
+          console.error(
+            `[OutboxProcessor] Failed to mark event ${failure.id} as failed:`,
+            innerError instanceof Error ? innerError.message : String(innerError)
+          );
+        }
+      }
+    }
   }
 
   // Helper: Queue email notification

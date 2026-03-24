@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   Search,
@@ -20,7 +20,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from "~/components/ui";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface ParentalLeaveRequest {
@@ -64,9 +70,58 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateParentalLeaveForm {
+  employeeId: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+}
+
+const initialCreateForm: CreateParentalLeaveForm = {
+  employeeId: "",
+  leaveType: "",
+  startDate: "",
+  endDate: "",
+  notes: "",
+};
+
 export default function AdminParentalLeavePage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateParentalLeaveForm>(initialCreateForm);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateParentalLeaveForm) =>
+      api.post("/parental-leave/requests", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-parental-leave-requests"] });
+      toast.success("Parental leave request created successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to create parental leave request", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (
+      !formData.employeeId.trim() ||
+      !formData.leaveType ||
+      !formData.startDate ||
+      !formData.endDate
+    ) {
+      toast.warning("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate(formData);
+  };
 
   const { data: leaveData, isLoading } = useQuery({
     queryKey: ["admin-parental-leave-requests", statusFilter],
@@ -160,7 +215,7 @@ export default function AdminParentalLeavePage() {
             Manage parental leave requests and entitlements
           </p>
         </div>
-        <Button disabled title="Coming soon">
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Request
         </Button>
@@ -255,6 +310,109 @@ export default function AdminParentalLeavePage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Parental Leave Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+          aria-label="Add parental leave request"
+        >
+          <ModalHeader title="Add Parental Leave Request" />
+          <ModalBody>
+            <form
+              id="parental-create-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Employee"
+                placeholder="Employee ID or name"
+                required
+                value={formData.employeeId}
+                onChange={(e) =>
+                  setFormData({ ...formData, employeeId: e.target.value })
+                }
+              />
+              <Select
+                label="Leave Type"
+                required
+                value={formData.leaveType}
+                onChange={(e) =>
+                  setFormData({ ...formData, leaveType: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select leave type" },
+                  { value: "maternity", label: "Maternity" },
+                  { value: "paternity", label: "Paternity" },
+                  { value: "shared_parental", label: "Shared Parental" },
+                  { value: "adoption", label: "Adoption" },
+                ]}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Expected Start Date"
+                  type="date"
+                  required
+                  value={formData.startDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="Expected End Date"
+                  type="date"
+                  required
+                  value={formData.endDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, endDate: e.target.value })
+                  }
+                />
+              </div>
+              <Textarea
+                label="Notes"
+                placeholder="Any additional details..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="parental-create-form"
+              disabled={
+                !formData.employeeId.trim() ||
+                !formData.leaveType ||
+                !formData.startDate ||
+                !formData.endDate ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." : "Add Request"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

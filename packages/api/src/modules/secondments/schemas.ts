@@ -119,6 +119,23 @@ export const ActivateSecondmentSchema = t.Object({
 });
 export type ActivateSecondment = Static<typeof ActivateSecondmentSchema>;
 
+/**
+ * POST /secondments/:id/transition - Transition a secondment to a new status.
+ *
+ * Valid transitions:
+ *   planned -> active / cancelled
+ *   active  -> extended / completed / cancelled
+ *   extended -> completed / cancelled
+ */
+export const SecondmentStatusTransitionSchema = t.Object({
+  status: SecondmentStatusSchema,
+  actual_end_date: t.Optional(DateSchema),
+  expected_end_date: t.Optional(DateSchema),
+  reason: t.Optional(t.String({ maxLength: 5000 })),
+  notes: t.Optional(t.String({ maxLength: 5000 })),
+});
+export type SecondmentStatusTransition = Static<typeof SecondmentStatusTransitionSchema>;
+
 export const SecondmentResponseSchema = t.Object({
   id: UuidSchema,
   tenant_id: UuidSchema,

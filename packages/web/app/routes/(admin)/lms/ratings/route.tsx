@@ -1,3 +1,4 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { Star, ThumbsUp, BarChart3 } from "lucide-react";
 import { Card, CardBody, StatCard } from "~/components/ui/card";

@@ -420,6 +420,128 @@ export const parentalLeaveRoutes = new Elysia({
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Alias routes: /requests — frontend calls /parental-leave/requests
+  // These delegate to the same service methods as the /bookings routes above.
+  // ===========================================================================
+
+  // GET /parental-leave/requests - Alias for GET /parental-leave/bookings
+  .get(
+    "/requests",
+    async (ctx) => {
+      const { parentalLeaveService, query, tenantContext } = ctx as unknown as ParentalLeaveRouteContext;
+      const { cursor, limit, ...filters } = query;
+      const parsedLimit =
+        limit !== undefined && limit !== null ? Number(limit) : undefined;
+
+      const result = await parentalLeaveService.listBookings(
+        tenantContext,
+        filters,
+        { cursor, limit: parsedLimit }
+      );
+
+      return {
+        items: result.items,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
+    },
+    {
+      beforeHandle: [requirePermission("parental_leave", "read")],
+      query: t.Composite([
+        t.Partial(BookingFiltersSchema),
+        t.Partial(PaginationQuerySchema),
+      ]),
+      response: t.Object({
+        items: t.Array(BookingResponseSchema),
+        nextCursor: t.Union([t.String(), t.Null()]),
+        hasMore: t.Boolean(),
+      }),
+      detail: {
+        tags: ["Parental Leave"],
+        summary: "List parental leave requests (alias)",
+        description:
+          "Alias for GET /parental-leave/bookings — list parental leave bookings with optional filters by employee, entitlement, or status",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /parental-leave/requests - Alias for POST /parental-leave/bookings
+  .post(
+    "/requests",
+    async (ctx) => {
+      const { parentalLeaveService, body, headers, tenantContext, audit, requestId, error, set } =
+        ctx as unknown as ParentalLeaveRouteContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      try {
+        const result = await parentalLeaveService.createBooking(
+          tenantContext,
+          body as unknown as CreateBooking,
+          idempotencyKey
+        );
+
+        if (!result.success) {
+          const status = mapErrorToStatus(
+            result.error?.code || "INTERNAL_ERROR",
+            parentalLeaveErrorStatusMap
+          );
+          return error(status, { error: result.error });
+        }
+
+        // Audit log the creation
+        if (audit) {
+          await audit.log({
+            action: AUDIT_ACTIONS.BOOKING_CREATED,
+            resourceType: "parental_leave_booking",
+            resourceId: result.data!.id,
+            newValues: result.data,
+            metadata: { idempotencyKey, requestId },
+          });
+        }
+
+        set.status = 201;
+        return result.data;
+      } catch (err: unknown) {
+        // Handle BookingValidationError thrown inside transaction
+        if (err instanceof BookingValidationError) {
+          const status = mapErrorToStatus(
+            err.code,
+            parentalLeaveErrorStatusMap
+          );
+          return error(status, {
+            error: {
+              code: err.code,
+              message: err.message,
+              details: err.details,
+            },
+          });
+        }
+        throw err;
+      }
+    },
+    {
+      beforeHandle: [requirePermission("parental_leave", "write")],
+      body: CreateBookingSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: BookingResponseSchema,
+        400: ErrorResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Parental Leave"],
+        summary: "Create parental leave request (alias)",
+        description:
+          "Alias for POST /parental-leave/bookings — book parental leave. Validates: min 1-week blocks, max 4 weeks/year/child, 21 days notice, child under 18",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type ParentalLeaveRoutes = typeof parentalLeaveRoutes;

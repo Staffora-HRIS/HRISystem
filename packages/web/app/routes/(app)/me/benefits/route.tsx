@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Heart, Calendar, AlertCircle, Check, Clock, FileText } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Heart, Calendar, AlertCircle, Check, Clock, FileText, PoundSterling, Users } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useToast } from "~/components/ui/toast";
 import { PlanCard, EnrollmentWizard } from "~/components/benefits";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface BenefitPlan {
   id: string;
@@ -53,10 +54,42 @@ const LIFE_EVENT_TYPES = [
   { value: "loss_of_coverage", label: "Loss of Coverage" },
 ];
 
+type PortalMeResponse = {
+  user: { id: string; email: string };
+  employee: { id: string; firstName: string; lastName: string } | null;
+  tenant: { id: string; name: string };
+};
+
 export default function MyBenefitsPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"current" | "available" | "history">("current");
   const [selectedPlan, setSelectedPlan] = useState<BenefitPlan | null>(null);
+  const [detailPlan, setDetailPlan] = useState<BenefitPlan | null>(null);
   const [showLifeEventModal, setShowLifeEventModal] = useState(false);
+
+  const { data: me } = useQuery({
+    queryKey: ["portal", "me"],
+    queryFn: () => api.get<PortalMeResponse>("/portal/me"),
+  });
+
+  const employeeId = me?.employee?.id ?? null;
+
+  const lifeEventMutation = useMutation({
+    mutationFn: (eventType: string) => {
+      if (!employeeId) throw new Error("Employee profile is required to report a life event.");
+      return api.post(`/benefits/employees/${employeeId}/life-events`, { eventType, eventDate: new Date().toISOString().split("T")[0] });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-life-events"] });
+      toast.success("Life event reported. Your HR team will review and update your benefit options.");
+      setShowLifeEventModal(false);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to report life event";
+      toast.error(message);
+    },
+  });
 
   const { data: enrollments, isLoading: enrollmentsLoading } = useQuery({
     queryKey: ["my-enrollments"],
@@ -328,8 +361,9 @@ export default function MyBenefitsPage() {
                     const p = availablePlans.items.find((p) => p.id === id);
                     if (p) setSelectedPlan(p);
                   }}
-                  onViewDetails={() => {
-                    // Could open a detail modal
+                  onViewDetails={(id) => {
+                    const p = availablePlans?.items.find((p) => p.id === id);
+                    if (p) setDetailPlan(p);
                   }}
                 />
               ))}
@@ -360,6 +394,82 @@ export default function MyBenefitsPage() {
         </div>
       )}
 
+      {/* Plan Detail Modal */}
+      {detailPlan && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <h3 className="font-semibold text-lg">{detailPlan.name}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setDetailPlan(null)} aria-label="Close">
+                &times;
+              </Button>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge>{detailPlan.planType}</Badge>
+                {detailPlan.provider && (
+                  <span className="text-sm text-gray-500">{detailPlan.provider}</span>
+                )}
+              </div>
+              {detailPlan.description && (
+                <p className="text-sm text-gray-600">{detailPlan.description}</p>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Users className="h-4 w-4" />
+                    Coverage
+                  </div>
+                  <p className="mt-1 font-medium capitalize text-gray-900">
+                    {detailPlan.coverageLevel.replace(/_/g, " + ")}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <PoundSterling className="h-4 w-4" />
+                    Your Cost
+                  </div>
+                  <p className="mt-1 font-medium text-gray-900">
+                    {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(detailPlan.employeeContribution)}/mo
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <PoundSterling className="h-4 w-4" />
+                  Employer Contribution
+                </div>
+                <p className="mt-1 font-medium text-green-600">
+                  {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(detailPlan.employerContribution)}/mo
+                </p>
+              </div>
+              {detailPlan.enrollmentStart && detailPlan.enrollmentEnd && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Calendar className="h-4 w-4" />
+                  Enrollment: {new Date(detailPlan.enrollmentStart).toLocaleDateString()} - {new Date(detailPlan.enrollmentEnd).toLocaleDateString()}
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDetailPlan(null)}>
+                  Close
+                </Button>
+                {detailPlan.enrollmentStatus !== "enrolled" && detailPlan.enrollmentStatus !== "pending" && (
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      setDetailPlan(null);
+                      setSelectedPlan(detailPlan);
+                    }}
+                  >
+                    Enroll
+                  </Button>
+                )}
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
       {/* Life Event Modal */}
       {showLifeEventModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -376,7 +486,9 @@ export default function MyBenefitsPage() {
                 {LIFE_EVENT_TYPES.map((event) => (
                   <button
                     key={event.value}
-                    className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50"
+                    onClick={() => lifeEventMutation.mutate(event.value)}
+                    disabled={lifeEventMutation.isPending}
+                    className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 disabled:opacity-50"
                   >
                     {event.label}
                   </button>

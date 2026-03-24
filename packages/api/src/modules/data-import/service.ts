@@ -30,6 +30,7 @@ import type {
   ListImportJobsQuery,
 } from "./schemas";
 import { IMPORT_TYPE_COLUMNS, MAX_IMPORT_ROWS } from "./schemas";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // CSV Parser
@@ -240,7 +241,7 @@ export class DataImportService {
         data: mapJobToResponse(job),
       };
     } catch (error) {
-      console.error("Failed to create import job:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to create import job");
       return {
         success: false,
         error: {
@@ -451,7 +452,7 @@ export class DataImportService {
         },
       };
     } catch (error) {
-      console.error("Import execution failed:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, jobId }, "Import execution failed");
       await this.repository.updateJobStatus(ctx, jobId, {
         status: "failed",
         completedAt: new Date(),

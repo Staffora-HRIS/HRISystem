@@ -342,6 +342,103 @@ export const returnToWorkRoutes = new Elysia({ prefix: "/return-to-work", name: 
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Alias routes: /interviews — frontend calls /return-to-work/interviews
+  // These delegate to the same service methods as the root routes above.
+  // ===========================================================================
+
+  // GET /return-to-work/interviews - Alias for GET /return-to-work/
+  .get(
+    "/interviews",
+    async (ctx) => {
+      const { rtwService, query, tenantContext } = ctx as unknown as RTWRouteContext;
+      const { cursor, limit, ...filters } = query;
+      const parsedLimit =
+        limit !== undefined && limit !== null ? Number(limit) : undefined;
+      const result = await rtwService.listInterviews(
+        tenantContext,
+        filters,
+        { cursor, limit: parsedLimit }
+      );
+
+      return {
+        items: result.items,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
+    },
+    {
+      beforeHandle: [requirePermission("absence", "read")],
+      query: t.Composite([
+        t.Partial(InterviewFiltersSchema),
+        t.Partial(PaginationQuerySchema),
+      ]),
+      response: InterviewListResponseSchema,
+      detail: {
+        tags: ["Return to Work"],
+        summary: "List return-to-work interviews (alias)",
+        description:
+          "Alias for GET /return-to-work — list return-to-work interviews with optional filters and cursor-based pagination.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /return-to-work/interviews - Alias for POST /return-to-work/
+  .post(
+    "/interviews",
+    async (ctx) => {
+      const { rtwService, body, headers, tenantContext, audit, requestId, error, set } =
+        ctx as unknown as RTWRouteContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await rtwService.createInterview(
+        tenantContext,
+        body as unknown as CreateInterview,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(result.error?.code || "INTERNAL_ERROR", rtwErrorStatusMap);
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the creation
+      if (audit) {
+        await audit.log({
+          action: RTW_AUDIT_ACTIONS.CREATED,
+          resourceType: "return_to_work_interview",
+          resourceId: result.data!.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("absence", "write")],
+      body: CreateInterviewSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: InterviewResponseSchema,
+        400: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Return to Work"],
+        summary: "Create return-to-work interview (alias)",
+        description:
+          "Alias for POST /return-to-work — create a new return-to-work interview record. " +
+          "The interview_date must be on or after the absence_end_date. " +
+          "Optionally link to a leave request.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type ReturnToWorkRoutes = typeof returnToWorkRoutes;

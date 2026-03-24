@@ -10,6 +10,9 @@ import type { DatabaseClient } from "../../plugins/db";
 import type { HRRepository, OrgUnitRow } from "./repository";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import type { CacheClient } from "../../plugins/cache";
+import { CacheKeys, CacheTTL } from "../../plugins/cache";
+import { logger } from "../../lib/logger";
 import type {
   CreateOrgUnit,
   UpdateOrgUnit,
@@ -34,8 +37,26 @@ type OrgUnitDomainEventType =
 export class OrgUnitService {
   constructor(
     private repository: HRRepository,
-    private db: DatabaseClient
+    private db: DatabaseClient,
+    private cache: CacheClient | null = null
   ) {}
+
+  // ===========================================================================
+  // Cache Helpers
+  // ===========================================================================
+
+  /**
+   * Invalidate the org tree cache for a tenant.
+   * Best-effort: cache failures are logged but do not propagate.
+   */
+  private async invalidateOrgTreeCache(tenantId: string): Promise<void> {
+    if (!this.cache) return;
+    try {
+      await this.cache.del(CacheKeys.orgTree(tenantId));
+    } catch (err) {
+      logger.warn({ err, module: "hr-org-units" }, "Failed to invalidate org tree cache");
+    }
+  }
 
   // ===========================================================================
   // Domain Event Emission
@@ -115,16 +136,41 @@ export class OrgUnitService {
 
   /**
    * Get org unit hierarchy
+   *
+   * When fetching the full tree (no rootId), results are cached per-tenant
+   * for 5 minutes (CacheTTL.SESSION). Subtree queries bypass the cache since
+   * they are less frequent and vary by rootId.
    */
   async getOrgUnitHierarchy(
     context: TenantContext,
     rootId?: string
   ): Promise<ServiceResult<OrgUnitResponse[]>> {
+    // Only cache the full tree (no rootId filter)
+    if (!rootId && this.cache) {
+      const cacheKey = CacheKeys.orgTree(context.tenantId);
+      try {
+        const cached = await this.cache.get<OrgUnitResponse[]>(cacheKey);
+        if (cached !== null) {
+          return { success: true, data: cached };
+        }
+      } catch (cacheErr) {
+        logger.warn({ err: cacheErr, module: "hr-org-units" }, "Cache read failed for org tree, falling back to DB");
+      }
+    }
+
     const orgUnits = await this.repository.getOrgUnitHierarchy(context, rootId);
+    const data = orgUnits.map(this.mapOrgUnitToResponse);
+
+    // Populate cache for full tree (fire-and-forget)
+    if (!rootId && this.cache) {
+      this.cache
+        .set(CacheKeys.orgTree(context.tenantId), data, CacheTTL.SESSION)
+        .catch((err) => logger.warn({ err, module: "hr-org-units" }, "Cache write failed for org tree"));
+    }
 
     return {
       success: true,
-      data: orgUnits.map(this.mapOrgUnitToResponse),
+      data,
     };
   }
 
@@ -190,6 +236,8 @@ export class OrgUnitService {
 
       return orgUnit;
     });
+
+    await this.invalidateOrgTreeCache(context.tenantId);
 
     return {
       success: true,
@@ -270,6 +318,8 @@ export class OrgUnitService {
       return orgUnit;
     });
 
+    await this.invalidateOrgTreeCache(context.tenantId);
+
     return {
       success: true,
       data: this.mapOrgUnitToResponse(result),
@@ -332,6 +382,8 @@ export class OrgUnitService {
         orgUnitId: id,
       });
     });
+
+    await this.invalidateOrgTreeCache(context.tenantId);
 
     return { success: true };
   }

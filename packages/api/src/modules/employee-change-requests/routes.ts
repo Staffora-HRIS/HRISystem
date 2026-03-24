@@ -10,6 +10,7 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { ChangeRequestRepository } from "./repository";
 import { ChangeRequestService } from "./service";
@@ -100,7 +101,7 @@ export const changeRequestPortalRoutes = new Elysia({ prefix: "/portal/change-re
         set.status = 201;
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("Portal change-requests POST error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "Portal change-requests POST error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to submit change request", requestId: "" } };
       }
@@ -134,7 +135,7 @@ export const changeRequestPortalRoutes = new Elysia({ prefix: "/portal/change-re
         set.status = 201;
         return { items: result.data!.map(formatChangeRequest) };
       } catch (error: any) {
-        console.error("Portal change-requests bulk POST error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "Portal change-requests bulk POST error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to submit change requests", requestId: "" } };
       }
@@ -176,7 +177,7 @@ export const changeRequestPortalRoutes = new Elysia({ prefix: "/portal/change-re
           hasMore: result.data!.hasMore,
         };
       } catch (error: any) {
-        console.error("Portal change-requests GET error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "Portal change-requests GET error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list change requests", requestId: "" } };
       }
@@ -205,7 +206,7 @@ export const changeRequestPortalRoutes = new Elysia({ prefix: "/portal/change-re
         const result = await changeRequestService.getMyPendingCount(tenantContext);
         return { count: result.data ?? 0 };
       } catch (error: any) {
-        console.error("Portal change-requests pending-count error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "Portal change-requests pending-count error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get pending count", requestId: "" } };
       }
@@ -235,7 +236,7 @@ export const changeRequestPortalRoutes = new Elysia({ prefix: "/portal/change-re
 
         return { success: true, message: "Change request cancelled" };
       } catch (error: any) {
-        console.error("Portal change-requests DELETE error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "Portal change-requests DELETE error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to cancel change request", requestId: "" } };
       }
@@ -291,7 +292,7 @@ export const changeRequestAdminRoutes = new Elysia({ prefix: "/hr/change-request
           hasMore: result.hasMore,
         };
       } catch (error: any) {
-        console.error("HR change-requests GET error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "HR change-requests GET error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list change requests", requestId: "" } };
       }
@@ -323,7 +324,7 @@ export const changeRequestAdminRoutes = new Elysia({ prefix: "/hr/change-request
         const count = await changeRequestService.getPendingReviewCount(tenantContext);
         return { count };
       } catch (error: any) {
-        console.error("HR change-requests count error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "HR change-requests count error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get pending count", requestId: "" } };
       }
@@ -353,7 +354,7 @@ export const changeRequestAdminRoutes = new Elysia({ prefix: "/hr/change-request
 
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("HR change-requests GET/:id error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "HR change-requests GET/:id error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get change request", requestId: "" } };
       }
@@ -388,7 +389,7 @@ export const changeRequestAdminRoutes = new Elysia({ prefix: "/hr/change-request
 
         return formatChangeRequest(result.data);
       } catch (error: any) {
-        console.error("HR change-requests PATCH review error:", error);
+        logger.error({ err: error, module: "employee-change-requests" }, "HR change-requests PATCH review error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to review change request", requestId: "" } };
       }

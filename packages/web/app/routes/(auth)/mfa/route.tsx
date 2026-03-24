@@ -118,7 +118,7 @@ export default function MfaPage() {
       }
 
       try {
-        await verifyMfa(fullCode);
+        await verifyMfa({ code: fullCode, trustDevice: rememberDevice });
         // Success - redirect to dashboard
         navigate(state?.from || "/dashboard", { replace: true });
       } catch {
@@ -127,7 +127,7 @@ export default function MfaPage() {
         inputRefs.current[0]?.focus();
       }
     },
-    [code, mfaToken, verifyMfa, navigate, state?.from, toast]
+    [code, mfaToken, verifyMfa, navigate, state?.from, toast, rememberDevice]
   );
 
   // Submit recovery/backup code verification
@@ -139,13 +139,13 @@ export default function MfaPage() {
     }
 
     try {
-      await verifyBackupCode(trimmedCode);
+      await verifyBackupCode({ code: trimmedCode, trustDevice: rememberDevice });
       toast.success("Recovery code verified successfully");
       navigate(state?.from || "/dashboard", { replace: true });
     } catch {
       setRecoveryCode("");
     }
-  }, [recoveryCode, mfaToken, verifyBackupCode, navigate, state?.from, toast]);
+  }, [recoveryCode, mfaToken, verifyBackupCode, navigate, state?.from, toast, rememberDevice]);
 
   // Switch to recovery code mode
   const switchToRecovery = useCallback(() => {
@@ -159,6 +159,25 @@ export default function MfaPage() {
     setCode(["", "", "", "", "", ""]);
   }, []);
 
+  // WebAuthn passkey support check
+  const [webAuthnSupported, setWebAuthnSupported] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkWebAuthn = async () => {
+      if (!window.PublicKeyCredential) {
+        setWebAuthnSupported(false);
+        return;
+      }
+      try {
+        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        setWebAuthnSupported(available);
+      } catch {
+        setWebAuthnSupported(false);
+      }
+    };
+    checkWebAuthn();
+  }, []);
+
   // WebAuthn authentication
   const handleWebAuthn = async () => {
     if (!window.PublicKeyCredential) {
@@ -166,12 +185,16 @@ export default function MfaPage() {
       return;
     }
 
-    try {
-      // In a real app, this would get the challenge from the server
-      toast.info("WebAuthn authentication coming soon");
-    } catch {
-      toast.error("WebAuthn authentication failed");
+    if (webAuthnSupported === false) {
+      toast.info(
+        "Your browser supports WebAuthn, but no platform authenticator was detected. You may need a hardware security key."
+      );
+      return;
     }
+
+    toast.info(
+      "WebAuthn passkey authentication requires server configuration. Contact your administrator to enable passkeys."
+    );
   };
 
   if (!mfaToken) {
@@ -270,6 +293,11 @@ export default function MfaPage() {
             >
               Use security key instead
             </button>
+            {webAuthnSupported === false && (
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                Passkey support not detected on this device
+              </p>
+            )}
           </div>
 
           {/* Help links */}

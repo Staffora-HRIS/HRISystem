@@ -61,8 +61,8 @@ async function fetchUserTenants(): Promise<TenantListItem[]> {
   return api.get<TenantListItem[]>("/auth/tenants");
 }
 
-async function switchTenant(tenantId: string): Promise<{ tenant: Tenant }> {
-  return api.post<{ tenant: Tenant }>("/auth/switch-tenant", { tenantId });
+async function switchTenant(tenantId: string): Promise<{ success: boolean; tenantId: string }> {
+  return api.post<{ success: boolean; tenantId: string }>("/auth/switch-tenant", { tenantId });
 }
 
 /**
@@ -186,7 +186,10 @@ export function useSwitchTenant() {
     mutationFn: switchTenant,
     onSuccess: async (data) => {
       // Update tenant ID in API client
-      api.setTenantId(data.tenant.id);
+      // API returns { success: boolean; tenantId: string }, not a nested tenant object
+      if (data?.tenantId) {
+        api.setTenantId(data.tenantId);
+      }
 
       // Clear all cached data (different tenant = different data)
       await queryClient.clear();

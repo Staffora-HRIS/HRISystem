@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   Users,
@@ -22,8 +22,14 @@ import {
   type ColumnDef,
   Select,
   Alert,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Input,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface DiversityReport {
   id: string;
@@ -73,7 +79,29 @@ function formatPercent(value: number): string {
 }
 
 export default function DiversityMonitoringPage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [reportForm, setReportForm] = useState({
+    reportingPeriod: "",
+    snapshotDate: "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post("/diversity/reports", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["compliance-diversity"] });
+      toast.success("Diversity report created successfully");
+      setShowCreateModal(false);
+      setReportForm({ reportingPeriod: "", snapshotDate: "" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to create report";
+      toast.error(message);
+    },
+  });
 
   const { data: reportsData, isLoading } = useQuery({
     queryKey: ["compliance-diversity", statusFilter],
@@ -96,6 +124,32 @@ export default function DiversityMonitoringPage() {
     totalEmployees: latestReport?.totalEmployees ?? 0,
     responseRate: latestReport?.responseRate ?? 0,
     latestPeriod: latestReport?.reportingPeriod ?? "-",
+  };
+
+  const handleExport = () => {
+    if (reports.length === 0) {
+      toast.error("No reports to export");
+      return;
+    }
+    const headers = ["Reporting Period", "Snapshot Date", "Status", "Employees", "Response Rate", "Dimensions", "Published"];
+    const rows = reports.map((r) => [
+      r.reportingPeriod,
+      r.snapshotDate,
+      STATUS_LABELS[r.status] || r.status,
+      String(r.totalEmployees),
+      formatPercent(r.responseRate),
+      String(r.dimensionCount),
+      formatDate(r.publishedDate),
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diversity-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Report exported");
   };
 
   const columns: ColumnDef<DiversityReport>[] = [
@@ -198,11 +252,11 @@ export default function DiversityMonitoringPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export Report
             </Button>
-            <Button>
+            <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
               New Report
             </Button>
@@ -285,7 +339,7 @@ export default function DiversityMonitoringPage() {
                   : "Create your first diversity monitoring report to get started"}
               </p>
               {!statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Report
                 </Button>
@@ -300,6 +354,60 @@ export default function DiversityMonitoringPage() {
           )}
         </CardBody>
       </Card>
+
+      {showCreateModal && (
+        <Modal open onClose={() => !createMutation.isPending && setShowCreateModal(false)}>
+          <ModalHeader>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">New Diversity Report</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="report-period" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Reporting Period <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="report-period"
+                  value={reportForm.reportingPeriod}
+                  onChange={(e) => setReportForm({ ...reportForm, reportingPeriod: e.target.value })}
+                  placeholder="e.g. 2025-26"
+                />
+              </div>
+              <div>
+                <label htmlFor="snapshot-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Snapshot Date <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="snapshot-date"
+                  type="date"
+                  value={reportForm.snapshotDate}
+                  onChange={(e) => setReportForm({ ...reportForm, snapshotDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!reportForm.reportingPeriod.trim() || !reportForm.snapshotDate) {
+                  toast.error("Reporting period and snapshot date are required");
+                  return;
+                }
+                createMutation.mutate({
+                  reportingPeriod: reportForm.reportingPeriod.trim(),
+                  snapshotDate: reportForm.snapshotDate,
+                });
+              }}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Creating..." : "Create Report"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

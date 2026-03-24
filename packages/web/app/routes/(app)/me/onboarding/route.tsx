@@ -74,10 +74,10 @@ export default function MyOnboardingPage() {
     ? Math.round((onboarding.completedTasks / onboarding.totalTasks) * 100)
     : 0;
 
-  const myTasks = onboarding?.tasks.filter((t) => t.assigneeType === "employee") || [];
+  const myTasks = onboarding?.tasks?.filter((t) => t.assigneeType === "employee") || [];
   const pendingTasks = myTasks.filter((t) => t.status === "pending" || t.status === "in_progress");
   const completedTasks = myTasks.filter((t) => t.status === "completed");
-  const otherTasks = onboarding?.tasks.filter((t) => t.assigneeType !== "employee") || [];
+  const otherTasks = onboarding?.tasks?.filter((t) => t.assigneeType !== "employee") || [];
 
   const handleCompleteTask = (taskId: string) => {
     completeMutation.mutate(taskId);
@@ -148,7 +148,7 @@ export default function MyOnboardingPage() {
                   : "secondary"
               }
             >
-              {onboarding.status.replace("_", " ").toUpperCase()}
+              {(onboarding.status ?? "pending").replace("_", " ").toUpperCase()}
             </Badge>
           </div>
 
@@ -220,7 +220,7 @@ export default function MyOnboardingPage() {
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         {categoryIcons[task.category] || categoryIcons.default}
-                        {task.category.replace("_", " ")}
+                        {(task.category ?? "other").replace("_", " ")}
                       </span>
                       {task.dueDate && (
                         <span className="flex items-center gap-1">
@@ -317,7 +317,7 @@ export default function MyOnboardingPage() {
                       {task.title}
                     </h4>
                     <Badge variant="secondary" className="text-xs">
-                      {task.assigneeType.replace("_", " ").toUpperCase()}
+                      {(task.assigneeType ?? "employee").replace("_", " ").toUpperCase()}
                     </Badge>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">

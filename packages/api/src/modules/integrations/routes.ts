@@ -22,6 +22,7 @@ import { IntegrationsService } from "./service";
 import {
   IntegrationResponseSchema,
   IntegrationFiltersSchema,
+  IntegrationStatusSchema,
   PaginationQuerySchema,
   ConnectIntegrationSchema,
   UpdateIntegrationConfigSchema,
@@ -108,10 +109,13 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
       }
     },
     {
-      query: t.Intersect([
-        PaginationQuerySchema,
-        IntegrationFiltersSchema,
-      ]),
+      query: t.Object({
+        cursor: t.Optional(t.String({ minLength: 1 })),
+        limit: t.Optional(t.String({ pattern: "^[0-9]+$" })),
+        category: t.Optional(t.String({ minLength: 1 })),
+        status: t.Optional(IntegrationStatusSchema),
+        search: t.Optional(t.String({ minLength: 1 })),
+      }),
       detail: {
         tags: ["Integrations"],
         summary: "List integrations for the current tenant",
@@ -301,10 +305,10 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
   )
 
   // =========================================================================
-  // POST /integrations/:provider/test - Test an integration connection
+  // POST /integrations/:id/test - Test an integration connection
   // =========================================================================
   .post(
-    "/:provider/test",
+    "/:id/test",
     async (ctx) => {
       const { integrationsService, tenantContext, params, set, requestId } =
         ctx as unknown as DerivedContext;
@@ -312,7 +316,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
       try {
         const result = await integrationsService.testConnection(
           tenantContext,
-          params.provider
+          params.id
         );
 
         if (!result.success) {
@@ -334,7 +338,7 @@ export const integrationsRoutes = new Elysia({ prefix: "/integrations" })
       }
     },
     {
-      params: ProviderParamsSchema,
+      params: t.Object({ id: t.String() }),
       headers: OptionalIdempotencyHeaderSchema,
       response: {
         200: TestConnectionResponseSchema,

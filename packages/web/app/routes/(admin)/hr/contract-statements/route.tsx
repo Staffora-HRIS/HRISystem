@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   FileText,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface ContractStatement {
   id: string;
@@ -73,9 +78,26 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateStatementFormState {
+  employeeId: string;
+  statementType: string;
+  effectiveDate: string;
+}
+
+const INITIAL_STATEMENT_FORM: CreateStatementFormState = {
+  employeeId: "",
+  statementType: "",
+  effectiveDate: "",
+};
+
 export default function ContractStatementsPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateStatementFormState>(INITIAL_STATEMENT_FORM);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-contract-statements", search, statusFilter],
@@ -87,6 +109,31 @@ export default function ContractStatementsPage() {
       return api.get<ContractStatementListResponse>(`/contract-statements?${params}`);
     },
   });
+
+  const createStatementMutation = useMutation({
+    mutationFn: (formData: CreateStatementFormState) =>
+      api.post("/contract-statements", {
+        employee_id: formData.employeeId,
+        statement_type: formData.statementType,
+        effective_date: formData.effectiveDate,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-hr-contract-statements"] });
+      toast.success("Statement issued successfully");
+      setShowCreateModal(false);
+      setCreateForm(INITIAL_STATEMENT_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to issue statement", {
+        message: err instanceof ApiError ? err.message : "Please try again.",
+      });
+    },
+  });
+
+  const handleCreateSubmit = () => {
+    if (!createForm.employeeId || !createForm.statementType || !createForm.effectiveDate) return;
+    createStatementMutation.mutate(createForm);
+  };
 
   const statements = data?.items ?? [];
 
@@ -173,7 +220,7 @@ export default function ContractStatementsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Written Statements of Employment</h1>
             <p className="text-gray-600">Manage statutory written statements and contract documentation</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Issue Statement
           </Button>
@@ -222,7 +269,7 @@ export default function ContractStatementsPage() {
                   : "No written statements have been issued"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Issue Statement
                 </Button>
@@ -237,6 +284,55 @@ export default function ContractStatementsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Issue Statement Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => { setShowCreateModal(false); setCreateForm(INITIAL_STATEMENT_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Issue Written Statement</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee ID"
+                required
+                value={createForm.employeeId}
+                onChange={(e) => setCreateForm((f) => ({ ...f, employeeId: e.target.value }))}
+              />
+              <Select
+                label="Statement Type"
+                required
+                value={createForm.statementType}
+                onChange={(e) => setCreateForm((f) => ({ ...f, statementType: e.target.value }))}
+                options={[
+                  { value: "", label: "Select statement type" },
+                  ...Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+              <Input
+                label="Effective Date"
+                type="date"
+                required
+                value={createForm.effectiveDate}
+                onChange={(e) => setCreateForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setCreateForm(INITIAL_STATEMENT_FORM); }} disabled={createStatementMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!createForm.employeeId || !createForm.statementType || !createForm.effectiveDate || createStatementMutation.isPending}
+              loading={createStatementMutation.isPending}
+              onClick={handleCreateSubmit}
+            >
+              {createStatementMutation.isPending ? "Issuing..." : "Issue Statement"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

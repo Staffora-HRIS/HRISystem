@@ -18,6 +18,8 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import type { TransactionSql } from "postgres";
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import type { JWTVerifyGetKey } from "jose";
 import type { DatabaseClient } from "../../plugins/db";
 import {
   SsoConfigRepository,
@@ -27,6 +29,7 @@ import {
 } from "./repository";
 import type { ServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import type {
   CreateSsoConfig,
   UpdateSsoConfig,
@@ -115,6 +118,43 @@ function mapLoginAttemptToResponse(row: SsoLoginAttemptRow): SsoLoginAttemptResp
 }
 
 // =============================================================================
+// JWKS Cache (per issuer URL, shared across service instances)
+// =============================================================================
+
+/**
+ * Cache of JWKS key-set resolvers keyed by issuer URL.
+ * `createRemoteJWKSet` already handles key rotation and caching internally,
+ * so we only need to avoid creating duplicate instances for the same issuer.
+ */
+const jwksCache = new Map<string, JWTVerifyGetKey>();
+
+/**
+ * Get or create a JWKS resolver for the given issuer URL.
+ * The JWKS endpoint is derived from the issuer per OIDC Discovery spec:
+ * `{issuerUrl}/.well-known/jwks.json`
+ *
+ * Note: Many IdPs also expose keys at `{issuerUrl}/jwks` or via the
+ * `jwks_uri` from `.well-known/openid-configuration`. We use the standard
+ * JWKS URI convention. If an IdP uses a non-standard path, the
+ * `openid-configuration` discovery should be implemented as a future
+ * enhancement.
+ */
+function getJwksResolver(issuerUrl: string): JWTVerifyGetKey {
+  const cached = jwksCache.get(issuerUrl);
+  if (cached) return cached;
+
+  const jwksUrl = new URL(
+    issuerUrl.endsWith("/")
+      ? `${issuerUrl}.well-known/jwks.json`
+      : `${issuerUrl}/.well-known/jwks.json`
+  );
+
+  const resolver = createRemoteJWKSet(jwksUrl);
+  jwksCache.set(issuerUrl, resolver);
+  return resolver;
+}
+
+// =============================================================================
 // Service
 // =============================================================================
 
@@ -196,16 +236,21 @@ export class SsoService {
     return `${authorizationEndpoint}?${params.toString()}`;
   }
 
+  /** Maximum age of a valid OIDC state parameter in seconds (10 minutes). */
+  private static readonly OIDC_STATE_MAX_AGE_SECONDS = 600;
+
   /**
    * Generate a cryptographically secure state parameter for OIDC CSRF protection.
-   * The state encodes the configId so we can look it up on callback.
+   * The state encodes the configId and a timestamp so we can look it up on callback
+   * and reject expired states (prevents replay attacks).
    */
   private generateOidcState(configId: string): string {
     const nonce = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000).toString(36);
     const secret = process.env["SSO_ENCRYPTION_KEY"] || process.env["BETTER_AUTH_SECRET"] || process.env["SESSION_SECRET"] || "";
-    const payload = `${configId}:${nonce}`;
+    const payload = `${configId}:${nonce}:${timestamp}`;
     const hmac = createHmac("sha256", secret).update(payload).digest("hex");
-    // Encode as base64url: configId:nonce:hmac
+    // Encode as base64url: configId:nonce:timestamp:hmac
     return Buffer.from(`${payload}:${hmac}`).toString("base64url");
   }
 
@@ -217,12 +262,12 @@ export class SsoService {
     try {
       const decoded = Buffer.from(state, "base64url").toString("utf-8");
       const parts = decoded.split(":");
-      if (parts.length !== 3) return null;
+      if (parts.length !== 4) return null;
 
-      const [configId, nonce, providedHmac] = parts;
+      const [configId, nonce, timestamp, providedHmac] = parts;
       const secret = process.env["SSO_ENCRYPTION_KEY"] || process.env["BETTER_AUTH_SECRET"] || process.env["SESSION_SECRET"] || "";
       const expectedHmac = createHmac("sha256", secret)
-        .update(`${configId}:${nonce}`)
+        .update(`${configId}:${nonce}:${timestamp}`)
         .digest("hex");
 
       // Constant-time comparison
@@ -230,6 +275,15 @@ export class SsoService {
       const a = Buffer.from(providedHmac, "utf-8");
       const b = Buffer.from(expectedHmac, "utf-8");
       if (!timingSafeEqual(a, b)) return null;
+
+      // Check expiry — reject states older than OIDC_STATE_MAX_AGE_SECONDS
+      const issuedAt = parseInt(timestamp, 36);
+      if (isNaN(issuedAt)) return null;
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (nowSeconds - issuedAt > SsoService.OIDC_STATE_MAX_AGE_SECONDS) {
+        logger.warn({ module: "sso", configId, ageSeconds: nowSeconds - issuedAt }, "OIDC state parameter expired");
+        return null;
+      }
 
       return configId;
     } catch {
@@ -285,17 +339,35 @@ export class SsoService {
   }
 
   /**
-   * Fetch user info from the OIDC userinfo endpoint or decode the id_token.
-   * For simplicity, we decode the id_token JWT payload (without signature
-   * verification, since we trust the token came from a verified exchange).
+   * Verify and decode an OIDC id_token using the IdP's JWKS endpoint.
+   *
+   * Verifies the JWT cryptographic signature, issuer claim, and expiry.
+   * The JWKS is fetched from `{issuerUrl}/.well-known/jwks.json` and cached
+   * per issuer to avoid redundant network calls.
+   *
+   * @param idToken - The raw JWT id_token from the token exchange
+   * @param issuerUrl - The OIDC issuer URL (used for JWKS lookup and iss validation)
+   * @param clientId - The OIDC client_id (used for aud validation)
+   * @throws Error if signature verification, issuer, audience, or expiry check fails
    */
-  private decodeIdToken(idToken: string): OidcUserInfo {
-    const parts = idToken.split(".");
-    if (parts.length !== 3) {
-      throw new Error("Invalid id_token format");
+  private async verifyIdToken(
+    idToken: string,
+    issuerUrl: string,
+    clientId: string
+  ): Promise<OidcUserInfo> {
+    const jwks = getJwksResolver(issuerUrl);
+
+    const { payload } = await jwtVerify(idToken, jwks, {
+      issuer: issuerUrl,
+      audience: clientId,
+    });
+
+    // The sub claim is required per OIDC Core spec
+    if (typeof payload.sub !== "string" || !payload.sub) {
+      throw new Error("id_token missing required 'sub' claim");
     }
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
-    return payload as OidcUserInfo;
+
+    return payload as unknown as OidcUserInfo;
   }
 
   // ===========================================================================
@@ -657,7 +729,7 @@ export class SsoService {
       }
       clientSecret = decrypted;
     } catch (err) {
-      console.error("[SSO] Failed to decrypt client secret:", err);
+      logger.error({ err, module: "sso", configId }, "SSO failed to decrypt client secret");
       return {
         success: false,
         error: {
@@ -672,7 +744,7 @@ export class SsoService {
       tokenResponse = await this.exchangeOidcCode(config, code, tenantSlug, clientSecret);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Token exchange failed";
-      console.error("[SSO] Token exchange error:", errorMsg);
+      logger.error({ module: "sso", errorMsg, configId }, "SSO token exchange error");
 
       await this.repository.recordLoginAttempt(tenantId, {
         ssoConfigId: configId,
@@ -694,17 +766,34 @@ export class SsoService {
       };
     }
 
-    // Step 3: Decode id_token to get user claims
+    // Step 3: Verify and decode id_token to get user claims
     let userInfo: OidcUserInfo;
     try {
-      userInfo = this.decodeIdToken(tokenResponse.id_token);
+      userInfo = await this.verifyIdToken(
+        tokenResponse.id_token,
+        config.issuerUrl!,
+        config.clientId!
+      );
     } catch (err) {
-      console.error("[SSO] Failed to decode id_token:", err);
+      const verifyMsg = err instanceof Error ? err.message : "Token verification failed";
+      logger.error({ err, module: "sso", configId }, "SSO id_token verification failed");
+
+      await this.repository.recordLoginAttempt(tenantId, {
+        ssoConfigId: configId,
+        idpSubject: "unknown",
+        email: null,
+        userId: null,
+        status: "failed",
+        errorMessage: `id_token verification failed: ${verifyMsg}`,
+        ipAddress,
+        userAgent,
+      });
+
       return {
         success: false,
         error: {
-          code: ErrorCodes.INTERNAL_ERROR,
-          message: "Failed to decode identity token",
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: "Identity token verification failed",
         },
       };
     }
@@ -774,7 +863,7 @@ export class SsoService {
         userId = await this.provisionUser(tenantId, email, name ?? email, config.defaultRoleId);
         isNewUser = true;
       } catch (err) {
-        console.error("[SSO] Auto-provision failed:", err);
+        logger.error({ err, module: "sso", email, tenantId }, "SSO auto-provision failed");
         await this.repository.recordLoginAttempt(tenantId, {
           ssoConfigId: configId,
           idpSubject: sub,

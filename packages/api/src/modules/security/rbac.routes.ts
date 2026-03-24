@@ -14,6 +14,7 @@ import { requireAuthContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 
 export const rbacRoutes = new Elysia({ name: "security-rbac-routes" })
 
@@ -54,7 +55,7 @@ export const rbacRoutes = new Elysia({ name: "security-rbac-routes" })
         roles: Array.from(roles),
       };
     } catch (error) {
-      console.error("Security /my-permissions error:", error);
+      logger.error({ err: error, module: "security", route: "/my-permissions" }, "Failed to load permissions");
       set.status = 500;
       return {
         error: {

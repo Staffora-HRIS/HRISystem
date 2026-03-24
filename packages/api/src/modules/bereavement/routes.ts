@@ -338,6 +338,102 @@ export const bereavementRoutes = new Elysia({ prefix: "/bereavement", name: "ber
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Alias routes: /requests — frontend calls /bereavement/requests
+  // These delegate to the same service methods as the root routes above.
+  // ===========================================================================
+
+  // GET /bereavement/requests - Alias for GET /bereavement/
+  .get(
+    "/requests",
+    async (ctx) => {
+      const { bereavementService, query, tenantContext } = ctx as unknown as BereavementRouteContext;
+      const { cursor, limit, ...filters } = query;
+      const parsedLimit =
+        limit !== undefined && limit !== null ? Number(limit) : undefined;
+
+      const result = await bereavementService.list(
+        tenantContext,
+        filters,
+        { cursor, limit: parsedLimit }
+      );
+
+      return {
+        items: result.items,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
+    },
+    {
+      beforeHandle: [requirePermission("bereavement", "read")],
+      query: t.Composite([
+        t.Partial(BereavementLeaveFiltersSchema),
+        t.Partial(PaginationQuerySchema),
+      ]),
+      response: BereavementLeaveListResponseSchema,
+      detail: {
+        tags: ["Bereavement"],
+        summary: "List parental bereavement leave records (alias)",
+        description:
+          "Alias for GET /bereavement — list parental bereavement leave records with optional filters and cursor-based pagination",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /bereavement/requests - Alias for POST /bereavement/
+  .post(
+    "/requests",
+    async (ctx) => {
+      const { bereavementService, body, headers, tenantContext, audit, requestId, error, set } =
+        ctx as unknown as BereavementRouteContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await bereavementService.create(tenantContext, body as unknown as CreateBereavementLeave);
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          bereavementErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the creation
+      if (audit) {
+        await audit.log({
+          action: "bereavement.leave.created",
+          resourceType: "parental_bereavement_leave",
+          resourceId: result.data!.id,
+          newValues: result.data as unknown as Record<string, unknown>,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("bereavement", "write")],
+      body: CreateBereavementLeaveSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: BereavementLeaveResponseSchema,
+        400: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Bereavement"],
+        summary: "Create parental bereavement leave request (alias)",
+        description:
+          "Alias for POST /bereavement — create a new parental bereavement leave request. " +
+          "Validates against the 2-week maximum, 56-week window, and SPBP eligibility rules.",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type BereavementRoutes = typeof bereavementRoutes;

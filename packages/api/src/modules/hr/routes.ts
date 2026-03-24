@@ -108,10 +108,10 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
   // Plugin Setup - Service Instantiation
   // ===========================================================================
   .derive((ctx) => {
-    const { db } = ctx as any;
+    const { db, cache } = ctx as any;
     // Create repository and service with database client from db plugin
     const repository = new HRRepository(db);
-    const service = new HRService(repository, db);
+    const service = new HRService(repository, db, cache || null);
     const addressRepository = new AddressRepository(db);
     const addressService = new AddressService(addressRepository, repository, db);
 

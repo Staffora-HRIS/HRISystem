@@ -15,6 +15,7 @@
  */
 
 import type { DatabaseClient } from "../../plugins/db";
+import type { CacheClient } from "../../plugins/cache";
 import type { HRRepository } from "./repository";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { EmployeeService } from "./employee.service";
@@ -65,11 +66,12 @@ export class HRService {
 
   constructor(
     private repository: HRRepository,
-    private db: DatabaseClient
+    private db: DatabaseClient,
+    private cache: CacheClient | null = null
   ) {
     this.employeeService = new EmployeeService(repository, db);
-    this.orgUnitService = new OrgUnitService(repository, db);
-    this.positionService = new PositionService(repository, db);
+    this.orgUnitService = new OrgUnitService(repository, db, cache);
+    this.positionService = new PositionService(repository, db, cache);
   }
 
   // ===========================================================================

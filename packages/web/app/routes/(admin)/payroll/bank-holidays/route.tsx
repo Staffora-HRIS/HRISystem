@@ -122,13 +122,60 @@ export default function AdminBankHolidaysPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: () => api.post("/bank-holidays/import-uk"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-bank-holidays"] });
-      toast.success("UK bank holidays imported successfully");
+    mutationFn: async () => {
+      // Fetch the UK government bank holiday JSON and send as bulk import
+      const response = await fetch(
+        "https://www.gov.uk/bank-holidays.json"
+      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch UK government bank holidays");
+      }
+      const data = await response.json() as Record<
+        string,
+        { events: { title: string; date: string }[] }
+      >;
+
+      const holidays: { name: string; date: string; country_code: string; region: string }[] = [];
+      const regionMap: Record<string, string> = {
+        "england-and-wales": "england-and-wales",
+        scotland: "scotland",
+        "northern-ireland": "northern-ireland",
+      };
+
+      for (const [region, info] of Object.entries(data)) {
+        const mappedRegion = regionMap[region];
+        if (!mappedRegion || !info?.events) continue;
+        for (const event of info.events) {
+          holidays.push({
+            name: event.title,
+            date: event.date,
+            country_code: "GB",
+            region: mappedRegion,
+          });
+        }
+      }
+
+      if (holidays.length === 0) {
+        throw new Error("No holidays found in government data");
+      }
+
+      // Backend /import accepts max 200 per request, so chunk if needed
+      const chunkSize = 200;
+      for (let i = 0; i < holidays.length; i += chunkSize) {
+        const chunk = holidays.slice(i, i + chunkSize);
+        await api.post("/bank-holidays/import", { holidays: chunk });
+      }
+
+      return { imported: holidays.length };
     },
-    onError: () => {
-      toast.error("Failed to import UK bank holidays");
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-bank-holidays"] });
+      toast.success(`${data.imported} UK bank holidays imported successfully`);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to import UK bank holidays";
+      toast.error(message);
     },
   });
 
@@ -151,6 +198,9 @@ export default function AdminBankHolidaysPage() {
     if (!formData.name.trim() || !formData.date) {
       toast.warning("Please fill in the required fields");
       return;
+    }
+    if (new Date(formData.date) < new Date(new Date().toDateString())) {
+      toast.warning("This date is in the past");
     }
     createMutation.mutate({
       name: formData.name.trim(),

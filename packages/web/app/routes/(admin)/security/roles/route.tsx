@@ -67,7 +67,11 @@ export default function AdminRolesPage() {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createRoleName, setCreateRoleName] = useState("");
+  const [createRoleDesc, setCreateRoleDesc] = useState("");
   const [editRole, setEditRole] = useState<RoleSummary | null>(null);
+  const [editRoleName, setEditRoleName] = useState("");
+  const [editRoleDesc, setEditRoleDesc] = useState("");
   const [permissionsRole, setPermissionsRole] = useState<RoleSummary | null>(null);
   const [grantKey, setGrantKey] = useState<string>("");
 
@@ -186,7 +190,7 @@ export default function AdminRolesPage() {
               variant="outline"
               size="sm"
               disabled={row.isSystem}
-              onClick={() => setEditRole(row)}
+              onClick={() => { setEditRole(row); setEditRoleName(row.name); setEditRoleDesc(row.description ?? ""); }}
             >
               Edit
             </Button>
@@ -233,30 +237,27 @@ export default function AdminRolesPage() {
         </CardBody>
       </Card>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)}>
+      <Modal open={createOpen} onClose={() => { setCreateOpen(false); setCreateRoleName(""); setCreateRoleDesc(""); }}>
         <ModalHeader title="Create Role" />
         <ModalBody>
           <div className="space-y-4">
-            <Input label="Name" placeholder="e.g. hr_manager" id="role-name" />
-            <Input label="Description" placeholder="Optional" id="role-desc" />
+            <Input label="Name" placeholder="e.g. hr_manager" value={createRoleName} onChange={(e) => setCreateRoleName(e.target.value)} />
+            <Input label="Description" placeholder="Optional" value={createRoleDesc} onChange={(e) => setCreateRoleDesc(e.target.value)} />
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="outline" onClick={() => setCreateOpen(false)}>
+          <Button variant="outline" onClick={() => { setCreateOpen(false); setCreateRoleName(""); setCreateRoleDesc(""); }}>
             Cancel
           </Button>
           <Button
             loading={createRoleMutation.isPending}
             onClick={() => {
-              const nameInput = document.getElementById("role-name") as HTMLInputElement | null;
-              const descInput = document.getElementById("role-desc") as HTMLInputElement | null;
-              const name = nameInput?.value?.trim() ?? "";
-              const description = descInput?.value?.trim() ?? "";
+              const name = createRoleName.trim();
               if (!name) {
                 toast.error("Role name is required");
                 return;
               }
-              createRoleMutation.mutate({ name, description: description || undefined });
+              createRoleMutation.mutate({ name, description: createRoleDesc.trim() || undefined });
             }}
           >
             Create
@@ -270,13 +271,13 @@ export default function AdminRolesPage() {
           <div className="space-y-4">
             <Input
               label="Name"
-              defaultValue={editRole?.name ?? ""}
-              id="edit-role-name"
+              value={editRoleName}
+              onChange={(e) => setEditRoleName(e.target.value)}
             />
             <Input
               label="Description"
-              defaultValue={editRole?.description ?? ""}
-              id="edit-role-desc"
+              value={editRoleDesc}
+              onChange={(e) => setEditRoleDesc(e.target.value)}
             />
           </div>
         </ModalBody>
@@ -288,12 +289,10 @@ export default function AdminRolesPage() {
             loading={updateRoleMutation.isPending}
             onClick={() => {
               if (!editRole) return;
-              const nameInput = document.getElementById("edit-role-name") as HTMLInputElement | null;
-              const descInput = document.getElementById("edit-role-desc") as HTMLInputElement | null;
               updateRoleMutation.mutate({
                 id: editRole.id,
-                name: nameInput?.value?.trim() ?? undefined,
-                description: descInput?.value?.trim() ?? undefined,
+                name: editRoleName.trim() || undefined,
+                description: editRoleDesc.trim() || undefined,
               });
             }}
           >

@@ -4,15 +4,18 @@
  * Generates report exports in various formats:
  * - CSV export generation
  * - Excel (XLSX) export generation
- * - Large dataset handling with streaming
+ * - Large dataset handling with cursor-based streaming
  * - Upload to storage and create download links
  * - Notify users when export is complete
  *
  * Features:
- * - Streaming for memory efficiency
- * - Progress tracking
- * - Automatic cleanup of old exports
- * - Support for custom queries
+ * - Cursor-based streaming for large datasets (>=1000 rows) to avoid loading
+ *   entire result sets into memory. Uses postgres.js cursor() with batched
+ *   reads and writes rows incrementally to temp files.
+ * - In-memory generation for small datasets (<1000 rows) for simplicity
+ * - Progress tracking via log callbacks
+ * - Automatic cleanup of old exports and temp files
+ * - Support for custom queries with table allowlist validation
  */
 
 import {
@@ -22,6 +25,34 @@ import {
   JobTypes,
   StreamKeys,
 } from "./base";
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/**
+ * Row count threshold for switching from in-memory to streaming export.
+ * Datasets with fewer rows than this use in-memory generation; larger
+ * datasets use cursor-based streaming to avoid high memory usage.
+ */
+const STREAMING_THRESHOLD = 1000;
+
+/**
+ * Number of rows to fetch per cursor batch when streaming.
+ * Balances memory usage against round-trip overhead.
+ */
+const CURSOR_BATCH_SIZE = 500;
+
+/**
+ * Absolute maximum number of rows an export can return.
+ * Prevents unbounded queries from exhausting database or memory resources.
+ */
+const MAX_EXPORT_ROWS = 100_000;
+
+/**
+ * Default row limit when the caller does not specify one.
+ */
+const DEFAULT_EXPORT_ROWS = 10_000;
 
 // =============================================================================
 // Types
@@ -50,20 +81,21 @@ export interface ExportColumn {
 
 /**
  * Export query definition
+ *
+ * SECURITY NOTE: This interface intentionally does NOT include a `customSql`
+ * or arbitrary `filters` field. All SQL is constructed server-side from
+ * validated, allowlisted table names and identifier-checked column names.
+ * Job payloads must never carry raw SQL strings.
  */
 export interface ExportQuery {
-  /** Base table or view */
+  /** Base table or view (must be in ALLOWED_EXPORT_TABLES allowlist) */
   table: string;
-  /** Columns to export */
+  /** Columns to export (each field name is validated against SAFE_IDENTIFIER_RE) */
   columns: ExportColumn[];
-  /** WHERE clause conditions */
-  filters?: Record<string, unknown>;
-  /** ORDER BY clause */
+  /** ORDER BY clause (each field is validated against SAFE_IDENTIFIER_RE) */
   orderBy?: Array<{ field: string; direction: "asc" | "desc" }>;
-  /** Maximum rows to export */
+  /** Maximum rows to export (capped at MAX_EXPORT_ROWS) */
   limit?: number;
-  /** Custom SQL (use with caution, must be tenant-scoped) */
-  customSql?: string;
 }
 
 /**
@@ -158,8 +190,10 @@ export interface ExportRecord {
  * Storage interface for export files
  */
 export interface ExportStorage {
-  /** Save a file and return the path/URL */
+  /** Save content (Buffer or string) and return the storage path */
   save(filename: string, content: Buffer | string): Promise<string>;
+  /** Save from a local file path (for streaming exports that write to temp files) */
+  saveFromFile(filename: string, localPath: string): Promise<string>;
   /** Get a download URL for a file */
   getDownloadUrl(filePath: string, expiresIn?: number): Promise<string>;
   /** Delete a file */
@@ -178,17 +212,53 @@ export class LocalStorage implements ExportStorage {
     this.baseUrl = process.env["EXPORT_BASE_URL"] || "http://localhost:3000/api/exports";
   }
 
+  /**
+   * Sanitise a filename to prevent path traversal attacks.
+   * Strips directory components via path.basename() and restricts
+   * the remaining characters to a safe allowlist.
+   */
+  private sanitiseFilename(pathMod: typeof import("path"), filename: string): string {
+    // Strip any directory components (e.g. "../../etc/passwd" -> "passwd")
+    let safe = pathMod.basename(filename);
+    // Restrict to alphanumeric, hyphens, underscores, and dots
+    safe = safe.replace(/[^a-zA-Z0-9._-]/g, "_");
+    // Prevent empty or dot-only filenames
+    if (!safe || safe === "." || safe === "..") {
+      safe = "export";
+    }
+    return safe;
+  }
+
   async save(filename: string, content: Buffer | string): Promise<string> {
     const fs = await import("fs/promises");
     const path = await import("path");
 
+    const safeFilename = this.sanitiseFilename(path, filename);
+
     // Ensure directory exists
     await fs.mkdir(this.basePath, { recursive: true });
 
-    const filePath = path.join(this.basePath, filename);
+    const filePath = path.join(this.basePath, safeFilename);
     await fs.writeFile(filePath, content);
 
     return filePath;
+  }
+
+  async saveFromFile(filename: string, localPath: string): Promise<string> {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+
+    const safeFilename = this.sanitiseFilename(path, filename);
+
+    // Ensure directory exists
+    await fs.mkdir(this.basePath, { recursive: true });
+
+    const destPath = path.join(this.basePath, safeFilename);
+    // If source and destination differ, copy the file
+    if (path.resolve(localPath) !== path.resolve(destPath)) {
+      await fs.copyFile(localPath, destPath);
+    }
+    return destPath;
   }
 
   async getDownloadUrl(filePath: string, _expiresIn?: number): Promise<string> {
@@ -241,6 +311,14 @@ export class S3Storage implements ExportStorage {
     return this.s3Client;
   }
 
+  private getContentType(filename: string): string {
+    if (filename.endsWith(".csv")) return "text/csv";
+    if (filename.endsWith(".xlsx")) {
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    }
+    return "application/octet-stream";
+  }
+
   async save(filename: string, content: Buffer | string): Promise<string> {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.getClient();
@@ -253,11 +331,28 @@ export class S3Storage implements ExportStorage {
         Bucket: this.bucket,
         Key: key,
         Body: body,
-        ContentType: filename.endsWith(".csv")
-          ? "text/csv"
-          : filename.endsWith(".xlsx")
-            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            : "application/octet-stream",
+        ContentType: this.getContentType(filename),
+      })
+    );
+
+    return `s3://${this.bucket}/${key}`;
+  }
+
+  async saveFromFile(filename: string, localPath: string): Promise<string> {
+    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const fs = await import("fs");
+    const client = await this.getClient();
+    const key = `${this.prefix}${filename}`;
+
+    // Read the file as a stream for the S3 upload to avoid loading into memory
+    const fileStream = fs.createReadStream(localPath);
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: fileStream as unknown as import("@aws-sdk/client-s3").PutObjectCommandInput["Body"],
+        ContentType: this.getContentType(filename),
       })
     );
 
@@ -370,11 +465,42 @@ function formatValue(
 }
 
 // =============================================================================
-// CSV Generator
+// CSV Generator (in-memory, for small datasets)
 // =============================================================================
 
 /**
- * Generate CSV content from rows
+ * CSV escaping helper. Shared between in-memory and streaming generators.
+ */
+function createCsvEscaper(
+  delimiter: string,
+  quoteChar: string,
+  escapeChar: string
+): (value: string) => string {
+  const quoteRegex = new RegExp(quoteChar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+  return (value: string): string => {
+    if (value.includes(quoteChar) || value.includes(delimiter) || value.includes("\n")) {
+      return quoteChar + value.replace(quoteRegex, escapeChar + quoteChar) + quoteChar;
+    }
+    return value;
+  };
+}
+
+/**
+ * Format a single row as a CSV line (no trailing line ending).
+ */
+function formatCsvRow(
+  row: Record<string, unknown>,
+  columns: ExportColumn[],
+  delimiter: string,
+  escape: (value: string) => string
+): string {
+  return columns
+    .map((col) => escape(formatValue(row[col.field], col.formatter, col.format)))
+    .join(delimiter);
+}
+
+/**
+ * Generate CSV content from rows (in-memory, for small datasets)
  */
 function generateCsv(
   rows: Array<Record<string, unknown>>,
@@ -395,12 +521,7 @@ function generateCsv(
     includeHeaders = true,
   } = options;
 
-  const escape = (value: string): string => {
-    if (value.includes(quoteChar) || value.includes(delimiter) || value.includes("\n")) {
-      return quoteChar + value.replace(new RegExp(quoteChar, "g"), escapeChar + quoteChar) + quoteChar;
-    }
-    return value;
-  };
+  const escape = createCsvEscaper(delimiter, quoteChar, escapeChar);
 
   const lines: string[] = [];
 
@@ -412,21 +533,36 @@ function generateCsv(
 
   // Add data rows
   for (const row of rows) {
-    const dataRow = columns
-      .map((col) => escape(formatValue(row[col.field], col.formatter, col.format)))
-      .join(delimiter);
-    lines.push(dataRow);
+    lines.push(formatCsvRow(row, columns, delimiter, escape));
   }
 
   return lines.join(lineEnding);
 }
 
 // =============================================================================
-// Excel Generator
+// Excel Generator (in-memory, for small datasets)
 // =============================================================================
 
 /**
- * Generate Excel content using exceljs
+ * Convert a row's column value to the appropriate Excel cell value
+ */
+function formatExcelCellValue(value: unknown, formatter?: ExportColumn["formatter"]): unknown {
+  switch (formatter) {
+    case "date":
+    case "datetime":
+      return value instanceof Date ? value : value ? new Date(String(value)) : null;
+    case "currency":
+    case "percentage":
+      return typeof value === "number" ? value : value ? Number(value) : null;
+    case "boolean":
+      return value ? "Yes" : "No";
+    default:
+      return value;
+  }
+}
+
+/**
+ * Generate Excel content using exceljs (in-memory, for small datasets)
  */
 async function generateExcel(
   rows: Array<Record<string, unknown>>,
@@ -474,27 +610,7 @@ async function generateExcel(
   for (const row of rows) {
     const rowData: Record<string, unknown> = {};
     for (const col of columns) {
-      const value = row[col.field];
-      // Apply formatting based on column type
-      switch (col.formatter) {
-        case "date":
-          rowData[col.field] = value instanceof Date ? value : value ? new Date(String(value)) : null;
-          break;
-        case "datetime":
-          rowData[col.field] = value instanceof Date ? value : value ? new Date(String(value)) : null;
-          break;
-        case "currency":
-          rowData[col.field] = typeof value === "number" ? value : value ? Number(value) : null;
-          break;
-        case "percentage":
-          rowData[col.field] = typeof value === "number" ? value : value ? Number(value) : null;
-          break;
-        case "boolean":
-          rowData[col.field] = value ? "Yes" : "No";
-          break;
-        default:
-          rowData[col.field] = value;
-      }
+      rowData[col.field] = formatExcelCellValue(row[col.field], col.formatter);
     }
     sheet.addRow(rowData);
   }
@@ -538,7 +654,7 @@ async function generateExcel(
 }
 
 // =============================================================================
-// Query Executor
+// Query Helpers
 // =============================================================================
 
 /**
@@ -574,20 +690,30 @@ const SAFE_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function validateIdentifier(name: string, context: string): void {
   if (!SAFE_IDENTIFIER_RE.test(name)) {
-    throw new Error(`Invalid ${context}: "${name}" — must be alphanumeric/underscore only`);
+    throw new Error(`Invalid ${context}: "${name}" -- must be alphanumeric/underscore only`);
   }
 }
 
 /**
- * Execute export query and return rows
+ * Validated query components shared between count, in-memory, and streaming paths.
  */
-async function executeExportQuery(
-  db: import("../plugins/db").DatabaseClient,
-  tenantId: string,
-  query: ExportQuery,
-  onProgress?: (processed: number) => void
-): Promise<Array<Record<string, unknown>>> {
-  const { table, columns, filters, orderBy, limit } = query;
+interface ValidatedExportQuery {
+  /** Quoted, validated column list for SELECT clause (e.g. '"first_name", "last_name"') */
+  columnsStr: string;
+  /** Validated ORDER BY clause (may be empty string) */
+  orderByStr: string;
+  /** Clamped LIMIT value */
+  limitVal: number;
+  /** The validated table name (unquoted) */
+  table: string;
+}
+
+/**
+ * Validate and build SQL components from an ExportQuery.
+ * Centralises validation so all code paths share the same security checks.
+ */
+function buildValidatedQuery(query: ExportQuery): ValidatedExportQuery {
+  const { table, columns, orderBy, limit } = query;
 
   // Validate table against allowlist
   if (!ALLOWED_EXPORT_TABLES.has(table)) {
@@ -601,36 +727,103 @@ async function executeExportQuery(
     return `"${c.field}"`;
   });
 
-  // Validate order-by fields
   const validDirections = new Set(["ASC", "DESC", "asc", "desc"]);
 
-  // Execute query with tenant context
+  const orderByStr = orderBy && orderBy.length > 0
+    ? `ORDER BY ${orderBy.map((o) => {
+        validateIdentifier(o.field, "order-by field");
+        const dir = validDirections.has(o.direction) ? o.direction.toUpperCase() : "ASC";
+        return `"${o.field}" ${dir}`;
+      }).join(", ")}`
+    : "";
+
+  const limitVal = limit && Number.isFinite(limit) && limit > 0 ? Math.min(limit, MAX_EXPORT_ROWS) : DEFAULT_EXPORT_ROWS;
+
+  return {
+    columnsStr: columnNames.join(", "),
+    orderByStr,
+    limitVal,
+    table,
+  };
+}
+
+/**
+ * Build the full SELECT SQL string from validated components.
+ *
+ * SECURITY BOUNDARY: This function uses string interpolation to build SQL,
+ * which is then executed via tx.unsafe(). This is safe ONLY because every
+ * interpolated value has been validated by buildValidatedQuery():
+ *
+ *   - vq.table: validated against ALLOWED_EXPORT_TABLES allowlist AND
+ *     SAFE_IDENTIFIER_RE regex (alphanumeric + underscore only)
+ *   - vq.columnsStr: each column validated against SAFE_IDENTIFIER_RE,
+ *     then double-quoted as SQL identifiers
+ *   - vq.orderByStr: each field validated against SAFE_IDENTIFIER_RE,
+ *     direction constrained to "ASC"/"DESC" literal values
+ *   - vq.limitVal: a clamped positive integer (typeof number)
+ *   - tenant_id: passed as a parameterised $1 bind variable, never interpolated
+ *
+ * DO NOT add additional interpolated values without equivalent validation.
+ * DO NOT bypass buildValidatedQuery() when calling this function.
+ */
+function buildSelectSql(vq: ValidatedExportQuery): string {
+  return `SELECT ${vq.columnsStr} FROM app."${vq.table}" WHERE tenant_id = $1::uuid ${vq.orderByStr} LIMIT ${vq.limitVal}`;
+}
+
+// =============================================================================
+// Row Count Query
+// =============================================================================
+
+/**
+ * Get the row count for an export query (capped at limitVal).
+ * Used to decide whether to use in-memory or streaming export.
+ */
+async function getExportRowCount(
+  db: import("../plugins/db").DatabaseClient,
+  tenantId: string,
+  query: ExportQuery
+): Promise<number> {
+  const vq = buildValidatedQuery(query);
+
+  // System context bypasses RLS; the WHERE tenant_id = $1 clause provides
+  // data isolation by filtering to the specific tenant's rows only.
   const rows = await db.withSystemContext(async (tx) => {
-    // Set tenant context for RLS
-    await tx`SELECT app.set_tenant_context(${tenantId}::uuid, NULL)`;
-
-    // Build query with validated/quoted identifiers
-    const columnsStr = columnNames.join(", ");
-    const orderByStr = orderBy && orderBy.length > 0
-      ? `ORDER BY ${orderBy.map((o) => {
-          validateIdentifier(o.field, "order-by field");
-          const dir = validDirections.has(o.direction) ? o.direction.toUpperCase() : "ASC";
-          return `"${o.field}" ${dir}`;
-        }).join(", ")}`
-      : "";
-    const limitVal = limit && Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100000) : 10000;
-
-    const result = await tx.unsafe<Array<Record<string, unknown>>>(
-      `SELECT ${columnsStr} FROM app."${table}" WHERE tenant_id = $1::uuid ${orderByStr} LIMIT ${limitVal}`,
+    const result = await tx.unsafe<Array<{ count: string }>>(
+      `SELECT COUNT(*)::text AS count FROM (SELECT 1 FROM app."${vq.table}" WHERE tenant_id = $1::uuid ${vq.orderByStr} LIMIT ${vq.limitVal}) sub`,
       [tenantId]
     );
-
-    await tx`SELECT app.clear_tenant_context()`;
 
     return result;
   });
 
-  // Call progress callback
+  return parseInt(rows[0]?.count ?? "0", 10);
+}
+
+// =============================================================================
+// In-Memory Query Executor (for small datasets)
+// =============================================================================
+
+/**
+ * Execute export query and return all rows in memory.
+ * Used for small datasets below STREAMING_THRESHOLD.
+ */
+async function executeExportQuery(
+  db: import("../plugins/db").DatabaseClient,
+  tenantId: string,
+  query: ExportQuery,
+  onProgress?: (processed: number) => void
+): Promise<Array<Record<string, unknown>>> {
+  const vq = buildValidatedQuery(query);
+  const sql = buildSelectSql(vq);
+
+  // System context bypasses RLS; the WHERE tenant_id = $1 clause in the
+  // generated SQL provides data isolation by filtering to this tenant only.
+  const rows = await db.withSystemContext(async (tx) => {
+    const result = await tx.unsafe<Array<Record<string, unknown>>>(sql, [tenantId]);
+
+    return result;
+  });
+
   if (onProgress) {
     onProgress(rows.length);
   }
@@ -639,11 +832,265 @@ async function executeExportQuery(
 }
 
 // =============================================================================
+// Streaming CSV Export (for large datasets)
+// =============================================================================
+
+/**
+ * Stream CSV rows from the database cursor directly to a temp file.
+ * Returns the temp file path and total row count.
+ *
+ * Uses postgres.js cursor(batchSize) as an async iterable to avoid
+ * holding the entire result set in memory. Each batch of rows is
+ * formatted and flushed to the file immediately.
+ */
+async function streamCsvToFile(
+  db: import("../plugins/db").DatabaseClient,
+  tenantId: string,
+  query: ExportQuery,
+  tempFilePath: string,
+  options: {
+    delimiter?: string;
+    quoteChar?: string;
+    escapeChar?: string;
+    lineEnding?: string;
+    includeHeaders?: boolean;
+  },
+  onProgress?: (processed: number) => void
+): Promise<{ rowCount: number }> {
+  const fs = await import("fs");
+  const {
+    delimiter = ",",
+    quoteChar = '"',
+    escapeChar = '"',
+    lineEnding = "\n",
+    includeHeaders = true,
+  } = options;
+
+  const escape = createCsvEscaper(delimiter, quoteChar, escapeChar);
+  const vq = buildValidatedQuery(query);
+  const sql = buildSelectSql(vq);
+
+  // Open a write stream to the temp file
+  const writeStream = fs.createWriteStream(tempFilePath, { encoding: "utf-8" });
+
+  // Wrap the write in a promise so we can await drain events for backpressure
+  const write = (chunk: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const ok = writeStream.write(chunk);
+      if (ok) {
+        resolve();
+      } else {
+        writeStream.once("drain", resolve);
+        writeStream.once("error", reject);
+      }
+    });
+  };
+
+  let rowCount = 0;
+
+  try {
+    // Write header row
+    if (includeHeaders) {
+      const headerRow = query.columns.map((col) => escape(col.header)).join(delimiter);
+      await write(headerRow + lineEnding);
+    }
+
+    // Stream rows from the database using cursor.
+    // System context bypasses RLS; the WHERE tenant_id = $1 clause in the
+    // generated SQL provides data isolation by filtering to this tenant only.
+    await db.withSystemContext(async (tx) => {
+      // postgres.js cursor(batchSize) returns an AsyncIterable of row batches
+      const cursor = tx.unsafe<Array<Record<string, unknown>>>(sql, [tenantId])
+        .cursor(CURSOR_BATCH_SIZE);
+
+      for await (const batch of cursor) {
+        for (const row of batch) {
+          const line = formatCsvRow(row, query.columns, delimiter, escape);
+          await write(line + lineEnding);
+          rowCount++;
+        }
+
+        if (onProgress) {
+          onProgress(rowCount);
+        }
+      }
+    });
+  } finally {
+    // Ensure the stream is closed
+    await new Promise<void>((resolve, reject) => {
+      writeStream.end(() => resolve());
+      writeStream.once("error", reject);
+    });
+  }
+
+  return { rowCount };
+}
+
+// =============================================================================
+// Streaming Excel Export (for large datasets)
+// =============================================================================
+
+/**
+ * Stream Excel rows from the database cursor to a temp file using
+ * ExcelJS streaming WorkbookWriter.
+ *
+ * The WorkbookWriter writes rows incrementally to the file, keeping
+ * memory usage proportional to the batch size rather than the full dataset.
+ * Note: auto-fit columns is not available in streaming mode because it
+ * requires knowing all values upfront.
+ */
+async function streamExcelToFile(
+  db: import("../plugins/db").DatabaseClient,
+  tenantId: string,
+  query: ExportQuery,
+  tempFilePath: string,
+  options: {
+    sheetName?: string;
+    includeHeaders?: boolean;
+    freezeHeader?: boolean;
+  },
+  onProgress?: (processed: number) => void
+): Promise<{ rowCount: number }> {
+  const ExcelJS = await import("exceljs");
+
+  // Use the streaming WorkbookWriter which writes to a file incrementally
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+    filename: tempFilePath,
+    useStyles: true,
+  });
+
+  workbook.creator = "Staffora";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const sheet = workbook.addWorksheet(options.sheetName || "Export", {
+    views: options.freezeHeader !== false ? [{ state: "frozen" as const, ySplit: 1 }] : undefined,
+  });
+
+  // Set up columns
+  sheet.columns = query.columns.map((col) => ({
+    header: options.includeHeaders !== false ? col.header : undefined,
+    key: col.field,
+    width: col.width || 15,
+  }));
+
+  // Style header row (must be done before committing it)
+  if (options.includeHeaders !== false) {
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" },
+    };
+    headerRow.border = {
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+    };
+    headerRow.commit();
+  }
+
+  // Apply column number formats (set on the column definition before writing rows)
+  query.columns.forEach((col, index) => {
+    const excelCol = sheet.getColumn(index + 1);
+    switch (col.formatter) {
+      case "date":
+        excelCol.numFmt = col.format || "yyyy-mm-dd";
+        break;
+      case "datetime":
+        excelCol.numFmt = col.format || "yyyy-mm-dd hh:mm:ss";
+        break;
+      case "currency":
+        excelCol.numFmt = col.format || "$#,##0.00";
+        break;
+      case "percentage":
+        excelCol.numFmt = col.format || "0.00%";
+        break;
+    }
+  });
+
+  const vq = buildValidatedQuery(query);
+  const sql = buildSelectSql(vq);
+  let rowCount = 0;
+
+  // Stream rows from cursor and add to worksheet.
+  // System context bypasses RLS; the WHERE tenant_id = $1 clause in the
+  // generated SQL provides data isolation by filtering to this tenant only.
+  await db.withSystemContext(async (tx) => {
+    const cursor = tx.unsafe<Array<Record<string, unknown>>>(sql, [tenantId])
+      .cursor(CURSOR_BATCH_SIZE);
+
+    for await (const batch of cursor) {
+      for (const row of batch) {
+        const rowData: Record<string, unknown> = {};
+        for (const col of query.columns) {
+          rowData[col.field] = formatExcelCellValue(row[col.field], col.formatter);
+        }
+        const excelRow = sheet.addRow(rowData);
+        excelRow.commit();
+        rowCount++;
+      }
+
+      if (onProgress) {
+        onProgress(rowCount);
+      }
+    }
+  });
+
+  // Commit the worksheet and workbook to flush everything to disk
+  sheet.commit();
+  await workbook.commit();
+
+  return { rowCount };
+}
+
+// =============================================================================
+// Temp File Helpers
+// =============================================================================
+
+/**
+ * Create a temp file path for streaming exports.
+ */
+async function createTempFilePath(exportId: string, extension: string): Promise<string> {
+  const os = await import("os");
+  const path = await import("path");
+  const fs = await import("fs/promises");
+
+  const tmpDir = path.join(os.tmpdir(), "staffora-export-tmp");
+  await fs.mkdir(tmpDir, { recursive: true });
+  return path.join(tmpDir, `${exportId}_${Date.now()}.${extension}`);
+}
+
+/**
+ * Safely remove a temp file, ignoring errors if it does not exist.
+ */
+async function removeTempFile(filePath: string): Promise<void> {
+  const fs = await import("fs/promises");
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+/**
+ * Get the file size of a local file.
+ */
+async function getFileSize(filePath: string): Promise<number> {
+  const fs = await import("fs/promises");
+  const stat = await fs.stat(filePath);
+  return stat.size;
+}
+
+// =============================================================================
 // CSV Export Processor
 // =============================================================================
 
 /**
- * Process CSV export job
+ * Process CSV export job.
+ *
+ * For datasets below STREAMING_THRESHOLD, uses in-memory generation.
+ * For larger datasets, streams rows from a postgres cursor to a temp file
+ * and then uploads the file to storage.
  */
 async function processCsvExport(
   payload: JobPayload<CsvExportPayload>,
@@ -672,41 +1119,85 @@ async function processCsvExport(
     // Update export status to processing
     await updateExportStatus(db, exportId, "processing");
 
-    // Execute query
-    log.info("Executing export query");
-    const rows = await executeExportQuery(db, payload.tenantId, query, (count) => {
-      log.debug(`Processed ${count} rows`);
-    });
+    // Determine dataset size to choose export strategy
+    const rowCount = await getExportRowCount(db, payload.tenantId, query);
+    log.info(`Export row count: ${rowCount} (streaming threshold: ${STREAMING_THRESHOLD})`);
 
-    log.info(`Query returned ${rows.length} rows`);
-
-    // Generate CSV
-    const csv = generateCsv(rows, query.columns, {
-      delimiter,
-      quoteChar,
-      escapeChar,
-      lineEnding,
-      includeHeaders: includeHeaders ?? true,
-    });
-
-    // Save to storage
     const storage = getStorage();
-    const filename = `${exportId}_${name.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
-    const filePath = await storage.save(filename, csv);
-    const downloadUrl = await storage.getDownloadUrl(filePath, 86400); // 24 hours
+    const storageFilename = `${exportId}_${name.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
+    let filePath: string;
+    let fileSize: number;
+    let actualRowCount: number;
 
-    const fileSize = Buffer.byteLength(csv, "utf-8");
+    if (rowCount < STREAMING_THRESHOLD) {
+      // --- Small dataset: in-memory generation ---
+      log.info("Using in-memory CSV generation (small dataset)");
+
+      const rows = await executeExportQuery(db, payload.tenantId, query, (count) => {
+        log.debug(`Processed ${count} rows`);
+      });
+
+      actualRowCount = rows.length;
+      log.info(`Query returned ${actualRowCount} rows`);
+
+      const csv = generateCsv(rows, query.columns, {
+        delimiter,
+        quoteChar,
+        escapeChar,
+        lineEnding,
+        includeHeaders: includeHeaders ?? true,
+      });
+
+      filePath = await storage.save(storageFilename, csv);
+      fileSize = Buffer.byteLength(csv, "utf-8");
+    } else {
+      // --- Large dataset: streaming to temp file ---
+      log.info("Using streaming CSV generation (large dataset)");
+
+      const tempFile = await createTempFilePath(exportId, "csv");
+      try {
+        const result = await streamCsvToFile(
+          db,
+          payload.tenantId,
+          query,
+          tempFile,
+          {
+            delimiter,
+            quoteChar,
+            escapeChar,
+            lineEnding,
+            includeHeaders: includeHeaders ?? true,
+          },
+          (processed) => {
+            // Log progress every 5000 rows
+            if (processed % 5000 === 0) {
+              log.info(`Streaming progress: ${processed} rows written`);
+            }
+          }
+        );
+
+        actualRowCount = result.rowCount;
+        fileSize = await getFileSize(tempFile);
+
+        // Upload temp file to storage
+        filePath = await storage.saveFromFile(storageFilename, tempFile);
+      } finally {
+        await removeTempFile(tempFile);
+      }
+    }
+
+    const downloadUrl = await storage.getDownloadUrl(filePath, 86400); // 24 hours
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     // Update export record
     await completeExport(db, exportId, {
       filePath,
       fileSize,
-      rowCount: rows.length,
+      rowCount: actualRowCount,
       expiresAt,
     });
 
-    log.info("CSV export completed", { downloadUrl, fileSize, rowCount: rows.length });
+    log.info("CSV export completed", { downloadUrl, fileSize, rowCount: actualRowCount });
 
     // Notify user if requested
     if (notifyUserId && payload.tenantId) {
@@ -717,7 +1208,7 @@ async function processCsvExport(
         name,
         format: "csv",
         downloadUrl,
-        rowCount: rows.length,
+        rowCount: actualRowCount,
       });
     }
   } catch (error) {
@@ -740,7 +1231,11 @@ async function processCsvExport(
 // =============================================================================
 
 /**
- * Process Excel export job
+ * Process Excel export job.
+ *
+ * For datasets below STREAMING_THRESHOLD, uses in-memory generation.
+ * For larger datasets, streams rows from a postgres cursor through
+ * ExcelJS WorkbookWriter to a temp file and then uploads to storage.
  */
 async function processExcelExport(
   payload: JobPayload<ExcelExportPayload>,
@@ -768,38 +1263,88 @@ async function processExcelExport(
     // Update export status to processing
     await updateExportStatus(db, exportId, "processing");
 
-    // Execute query
-    log.info("Executing export query");
-    const rows = await executeExportQuery(db, payload.tenantId, query);
+    // Determine dataset size to choose export strategy
+    const rowCount = await getExportRowCount(db, payload.tenantId, query);
+    log.info(`Export row count: ${rowCount} (streaming threshold: ${STREAMING_THRESHOLD})`);
 
-    log.info(`Query returned ${rows.length} rows`);
-
-    // Generate Excel
-    const excel = await generateExcel(rows, query.columns, {
-      sheetName,
-      includeHeaders: includeHeaders ?? true,
-      autoFitColumns,
-      freezeHeader,
-    });
-
-    // Save to storage
     const storage = getStorage();
-    const filename = `${exportId}_${name.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
-    const filePath = await storage.save(filename, excel);
-    const downloadUrl = await storage.getDownloadUrl(filePath, 86400);
+    const storageFilename = `${exportId}_${name.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+    let filePath: string;
+    let fileSize: number;
+    let actualRowCount: number;
 
-    const fileSize = excel.length;
+    if (rowCount < STREAMING_THRESHOLD) {
+      // --- Small dataset: in-memory generation ---
+      log.info("Using in-memory Excel generation (small dataset)");
+
+      const rows = await executeExportQuery(db, payload.tenantId, query);
+      actualRowCount = rows.length;
+      log.info(`Query returned ${actualRowCount} rows`);
+
+      const excel = await generateExcel(rows, query.columns, {
+        sheetName,
+        includeHeaders: includeHeaders ?? true,
+        autoFitColumns,
+        freezeHeader,
+      });
+
+      filePath = await storage.save(storageFilename, excel);
+      fileSize = excel.length;
+    } else {
+      // --- Large dataset: streaming to temp file ---
+      // Note: auto-fit columns is not available in streaming mode since it
+      // requires knowing all values upfront. Column widths use the explicit
+      // width from ExportColumn or a default of 15.
+      if (autoFitColumns !== false) {
+        log.info(
+          "Auto-fit columns disabled for streaming export (requires all data in memory). " +
+          "Using explicit column widths."
+        );
+      }
+
+      log.info("Using streaming Excel generation (large dataset)");
+
+      const tempFile = await createTempFilePath(exportId, "xlsx");
+      try {
+        const result = await streamExcelToFile(
+          db,
+          payload.tenantId,
+          query,
+          tempFile,
+          {
+            sheetName,
+            includeHeaders: includeHeaders ?? true,
+            freezeHeader,
+          },
+          (processed) => {
+            if (processed % 5000 === 0) {
+              log.info(`Streaming progress: ${processed} rows written`);
+            }
+          }
+        );
+
+        actualRowCount = result.rowCount;
+        fileSize = await getFileSize(tempFile);
+
+        // Upload temp file to storage
+        filePath = await storage.saveFromFile(storageFilename, tempFile);
+      } finally {
+        await removeTempFile(tempFile);
+      }
+    }
+
+    const downloadUrl = await storage.getDownloadUrl(filePath, 86400);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // Update export record
     await completeExport(db, exportId, {
       filePath,
       fileSize,
-      rowCount: rows.length,
+      rowCount: actualRowCount,
       expiresAt,
     });
 
-    log.info("Excel export completed", { downloadUrl, fileSize, rowCount: rows.length });
+    log.info("Excel export completed", { downloadUrl, fileSize, rowCount: actualRowCount });
 
     // Notify user
     if (notifyUserId && payload.tenantId) {
@@ -810,7 +1355,7 @@ async function processExcelExport(
         name,
         format: "xlsx",
         downloadUrl,
-        rowCount: rows.length,
+        rowCount: actualRowCount,
       });
     }
   } catch (error) {

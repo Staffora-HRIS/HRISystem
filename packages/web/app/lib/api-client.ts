@@ -189,6 +189,9 @@ function calculateBackoff(
 }
 
 class ApiClient {
+  /** Prevents multiple concurrent 401 → /login redirects */
+  static _redirectingToLogin = false;
+
   private baseUrl: string;
   private defaultHeaders: Record<string, string>;
   private requestInterceptors: RequestInterceptor[] = [];
@@ -468,6 +471,22 @@ class ApiClient {
           // Run error interceptors
           for (const interceptor of this.errorInterceptors) {
             error = await interceptor(error);
+          }
+
+          // Auto-redirect to login on 401 (expired/invalid session).
+          // Uses a static flag to prevent multiple concurrent redirects.
+          if (
+            response.status === 401 &&
+            typeof window !== "undefined" &&
+            !ApiClient._redirectingToLogin
+          ) {
+            const currentPath = window.location.pathname;
+            if (currentPath !== "/login" && currentPath !== "/register") {
+              ApiClient._redirectingToLogin = true;
+              window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+              // Return a never-resolving promise to prevent further processing
+              return new Promise<T>(() => {});
+            }
           }
 
           throw error;

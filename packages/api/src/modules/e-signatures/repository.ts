@@ -111,7 +111,7 @@ export class ESignaturesRepository {
           sr.reminder_count,
           sr.last_reminder_at,
           sr.requested_by,
-          app.get_user_display_name(sr.requested_by) as "requestedByName",
+          COALESCE((SELECT u.name FROM app."user" u WHERE u.id = sr.requested_by::text), 'Unknown') as "requestedByName",
           sr.created_at,
           sr.updated_at
         FROM app.signature_requests sr
@@ -164,7 +164,7 @@ export class ESignaturesRepository {
           sr.reminder_count,
           sr.last_reminder_at,
           sr.requested_by,
-          app.get_user_display_name(sr.requested_by) as "requestedByName",
+          COALESCE((SELECT u.name FROM app."user" u WHERE u.id = sr.requested_by::text), 'Unknown') as "requestedByName",
           sr.created_at,
           sr.updated_at
         FROM app.signature_requests sr

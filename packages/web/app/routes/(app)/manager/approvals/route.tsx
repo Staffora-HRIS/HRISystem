@@ -70,33 +70,29 @@ export default function ManagerApprovalsPage() {
 
   const approveMutation = useMutation({
     mutationFn: (params: { type: string; id: string }) => {
-      if (params.type === "leave_request") {
-        return api.post(`/absence/requests/${params.id}/approve`, { action: "approve" });
-      }
-      return api.post(`/time/timesheets/${params.id}/approve`, { action: "approve" });
+      return api.post(`/manager/approvals/${params.id}/approve`, { type: params.type === "leave_request" ? "leave" : "timesheet" });
     },
     onSuccess: () => {
       toast.success("Approved successfully");
       queryClient.invalidateQueries({ queryKey: ["portal", "approvals"] });
     },
-    onError: () => {
-      toast.error("Failed to approve");
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to approve";
+      toast.error(message);
     },
   });
 
   const rejectMutation = useMutation({
     mutationFn: (params: { type: string; id: string }) => {
-      if (params.type === "leave_request") {
-        return api.post(`/absence/requests/${params.id}/approve`, { action: "reject", comments: "Rejected by manager" });
-      }
-      return api.post(`/time/timesheets/${params.id}/approve`, { action: "reject", comments: "Rejected by manager" });
+      return api.post(`/manager/approvals/${params.id}/reject`, { type: params.type === "leave_request" ? "leave" : "timesheet" });
     },
     onSuccess: () => {
       toast.success("Rejected successfully");
       queryClient.invalidateQueries({ queryKey: ["portal", "approvals"] });
     },
-    onError: () => {
-      toast.error("Failed to reject");
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Failed to reject";
+      toast.error(message);
     },
   });
 

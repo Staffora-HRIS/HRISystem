@@ -315,16 +315,16 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
   // Member Routes
   // ===========================================================================
 
-  // GET /talent-pools/:poolId/members - List pool members
+  // GET /talent-pools/:id/members - List pool members
   .get(
-    "/:poolId/members",
+    "/:id/members",
     async (ctx) => {
       const { talentPoolService, tenantContext, params, query, error } = ctx as any;
       const { cursor, limit = 20, ...filters } = query;
 
       const result = await talentPoolService.listMembers(
         tenantContext,
-        params.poolId,
+        params.id,
         filters,
         { cursor, limit: Number(limit) }
       );
@@ -343,7 +343,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     },
     {
       beforeHandle: [requirePermission("talent_pools", "read")],
-      params: t.Object({ poolId: UuidSchema }),
+      params: t.Object({ id: UuidSchema }),
       query: t.Partial(t.Object({
         ...MemberFiltersSchema.properties,
         ...PaginationQuerySchema.properties,
@@ -366,14 +366,14 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     }
   )
 
-  // POST /talent-pools/:poolId/members - Add member to pool
+  // POST /talent-pools/:id/members - Add member to pool
   .post(
-    "/:poolId/members",
+    "/:id/members",
     async (ctx) => {
       const { talentPoolService, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
-      const result = await talentPoolService.addMember(tenantContext, params.poolId, body);
+      const result = await talentPoolService.addMember(tenantContext, params.id, body);
 
       if (!result.success) {
         return error(mapErrorToStatus(result.error.code, TALENT_POOL_ERROR_CODES), {
@@ -388,7 +388,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
           resourceType: "talent_pool_member",
           resourceId: result.data.id,
           newValues: result.data,
-          metadata: { idempotencyKey, requestId, poolId: params.poolId },
+          metadata: { idempotencyKey, requestId, poolId: params.id },
         });
       }
 
@@ -396,7 +396,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     },
     {
       beforeHandle: [requirePermission("talent_pools", "write")],
-      params: t.Object({ poolId: UuidSchema }),
+      params: t.Object({ id: UuidSchema }),
       body: AddMemberSchema,
       headers: OptionalIdempotencyHeaderSchema,
       response: {
@@ -414,9 +414,9 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     }
   )
 
-  // PATCH /talent-pools/:poolId/members/:memberId - Update member
+  // PATCH /talent-pools/:id/members/:memberId - Update member
   .patch(
-    "/:poolId/members/:memberId",
+    "/:id/members/:memberId",
     async (ctx) => {
       const { talentPoolService, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
@@ -436,7 +436,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
           resourceType: "talent_pool_member",
           resourceId: params.memberId,
           newValues: result.data,
-          metadata: { idempotencyKey, requestId, poolId: params.poolId },
+          metadata: { idempotencyKey, requestId, poolId: params.id },
         });
       }
 
@@ -444,7 +444,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     },
     {
       beforeHandle: [requirePermission("talent_pools", "write")],
-      params: t.Object({ poolId: UuidSchema, memberId: UuidSchema }),
+      params: t.Object({ id: UuidSchema, memberId: UuidSchema }),
       body: UpdateMemberSchema,
       headers: OptionalIdempotencyHeaderSchema,
       response: {
@@ -461,9 +461,9 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     }
   )
 
-  // DELETE /talent-pools/:poolId/members/:memberId - Remove member
+  // DELETE /talent-pools/:id/members/:memberId - Remove member
   .delete(
-    "/:poolId/members/:memberId",
+    "/:id/members/:memberId",
     async (ctx) => {
       const { talentPoolService, tenantContext, params, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
@@ -482,7 +482,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
           action: "talent_pool.member.removed",
           resourceType: "talent_pool_member",
           resourceId: params.memberId,
-          metadata: { idempotencyKey, requestId, poolId: params.poolId },
+          metadata: { idempotencyKey, requestId, poolId: params.id },
         });
       }
 
@@ -490,7 +490,7 @@ export const talentPoolRoutes = new Elysia({ prefix: "/talent-pools", name: "tal
     },
     {
       beforeHandle: [requirePermission("talent_pools", "delete")],
-      params: t.Object({ poolId: UuidSchema, memberId: UuidSchema }),
+      params: t.Object({ id: UuidSchema, memberId: UuidSchema }),
       headers: OptionalIdempotencyHeaderSchema,
       response: {
         200: SuccessSchema,

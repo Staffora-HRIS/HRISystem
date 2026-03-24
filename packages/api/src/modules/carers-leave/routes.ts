@@ -485,6 +485,117 @@ export const carersLeaveRoutes = new Elysia({
         security: [{ bearerAuth: [] }],
       },
     }
+  )
+
+  // ===========================================================================
+  // Alias routes: /requests — frontend calls /carers-leave/requests
+  // These delegate to the same service methods as the root routes above.
+  // ===========================================================================
+
+  // GET /carers-leave/requests - Alias for GET /carers-leave/
+  .get(
+    "/requests",
+    async (ctx) => {
+      const { carersLeaveService, query, tenantContext } = ctx as unknown as CarersLeaveRouteContext;
+      const { cursor, limit, ...filters } = query;
+      const parsedLimit =
+        limit !== undefined && limit !== null ? Number(limit) : undefined;
+
+      const result = await carersLeaveService.listEntitlements(
+        tenantContext,
+        filters,
+        { cursor, limit: parsedLimit }
+      );
+
+      return {
+        items: result.items,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+      };
+    },
+    {
+      beforeHandle: [requirePermission("carers_leave", "read")],
+      query: t.Composite([
+        t.Partial(EntitlementFiltersSchema),
+        t.Partial(PaginationQuerySchema),
+      ]),
+      response: t.Object({
+        items: t.Array(EntitlementResponseSchema),
+        nextCursor: t.Union([t.String(), t.Null()]),
+        hasMore: t.Boolean(),
+      }),
+      detail: {
+        tags: ["Carer's Leave"],
+        summary: "List carer's leave requests (alias)",
+        description:
+          "Alias for GET /carers-leave — list carer's leave entitlements with optional filters and cursor-based pagination",
+        security: [{ bearerAuth: [] }],
+      },
+    }
+  )
+
+  // POST /carers-leave/requests - Alias for POST /carers-leave/
+  .post(
+    "/requests",
+    async (ctx) => {
+      const {
+        carersLeaveService,
+        body,
+        headers,
+        tenantContext,
+        audit,
+        requestId,
+        error,
+        set,
+      } = ctx as unknown as CarersLeaveRouteContext;
+      const idempotencyKey = headers["idempotency-key"];
+
+      const result = await carersLeaveService.createEntitlement(
+        tenantContext,
+        body as unknown as CreateEntitlement,
+        idempotencyKey
+      );
+
+      if (!result.success) {
+        const status = mapErrorToStatus(
+          result.error?.code || "INTERNAL_ERROR",
+          carersLeaveErrorStatusMap
+        );
+        return error(status, { error: result.error });
+      }
+
+      // Audit log the creation
+      if (audit) {
+        await audit.log({
+          action: CarersLeaveAuditActions.ENTITLEMENT_CREATED,
+          resourceType: "carers_leave_entitlement",
+          resourceId: result.data!.id,
+          newValues: result.data,
+          metadata: { idempotencyKey, requestId },
+        });
+      }
+
+      set.status = 201;
+      return result.data;
+    },
+    {
+      beforeHandle: [requirePermission("carers_leave", "write")],
+      body: CreateEntitlementSchema,
+      headers: OptionalIdempotencyHeaderSchema,
+      response: {
+        201: EntitlementResponseSchema,
+        400: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+      detail: {
+        tags: ["Carer's Leave"],
+        summary: "Create carer's leave request (alias)",
+        description:
+          "Alias for POST /carers-leave — create a new carer's leave entitlement for an employee and leave year",
+        security: [{ bearerAuth: [] }],
+      },
+    }
   );
 
 export type CarersLeaveRoutes = typeof carersLeaveRoutes;

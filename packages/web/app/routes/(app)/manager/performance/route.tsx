@@ -1,6 +1,8 @@
+export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Target, Users, TrendingUp, Calendar, Star, Eye } from "lucide-react";
+import { Target, Users, TrendingUp, Calendar, Star, Eye, AlertCircle } from "lucide-react";
 import {
   Card,
   CardBody,
@@ -13,6 +15,7 @@ import {
   ModalBody,
   ModalFooter,
   Select,
+  Spinner,
   useToast,
 } from "~/components/ui";
 import { api, ApiError } from "~/lib/api-client";
@@ -45,15 +48,18 @@ export default function ManagerPerformancePage() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data: goalsData } = useQuery({
+  const { data: goalsData, isLoading: goalsLoading, error: goalsError } = useQuery({
     queryKey: ["team-goals"],
     queryFn: () => api.get<{ items: Goal[]; nextCursor: string | null; hasMore: boolean }>("/talent/goals"),
   });
 
-  const { data: reviewsData } = useQuery({
+  const { data: reviewsData, isLoading: reviewsLoading, error: reviewsError } = useQuery({
     queryKey: ["team-reviews"],
     queryFn: () => api.get<{ items: Review[]; nextCursor: string | null; hasMore: boolean }>("/talent/reviews"),
   });
+
+  const isLoading = goalsLoading || reviewsLoading;
+  const error = goalsError || reviewsError;
 
   // State for goal detail modal
   const [viewingGoal, setViewingGoal] = useState<Goal | null>(null);
@@ -123,6 +129,38 @@ export default function ManagerPerformancePage() {
     });
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error && !goalsData && !reviewsData) {
+    const message =
+      error instanceof ApiError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Unable to load performance data.";
+
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Team Performance</h1>
+        <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
+          <CardBody className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-red-800 dark:text-red-300">Error loading data</h4>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">{message}</p>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
   const goals = goalsData?.items || [];
   const reviews = reviewsData?.items || [];
 
@@ -172,21 +210,23 @@ export default function ManagerPerformancePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team Performance</h1>
-          <p className="text-gray-600">Manage goals and performance reviews</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Team Performance</h1>
+          <p className="text-gray-600 dark:text-gray-400">Manage goals and performance reviews</p>
         </div>
       </div>
 
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
         <button
+          type="button"
           onClick={() => setActiveTab("goals")}
-          className={`px-4 py-2 font-medium ${activeTab === "goals" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+          className={`px-4 py-2 font-medium ${activeTab === "goals" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
         >
           Goals
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab("reviews")}
-          className={`px-4 py-2 font-medium ${activeTab === "reviews" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+          className={`px-4 py-2 font-medium ${activeTab === "reviews" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
         >
           Reviews
         </button>
@@ -206,8 +246,8 @@ export default function ManagerPerformancePage() {
               <Card>
                 <CardBody className="text-center py-12">
                   <Target className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900">No goals found</h3>
-                  <p className="text-gray-500">Your team doesn't have any goals set yet.</p>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">No goals found</h3>
+                  <p className="text-gray-500 dark:text-gray-400">Your team doesn't have any goals set yet.</p>
                 </CardBody>
               </Card>
             ) : (
@@ -217,14 +257,14 @@ export default function ManagerPerformancePage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-500">{goal.employeeName}</span>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{goal.employeeName}</span>
                           {getStatusBadge(goal.status)}
                           <Badge variant="outline">{goal.category}</Badge>
                         </div>
-                        <h3 className="font-semibold text-gray-900">{goal.title}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{goal.description}</p>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{goal.title}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{goal.description}</p>
                         <div className="flex items-center gap-4 mt-3">
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
                             Due: {new Date(goal.targetDate).toLocaleDateString()}
                           </span>
                         </div>
@@ -271,8 +311,8 @@ export default function ManagerPerformancePage() {
               <Card>
                 <CardBody className="text-center py-12">
                   <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900">No reviews found</h3>
-                  <p className="text-gray-500">No performance reviews are currently in progress.</p>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">No reviews found</h3>
+                  <p className="text-gray-500 dark:text-gray-400">No performance reviews are currently in progress.</p>
                 </CardBody>
               </Card>
             ) : (
@@ -285,7 +325,7 @@ export default function ManagerPerformancePage() {
                           <span className="font-medium">{review.employeeName}</span>
                           {getStatusBadge(review.status)}
                         </div>
-                        <p className="text-sm text-gray-600">{review.cycleName}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{review.cycleName}</p>
                         <div className="flex items-center gap-6 mt-3">
                           <div>
                             <span className="text-xs text-gray-500 block">Self Rating</span>
@@ -328,31 +368,31 @@ export default function ManagerPerformancePage() {
           {viewingGoal && (
             <div className="space-y-4">
               <div>
-                <h3 className="font-semibold text-gray-900">{viewingGoal.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">{viewingGoal.employeeName}</p>
+                <h3 className="font-semibold text-gray-900 dark:text-white">{viewingGoal.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{viewingGoal.employeeName}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-500">Description</label>
-                <p className="text-gray-900 mt-1">{viewingGoal.description}</p>
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</label>
+                <p className="text-gray-900 dark:text-white mt-1">{viewingGoal.description}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Category</label>
-                  <p className="text-gray-900 mt-1">{viewingGoal.category}</p>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Category</label>
+                  <p className="text-gray-900 dark:text-white mt-1">{viewingGoal.category}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Status</label>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</label>
                   <div className="mt-1">{getStatusBadge(viewingGoal.status)}</div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Target Date</label>
-                  <p className="text-gray-900 mt-1">{new Date(viewingGoal.targetDate).toLocaleDateString()}</p>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Target Date</label>
+                  <p className="text-gray-900 dark:text-white mt-1">{new Date(viewingGoal.targetDate).toLocaleDateString()}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Progress</label>
-                  <p className="text-gray-900 mt-1">{viewingGoal.progress}%</p>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Progress</label>
+                  <p className="text-gray-900 dark:text-white mt-1">{viewingGoal.progress}%</p>
                 </div>
               </div>
               <div>
@@ -384,26 +424,26 @@ export default function ManagerPerformancePage() {
           {viewingReview && (
             <div className="space-y-4">
               <div>
-                <h3 className="font-semibold text-gray-900">{viewingReview.employeeName}</h3>
-                <p className="text-sm text-gray-500 mt-1">{viewingReview.cycleName}</p>
+                <h3 className="font-semibold text-gray-900 dark:text-white">{viewingReview.employeeName}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{viewingReview.cycleName}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Status</label>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</label>
                   <div className="mt-1">{getStatusBadge(viewingReview.status)}</div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Created</label>
-                  <p className="text-gray-900 mt-1">{new Date(viewingReview.createdAt).toLocaleDateString()}</p>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</label>
+                  <p className="text-gray-900 dark:text-white mt-1">{new Date(viewingReview.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Self Rating</label>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Self Rating</label>
                   <div className="mt-1">{renderStars(viewingReview.selfRating)}</div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Manager Rating</label>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Manager Rating</label>
                   <div className="mt-1">{renderStars(viewingReview.managerRating)}</div>
                 </div>
               </div>
@@ -432,13 +472,13 @@ export default function ManagerPerformancePage() {
         <ModalBody>
           <div className="space-y-4">
             {reviewToComplete && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   <span className="font-medium">Cycle:</span> {reviewToComplete.cycleName}
                 </p>
                 {reviewToComplete.selfRating !== null && (
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm text-gray-600 font-medium">Self Rating:</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">Self Rating:</span>
                     {renderStars(reviewToComplete.selfRating)}
                   </div>
                 )}
@@ -491,7 +531,7 @@ export default function ManagerPerformancePage() {
                     onChange={(e) => setReviewPromotion(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     Recommend for promotion
                   </span>
                 </label>

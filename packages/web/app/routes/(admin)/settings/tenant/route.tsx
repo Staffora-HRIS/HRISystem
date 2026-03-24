@@ -137,7 +137,7 @@ export default function AdminTenantSettingsPage() {
     refetch,
   } = useQuery({
     queryKey: queryKeys.tenant.current(),
-    queryFn: () => api.get<TenantData>("/api/v1/tenant/current"),
+    queryFn: () => api.get<TenantData>("/tenant/current"),
   });
 
   // Sync form state when data loads
@@ -160,7 +160,7 @@ export default function AdminTenantSettingsPage() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formStateToPayload>) =>
-      api.put<TenantData>("/api/v1/tenant/settings", payload),
+      api.put<TenantData>("/tenant/settings", payload),
     onSuccess: (updated) => {
       toast.success("Settings saved successfully");
       setIsDirty(false);
@@ -265,11 +265,11 @@ export default function AdminTenantSettingsPage() {
                 <Building2 className="h-8 w-8 text-gray-400" />
               </div>
               <div>
-                <Button variant="outline" size="sm" disabled>
-                  Upload Logo
-                </Button>
+                <p className="text-sm text-gray-400">
+                  Logo upload coming soon
+                </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Logo upload is not yet available. PNG, JPG up to 2MB. Recommended: 200x200px
+                  PNG, JPG up to 2MB. Recommended: 200x200px
                 </p>
               </div>
             </div>

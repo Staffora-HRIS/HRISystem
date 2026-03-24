@@ -10,6 +10,9 @@ import type { DatabaseClient } from "../../plugins/db";
 import type { HRRepository, PositionRow } from "./repository";
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import type { CacheClient } from "../../plugins/cache";
+import { CacheKeys, CacheTTL } from "../../plugins/cache";
+import { logger } from "../../lib/logger";
 import type {
   CreatePosition,
   UpdatePosition,
@@ -34,8 +37,26 @@ type PositionDomainEventType =
 export class PositionService {
   constructor(
     private repository: HRRepository,
-    private db: DatabaseClient
+    private db: DatabaseClient,
+    private cache: CacheClient | null = null
   ) {}
+
+  // ===========================================================================
+  // Cache Helpers
+  // ===========================================================================
+
+  /**
+   * Invalidate the positions cache for a tenant.
+   * Best-effort: cache failures are logged but do not propagate.
+   */
+  private async invalidatePositionsCache(tenantId: string): Promise<void> {
+    if (!this.cache) return;
+    try {
+      await this.cache.del(CacheKeys.positions(tenantId));
+    } catch (err) {
+      logger.warn({ err, module: "hr-positions" }, "Failed to invalidate positions cache");
+    }
+  }
 
   // ===========================================================================
   // Domain Event Emission
@@ -71,20 +92,53 @@ export class PositionService {
   // ===========================================================================
 
   /**
-   * List positions with filters
+   * List positions with filters.
+   *
+   * When fetching with no filters and no cursor (i.e. the first page of the
+   * full list), results are cached per-tenant for 5 minutes.
    */
   async listPositions(
     context: TenantContext,
     filters: PositionFilters = {},
     pagination: PaginationQuery = {}
   ): Promise<PaginatedServiceResult<PositionResponse>> {
-    const result = await this.repository.findPositions(context, filters, pagination);
+    // Determine if this is a cacheable request (no filters, first page)
+    const hasFilters = !!(
+      filters.org_unit_id ||
+      filters.is_active !== undefined ||
+      filters.is_manager !== undefined ||
+      filters.job_grade ||
+      filters.search
+    );
+    const isCacheable = !hasFilters && !pagination.cursor && this.cache;
 
-    return {
+    if (isCacheable) {
+      const cacheKey = CacheKeys.positions(context.tenantId);
+      try {
+        const cached = await this.cache!.get<PaginatedServiceResult<PositionResponse>>(cacheKey);
+        if (cached !== null) {
+          return cached;
+        }
+      } catch (cacheErr) {
+        logger.warn({ err: cacheErr, module: "hr-positions" }, "Cache read failed for positions, falling back to DB");
+      }
+    }
+
+    const result = await this.repository.findPositions(context, filters, pagination);
+    const mapped: PaginatedServiceResult<PositionResponse> = {
       items: result.items.map(this.mapPositionToResponse),
       nextCursor: result.nextCursor,
       hasMore: result.hasMore,
     };
+
+    // Populate cache for the unfiltered first page (fire-and-forget)
+    if (isCacheable) {
+      this.cache!
+        .set(CacheKeys.positions(context.tenantId), mapped, CacheTTL.SESSION)
+        .catch((err) => logger.warn({ err, module: "hr-positions" }, "Cache write failed for positions"));
+    }
+
+    return mapped;
   }
 
   /**
@@ -165,6 +219,8 @@ export class PositionService {
       return position;
     });
 
+    await this.invalidatePositionsCache(context.tenantId);
+
     return {
       success: true,
       data: this.mapPositionToResponse(result),
@@ -231,6 +287,8 @@ export class PositionService {
       return position;
     });
 
+    await this.invalidatePositionsCache(context.tenantId);
+
     return {
       success: true,
       data: this.mapPositionToResponse(result),
@@ -280,6 +338,8 @@ export class PositionService {
         positionId: id,
       });
     });
+
+    await this.invalidatePositionsCache(context.tenantId);
 
     return { success: true };
   }

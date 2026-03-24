@@ -26,6 +26,7 @@ import {
   StatCard,
   Button,
   Badge,
+  ConfirmModal,
   DataTable,
   type ColumnDef,
   Input,
@@ -47,6 +48,9 @@ export default function LookupValuesPage() {
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [editingCategory, setEditingCategory] =
     useState<LookupCategory | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "category" | "value"; id: string; label: string } | null>(null);
 
   // Value state
   const [valSearch, setValSearch] = useState("");
@@ -165,13 +169,7 @@ export default function LookupValuesPage() {
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                if (
-                  confirm(
-                    `Delete category "${row.name}"? This will also delete all its values.`
-                  )
-                ) {
-                  deleteCategoryMutation.mutate(row.id);
-                }
+                setDeleteConfirm({ type: "category", id: row.id, label: row.name });
               }}
               aria-label={`Delete ${row.name}`}
             >
@@ -265,9 +263,7 @@ export default function LookupValuesPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`Delete value "${row.label}"?`)) {
-                deleteValueMutation.mutate(row.id);
-              }
+              setDeleteConfirm({ type: "value", id: row.id, label: row.label });
             }}
             aria-label={`Delete ${row.label}`}
           >
@@ -548,6 +544,30 @@ export default function LookupValuesPage() {
           isPending={updateValueMutation.isPending}
         />
       )}
+
+      {/* Delete Confirmation */}
+      <ConfirmModal
+        open={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            if (deleteConfirm.type === "category") {
+              deleteCategoryMutation.mutate(deleteConfirm.id);
+            } else {
+              deleteValueMutation.mutate(deleteConfirm.id);
+            }
+          }
+          setDeleteConfirm(null);
+        }}
+        title={deleteConfirm?.type === "category" ? "Delete Category" : "Delete Value"}
+        message={
+          deleteConfirm?.type === "category"
+            ? `Delete category "${deleteConfirm.label}"? This will also delete all its values.`
+            : `Delete value "${deleteConfirm?.label ?? ""}"?`
+        }
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   );
 }

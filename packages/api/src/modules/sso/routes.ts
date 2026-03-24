@@ -21,6 +21,7 @@ import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import type { AuditHelper } from "../../plugins/audit";
 import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { logger } from "../../lib/logger";
 import type { DatabaseClient } from "../../plugins/db";
 import { SsoConfigRepository } from "./repository";
 import { SsoService } from "./service";
@@ -419,7 +420,7 @@ export const ssoPublicRoutes = new Elysia({ prefix: "/auth/sso", name: "sso-publ
       // Check for IdP error response
       if (query.error) {
         const errorDesc = query.error_description || query.error;
-        console.error(`[SSO] IdP error: ${query.error} - ${errorDesc}`);
+        logger.error({ module: "sso", idpError: query.error, errorDesc }, "SSO IdP error in callback");
 
         // Redirect to frontend login page with error
         const frontendUrl = process.env["FRONTEND_URL"] || "http://localhost:5173";

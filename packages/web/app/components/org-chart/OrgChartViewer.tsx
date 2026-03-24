@@ -83,8 +83,8 @@ function OrgNode({
       {/* Node Card */}
       <div
         className={cn(
-          "relative flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer min-w-[200px]",
-          matchesSearch ? "border-blue-200" : "border-gray-100 opacity-50"
+          "relative flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer min-w-[200px] dark:bg-gray-800 dark:border-gray-700",
+          matchesSearch ? "border-blue-200 dark:border-blue-600" : "border-gray-200 opacity-50 dark:border-gray-700"
         )}
         onClick={() => onNodeClick?.(node)}
       >
@@ -103,7 +103,7 @@ function OrgNode({
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm text-gray-900 truncate">{node.name}</p>
+          <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{node.name}</p>
           {node.title && (
             <p className="text-xs text-gray-500 truncate">{node.title}</p>
           )}
@@ -221,7 +221,7 @@ export function OrgChartViewer({ className, onNodeClick }: OrgChartViewerProps) 
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 border-b bg-white p-4">
+      <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -230,7 +230,7 @@ export function OrgChartViewer({ className, onNodeClick }: OrgChartViewerProps) 
             placeholder="Search employees..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
           />
         </div>
 
@@ -238,13 +238,13 @@ export function OrgChartViewer({ className, onNodeClick }: OrgChartViewerProps) 
         <div className="flex items-center gap-2">
           <button
             onClick={expandAll}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           >
             Expand All
           </button>
           <button
             onClick={collapseAll}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           >
             Collapse All
           </button>
@@ -269,7 +269,7 @@ export function OrgChartViewer({ className, onNodeClick }: OrgChartViewerProps) 
       </div>
 
       {/* Chart */}
-      <div className="flex-1 overflow-auto bg-gray-50 p-8">
+      <div className="flex-1 overflow-auto bg-gray-100 p-8 dark:bg-gray-900">
         <div
           className="min-w-max min-h-max transition-transform origin-top-left"
           style={{ transform: `scale(${zoom})` }}

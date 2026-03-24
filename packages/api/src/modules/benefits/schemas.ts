@@ -18,8 +18,8 @@ export const BenefitCategory = Type.Union([
   Type.Literal("life"),
   Type.Literal("disability"),
   Type.Literal("retirement"),
-  Type.Literal("hsa"),
-  Type.Literal("fsa"),
+  Type.Literal("childcare_vouchers"),
+  Type.Literal("cycle_to_work"),
   Type.Literal("wellness"),
   Type.Literal("commuter"),
   Type.Literal("education"),
@@ -69,7 +69,7 @@ export const LifeEventType = Type.Union([
   Type.Literal("employment_change"),
   Type.Literal("address_change"),
   Type.Literal("legal_separation"),
-  Type.Literal("medicare_eligibility"),
+  Type.Literal("pension_commencement"),
   Type.Literal("other"),
 ]);
 
@@ -411,7 +411,7 @@ export const SubmitElections = Type.Object({
   acknowledgements: Type.Object({
     tobacco_use: Type.Boolean(),
     terms_accepted: Type.Boolean(),
-    hipaa_acknowledged: Type.Boolean(),
+    gdpr_health_data_acknowledged: Type.Boolean(),
   }),
   employee_notes: Type.Optional(Type.String()),
 });
@@ -436,7 +436,7 @@ export type BenefitCostSummary = Static<typeof BenefitCostSummary>;
 // =============================================================================
 
 export const PaginationQuery = Type.Object({
-  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  limit: Type.Optional(Type.String({ pattern: "^[0-9]+$" })),
   cursor: Type.Optional(Type.String()),
 });
 

@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Heart,
   Search,
@@ -20,7 +20,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from "~/components/ui";
+import { useToast } from "~/components/ui/toast";
 import { api } from "~/lib/api-client";
 
 interface BereavementLeave {
@@ -67,9 +73,61 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+interface CreateBereavementForm {
+  employeeId: string;
+  relationship: string;
+  dateOfBereavement: string;
+  startDate: string;
+  expectedReturnDate: string;
+  notes: string;
+}
+
+const initialCreateForm: CreateBereavementForm = {
+  employeeId: "",
+  relationship: "",
+  dateOfBereavement: "",
+  startDate: "",
+  expectedReturnDate: "",
+  notes: "",
+};
+
 export default function AdminBereavementLeavePage() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState<CreateBereavementForm>(initialCreateForm);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateBereavementForm) =>
+      api.post("/bereavement/requests", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-bereavement-requests"] });
+      toast.success("Bereavement leave request created successfully");
+      setShowCreateModal(false);
+      setFormData(initialCreateForm);
+    },
+    onError: () => {
+      toast.error("Failed to create bereavement leave request", {
+        message: "Please check your input and try again.",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (
+      !formData.employeeId.trim() ||
+      !formData.relationship ||
+      !formData.dateOfBereavement ||
+      !formData.startDate ||
+      !formData.expectedReturnDate
+    ) {
+      toast.warning("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate(formData);
+  };
 
   const { data: leaveData, isLoading } = useQuery({
     queryKey: ["admin-bereavement-requests", statusFilter],
@@ -172,7 +230,7 @@ export default function AdminBereavementLeavePage() {
             Manage bereavement leave requests and SPBP eligibility
           </p>
         </div>
-        <Button disabled title="Coming soon">
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Request
         </Button>
@@ -268,6 +326,120 @@ export default function AdminBereavementLeavePage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Bereavement Leave Modal */}
+      {showCreateModal && (
+        <Modal
+          open
+          onClose={() => {
+            setShowCreateModal(false);
+            setFormData(initialCreateForm);
+          }}
+          size="md"
+          aria-label="Add bereavement leave request"
+        >
+          <ModalHeader title="Add Bereavement Leave Request" />
+          <ModalBody>
+            <form
+              id="bereavement-create-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Employee"
+                placeholder="Employee ID or name"
+                required
+                value={formData.employeeId}
+                onChange={(e) =>
+                  setFormData({ ...formData, employeeId: e.target.value })
+                }
+              />
+              <Select
+                label="Relationship to Deceased"
+                required
+                value={formData.relationship}
+                onChange={(e) =>
+                  setFormData({ ...formData, relationship: e.target.value })
+                }
+                options={[
+                  { value: "", label: "Select relationship" },
+                  { value: "child", label: "Child" },
+                  { value: "spouse", label: "Spouse" },
+                  { value: "parent", label: "Parent" },
+                  { value: "sibling", label: "Sibling" },
+                  { value: "other", label: "Other" },
+                ]}
+              />
+              <Input
+                label="Date of Bereavement"
+                type="date"
+                required
+                value={formData.dateOfBereavement}
+                onChange={(e) =>
+                  setFormData({ ...formData, dateOfBereavement: e.target.value })
+                }
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Start Date"
+                  type="date"
+                  required
+                  value={formData.startDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startDate: e.target.value })
+                  }
+                />
+                <Input
+                  label="Expected Return Date"
+                  type="date"
+                  required
+                  value={formData.expectedReturnDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, expectedReturnDate: e.target.value })
+                  }
+                />
+              </div>
+              <Textarea
+                label="Notes"
+                placeholder="Any additional details..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setFormData(initialCreateForm);
+              }}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="bereavement-create-form"
+              disabled={
+                !formData.employeeId.trim() ||
+                !formData.relationship ||
+                !formData.dateOfBereavement ||
+                !formData.startDate ||
+                !formData.expectedReturnDate ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." : "Add Request"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

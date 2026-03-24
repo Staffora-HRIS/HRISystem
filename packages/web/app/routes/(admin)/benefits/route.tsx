@@ -1,5 +1,5 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -10,6 +10,9 @@ import {
   Filter,
   Download,
   FileText,
+  ChevronDown,
+  ChevronUp,
+  X,
 } from "lucide-react";
 import { Card, CardHeader, CardBody } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -56,8 +59,8 @@ const PLAN_TYPE_COLORS: Record<string, string> = {
   life: "bg-green-100 text-green-700",
   disability: "bg-orange-100 text-orange-700",
   retirement: "bg-yellow-100 text-yellow-700",
-  hsa: "bg-teal-100 text-teal-700",
-  fsa: "bg-indigo-100 text-indigo-700",
+  childcare_vouchers: "bg-teal-100 text-teal-700",
+  cycle_to_work: "bg-indigo-100 text-indigo-700",
 };
 
 const BENEFIT_CATEGORIES = [
@@ -67,8 +70,8 @@ const BENEFIT_CATEGORIES = [
   { value: "life", label: "Life Insurance" },
   { value: "disability", label: "Disability" },
   { value: "retirement", label: "Retirement" },
-  { value: "hsa", label: "HSA" },
-  { value: "fsa", label: "FSA" },
+  { value: "childcare_vouchers", label: "Childcare Vouchers" },
+  { value: "cycle_to_work", label: "Cycle to Work" },
   { value: "wellness", label: "Wellness" },
   { value: "other", label: "Other" },
 ];
@@ -114,6 +117,13 @@ export default function BenefitsAdminPage() {
   const [planTypeFilter, setPlanTypeFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState<CreatePlanForm>(initialCreatePlanForm);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState({
+    search: "",
+    status: "",
+    enrollmentStart: "",
+    enrollmentEnd: "",
+  });
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["admin-benefit-plans", planTypeFilter],
@@ -173,8 +183,89 @@ export default function BenefitsAdminPage() {
     });
   };
 
-  const activePlans = plans?.items.filter((p) => p.isActive) || [];
-  const inactivePlans = plans?.items.filter((p) => !p.isActive) || [];
+  const handleExportPlans = useCallback(() => {
+    const allPlans = plans?.items;
+    if (!allPlans?.length) {
+      toast.info("No data to export");
+      return;
+    }
+    const headers = [
+      "Name",
+      "Plan Type",
+      "Provider",
+      "Coverage Level",
+      "Employee Contribution",
+      "Employer Contribution",
+      "Effective From",
+      "Effective To",
+      "Enrollment Start",
+      "Enrollment End",
+      "Active",
+      "Enrolled Count",
+    ];
+    const rows = allPlans.map((plan) => [
+      plan.name,
+      plan.planType,
+      plan.provider ?? "",
+      plan.coverageLevel,
+      String(plan.employeeContribution),
+      String(plan.employerContribution),
+      plan.effectiveFrom,
+      plan.effectiveTo ?? "",
+      plan.enrollmentStart ?? "",
+      plan.enrollmentEnd ?? "",
+      plan.isActive ? "Yes" : "No",
+      plan.enrolledCount !== undefined ? String(plan.enrolledCount) : "",
+    ]);
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `benefits-plans-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Benefits data exported");
+  }, [plans, toast]);
+
+  // Apply advanced filters on top of the already-fetched plans
+  const filteredPlans = (plans?.items || []).filter((plan) => {
+    if (advancedFilters.search) {
+      const searchLower = advancedFilters.search.toLowerCase();
+      const nameMatch = plan.name.toLowerCase().includes(searchLower);
+      const providerMatch = plan.provider?.toLowerCase().includes(searchLower);
+      if (!nameMatch && !providerMatch) return false;
+    }
+    if (advancedFilters.status === "active" && !plan.isActive) return false;
+    if (advancedFilters.status === "inactive" && plan.isActive) return false;
+    if (advancedFilters.enrollmentStart && plan.enrollmentStart) {
+      if (plan.enrollmentStart < advancedFilters.enrollmentStart) return false;
+    }
+    if (advancedFilters.enrollmentEnd && plan.enrollmentEnd) {
+      if (plan.enrollmentEnd > advancedFilters.enrollmentEnd) return false;
+    }
+    return true;
+  });
+
+  const activePlans = filteredPlans.filter((p) => p.isActive);
+  const inactivePlans = filteredPlans.filter((p) => !p.isActive);
+
+  const hasActiveAdvancedFilters =
+    advancedFilters.search ||
+    advancedFilters.status ||
+    advancedFilters.enrollmentStart ||
+    advancedFilters.enrollmentEnd;
+
+  const clearAdvancedFilters = () => {
+    setAdvancedFilters({ search: "", status: "", enrollmentStart: "", enrollmentEnd: "" });
+  };
 
   return (
     <div className="space-y-6">
@@ -189,7 +280,7 @@ export default function BenefitsAdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => toast.info("Coming Soon", { message: "Benefits export will be available in a future update." })}>
+          <Button variant="outline" onClick={handleExportPlans}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -270,14 +361,84 @@ export default function BenefitsAdminPage() {
           <option value="life">Life Insurance</option>
           <option value="disability">Disability</option>
           <option value="retirement">Retirement</option>
-          <option value="hsa">HSA</option>
-          <option value="fsa">FSA</option>
+          <option value="childcare_vouchers">Childcare Vouchers</option>
+          <option value="cycle_to_work">Cycle to Work</option>
         </select>
-        <Button variant="outline" size="sm" onClick={() => toast.info("Coming Soon", { message: "Advanced filtering will be available in a future update." })}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          aria-expanded={showAdvancedFilters}
+          aria-controls="advanced-filters-panel"
+        >
           <Filter className="h-4 w-4 mr-2" />
           More Filters
+          {showAdvancedFilters ? (
+            <ChevronUp className="h-4 w-4 ml-1" />
+          ) : (
+            <ChevronDown className="h-4 w-4 ml-1" />
+          )}
         </Button>
+        {hasActiveAdvancedFilters && (
+          <Button variant="ghost" size="sm" onClick={clearAdvancedFilters}>
+            <X className="h-4 w-4 mr-1" />
+            Clear Filters
+          </Button>
+        )}
       </div>
+
+      {/* Advanced Filters Panel */}
+      {showAdvancedFilters && (
+        <div
+          id="advanced-filters-panel"
+          className="rounded-lg border border-gray-200 bg-gray-50 p-4"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Input
+              label="Search by name or provider"
+              placeholder="e.g. Premium Health"
+              value={advancedFilters.search}
+              onChange={(e) =>
+                setAdvancedFilters({ ...advancedFilters, search: e.target.value })
+              }
+            />
+            <Select
+              label="Plan Status"
+              value={advancedFilters.status}
+              onChange={(e) =>
+                setAdvancedFilters({ ...advancedFilters, status: e.target.value })
+              }
+              options={[
+                { value: "", label: "All Statuses" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ]}
+            />
+            <Input
+              label="Enrollment Start (from)"
+              type="date"
+              value={advancedFilters.enrollmentStart}
+              onChange={(e) =>
+                setAdvancedFilters({
+                  ...advancedFilters,
+                  enrollmentStart: e.target.value,
+                })
+              }
+            />
+            <Input
+              label="Enrollment End (to)"
+              type="date"
+              value={advancedFilters.enrollmentEnd}
+              onChange={(e) =>
+                setAdvancedFilters({
+                  ...advancedFilters,
+                  enrollmentEnd: e.target.value,
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
 
       {/* Active Plans */}
       {plansLoading ? (

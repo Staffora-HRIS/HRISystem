@@ -160,6 +160,9 @@ export default function BankHolidaysPage() {
       toast.error("Date is required");
       return;
     }
+    if (new Date(formDate) < new Date(new Date().toDateString())) {
+      toast.warning("This date is in the past");
+    }
     createMutation.mutate({
       name: trimmedName,
       date: formDate,

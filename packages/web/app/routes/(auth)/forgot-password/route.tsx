@@ -5,17 +5,14 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { authApi } from "../../../lib/auth";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import type { Route } from "./+types/route";
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-});
-
-type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+interface ForgotPasswordFormData {
+  email: string;
+}
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -114,7 +111,13 @@ export default function ForgotPasswordPage() {
           autoComplete="email"
           placeholder="name@company.com"
           error={errors.email?.message}
-          {...register("email")}
+          {...register("email", {
+            required: "Email address is required",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "Please enter a valid email address",
+            },
+          })}
         />
 
         <Button type="submit" fullWidth loading={isSubmitting}>

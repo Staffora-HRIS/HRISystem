@@ -14,6 +14,7 @@ import {
   ModalFooter,
   Button,
   Input,
+  useToast,
 } from "~/components/ui";
 import type { IntegrationResponse } from "./types";
 import { getProviderMeta } from "./types";
@@ -48,6 +49,7 @@ export function IntegrationConfigModal({
   onUpdateConfig,
   onClose,
 }: IntegrationConfigModalProps) {
+  const toast = useToast();
   const [formApiKey, setFormApiKey] = useState("");
   const [formApiSecret, setFormApiSecret] = useState("");
   const [formWebhookUrl, setFormWebhookUrl] = useState("");
@@ -63,6 +65,11 @@ export function IntegrationConfigModal({
   }
 
   function handleSave() {
+    if (!formApiKey.trim() && !formApiSecret.trim() && !formWebhookUrl.trim()) {
+      toast.error("At least one credential field (API Key, API Secret, or Webhook URL) is required");
+      return;
+    }
+
     const configPayload: {
       api_key?: string;
       api_secret?: string;

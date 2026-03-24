@@ -65,10 +65,10 @@ export default function AdminHrIndexPage() {
           <p className="text-gray-600">Manage employees and organization structure</p>
         </div>
         <div className="flex gap-2">
-          <Link to="/admin/hr/employees/new">
+          <Link to="/admin/hr/employees">
             <Button>
               <UserPlus className="h-4 w-4 mr-2" />
-              Add Employee
+              Manage Employees
             </Button>
           </Link>
         </div>

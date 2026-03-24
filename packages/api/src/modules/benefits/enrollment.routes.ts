@@ -39,6 +39,7 @@ import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 import {
   // Dependent schemas
   CreateDependent,
@@ -815,7 +816,7 @@ export const enrollmentRoutes = new Elysia({ name: "benefits-enrollment-routes" 
 
         return { items: result.data };
       } catch (error) {
-        console.error("Benefits /my-enrollments error:", error);
+        logger.error({ err: error, module: "benefits" }, "Benefits /my-enrollments error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get enrollments" } };
       }
@@ -865,7 +866,7 @@ export const enrollmentRoutes = new Elysia({ name: "benefits-enrollment-routes" 
           pending_life_events: pendingLifeEvents,
         };
       } catch (err) {
-        console.error("Benefits /stats error:", err);
+        logger.error({ err, module: "benefits" }, "Benefits /stats error");
         set.status = 500;
         return { error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get benefits stats" } };
       }

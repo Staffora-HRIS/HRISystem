@@ -176,6 +176,7 @@ export default function AppearanceSettingsPage() {
 
   const [prefs, setPrefs] = useState<AppearancePreferences>(DEFAULT_PREFS);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load stored preferences on mount
   useEffect(() => {
@@ -194,9 +195,11 @@ export default function AppearanceSettingsPage() {
   );
 
   const handleSave = useCallback(() => {
+    setIsSaving(true);
     savePreferences(prefs);
     setIsDirty(false);
     toast.success("Appearance settings saved successfully");
+    setIsSaving(false);
   }, [prefs, toast]);
 
   const handleThemeChange = useCallback(
@@ -219,9 +222,9 @@ export default function AppearanceSettingsPage() {
             Customise the look and feel of your Staffora experience
           </p>
         </div>
-        <Button onClick={handleSave} disabled={!isDirty}>
+        <Button onClick={handleSave} disabled={!isDirty || isSaving} loading={isSaving}>
           <Save className="h-4 w-4 mr-2" />
-          Save Changes
+          {isSaving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -457,9 +460,9 @@ export default function AppearanceSettingsPage() {
 
       {/* Save footer — visible on mobile when page is long */}
       <div className="flex justify-end pt-2 pb-4 sm:hidden">
-        <Button onClick={handleSave} disabled={!isDirty} className="w-full">
+        <Button onClick={handleSave} disabled={!isDirty || isSaving} loading={isSaving} className="w-full">
           <Save className="h-4 w-4 mr-2" />
-          Save Changes
+          {isSaving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
     </div>

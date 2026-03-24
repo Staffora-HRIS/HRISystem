@@ -17,6 +17,7 @@ import {
   Badge,
   Input,
   Select,
+  ConfirmModal,
   useToast,
 } from "~/components/ui";
 import { Spinner } from "~/components/ui/spinner";
@@ -65,6 +66,7 @@ export default function EmergencyContactsPage() {
   const queryClient = useQueryClient();
 
   const [showAddForm, setShowAddForm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -433,15 +435,7 @@ export default function EmergencyContactsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Remove ${contact.name} as an emergency contact?`
-                        )
-                      ) {
-                        deleteMutation.mutate(contact.id);
-                      }
-                    }}
+                    onClick={() => setDeleteConfirm({ id: contact.id, name: contact.name })}
                     disabled={deleteMutation.isPending}
                     aria-label={`Remove ${contact.name}`}
                   >
@@ -453,6 +447,22 @@ export default function EmergencyContactsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            deleteMutation.mutate(deleteConfirm.id);
+          }
+          setDeleteConfirm(null);
+        }}
+        title="Remove Emergency Contact"
+        message={`Remove ${deleteConfirm?.name ?? "this contact"} as an emergency contact?`}
+        confirmLabel="Remove"
+        danger
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

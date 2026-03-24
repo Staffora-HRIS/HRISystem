@@ -1,5 +1,6 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -24,6 +25,7 @@ interface ReportDefinition {
 }
 
 export default function AnalyticsDashboardPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"dashboard" | "reports">(
     "dashboard"
   );
@@ -82,6 +84,7 @@ export default function AnalyticsDashboardPage() {
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+            aria-label="Date range filter"
           >
             <option value="last_7_days">Last 7 Days</option>
             <option value="last_30_days">Last 30 Days</option>
@@ -186,7 +189,7 @@ export default function AnalyticsDashboardPage() {
           <div>
             <h2 className="text-lg font-semibold mb-4">Quick Reports</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/reports?type=headcount")}>
                 <CardBody className="text-center py-6">
                   <Users className="h-8 w-8 mx-auto text-blue-600 mb-2" />
                   <h3 className="font-medium">Headcount Summary</h3>
@@ -195,7 +198,7 @@ export default function AnalyticsDashboardPage() {
                   </p>
                 </CardBody>
               </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/reports?type=turnover")}>
                 <CardBody className="text-center py-6">
                   <TrendingDown className="h-8 w-8 mx-auto text-red-600 mb-2" />
                   <h3 className="font-medium">Turnover Report</h3>
@@ -204,7 +207,7 @@ export default function AnalyticsDashboardPage() {
                   </p>
                 </CardBody>
               </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/reports?category=attendance")}>
                 <CardBody className="text-center py-6">
                   <Clock className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
                   <h3 className="font-medium">Attendance Report</h3>
@@ -213,12 +216,12 @@ export default function AnalyticsDashboardPage() {
                   </p>
                 </CardBody>
               </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/reports?category=leave")}>
                 <CardBody className="text-center py-6">
                   <Calendar className="h-8 w-8 mx-auto text-green-600 mb-2" />
                   <h3 className="font-medium">Leave Balances</h3>
                   <p className="text-sm text-gray-500">
-                    PTO and leave summary
+                    Holiday and leave summary
                   </p>
                 </CardBody>
               </Card>

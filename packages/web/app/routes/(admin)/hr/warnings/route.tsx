@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   AlertTriangle,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface Warning {
   id: string;
@@ -40,6 +45,20 @@ interface WarningListResponse {
   nextCursor: string | null;
   hasMore: boolean;
 }
+
+interface CreateWarningFormState {
+  employeeId: string;
+  level: string;
+  reason: string;
+  issuedDate: string;
+}
+
+const INITIAL_WARNING_FORM: CreateWarningFormState = {
+  employeeId: "",
+  level: "",
+  reason: "",
+  issuedDate: new Date().toISOString().split("T")[0],
+};
 
 const LEVEL_BADGE: Record<string, BadgeVariant> = {
   verbal: "info",
@@ -77,19 +96,48 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function WarningsPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
+  const [employeeIdFilter, setEmployeeIdFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [warningForm, setWarningForm] = useState<CreateWarningFormState>(INITIAL_WARNING_FORM);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-hr-warnings", search, statusFilter, levelFilter],
+    queryKey: ["admin-hr-warnings", employeeIdFilter, search, statusFilter, levelFilter],
     queryFn: async () => {
+      if (!employeeIdFilter.trim()) return { items: [], nextCursor: null, hasMore: false } as WarningListResponse;
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (statusFilter) params.set("status", statusFilter);
       if (levelFilter) params.set("level", levelFilter);
       params.set("limit", "50");
-      return api.get<WarningListResponse>(`/warnings?${params}`);
+      return api.get<WarningListResponse>(`/warnings/employee/${employeeIdFilter.trim()}?${params}`);
+    },
+    enabled: !!employeeIdFilter.trim(),
+  });
+
+  const createWarningMutation = useMutation({
+    mutationFn: (formData: CreateWarningFormState) =>
+      api.post("/warnings", {
+        employee_id: formData.employeeId,
+        level: formData.level,
+        reason: formData.reason,
+        issued_date: formData.issuedDate,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-hr-warnings"] });
+      toast.success("Warning issued successfully");
+      setShowCreateModal(false);
+      setWarningForm(INITIAL_WARNING_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to issue warning", {
+        message: err instanceof ApiError ? err.message : "Please try again.",
+      });
     },
   });
 
@@ -176,7 +224,7 @@ export default function WarningsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Employee Warnings</h1>
             <p className="text-gray-600">Manage disciplinary warnings and records</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Issue Warning
           </Button>
@@ -185,10 +233,16 @@ export default function WarningsPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
+        <Input
+          placeholder="Employee ID"
+          value={employeeIdFilter}
+          onChange={(e) => setEmployeeIdFilter(e.target.value)}
+          className="max-w-[280px]"
+        />
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="Search employees..."
+            placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -229,9 +283,11 @@ export default function WarningsPage() {
               <AlertTriangle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900">No warnings found</h3>
               <p className="text-gray-500">
-                {search || statusFilter || levelFilter
-                  ? "Try adjusting your filters"
-                  : "No employee warnings recorded"}
+                {!employeeIdFilter.trim()
+                  ? "Enter an employee ID above to view warnings"
+                  : search || statusFilter || levelFilter
+                    ? "Try adjusting your filters"
+                    : "No warnings found for this employee"}
               </p>
             </div>
           ) : (
@@ -243,6 +299,63 @@ export default function WarningsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Warning Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => { setShowCreateModal(false); setWarningForm(INITIAL_WARNING_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Issue Warning</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee ID"
+                required
+                value={warningForm.employeeId}
+                onChange={(e) => setWarningForm((f) => ({ ...f, employeeId: e.target.value }))}
+              />
+              <Select
+                label="Warning Level"
+                value={warningForm.level}
+                onChange={(e) => setWarningForm((f) => ({ ...f, level: e.target.value }))}
+                options={[
+                  { value: "", label: "Select warning level" },
+                  { value: "verbal", label: "Verbal" },
+                  { value: "first_written", label: "First Written" },
+                  { value: "final_written", label: "Final Written" },
+                ]}
+              />
+              <Input
+                label="Reason"
+                placeholder="Enter reason for warning"
+                required
+                value={warningForm.reason}
+                onChange={(e) => setWarningForm((f) => ({ ...f, reason: e.target.value }))}
+              />
+              <Input
+                label="Issued Date"
+                type="date"
+                required
+                value={warningForm.issuedDate}
+                onChange={(e) => setWarningForm((f) => ({ ...f, issuedDate: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setWarningForm(INITIAL_WARNING_FORM); }} disabled={createWarningMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!warningForm.employeeId || !warningForm.level || !warningForm.reason || !warningForm.issuedDate || createWarningMutation.isPending}
+              loading={createWarningMutation.isPending}
+              onClick={() => createWarningMutation.mutate(warningForm)}
+            >
+              {createWarningMutation.isPending ? "Issuing..." : "Issue Warning"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

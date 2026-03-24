@@ -1,7 +1,7 @@
 export { RouteErrorBoundary as ErrorBoundary } from "~/components/ui/RouteErrorBoundary";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import {
   Accessibility,
@@ -19,8 +19,13 @@ import {
   type ColumnDef,
   Input,
   Select,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useToast,
 } from "~/components/ui";
-import { api } from "~/lib/api-client";
+import { api, ApiError } from "~/lib/api-client";
 
 interface Adjustment {
   id: string;
@@ -68,6 +73,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+interface CreateAdjustmentFormState {
+  employeeId: string;
+  category: string;
+  description: string;
+}
+
+const INITIAL_ADJUSTMENT_FORM: CreateAdjustmentFormState = {
+  employeeId: "",
+  category: "",
+  description: "",
+};
+
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
   return new Date(dateString).toLocaleDateString("en-GB", {
@@ -78,8 +95,13 @@ function formatDate(dateString: string | null): string {
 }
 
 export default function AdjustmentsPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [adjustmentForm, setAdjustmentForm] = useState<CreateAdjustmentFormState>(INITIAL_ADJUSTMENT_FORM);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-hr-adjustments", search, statusFilter],
@@ -89,6 +111,26 @@ export default function AdjustmentsPage() {
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "50");
       return api.get<AdjustmentListResponse>(`/reasonable-adjustments?${params}`);
+    },
+  });
+
+  const createAdjustmentMutation = useMutation({
+    mutationFn: (formData: CreateAdjustmentFormState) =>
+      api.post("/reasonable-adjustments", {
+        employee_id: formData.employeeId,
+        category: formData.category,
+        description: formData.description,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-hr-adjustments"] });
+      toast.success("Adjustment request created successfully");
+      setShowCreateModal(false);
+      setAdjustmentForm(INITIAL_ADJUSTMENT_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to create adjustment request", {
+        message: err instanceof ApiError ? err.message : "Please try again.",
+      });
     },
   });
 
@@ -168,7 +210,7 @@ export default function AdjustmentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Reasonable Adjustments</h1>
             <p className="text-gray-600">Track and manage workplace adjustment requests</p>
           </div>
-          <Button>
+          <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Adjustment
           </Button>
@@ -218,7 +260,7 @@ export default function AdjustmentsPage() {
                   : "No reasonable adjustment requests recorded"}
               </p>
               {!search && !statusFilter && (
-                <Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Adjustment
                 </Button>
@@ -233,6 +275,54 @@ export default function AdjustmentsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Create Adjustment Modal */}
+      {showCreateModal && (
+        <Modal open onClose={() => { setShowCreateModal(false); setAdjustmentForm(INITIAL_ADJUSTMENT_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">New Reasonable Adjustment</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Employee ID"
+                placeholder="Enter employee ID"
+                required
+                value={adjustmentForm.employeeId}
+                onChange={(e) => setAdjustmentForm((f) => ({ ...f, employeeId: e.target.value }))}
+              />
+              <Select
+                label="Category"
+                value={adjustmentForm.category}
+                onChange={(e) => setAdjustmentForm((f) => ({ ...f, category: e.target.value }))}
+                options={[
+                  { value: "", label: "Select category" },
+                  ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+              <Input
+                label="Description"
+                placeholder="Describe the adjustment needed"
+                required
+                value={adjustmentForm.description}
+                onChange={(e) => setAdjustmentForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCreateModal(false); setAdjustmentForm(INITIAL_ADJUSTMENT_FORM); }} disabled={createAdjustmentMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!adjustmentForm.employeeId || !adjustmentForm.category || !adjustmentForm.description || createAdjustmentMutation.isPending}
+              loading={createAdjustmentMutation.isPending}
+              onClick={() => createAdjustmentMutation.mutate(adjustmentForm)}
+            >
+              {createAdjustmentMutation.isPending ? "Creating..." : "Create Adjustment"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 }

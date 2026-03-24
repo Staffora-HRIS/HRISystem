@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardBody, StatCard } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { toast } from "~/components/ui/toast";
 import { api, ApiError } from "~/lib/api-client";
 
 type PortalMeResponse = {
@@ -74,8 +75,15 @@ export default function MyTimePage() {
         eventTime: new Date().toISOString(),
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, eventType) => {
       await queryClient.invalidateQueries({ queryKey: ["time", "events"] });
+      const labels: Record<string, string> = {
+        clock_in: "Clocked in",
+        clock_out: "Clocked out",
+        break_start: "Break started",
+        break_end: "Break ended",
+      };
+      toast.success(labels[eventType] || "Time event recorded");
     },
   });
 

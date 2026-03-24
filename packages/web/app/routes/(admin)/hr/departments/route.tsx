@@ -79,6 +79,8 @@ export default function AdminDepartmentsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deptForm, setDeptForm] = useState<CreateDeptFormState>(INITIAL_DEPT_FORM);
+  const [editingDept, setEditingDept] = useState<OrgUnit | null>(null);
+  const [editForm, setEditForm] = useState<CreateDeptFormState>(INITIAL_DEPT_FORM);
 
   // Create department mutation
   const createDeptMutation = useMutation({
@@ -100,6 +102,30 @@ export default function AdminDepartmentsPage() {
     },
     onError: (err) => {
       toast.error("Failed to create department", {
+        message: err instanceof Error ? err.message : "Please try again.",
+      });
+    },
+  });
+
+  // Update department mutation
+  const updateDeptMutation = useMutation({
+    mutationFn: (data: { id: string; form: CreateDeptFormState }) =>
+      api.put(`/hr/org-units/${data.id}`, {
+        name: data.form.name,
+        code: data.form.code.toUpperCase(),
+        ...(data.form.parentId ? { parent_id: data.form.parentId } : { parent_id: null }),
+      }),
+    onSuccess: () => {
+      invalidationPatterns.organization().forEach((key) =>
+        qc.invalidateQueries({ queryKey: key })
+      );
+      qc.invalidateQueries({ queryKey: ["admin-org-units"] });
+      toast.success("Department updated successfully");
+      setEditingDept(null);
+      setEditForm(INITIAL_DEPT_FORM);
+    },
+    onError: (err) => {
+      toast.error("Failed to update department", {
         message: err instanceof Error ? err.message : "Please try again.",
       });
     },
@@ -188,9 +214,24 @@ export default function AdminDepartmentsPage() {
     {
       id: "actions",
       header: "",
-      cell: () => (
+      cell: ({ row }) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Edit department ${row.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingDept(row);
+              setEditForm({
+                name: row.name,
+                code: row.code || "",
+                unitType: row.unitType,
+                parentId: row.parentId || "",
+                effectiveFrom: new Date().toISOString().split("T")[0],
+              });
+            }}
+          >
             <Edit className="h-4 w-4" />
           </Button>
         </div>
@@ -368,6 +409,54 @@ export default function AdminDepartmentsPage() {
               onClick={() => createDeptMutation.mutate(deptForm)}
             >
               {createDeptMutation.isPending ? "Creating..." : "Create Department"}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Edit Department Modal */}
+      {editingDept && (
+        <Modal open onClose={() => { setEditingDept(null); setEditForm(INITIAL_DEPT_FORM); }} size="lg">
+          <ModalHeader>
+            <h3 className="text-lg font-semibold">Edit Department: {editingDept.name}</h3>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <Input
+                label="Name"
+                placeholder="Enter department name"
+                required
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <Input
+                label="Code"
+                placeholder="Enter department code (e.g., ENG, HR)"
+                required
+                value={editForm.code}
+                onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+              />
+              <Select
+                label="Parent Department"
+                value={editForm.parentId}
+                onChange={(e) => setEditForm((f) => ({ ...f, parentId: e.target.value }))}
+                options={[
+                  { value: "", label: "None (Top Level)" },
+                  ...orgUnits.filter((u) => u.id !== editingDept.id).map((u) => ({ value: u.id, label: u.name })),
+                ]}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setEditingDept(null); setEditForm(INITIAL_DEPT_FORM); }} disabled={updateDeptMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!editForm.name || !editForm.code || updateDeptMutation.isPending}
+              loading={updateDeptMutation.isPending}
+              onClick={() => updateDeptMutation.mutate({ id: editingDept.id, form: editForm })}
+            >
+              {updateDeptMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </ModalFooter>
         </Modal>
