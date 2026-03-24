@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_announcements_active
 CREATE TRIGGER set_announcements_updated_at
     BEFORE UPDATE ON app.announcements
     FOR EACH ROW
-    EXECUTE FUNCTION app.set_updated_at();
+    EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Row-Level Security

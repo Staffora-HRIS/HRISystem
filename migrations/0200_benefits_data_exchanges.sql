@@ -96,7 +96,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.benefits_data_exchanges TO hris_app;
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON app.benefits_data_exchanges
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Comments

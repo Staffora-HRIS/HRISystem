@@ -94,6 +94,8 @@ CREATE INDEX IF NOT EXISTS idx_employee_addresses_is_current
 -- -----------------------------------------------------------------------------
 
 -- Function to get all current addresses for an employee
+-- Drop first because return type changed (new column names)
+DROP FUNCTION IF EXISTS app.get_employee_addresses(uuid);
 CREATE OR REPLACE FUNCTION app.get_employee_addresses(
     p_employee_id uuid
 )
@@ -127,6 +129,7 @@ END;
 $$;
 
 -- Function to get primary address of a specific type
+DROP FUNCTION IF EXISTS app.get_employee_address_by_type(uuid, app.address_type);
 CREATE OR REPLACE FUNCTION app.get_employee_address_by_type(
     p_employee_id uuid,
     p_address_type app.address_type
@@ -158,6 +161,7 @@ END;
 $$;
 
 -- Function to get employee's home address
+DROP FUNCTION IF EXISTS app.get_employee_home_address(uuid);
 CREATE OR REPLACE FUNCTION app.get_employee_home_address(
     p_employee_id uuid
 )
@@ -181,6 +185,7 @@ END;
 $$;
 
 -- Function to format address as single line
+DROP FUNCTION IF EXISTS app.format_address_single_line(uuid);
 CREATE OR REPLACE FUNCTION app.format_address_single_line(
     p_address_id uuid
 )
@@ -208,6 +213,7 @@ END;
 $$;
 
 -- Function to add or update an address (effective-dated)
+DROP FUNCTION IF EXISTS app.upsert_employee_address(uuid, app.address_type, varchar, varchar, varchar, varchar, varchar, varchar, boolean, date);
 CREATE OR REPLACE FUNCTION app.upsert_employee_address(
     p_employee_id uuid,
     p_address_type app.address_type,
@@ -277,6 +283,7 @@ END;
 $$;
 
 -- Function to get employees by location (for location-based reports)
+DROP FUNCTION IF EXISTS app.get_employees_by_location(uuid, varchar, varchar);
 CREATE OR REPLACE FUNCTION app.get_employees_by_location(
     p_tenant_id uuid,
     p_country varchar(3) DEFAULT NULL,
@@ -310,6 +317,7 @@ $$;
 -- -----------------------------------------------------------------------------
 -- Update GDPR anonymize_employee function (from 0129) to use new column names
 -- -----------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS app.anonymize_employee(uuid, uuid, text);
 CREATE OR REPLACE FUNCTION app.anonymize_employee(
     p_tenant_id uuid,
     p_employee_id uuid,

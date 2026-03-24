@@ -128,7 +128,7 @@ CREATE INDEX idx_awa_status
 CREATE TRIGGER trg_awa_updated_at
     BEFORE UPDATE ON app.agency_worker_assignments
     FOR EACH ROW
-    EXECUTE FUNCTION app.set_updated_at();
+    EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DOWN Migration (for rollback)

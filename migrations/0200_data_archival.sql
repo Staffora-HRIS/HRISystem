@@ -62,7 +62,7 @@ CREATE UNIQUE INDEX idx_archived_records_unique_source
 -- Updated at trigger
 CREATE TRIGGER trg_archived_records_updated_at
   BEFORE UPDATE ON app.archived_records
-  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Row-Level Security
@@ -117,7 +117,7 @@ CREATE INDEX idx_archival_rules_tenant_id ON app.archival_rules(tenant_id);
 -- Updated at trigger
 CREATE TRIGGER trg_archival_rules_updated_at
   BEFORE UPDATE ON app.archival_rules
-  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION app.update_updated_at_column();
 
 -- RLS for archival_rules
 ALTER TABLE app.archival_rules ENABLE ROW LEVEL SECURITY;

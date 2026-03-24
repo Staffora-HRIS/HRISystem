@@ -109,7 +109,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.dpia_assessments TO hris_app;
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON app.dpia_assessments
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DPIA risk register (child risks per DPIA)

@@ -41,6 +41,21 @@ CREATE INDEX idx_rsh_report ON app.report_schedule_history(report_id, changed_at
 CREATE INDEX idx_rsh_tenant ON app.report_schedule_history(tenant_id, changed_at DESC);
 
 -- ============================================================================
+-- Add scheduling columns to report_definitions (if missing)
+-- ============================================================================
+
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS is_scheduled boolean NOT NULL DEFAULT false;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_frequency varchar(50);
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_time time;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_day_of_week integer;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_day_of_month integer;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_cron_expression varchar(100);
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_recipients jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS schedule_export_format varchar(20) DEFAULT 'csv';
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS next_scheduled_run timestamptz;
+ALTER TABLE app.report_definitions ADD COLUMN IF NOT EXISTS last_scheduled_run timestamptz;
+
+-- ============================================================================
 -- Function: Calculate next_scheduled_run based on schedule settings
 -- ============================================================================
 

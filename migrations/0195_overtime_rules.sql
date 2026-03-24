@@ -87,6 +87,16 @@ CREATE INDEX IF NOT EXISTS idx_overtime_rules_tenant_active
 CREATE INDEX IF NOT EXISTS idx_overtime_rules_effective
   ON app.overtime_rules (tenant_id, name, effective_from, effective_to);
 
+-- Ensure columns exist (table may have been created by an earlier migration without them)
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS day_type app.overtime_day_type NOT NULL DEFAULT 'weekday';
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS threshold_hours_weekly numeric(6,2) NOT NULL DEFAULT 0;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS rate_multiplier numeric(4,2) NOT NULL DEFAULT 1.50;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS applies_to jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS effective_from date NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE app.overtime_rules ADD COLUMN IF NOT EXISTS effective_to date;
+
 CREATE INDEX IF NOT EXISTS idx_overtime_rules_day_type
   ON app.overtime_rules (tenant_id, day_type);
 

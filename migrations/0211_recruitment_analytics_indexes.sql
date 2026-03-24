@@ -15,12 +15,12 @@
 -- -----------------------------------------------------------------------------
 
 -- Requisitions filtered by status + date range + org_unit for analytics
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_requisitions_analytics_filled
+CREATE INDEX IF NOT EXISTS idx_requisitions_analytics_filled
     ON app.requisitions(tenant_id, status, created_at DESC)
     WHERE status = 'filled';
 
 -- Candidate stage events: find 'hired' transitions quickly
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cse_hired_by_candidate
+CREATE INDEX IF NOT EXISTS idx_cse_hired_by_candidate
     ON app.candidate_stage_events(candidate_id, created_at ASC)
     WHERE to_stage = 'hired';
 
@@ -31,7 +31,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cse_hired_by_candidate
 -- -----------------------------------------------------------------------------
 
 -- Recruitment costs: date range + currency filtering with requisition join
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_recruitment_costs_analytics
+CREATE INDEX IF NOT EXISTS idx_recruitment_costs_analytics
     ON app.recruitment_costs(tenant_id, currency, incurred_date DESC);
 
 -- -----------------------------------------------------------------------------
@@ -41,11 +41,11 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_recruitment_costs_analytics
 -- -----------------------------------------------------------------------------
 
 -- Candidates by source for aggregation
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_candidates_source_analytics
+CREATE INDEX IF NOT EXISTS idx_candidates_source_analytics
     ON app.candidates(tenant_id, source, current_stage, created_at DESC);
 
 -- Candidates hired: for counting hires in date ranges
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_candidates_hired_updated
+CREATE INDEX IF NOT EXISTS idx_candidates_hired_updated
     ON app.candidates(tenant_id, updated_at DESC)
     WHERE current_stage = 'hired';
 
@@ -56,11 +56,11 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_candidates_hired_updated
 -- -----------------------------------------------------------------------------
 
 -- Stage events: for counting entries to each stage in date range
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cse_to_stage_date
+CREATE INDEX IF NOT EXISTS idx_cse_to_stage_date
     ON app.candidate_stage_events(tenant_id, to_stage, created_at DESC);
 
 -- Stage events: for counting forward exits from each stage
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cse_from_stage_date
+CREATE INDEX IF NOT EXISTS idx_cse_from_stage_date
     ON app.candidate_stage_events(tenant_id, from_stage, created_at DESC)
     WHERE from_stage IS NOT NULL;
 

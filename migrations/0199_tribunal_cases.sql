@@ -83,7 +83,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.tribunal_cases TO hris_app;
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON app.tribunal_cases
   FOR EACH ROW
-  EXECUTE FUNCTION app.update_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- DOWN (rollback)

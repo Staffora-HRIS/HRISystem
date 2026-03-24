@@ -106,4 +106,4 @@ CREATE POLICY tenant_isolation_insert
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON app.total_reward_statements
   FOR EACH ROW
-  EXECUTE FUNCTION app.set_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();

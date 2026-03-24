@@ -145,9 +145,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.flex_benefit_allocations TO hris_app
 CREATE OR REPLACE TRIGGER trg_flex_benefit_funds_updated_at
   BEFORE UPDATE ON app.flex_benefit_funds
   FOR EACH ROW
-  EXECUTE FUNCTION app.set_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 CREATE OR REPLACE TRIGGER trg_flex_benefit_allocations_updated_at
   BEFORE UPDATE ON app.flex_benefit_allocations
   FOR EACH ROW
-  EXECUTE FUNCTION app.set_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();

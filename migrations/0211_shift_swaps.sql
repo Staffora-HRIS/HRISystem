@@ -135,15 +135,9 @@ ALTER TABLE app.shift_swap_requests
     status::text IN ('pending', 'pending_target') OR target_accepted IS NOT NULL
   );
 
--- Index for requests in pending_target state (target employee action queue)
-CREATE INDEX IF NOT EXISTS idx_shift_swap_pending_target
-    ON app.shift_swap_requests(tenant_id, target_employee_id, created_at DESC)
-    WHERE status = 'pending_target';
-
--- Index for requests in pending_manager state (manager approval queue)
-CREATE INDEX IF NOT EXISTS idx_shift_swap_pending_manager
-    ON app.shift_swap_requests(tenant_id, created_at DESC)
-    WHERE status = 'pending_manager';
+-- Index for requests by status (covers pending_target, pending_manager lookups)
+CREATE INDEX IF NOT EXISTS idx_shift_swap_status_tenant
+    ON app.shift_swap_requests(tenant_id, status, created_at DESC);
 
 -- Comments
 COMMENT ON COLUMN app.shift_swap_requests.manager_response_at IS 'Timestamp when the manager approved or rejected the swap request';

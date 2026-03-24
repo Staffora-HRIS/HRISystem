@@ -123,7 +123,7 @@ CREATE POLICY system_bypass ON app.whistleblowing_audit_log
 CREATE TRIGGER trg_whistleblowing_cases_updated_at
   BEFORE UPDATE ON app.whistleblowing_cases
   FOR EACH ROW
-  EXECUTE FUNCTION app.set_updated_at();
+  EXECUTE FUNCTION app.update_updated_at_column();
 
 -- =============================================================================
 -- Grant permissions to application role
