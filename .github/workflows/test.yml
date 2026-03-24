@@ -87,7 +87,7 @@ jobs:
           TEST_DB_PORT: '5432'
           TEST_DB_NAME: hris
           TEST_DB_USER: hris_app
-          TEST_DB_PASSWORD: hris_app_dev_password
+          TEST_DB_PASSWORD: hris_dev_password
           TEST_DB_ADMIN_USER: hris
           TEST_DB_ADMIN_PASSWORD: hris_dev_password
           TEST_REDIS_HOST: localhost
