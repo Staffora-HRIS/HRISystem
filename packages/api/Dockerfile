@@ -7,7 +7,7 @@
 # =============================================================================
 # Stage 1: Install ALL dependencies (needed for build)
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS deps
+FROM oven/bun:1.3.11-alpine AS deps
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN bun install --ignore-scripts
 # =============================================================================
 # Stage 2: Build the API bundle
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS builder
+FROM oven/bun:1.3.11-alpine AS builder
 
 WORKDIR /app
 
@@ -49,7 +49,7 @@ RUN bun build src/app.ts --outdir dist --target bun --define "process.env.NODE_E
 # =============================================================================
 # Stage 3: Production dependencies only
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS prod-deps
+FROM oven/bun:1.3.11-alpine AS prod-deps
 
 WORKDIR /app
 
@@ -66,7 +66,7 @@ RUN bun install --production --ignore-scripts
 # =============================================================================
 # Stage 4: Production runtime
 # =============================================================================
-FROM oven/bun:1.1.38-alpine AS runner
+FROM oven/bun:1.3.11-alpine AS runner
 
 WORKDIR /app
 
