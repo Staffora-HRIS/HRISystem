@@ -172,10 +172,10 @@ describe("Authentication enforcement (live HTTP)", () => {
     expect(body.error.code).toBeDefined();
   });
 
-  it("GET /api/v1/absence/leave-requests should return 401 without auth", async () => {
+  it("GET /api/v1/absence/leave-types should return 401 without auth", async () => {
     if (!serverAvailable) return;
 
-    const response = await fetch(`${API_BASE}/api/v1/absence/leave-requests`);
+    const response = await fetch(`${API_BASE}/api/v1/absence/leave-types`);
     expect(response.status).toBe(401);
   });
 
