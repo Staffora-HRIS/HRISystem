@@ -41,7 +41,7 @@
     "firebase-admin": "^13.0.2",
     "ioredis": "^5.4.1",
     "jose": "^5.9.6",
-    "nodemailer": "^6.9.16",
+    "nodemailer": "^8.0.3",
     "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",
     "pino": "^9.14.0",
