@@ -38,7 +38,7 @@ export interface BradfordThresholds {
   serious: number;
 }
 
-const DEFAULT_THRESHOLDS: BradfordThresholds = {
+export const DEFAULT_THRESHOLDS: BradfordThresholds = {
   low: 50,
   moderate: 125,
   high: 400,

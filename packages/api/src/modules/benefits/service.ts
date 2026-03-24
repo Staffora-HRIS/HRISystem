@@ -902,7 +902,7 @@ export class BenefitsService {
     pagination: PaginationQuery = {}
   ): Promise<PaginatedServiceResult<LifeEventResponse>> {
     const events = await this.repository.findLifeEvents(context, undefined, status as any);
-    const limit = pagination.limit || 50;
+    const limit = Number(pagination.limit) || 50;
     const startIndex = pagination.cursor
       ? events.findIndex((e) => e.id === pagination.cursor) + 1
       : 0;

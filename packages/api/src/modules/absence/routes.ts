@@ -20,7 +20,7 @@ import {
 
 export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-routes" })
   .derive((ctx) => {
-    const { db } = ctx as any;
+    const { db, cache } = ctx as any;
     const repo = new AbsenceRepository(db);
     const service = new AbsenceService(repo);
     return { absenceService: service };
@@ -50,7 +50,8 @@ export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-rou
       const { absenceService, tenantContext, body } = ctx as any;
       const result = await absenceService.createLeaveType(tenantContext, body as any);
       if (!result.success) {
-        throw new Error(result.error?.message || "Failed to create leave type");
+        ctx.set.status = 400;
+        return { error: { code: result.error?.code || "VALIDATION_ERROR", message: result.error?.message || "Failed to create leave type" } };
       }
       return result.data;
     },

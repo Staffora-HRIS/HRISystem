@@ -63,6 +63,34 @@ export interface CategoryStats extends Row {
   restoredCount: number;
 }
 
+// Archive policy row (TODO-225)
+export interface ArchivePolicyRow extends Row {
+  id: string;
+  tenantId: string;
+  sourceTable: string;
+  archiveAfterDays: number;
+  statusFilter: string | null;
+  enabled: boolean;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Archive log row (TODO-225)
+export interface ArchiveLogRow extends Row {
+  id: string;
+  tenantId: string;
+  policyId: string;
+  sourceTable: string;
+  recordsArchived: number;
+  recordsRestored: number;
+  status: string;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date | null;
+  createdAt: Date;
+}
+
 // =============================================================================
 // Repository
 // =============================================================================
@@ -545,6 +573,182 @@ export class DataArchivalRepository {
         GROUP BY source_category, date_trunc('hour', archived_at)
         ORDER BY date_trunc('hour', archived_at) DESC
         LIMIT 10
+      `;
+    });
+  }
+
+  // ===========================================================================
+  // Archive Policy Methods (TODO-225)
+  // ===========================================================================
+
+  async archivePolicyExistsForTable(
+    context: TenantContext,
+    sourceTable: string,
+    excludeId?: string
+  ): Promise<boolean> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT 1 FROM app.archive_policies
+        WHERE source_table = ${sourceTable}
+          ${excludeId ? tx`AND id != ${excludeId}::uuid` : tx``}
+        LIMIT 1
+      `;
+    });
+    return rows.length > 0;
+  }
+
+  async createArchivePolicy(
+    context: TenantContext,
+    data: Partial<ArchivePolicyRow>
+  ): Promise<ArchivePolicyRow> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<ArchivePolicyRow[]>`
+        INSERT INTO app.archive_policies (
+          tenant_id, source_table, archive_after_days, status_filter, enabled, description
+        ) VALUES (
+          ${context.tenantId}::uuid, ${data.sourceTable!}, ${data.archiveAfterDays!},
+          ${data.statusFilter ?? null}, ${data.enabled ?? true}, ${data.description ?? null}
+        ) RETURNING *
+      `;
+    });
+    return rows[0]!;
+  }
+
+  async getArchivePolicyById(
+    context: TenantContext,
+    id: string
+  ): Promise<ArchivePolicyRow | null> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<ArchivePolicyRow[]>`
+        SELECT * FROM app.archive_policies WHERE id = ${id}::uuid
+      `;
+    });
+    return rows[0] ?? null;
+  }
+
+  async listArchivePolicies(
+    context: TenantContext,
+    _pagination: { limit?: number; cursor?: string } = {}
+  ): Promise<ArchivePolicyRow[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<ArchivePolicyRow[]>`
+        SELECT * FROM app.archive_policies ORDER BY source_table, id
+      `;
+    });
+  }
+
+  async updateArchivePolicy(
+    context: TenantContext,
+    id: string,
+    data: Partial<ArchivePolicyRow>
+  ): Promise<ArchivePolicyRow> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<ArchivePolicyRow[]>`
+        UPDATE app.archive_policies SET
+          archive_after_days = COALESCE(${data.archiveAfterDays ?? null}, archive_after_days),
+          status_filter = COALESCE(${data.statusFilter ?? null}, status_filter),
+          enabled = COALESCE(${data.enabled ?? null}, enabled),
+          description = COALESCE(${data.description ?? null}, description),
+          updated_at = now()
+        WHERE id = ${id}::uuid
+        RETURNING *
+      `;
+    });
+    return rows[0]!;
+  }
+
+  async deleteArchivePolicy(
+    context: TenantContext,
+    id: string
+  ): Promise<void> {
+    await this.db.withTransaction(context, async (tx) => {
+      await tx`DELETE FROM app.archive_policies WHERE id = ${id}::uuid`;
+    });
+  }
+
+  async getEnabledArchivePolicies(
+    context: TenantContext
+  ): Promise<ArchivePolicyRow[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<ArchivePolicyRow[]>`
+        SELECT * FROM app.archive_policies WHERE enabled = true ORDER BY source_table
+      `;
+    });
+  }
+
+  async listArchiveLog(
+    context: TenantContext,
+    _query: any = {}
+  ): Promise<ArchiveLogRow[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<ArchiveLogRow[]>`
+        SELECT * FROM app.archive_log ORDER BY created_at DESC LIMIT 100
+      `;
+    });
+  }
+
+  async ensureArchiveTable(
+    _context: TenantContext,
+    _sourceTable: string
+  ): Promise<void> {
+    // Archive tables are created by migrations
+  }
+
+  async findEligibleForPolicy(
+    context: TenantContext,
+    policy: ArchivePolicyRow
+  ): Promise<any[]> {
+    return this.db.withTransaction(context, async (tx) => {
+      return tx<any[]>`
+        SELECT id FROM ${tx.unsafe(policy.sourceTable)}
+        WHERE updated_at < now() - interval '1 day' * ${policy.archiveAfterDays}
+        LIMIT 1000
+      `;
+    });
+  }
+
+  async copyToArchiveTable(
+    context: TenantContext,
+    sourceTable: string,
+    recordId: string
+  ): Promise<void> {
+    await this.db.withTransaction(context, async (tx) => {
+      await tx`
+        INSERT INTO app.archived_records (tenant_id, source_table, source_id, source_category, archived_data, archived_by)
+        SELECT ${context.tenantId}::uuid, ${sourceTable}, id, 'hr', row_to_json(t)::jsonb, ${context.userId}
+        FROM ${tx.unsafe(sourceTable)} t
+        WHERE id = ${recordId}::uuid
+      `;
+    });
+  }
+
+  async createArchiveLogEntry(
+    context: TenantContext,
+    data: Partial<ArchiveLogRow>
+  ): Promise<ArchiveLogRow> {
+    const rows = await this.db.withTransaction(context, async (tx) => {
+      return tx<ArchiveLogRow[]>`
+        INSERT INTO app.archive_log (
+          tenant_id, policy_id, source_table, records_archived, records_restored, status
+        ) VALUES (
+          ${context.tenantId}::uuid, ${data.policyId ?? null}, ${data.sourceTable ?? ''},
+          ${data.recordsArchived ?? 0}, ${data.recordsRestored ?? 0}, ${data.status ?? 'completed'}
+        ) RETURNING *
+      `;
+    });
+    return rows[0]!;
+  }
+
+  async restoreFromArchiveTable(
+    context: TenantContext,
+    sourceTable: string,
+    recordId: string
+  ): Promise<void> {
+    await this.db.withTransaction(context, async (tx) => {
+      // Mark the archived record as restored
+      await tx`
+        UPDATE app.archived_records SET status = 'restored', restored_at = now()
+        WHERE source_table = ${sourceTable} AND source_id = ${recordId}
       `;
     });
   }

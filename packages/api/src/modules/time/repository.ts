@@ -266,7 +266,7 @@ export class TimeRepository {
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
+    const cursor = hasMore && data.length > 0 ? (data[data.length - 1] as any)?.id ?? null : null;
 
     return { data, cursor, hasMore };
   }
@@ -457,7 +457,7 @@ export class TimeRepository {
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
+    const cursor = hasMore && data.length > 0 ? (data[data.length - 1] as any)?.id ?? null : null;
 
     return { data: data as TimeEventRow[], cursor, hasMore };
   }
@@ -537,7 +537,7 @@ export class TimeRepository {
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
+    const cursor = hasMore && data.length > 0 ? (data[data.length - 1] as any)?.id ?? null : null;
 
     return { data: data as ScheduleRow[], cursor, hasMore };
   }
@@ -760,7 +760,7 @@ export class TimeRepository {
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const cursor = hasMore && data.length > 0 ? data[data.length - 1]?.id ?? null : null;
+    const cursor = hasMore && data.length > 0 ? (data[data.length - 1] as any)?.id ?? null : null;
 
     return { data: data as TimesheetRow[], cursor, hasMore };
   }

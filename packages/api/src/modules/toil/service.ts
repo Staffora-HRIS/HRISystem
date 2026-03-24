@@ -27,6 +27,7 @@ import type {
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // Error codes
@@ -36,6 +37,10 @@ export const ToilErrorCodes = {
   BALANCE_NOT_FOUND: "TOIL_BALANCE_NOT_FOUND",
   INSUFFICIENT_BALANCE: "INSUFFICIENT_TOIL_BALANCE",
   ZERO_ADJUSTMENT: "TOIL_ZERO_ADJUSTMENT",
+  DATE_OUTSIDE_PERIOD: "TOIL_DATE_OUTSIDE_PERIOD",
+  ACCRUAL_REASON_REQUIRED: "TOIL_ACCRUAL_REASON_REQUIRED",
+  PERIOD_EXPIRED: "TOIL_PERIOD_EXPIRED",
+  TRANSACTION_NOT_FOUND: "TOIL_TRANSACTION_NOT_FOUND",
 } as const;
 
 // =============================================================================
@@ -72,7 +77,7 @@ export class ToilService {
       }
       return { success: true, data: this.formatBalance(balance) };
     } catch (error) {
-      console.error("Error fetching TOIL balance:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId }, "Failed to fetch TOIL balance");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to fetch TOIL balance" },
@@ -105,7 +110,7 @@ export class ToilService {
         },
       };
     } catch (error) {
-      console.error("Error listing TOIL transactions:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId }, "Failed to list TOIL transactions");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list TOIL transactions" },
@@ -138,7 +143,7 @@ export class ToilService {
         },
       };
     } catch (error) {
-      console.error("Error accruing TOIL:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId: input.employeeId }, "Failed to accrue TOIL");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to accrue TOIL" },
@@ -193,7 +198,7 @@ export class ToilService {
         },
       };
     } catch (error) {
-      console.error("Error using TOIL:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId: input.employeeId }, "Failed to use TOIL");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to use TOIL" },
@@ -253,7 +258,7 @@ export class ToilService {
         },
       };
     } catch (error) {
-      console.error("Error adjusting TOIL:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId: input.employeeId }, "Failed to adjust TOIL");
       return {
         success: false,
         error: { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to adjust TOIL" },

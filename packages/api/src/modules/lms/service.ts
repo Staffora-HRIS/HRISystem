@@ -18,17 +18,44 @@ import type {
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import type { CacheClient } from "../../plugins/cache";
+import { CacheKeys, CacheTTL } from "../../plugins/cache";
+import { logger } from "../../lib/logger";
 
 export class LMSService {
   constructor(
     private repository: LMSRepository,
-    private db: any
+    private db: any,
+    private cache: CacheClient | null = null
   ) {}
+
+  // ===========================================================================
+  // Cache Helpers
+  // ===========================================================================
+
+  /**
+   * Invalidate the course catalog cache for a tenant.
+   * Best-effort: cache failures are logged but do not propagate.
+   */
+  private async invalidateCourseCatalogCache(tenantId: string): Promise<void> {
+    if (!this.cache) return;
+    try {
+      await this.cache.del(CacheKeys.courseCatalog(tenantId));
+    } catch (err) {
+      logger.warn({ err, module: "lms" }, "Failed to invalidate course catalog cache");
+    }
+  }
 
   // ===========================================================================
   // Course Operations
   // ===========================================================================
 
+  /**
+   * List courses with optional filters.
+   *
+   * When fetching with no filters and no cursor (first page of full catalog),
+   * results are cached per-tenant for 5 minutes.
+   */
   async listCourses(
     ctx: TenantContext,
     filters: {
@@ -40,7 +67,38 @@ export class LMSService {
     },
     pagination: PaginationOptions
   ) {
-    return this.repository.listCourses(ctx, filters, pagination);
+    // Determine if this is a cacheable request (no filters, first page)
+    const hasFilters = !!(
+      filters.category ||
+      filters.status ||
+      filters.contentType ||
+      filters.isRequired !== undefined ||
+      filters.search
+    );
+    const isCacheable = !hasFilters && !pagination.cursor && this.cache;
+
+    if (isCacheable) {
+      const cacheKey = CacheKeys.courseCatalog(ctx.tenantId);
+      try {
+        const cached = await this.cache!.get<any>(cacheKey);
+        if (cached !== null) {
+          return cached;
+        }
+      } catch (cacheErr) {
+        logger.warn({ err: cacheErr, module: "lms" }, "Cache read failed for course catalog, falling back to DB");
+      }
+    }
+
+    const result = await this.repository.listCourses(ctx, filters, pagination);
+
+    // Populate cache for unfiltered first page (fire-and-forget)
+    if (isCacheable) {
+      this.cache!
+        .set(CacheKeys.courseCatalog(ctx.tenantId), result, CacheTTL.SESSION)
+        .catch((err) => logger.warn({ err, module: "lms" }, "Cache write failed for course catalog"));
+    }
+
+    return result;
   }
 
   async getCourse(ctx: TenantContext, id: string): Promise<ServiceResult<CourseResponse>> {
@@ -66,6 +124,7 @@ export class LMSService {
           return result;
         }
       );
+      await this.invalidateCourseCatalogCache(ctx.tenantId);
       return { success: true, data: course };
     } catch (error: any) {
       return { success: false, error: { code: "CREATE_FAILED", message: error.message || "Failed to create course" } };
@@ -95,6 +154,7 @@ export class LMSService {
       if (!course) {
         return { success: false, error: { code: "UPDATE_FAILED", message: "Failed to update course" } };
       }
+      await this.invalidateCourseCatalogCache(ctx.tenantId);
       return { success: true, data: course };
     } catch (error: any) {
       return { success: false, error: { code: "UPDATE_FAILED", message: error.message || "Failed to update course" } };
@@ -135,6 +195,9 @@ export class LMSService {
         return result;
       }
     );
+    if (deleted) {
+      await this.invalidateCourseCatalogCache(ctx.tenantId);
+    }
     return { success: deleted, data: deleted };
   }
 
@@ -179,7 +242,7 @@ export class LMSService {
     // Check mandatory prerequisites are completed before enrollment (TODO-245)
     const prerequisiteCheck = await this.checkPrerequisitesForEnrollment(ctx, data.courseId, data.employeeId);
     if (!prerequisiteCheck.success) {
-      return prerequisiteCheck as ServiceResult<EnrollmentResponse>;
+      return prerequisiteCheck as unknown as ServiceResult<EnrollmentResponse>;
     }
 
     try {
@@ -287,7 +350,7 @@ export class LMSService {
       const path = await this.repository.createLearningPath(ctx, data);
       return { success: true, data: path };
     } catch (error: any) {
-      console.error("Error creating learning path:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to create learning path");
       return { success: false, error: { code: ErrorCodes.INTERNAL_ERROR, message: error.message } };
     }
   }

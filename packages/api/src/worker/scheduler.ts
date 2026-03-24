@@ -2380,6 +2380,23 @@ class Scheduler {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /**
+   * Refresh dashboard materialized views.
+   */
+  private async refreshDashboardStats(): Promise<void> {
+    try {
+      await this.sql`SELECT app.enable_system_context()`;
+      await this.sql`REFRESH MATERIALIZED VIEW CONCURRENTLY IF EXISTS mv_dashboard_employee_stats`;
+      await this.sql`REFRESH MATERIALIZED VIEW CONCURRENTLY IF EXISTS mv_dashboard_leave_stats`;
+      await this.sql`REFRESH MATERIALIZED VIEW CONCURRENTLY IF EXISTS mv_dashboard_case_stats`;
+      await this.sql`REFRESH MATERIALIZED VIEW CONCURRENTLY IF EXISTS mv_dashboard_onboarding_stats`;
+      await this.sql`SELECT app.disable_system_context()`;
+      console.log("[Scheduler] Dashboard stats refreshed");
+    } catch (err) {
+      console.error("[Scheduler] Failed to refresh dashboard stats:", err);
+    }
+  }
 }
 
 // Main entry point

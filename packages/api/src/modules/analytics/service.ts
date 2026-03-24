@@ -928,15 +928,13 @@ export class AnalyticsService {
     return {
       success: true,
       data: {
-        current_headcount: data.currentHeadcount,
-        period_start: startDate,
-        period_end: endDate,
+        currentHeadcount: data.currentHeadcount,
         trends: data.trends.map((t) => ({
           period: t.period,
-          total_headcount: t.totalHeadcount,
+          totalHeadcount: t.totalHeadcount,
           hires: t.hires,
           terminations: t.terminations,
-          net_change: t.netChange,
+          netChange: t.netChange,
         })),
       },
     };
@@ -957,20 +955,18 @@ export class AnalyticsService {
     return {
       success: true,
       data: {
-        period_start: startDate,
-        period_end: endDate,
-        overall_turnover_rate: data.overallTurnoverRate,
-        overall_voluntary_rate: data.overallVoluntaryRate,
-        overall_involuntary_rate: data.overallInvoluntaryRate,
-        total_terminations: data.totalTerminations,
-        by_department: data.byDepartment.map((d) => ({
-          org_unit_id: d.orgUnitId,
-          org_unit_name: d.orgUnitName,
-          total_terminations: d.totalTerminations,
-          voluntary_terminations: d.voluntaryTerminations,
-          involuntary_terminations: d.involuntaryTerminations,
+        totalTerminations: data.totalTerminations,
+        overallTurnoverRate: data.overallTurnoverRate,
+        overallVoluntaryRate: data.overallVoluntaryRate,
+        overallInvoluntaryRate: data.overallInvoluntaryRate,
+        byDepartment: data.byDepartment.map((d) => ({
+          orgUnitId: d.orgUnitId,
+          orgUnitName: d.orgUnitName,
+          totalTerminations: d.totalTerminations,
+          voluntaryTerminations: d.voluntaryTerminations,
+          involuntaryTerminations: d.involuntaryTerminations,
           headcount: d.headcount,
-          turnover_rate: d.turnoverRate,
+          turnoverRate: d.turnoverRate,
         })),
       },
     };
@@ -993,17 +989,16 @@ export class AnalyticsService {
     return {
       success: true,
       data: {
-        total_active_employees: data.totalActive,
-        employees_with_dob: data.employeesWithDob,
-        retirement_ages: retirementAges,
+        totalActive: data.totalActive,
+        employeesWithDob: data.employeesWithDob,
         projections: data.projections.map((p) => ({
-          retirement_age: p.retirementAge,
-          years_to_retirement: p.yearsToRetirement,
-          employee_count: p.employeeCount,
+          retirementAge: p.retirementAge,
+          yearsToRetirement: p.yearsToRetirement,
+          employeeCount: p.employeeCount,
           percentage: p.percentage,
           departments: p.departments.map((d) => ({
-            org_unit_id: d.orgUnitId,
-            org_unit_name: d.orgUnitName,
+            orgUnitId: d.orgUnitId,
+            orgUnitName: d.orgUnitName,
             count: d.count,
           })),
         })),
@@ -1023,12 +1018,12 @@ export class AnalyticsService {
     return {
       success: true,
       data: {
-        total_employees: data.totalEmployees,
-        average_tenure_months: data.averageTenureMonths,
-        median_tenure_months: data.medianTenureMonths,
+        totalEmployees: data.totalEmployees,
+        averageTenureMonths: data.averageTenureMonths,
+        medianTenureMonths: data.medianTenureMonths,
         bands: data.bands.map((b) => ({
           band: b.band,
-          employee_count: b.employeeCount,
+          employeeCount: b.employeeCount,
           percentage: b.percentage,
         })),
       },
@@ -1047,17 +1042,17 @@ export class AnalyticsService {
     return {
       success: true,
       data: {
-        total_budgeted_headcount: data.totalBudgeted,
-        total_filled: data.totalFilled,
-        total_open_requisitions: data.totalOpenRequisitions,
-        overall_vacancy_rate: data.overallVacancyRate,
-        by_department: data.byDepartment.map((d) => ({
-          org_unit_id: d.orgUnitId,
-          org_unit_name: d.orgUnitName,
-          budgeted_headcount: d.budgetedHeadcount,
-          filled_positions: d.filledPositions,
-          open_requisitions: d.openRequisitions,
-          vacancy_rate: d.vacancyRate,
+        totalBudgeted: data.totalBudgeted,
+        totalFilled: data.totalFilled,
+        totalOpenRequisitions: data.totalOpenRequisitions,
+        overallVacancyRate: data.overallVacancyRate,
+        byDepartment: data.byDepartment.map((d) => ({
+          orgUnitId: d.orgUnitId,
+          orgUnitName: d.orgUnitName,
+          budgetedHeadcount: d.budgetedHeadcount,
+          filledPositions: d.filledPositions,
+          openRequisitions: d.openRequisitions,
+          vacancyRate: d.vacancyRate,
         })),
       },
     };
@@ -1078,29 +1073,28 @@ export class AnalyticsService {
         headcount: {
           total: data.headcount.total,
           active: data.headcount.active,
-          on_leave: data.headcount.onLeave,
+          onLeave: data.headcount.onLeave,
           pending: data.headcount.pending,
         },
         turnover: {
-          rate_12m: data.turnover.rate12m,
-          voluntary_rate_12m: data.turnover.voluntaryRate12m,
-          involuntary_rate_12m: data.turnover.involuntaryRate12m,
+          rate12m: data.turnover.rate12m,
+          voluntaryRate12m: data.turnover.voluntaryRate12m,
+          involuntaryRate12m: data.turnover.involuntaryRate12m,
         },
         tenure: {
-          average_months: data.tenure.averageMonths,
-          median_months: data.tenure.medianMonths,
+          averageMonths: data.tenure.averageMonths,
+          medianMonths: data.tenure.medianMonths,
         },
-        retirement_risk: {
-          within_2_years: data.retirementRisk.within2Years,
-          within_5_years: data.retirementRisk.within5Years,
+        retirementRisk: {
+          within2Years: data.retirementRisk.within2Years,
+          within5Years: data.retirementRisk.within5Years,
         },
         vacancy: {
-          budgeted_headcount: data.vacancy.budgetedHeadcount,
+          budgetedHeadcount: data.vacancy.budgetedHeadcount,
           filled: data.vacancy.filled,
-          vacancy_rate: data.vacancy.vacancyRate,
-          open_requisitions: data.vacancy.openRequisitions,
+          vacancyRate: data.vacancy.vacancyRate,
+          openRequisitions: data.vacancy.openRequisitions,
         },
-        as_of_date: new Date().toISOString().split("T")[0]!,
       },
     };
   }

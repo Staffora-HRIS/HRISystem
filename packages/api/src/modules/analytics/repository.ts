@@ -15,7 +15,15 @@ import type {
   DiversityFilters,
   CompensationFilters,
   WorkforcePlanningFilters,
+  WorkforceAnalyticsFilters,
 } from "./schemas";
+
+// Extended filter type used by compensation analytics methods
+type CompensationAnalyticsFilters = CompensationFilters & {
+  department_id?: string;
+  start_date?: string;
+  end_date?: string;
+};
 
 import type { TenantContext } from "../../types/service-result";
 
@@ -183,7 +191,7 @@ export class AnalyticsRepository {
           COUNT(*) FILTER (WHERE termination_reason IN ('resignation', 'retirement', 'personal')) as voluntary_terminations,
           COUNT(*) FILTER (WHERE termination_reason NOT IN ('resignation', 'retirement', 'personal')) as involuntary_terminations,
           ROUND(COUNT(*)::numeric / NULLIF((SELECT count FROM avg_headcount), 0) * 100, 2) as turnover_rate,
-          ROUND(AVG(EXTRACT(EPOCH FROM (termination_date - hire_date)) / 86400 / 30), 1) as avg_tenure_months
+          ROUND(AVG((termination_date - hire_date)::numeric / 30), 1) as avg_tenure_months
         FROM terminated
       `;
     });
@@ -487,7 +495,7 @@ export class AnalyticsRepository {
         cand_stats AS (
           SELECT
             COUNT(*) AS total_applications,
-            COUNT(*) FILTER (WHERE c.current_stage IN ('screening', 'phone_screen')) AS applications_in_review,
+            COUNT(*) FILTER (WHERE c.current_stage::text IN ('screening', 'applied')) AS applications_in_review,
             COUNT(*) FILTER (WHERE c.current_stage = 'interview') AS interviews_scheduled,
             COUNT(*) FILTER (WHERE c.current_stage = 'offer') AS offers_extended,
             COUNT(*) FILTER (WHERE c.current_stage = 'hired') AS offers_accepted,
@@ -927,6 +935,99 @@ export class AnalyticsRepository {
       median_gap_percentage: medianGap,
       male_count: maleCount,
       female_count: femaleCount,
+    };
+  }
+
+  // ===========================================================================
+  // Diversity Analytics - Extended (TODO-147)
+  // ===========================================================================
+
+  async getDiversityOverview(
+    context: TenantContext,
+    filters: { org_unit_id?: string } = {}
+  ): Promise<{
+    totalEmployees: number;
+    byGender: Array<{ label: string; count: number }>;
+    byEthnicity: Array<{ label: string; count: number }>;
+    byDisability: Array<{ label: string; count: number }>;
+    byAgeBand: Array<{ label: string; count: number }>;
+    completionRate: { totalEmployees: number; totalSubmissions: number; completionRate: number };
+  }> {
+    const diversityFilters: DiversityFilters = filters.org_unit_id
+      ? { org_unit_id: filters.org_unit_id }
+      : {};
+
+    const [gender, ethnicity, disability, ageBand, completion] = await Promise.all([
+      this.getDiversityByGender(context, diversityFilters),
+      this.getDiversityByEthnicity(context, diversityFilters),
+      this.getDiversityByDisability(context, diversityFilters),
+      this.getDiversityByAgeBand(context, diversityFilters),
+      this.getDiversityCompletionRate(context),
+    ]);
+
+    const totalEmployees = gender.reduce((sum, g) => sum + (g.count || 0), 0);
+
+    return {
+      totalEmployees,
+      byGender: gender.map((g: any) => ({ label: g.gender || g.label || "unknown", count: g.count || 0 })),
+      byEthnicity: ethnicity.map((e: any) => ({ label: e.ethnicity || e.label || "unknown", count: e.count || 0 })),
+      byDisability: disability.map((d: any) => ({ label: d.disabilityStatus || d.label || "unknown", count: d.count || 0 })),
+      byAgeBand: ageBand.map((a: any) => ({ label: a.ageBand || a.label || "unknown", count: a.count || 0 })),
+      completionRate: completion,
+    };
+  }
+
+  async getDiversityByDepartmentDetailed(
+    context: TenantContext,
+    filters: { org_unit_id?: string } = {}
+  ): Promise<any[]> {
+    const data = await this.getDiversityByDepartment(context, filters.org_unit_id ? { org_unit_id: filters.org_unit_id } : {});
+    return data.map((dept: any) => ({
+      orgUnitId: dept.orgUnitId || dept.org_unit_id,
+      orgUnitName: dept.orgUnitName || dept.org_unit_name,
+      totalEmployees: dept.totalEmployees || dept.total_employees || 0,
+      byGender: [],
+      byEthnicity: [],
+      byDisability: [],
+      byAgeBand: [],
+    }));
+  }
+
+  async getDiversityByGradeDetailed(
+    context: TenantContext,
+    _filters: { org_unit_id?: string } = {}
+  ): Promise<any[]> {
+    return [];
+  }
+
+  async getDiversityTrendsDetailed(
+    context: TenantContext,
+    filters: { org_unit_id?: string; start_date?: string; end_date?: string } = {}
+  ): Promise<{
+    genderTrends: Array<{ period: string; label: string; headcount: number }>;
+    ethnicityTrends: Array<{ period: string; label: string; headcount: number }>;
+    disabilityTrends: Array<{ period: string; label: string; headcount: number }>;
+    ageBandTrends: Array<{ period: string; label: string; headcount: number }>;
+    hiringTrends: Array<{ period: string; characteristic: string; value: string; hires: number }>;
+    leavingTrends: Array<{ period: string; characteristic: string; value: string; leavers: number }>;
+  }> {
+    const diversityFilters: DiversityFilters = {};
+    if (filters.org_unit_id) diversityFilters.org_unit_id = filters.org_unit_id;
+    if (filters.start_date) diversityFilters.start_date = filters.start_date;
+    if (filters.end_date) diversityFilters.end_date = filters.end_date;
+
+    const [hiring, leaving] = await Promise.all([
+      this.getDiversityHiringTrends(context, diversityFilters),
+      this.getDiversityLeavingTrends(context, diversityFilters),
+    ]);
+
+    return {
+      genderTrends: [],
+      ethnicityTrends: [],
+      disabilityTrends: [],
+      ageBandTrends: [],
+      hiringTrends: (hiring as any[]).map((h: any) => ({ period: h.month || h.period, characteristic: "gender", value: h.gender || "", hires: h.count || h.hires || 0 })),
+      leavingTrends: (leaving as any[]).map((l: any) => ({ period: l.month || l.period, characteristic: "gender", value: l.gender || "", leavers: l.count || l.leavers || 0 })),
     };
   }
 
@@ -2596,7 +2697,7 @@ export class AnalyticsRepository {
         WITH active_emp AS (
           SELECT
             e.id,
-            EXTRACT(EPOCH FROM (CURRENT_DATE - e.hire_date)) / 86400 / 30.44 AS tenure_months
+            (CURRENT_DATE - e.hire_date)::numeric / 30.44 AS tenure_months
           FROM employees e
           WHERE e.status IN ('active', 'on_leave')
             ${filters.department_id
@@ -2823,7 +2924,7 @@ export class AnalyticsRepository {
             e.id,
             e.status,
             e.hire_date,
-            EXTRACT(EPOCH FROM (CURRENT_DATE - e.hire_date)) / 86400 / 30.44 AS tenure_months
+            (CURRENT_DATE - e.hire_date)::numeric / 30.44 AS tenure_months
           FROM employees e
           WHERE e.status IN ('active', 'on_leave', 'pending')
             ${filters.department_id

@@ -256,3 +256,16 @@ export const IdempotencyHeaderSchema = t.Object({
   "idempotency-key": t.String({ minLength: 1 }),
 });
 export type IdempotencyHeader = Static<typeof IdempotencyHeaderSchema>;
+
+// =============================================================================
+// SLA Escalation History
+// =============================================================================
+
+export const EscalationHistoryQuerySchema = t.Object({
+  cursor: t.Optional(t.String({ minLength: 1 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 20 })),
+  workflow_instance_id: t.Optional(t.String({ format: "uuid" })),
+  task_id: t.Optional(t.String({ format: "uuid" })),
+});
+
+export type EscalationHistoryQuery = Static<typeof EscalationHistoryQuerySchema>;

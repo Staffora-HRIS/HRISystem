@@ -132,4 +132,24 @@ export class ManagerService {
   ): Promise<import("./manager.types").TeamAbsenceEntry[]> {
     return this.absence.getTeamAbsenceCalendar(ctx, startDate, endDate);
   }
+
+  /**
+   * Get training overview for all direct reports (TODO).
+   */
+  async getTeamTrainingOverview(
+    _ctx: { tenantId: string; userId: string },
+    _filter: string = "all"
+  ): Promise<any[]> {
+    return [];
+  }
+
+  /**
+   * Get detailed training status for a specific team member (TODO).
+   */
+  async getTeamMemberTraining(
+    _ctx: { tenantId: string; userId: string },
+    _employeeId: string
+  ): Promise<any | null> {
+    return null;
+  }
 }

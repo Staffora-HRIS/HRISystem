@@ -98,7 +98,7 @@ export const CreateAssignmentSchema = t.Object({
   department: t.Optional(t.String({ maxLength: 255 })),
   start_date: DateSchema,
   end_date: t.Optional(DateSchema),
-  hourly_rate: t.Number({ minimum: 0, exclusiveMinimum: true }),
+  hourly_rate: t.Number({ minimum: 0, exclusiveMinimum: 0 }),
   comparable_rate: t.Optional(t.Number({ minimum: 0 })),
   notes: t.Optional(t.String({ maxLength: 5000 })),
 });
@@ -109,7 +109,7 @@ export const UpdateAssignmentSchema = t.Partial(
     role: t.String({ minLength: 1, maxLength: 500 }),
     department: t.Union([t.String({ maxLength: 255 }), t.Null()]),
     end_date: t.Union([DateSchema, t.Null()]),
-    hourly_rate: t.Number({ minimum: 0, exclusiveMinimum: true }),
+    hourly_rate: t.Number({ minimum: 0, exclusiveMinimum: 0 }),
     comparable_rate: t.Union([t.Number({ minimum: 0 }), t.Null()]),
     status: AwrAssignmentStatusSchema,
     notes: t.Union([t.String({ maxLength: 5000 }), t.Null()]),

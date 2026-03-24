@@ -149,3 +149,14 @@ export const ToilTransactionResponseSchema = t.Object({
 });
 
 export type ToilTransactionResponse = Static<typeof ToilTransactionResponseSchema>;
+
+// =============================================================================
+// Aliases (used by routes.ts)
+// =============================================================================
+
+export const CreateToilBalanceSchema = AdjustToilSchema;
+export const CreateToilAccrualSchema = AccrueToilSchema;
+export const CreateToilUsageSchema = UseToilSchema;
+export const ToilBalanceQuerySchema = PaginationQuerySchema;
+export const ToilTransactionQuerySchema = ToilTransactionFiltersSchema;
+export const IdParamsSchema = t.Object({ id: UuidSchema });

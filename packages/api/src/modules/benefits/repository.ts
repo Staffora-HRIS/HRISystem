@@ -175,7 +175,8 @@ export class BenefitsRepository {
     context: TenantContext,
     pagination: PaginationQuery = {}
   ): Promise<PaginatedResult<CarrierRow>> {
-    const { limit = 20, cursor } = pagination;
+    const limit = Number(pagination.limit) || 20;
+    const cursor = pagination.cursor;
     const fetchLimit = limit + 1;
 
     const result = await this.db.withTransaction(context, async (tx) => {
@@ -290,7 +291,8 @@ export class BenefitsRepository {
     filters: PlanFilters = {},
     pagination: PaginationQuery = {}
   ): Promise<PaginatedResult<PlanRow>> {
-    const { limit = 20, cursor } = pagination;
+    const limit = Number(pagination.limit) || 20;
+    const cursor = pagination.cursor;
     const fetchLimit = limit + 1;
 
     const result = await this.db.withTransaction(context, async (tx) => {
@@ -584,7 +586,8 @@ export class BenefitsRepository {
     filters: EnrollmentFilters = {},
     pagination: PaginationQuery = {}
   ): Promise<PaginatedResult<EnrollmentRow>> {
-    const { limit = 20, cursor } = pagination;
+    const limit = Number(pagination.limit) || 20;
+    const cursor = pagination.cursor;
     const fetchLimit = limit + 1;
 
     const result = await this.db.withTransaction(context, async (tx) => {

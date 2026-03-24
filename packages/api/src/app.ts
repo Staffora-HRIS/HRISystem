@@ -23,8 +23,12 @@ import {
   auditPlugin,
   betterAuthPlugin,
 } from "./plugins";
+import { ipAllowlistPlugin } from "./plugins/ip-allowlist";
 import { ErrorCodes } from "./plugins/errors";
+import { featureFlagsPlugin } from "./plugins/feature-flags";
 import { metricsPlugin } from "./plugins/metrics";
+import { tracingPlugin } from "./plugins/tracing";
+import { initTelemetry, shutdownTelemetry } from "./lib/telemetry";
 
 // Import modules
 import { hrRoutes } from "./modules/hr";
@@ -128,6 +132,7 @@ import { incomeProtectionRoutes } from "./modules/income-protection";
 import { tribunalRoutes } from "./modules/tribunal";
 import { globalMobilityRoutes } from "./modules/global-mobility";
 
+import { featureFlagAdminRoutes, featureFlagEvalRoutes } from "./modules/feature-flags";
 import { beneficiaryNominationRoutes } from "./modules/beneficiary-nominations";
 import { benefitsExchangeRoutes } from "./modules/benefits-exchange";
 import { dataImportRoutes } from "./modules/data-import";
@@ -157,6 +162,13 @@ const config = {
 
 /** Pre-compiled regex for dev CORS origin check (avoid re-compiling on every request) */
 const DEV_LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/**
+ * Initialize OpenTelemetry distributed tracing.
+ * Must happen before the Elysia app is created so the tracer provider is
+ * registered before any spans are started. No-op when OTEL_ENABLED !== "true".
+ */
+initTelemetry({ serviceName: "staffora-api" });
 
 /**
  * Application start time for uptime calculation
@@ -272,6 +284,11 @@ export const app = new Elysia()
   // Prometheus metrics (GET /metrics — no auth required for scraping)
   .use(metricsPlugin())
 
+  // OpenTelemetry distributed tracing (after errors, before db/auth)
+  // Creates a span per request, propagates W3C traceparent headers,
+  // and enriches spans with tenant_id/user_id. No-op when OTEL_ENABLED !== "true".
+  .use(tracingPlugin())
+
   // Request body size limit (pre-computed at startup, not per-request)
   .onBeforeHandle({ as: "global" }, ({ request, set }) => {
     const contentLength = request.headers.get("content-length");
@@ -290,6 +307,9 @@ export const app = new Elysia()
   .use(cachePlugin())
 
   .use(rateLimitPlugin())
+
+  // IP allowlist for admin endpoints (reads ADMIN_IP_ALLOWLIST env var)
+  .use(ipAllowlistPlugin())
 
   // Better Auth routes (mounted before other auth for /api/auth/* endpoints)
   .use(betterAuthPlugin())
@@ -513,11 +533,13 @@ export const app = new Elysia()
   .use(authPlugin())
   .use(tenantPlugin({ optional: true }))
   .use(rbacPlugin())
+  .use(featureFlagsPlugin())
   .use(idempotencyPlugin())
   .use(auditPlugin())
 
   // API v1 routes group
-  .group("/api/v1", (api) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Elysia's type chain exceeds TS recursion limit with 70+ route modules
+  .group("/api/v1", (api: any) =>
     api
       // Auth routes (before other modules)
       .use(authRoutes)
@@ -585,6 +607,9 @@ export const app = new Elysia()
       .use(bulkOperationsRoutes)
       // API Key Management
       .use(apiKeyRoutes)
+      // Feature Flags (admin CRUD + user evaluation)
+      .use(featureFlagAdminRoutes)
+      .use(featureFlagEvalRoutes)
       // Data Import (CSV bulk data loading)
       .use(dataImportRoutes)
       // Employee Change Requests (self-service + HR review)
@@ -715,6 +740,15 @@ if (import.meta.main) {
   console.log(
     `Documentation: http://${app.server?.hostname}:${app.server?.port}/docs`
   );
+
+  // Graceful shutdown: flush pending telemetry spans before exiting
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`[API] Received ${signal}, shutting down...`);
+    await shutdownTelemetry();
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
 export type App = typeof app;

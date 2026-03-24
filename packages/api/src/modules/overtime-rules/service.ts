@@ -25,6 +25,7 @@ import type {
 } from "./schemas";
 import type { ServiceResult } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
+import { logger } from "../../lib/logger";
 
 // =============================================================================
 // Error Codes
@@ -86,7 +87,7 @@ export class OvertimeRulesService {
         input.effectiveTo ? new Date(input.effectiveTo) : null
       );
       if (!overlapCheck.success) {
-        return overlapCheck as ServiceResult<OvertimeRuleRow>;
+        return overlapCheck as unknown as ServiceResult<OvertimeRuleRow>;
       }
 
       const rule = await this.repo.createRule(ctx, {
@@ -102,7 +103,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: rule };
     } catch (error) {
-      console.error("Error creating overtime rule:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to create overtime rule");
       return {
         success: false,
         error: {
@@ -135,7 +136,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: rule };
     } catch (error) {
-      console.error("Error fetching overtime rule:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, ruleId: id }, "Failed to fetch overtime rule");
       return {
         success: false,
         error: {
@@ -178,7 +179,7 @@ export class OvertimeRulesService {
         },
       };
     } catch (error) {
-      console.error("Error listing overtime rules:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to list overtime rules");
       return {
         success: false,
         error: {
@@ -251,7 +252,7 @@ export class OvertimeRulesService {
         id
       );
       if (!overlapCheck.success) {
-        return overlapCheck as ServiceResult<OvertimeRuleRow>;
+        return overlapCheck as unknown as ServiceResult<OvertimeRuleRow>;
       }
 
       const updated = await this.repo.updateRule(ctx, id, {
@@ -285,7 +286,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: updated };
     } catch (error) {
-      console.error("Error updating overtime rule:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, ruleId: id }, "Failed to update overtime rule");
       return {
         success: false,
         error: {
@@ -319,7 +320,7 @@ export class OvertimeRulesService {
       const deleted = await this.repo.deleteRule(ctx, id);
       return { success: true, data: { deleted } };
     } catch (error) {
-      console.error("Error deleting overtime rule:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, ruleId: id }, "Failed to delete overtime rule");
       return {
         success: false,
         error: {
@@ -418,7 +419,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: result };
     } catch (error) {
-      console.error("Error calculating overtime for employee:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, employeeId }, "Failed to calculate overtime for employee");
       return {
         success: false,
         error: {
@@ -529,7 +530,7 @@ export class OvertimeRulesService {
         },
       };
     } catch (error) {
-      console.error("Error in batch overtime calculation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed batch overtime calculation");
       return {
         success: false,
         error: {
@@ -576,7 +577,7 @@ export class OvertimeRulesService {
         },
       };
     } catch (error) {
-      console.error("Error listing overtime calculations:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId }, "Failed to list overtime calculations");
       return {
         success: false,
         error: {
@@ -609,7 +610,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: calculation };
     } catch (error) {
-      console.error("Error fetching overtime calculation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, calculationId: id }, "Failed to fetch overtime calculation");
       return {
         success: false,
         error: {
@@ -669,7 +670,7 @@ export class OvertimeRulesService {
 
       return { success: true, data: approved };
     } catch (error) {
-      console.error("Error approving overtime calculation:", error);
+      logger.error({ err: error, tenantId: ctx.tenantId, calculationId: id }, "Failed to approve overtime calculation");
       return {
         success: false,
         error: {
