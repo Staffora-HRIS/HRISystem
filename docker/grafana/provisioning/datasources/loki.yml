@@ -15,14 +15,21 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+    uid: loki
     isDefault: false
     editable: false
     jsonData:
       maxLines: 1000
       timeout: 60
       derivedFields:
-        # Link request IDs to trace view (if OpenTelemetry is configured)
+        # Link traceId fields in structured logs to Tempo trace view
+        - datasourceUid: tempo
+          matcherRegex: '"traceId":"([a-f0-9]+)"'
+          name: TraceID
+          url: "$${__value.raw}"
+          urlDisplayLabel: "View Trace"
+        # Link request IDs for non-traced requests
         - datasourceUid: ""
-          matcherRegex: '"requestId":"([a-f0-9-]+)"'
+          matcherRegex: '"requestId":"([a-f0-9_]+)"'
           name: RequestID
           url: ""

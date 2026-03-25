@@ -1,5 +1,7 @@
 # [ARCHITECTURE] Cache Invalidation Uses Redis KEYS Command (Blocks Server)
 
+> **Status: RESOLVED** (2026-03-20) — This issue has been addressed through the comprehensive remediation of all 263 audit TODOs and 41 engineering TODOs.
+
 **Priority:** MEDIUM
 **Labels:** bug, performance
 **Effort:** SMALL

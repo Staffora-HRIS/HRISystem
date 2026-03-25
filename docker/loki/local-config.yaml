@@ -47,6 +47,18 @@ storage_config:
     cache_location: /loki/tsdb-cache
 
 # ---------------------------------------------------------------------------
+# Chunk encoding -- snappy compression for balanced speed and size
+# ---------------------------------------------------------------------------
+chunk_store_config:
+  chunk_cache_config:
+    embedded_cache:
+      enabled: true
+      max_size_mb: 100
+
+ingester:
+  chunk_encoding: snappy
+
+# ---------------------------------------------------------------------------
 # Ingestion and retention limits
 # ---------------------------------------------------------------------------
 limits_config:

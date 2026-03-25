@@ -1,6 +1,6 @@
 # Architecture
 
-*Last updated: 2026-03-17*
+*Last updated: 2026-03-21*
 
 ## System Overview
 
@@ -81,16 +81,19 @@ The API uses Elysia's plugin system. Plugins **must** be registered in order due
 
 ```mermaid
 graph TD
-    CORS[CORS] --> SecHeaders[Security Headers]
+    CORS[CORS] --> SecHeaders[securityHeadersPlugin<br/>Security headers]
     SecHeaders --> Errors[errorsPlugin<br/>Error handling, request IDs]
-    Errors --> DB[dbPlugin<br/>PostgreSQL connection]
+    Errors --> Metrics[metricsPlugin<br/>Prometheus metrics]
+    Metrics --> Tracing[tracingPlugin<br/>OpenTelemetry distributed tracing]
+    Tracing --> DB[dbPlugin<br/>PostgreSQL connection]
     DB --> Cache[cachePlugin<br/>Redis connection]
     Cache --> RateLimit[rateLimitPlugin<br/>Request throttling]
     RateLimit --> BetterAuth[betterAuthPlugin<br/>Auth route handler]
     BetterAuth --> Auth[authPlugin<br/>Session validation]
     Auth --> Tenant[tenantPlugin<br/>Tenant resolution]
     Tenant --> RBAC[rbacPlugin<br/>Permission checks]
-    RBAC --> Idempotency[idempotencyPlugin<br/>Deduplication]
+    RBAC --> FeatureFlags[featureFlagsPlugin<br/>Feature flag evaluation]
+    FeatureFlags --> Idempotency[idempotencyPlugin<br/>Deduplication]
     Idempotency --> Audit[auditPlugin<br/>Audit logging]
 ```
 

@@ -88,7 +88,29 @@ scrape_configs:
       - docker: {}
 
       # ------------------------------------------------------------------
-      # Stage 2: Try to parse the log line as JSON (structured logs from API/worker)
+      # Stage 2: Drop health check noise
+      # Health check endpoints (/health, /healthz, /ready) generate high-
+      # frequency log lines that add no diagnostic value. Drop them early
+      # to reduce Loki ingestion volume and storage costs.
+      # ------------------------------------------------------------------
+      - drop:
+          expression: '"path":"/health"'
+          drop_counter_reason: health_check
+      - drop:
+          expression: '"path":"/healthz"'
+          drop_counter_reason: health_check
+      - drop:
+          expression: '"path":"/ready"'
+          drop_counter_reason: health_check
+      - drop:
+          expression: "GET /health"
+          drop_counter_reason: health_check
+      - drop:
+          expression: "GET /healthz"
+          drop_counter_reason: health_check
+
+      # ------------------------------------------------------------------
+      # Stage 3: Try to parse the log line as JSON (structured logs from API/worker)
       # This extracts level, msg, requestId, tenantId, userId, etc.
       # Pino outputs numeric levels (10=trace, 20=debug, 30=info, 40=warn,
       # 50=error, 60=fatal) in production JSON mode.
@@ -106,9 +128,10 @@ scrape_configs:
             status: status
             duration: duration
             error: error
+            module: module
 
       # ------------------------------------------------------------------
-      # Stage 3: Translate Pino numeric levels to human-readable strings.
+      # Stage 4: Translate Pino numeric levels to human-readable strings.
       # Pino outputs level as an integer in production JSON mode:
       #   10=trace, 20=debug, 30=info, 40=warn, 50=error, 60=fatal
       # These replacements normalise numeric levels to strings before
@@ -140,7 +163,7 @@ scrape_configs:
           replace: "fatal"
 
       # ------------------------------------------------------------------
-      # Stage 4: Normalise string-format level values (from pino-pretty
+      # Stage 5: Normalise string-format level values (from pino-pretty
       # in development or other non-Pino services)
       # ------------------------------------------------------------------
       - replace:
@@ -165,21 +188,21 @@ scrape_configs:
           replace: "fatal"
 
       # ------------------------------------------------------------------
-      # Stage 5: Set extracted level as a label (for filtering in Grafana)
+      # Stage 6: Set extracted level as a label (for filtering in Grafana)
       # Falls back to "unknown" if not a structured JSON log
       # ------------------------------------------------------------------
       - labels:
           level:
 
       # ------------------------------------------------------------------
-      # Stage 6: Add static labels
+      # Stage 7: Add static labels
       # ------------------------------------------------------------------
       - static_labels:
           cluster: staffora
           environment: development
 
       # ------------------------------------------------------------------
-      # Stage 7: Timestamp extraction from structured JSON logs
+      # Stage 8: Timestamp extraction from structured JSON logs
       # The docker: {} stage already handles the Docker json-file timestamp.
       # This stage extracts the application-level timestamp if present in
       # the structured JSON log body (e.g., {"timestamp":"2026-03-17T..."}).

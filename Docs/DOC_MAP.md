@@ -2,7 +2,7 @@
 
 > Visual navigation system for all Staffora documentation
 > Total: 190+ files across 17 directories
-> **Last updated:** 2026-03-17
+> **Last updated:** 2026-03-21
 
 ---
 

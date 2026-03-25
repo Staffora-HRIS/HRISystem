@@ -7,6 +7,7 @@
 #   Production:     docker compose --profile production up -d
 #   Monitoring:     docker compose --profile monitoring up -d
 #   Scanning:       docker compose --profile scanning up -d
+#   Uptime:         docker compose --profile uptime up -d
 #   Scaled (3 API): docker compose --profile production up -d --scale api=3
 #
 # Profiles:
@@ -14,6 +15,7 @@
 #   - production: Production-optimized configuration with nginx load balancer
 #   - monitoring: Full observability stack (Loki, Promtail, Prometheus, Grafana, exporters)
 #   - scanning: ClamAV virus scanning for document uploads
+#   - uptime: Uptime Kuma self-hosted uptime monitoring and status page
 #
 # Monitoring Stack (--profile monitoring):
 #   Adds log aggregation (Loki + Promtail) and metrics (Prometheus + exporters)
@@ -44,6 +46,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hris_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-hris}
       # Production: Tune shared_buffers, work_mem via postgres.conf
+    entrypoint: ["/scripts/entrypoint-wrapper.sh"]
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -52,6 +55,7 @@ services:
       - postgres_wal_archive:/wal-archive
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/entrypoint-wrapper.sh:/scripts/entrypoint-wrapper.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hris} -d ${POSTGRES_DB:-hris}"]
       interval: 10s
@@ -83,7 +87,7 @@ services:
   # app.set_tenant_context().
   #
   # Architecture:
-  #   API/Worker --[max_client_conn=200]--> PgBouncer --[pool_size=25]--> PostgreSQL
+  #   API/Worker --[max_client_conn=200]--> PgBouncer --[pool_size=20]--> PostgreSQL
   #
   # Direct PostgreSQL access (bypassing PgBouncer) is preserved for:
   #   - Migrations (DATABASE_URL still points to postgres:5432)
@@ -91,7 +95,7 @@ services:
   #   - Admin/superuser connections
   # ---------------------------------------------------------------------------
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:latest
     container_name: staffora-pgbouncer
     restart: unless-stopped
     environment:
@@ -209,6 +213,14 @@ services:
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30000}
+      # OpenTelemetry distributed tracing (optional, requires 'monitoring' profile with tempo)
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4318}
+      OTEL_SERVICE_NAME: staffora-api
+      OTEL_SERVICE_VERSION: "0.1.0"
+      OTEL_SAMPLE_RATE: ${OTEL_SAMPLE_RATE:-}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
+      OTEL_CONSOLE_EXPORTER: ${OTEL_CONSOLE_EXPORTER:-false}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
@@ -249,7 +261,7 @@ services:
         NODE_ENV: ${NODE_ENV:-development}
     container_name: staffora-worker
     restart: unless-stopped
-    command: ["bun", "run", "src/worker.ts"]
+    command: ["bun", "run", "packages/api/src/worker.ts"]
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       # DATABASE_APP_URL routes through PgBouncer for connection pooling.
@@ -278,6 +290,14 @@ services:
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30000}
+      # OpenTelemetry distributed tracing (optional, requires 'monitoring' profile with tempo)
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4318}
+      OTEL_SERVICE_NAME: staffora-worker
+      OTEL_SERVICE_VERSION: "0.1.0"
+      OTEL_SAMPLE_RATE: ${OTEL_SAMPLE_RATE:-}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
+      OTEL_CONSOLE_EXPORTER: ${OTEL_CONSOLE_EXPORTER:-false}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -466,6 +486,54 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
+  # Uptime Kuma -- Self-hosted Uptime Monitoring (Optional)
+  # ---------------------------------------------------------------------------
+  # Provides HTTP/TCP uptime monitoring, SSL certificate expiry checks,
+  # alerting (Slack, email, PagerDuty), and a public status page.
+  #
+  # Enable with: docker compose --profile uptime up -d
+  #
+  # Dashboard: http://localhost:3002
+  # Port 3002 is used because the worker health endpoint occupies port 3001.
+  #
+  # See Docs/operations/uptime-monitoring.md for monitor configuration guide.
+  # ---------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: staffora-uptime-kuma
+    restart: unless-stopped
+    profiles:
+      - uptime
+    ports:
+      - "${UPTIME_KUMA_PORT:-3002}:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get('http://localhost:3001/api/entry-page',{timeout:5000},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
   # Production-Only Services
   # ---------------------------------------------------------------------------
 
@@ -481,10 +549,26 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/cache.conf:/etc/nginx/cache.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+      # Let's Encrypt certificate volume (shared with certbot, read-only for nginx)
+      - certbot_conf:/etc/letsencrypt:ro
+      # ACME challenge webroot (shared with certbot, read-only for nginx)
+      - certbot_webroot:/var/www/certbot:ro
     depends_on:
       - api
       - web
+    # Run nginx in foreground. A background loop reloads the config every
+    # 6 hours so renewed certificates are picked up even if certbot's
+    # deploy hook fails. The trap ensures clean shutdown on SIGTERM.
+    command: >
+      /bin/sh -c '
+        trap "nginx -s quit; exit 0" TERM INT;
+        nginx -g "daemon off;" &
+        while :; do sleep 6h; nginx -s reload; done &
+        wait
+      '
     networks:
       - staffora-network
     deploy:
@@ -498,18 +582,80 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # ---------------------------------------------------------------------------
+  # Certbot — Automated TLS Certificate Management
+  # ---------------------------------------------------------------------------
+  # Provisions and renews Let's Encrypt TLS certificates using HTTP-01 challenges.
+  # Shares two volumes with nginx:
+  #   - certbot_conf:    Certificate files at /etc/letsencrypt
+  #   - certbot_webroot: ACME challenge webroot at /var/www/certbot
+  #
+  # First-time setup:
+  #   ./scripts/init-letsencrypt.sh
+  #
+  # The container runs a renewal check every 12 hours. Certbot only contacts
+  # Let's Encrypt when a certificate is within 30 days of expiry.
+  #
+  # Manual commands:
+  #   docker compose --profile production exec certbot certbot certificates
+  #   docker compose --profile production exec certbot certbot renew --dry-run
+  #   docker compose --profile production exec certbot certbot renew --force-renewal
+  #
+  # See: Docs/operations/ssl-certificates.md
+  # ---------------------------------------------------------------------------
+  certbot:
+    image: certbot/certbot:latest
+    container_name: staffora-certbot
+    restart: unless-stopped
+    profiles:
+      - production
+    volumes:
+      # Certificate storage — shared with nginx (rw for certbot, ro for nginx)
+      - certbot_conf:/etc/letsencrypt
+      # ACME challenge webroot — shared with nginx
+      - certbot_webroot:/var/www/certbot
+      # Certbot CLI configuration
+      - ./certbot/cli.ini:/etc/letsencrypt/cli.ini:ro
+    # Check for renewal every 12 hours (43200 seconds).
+    # certbot renew exits immediately if no certificates need renewal.
+    # The trap ensures clean shutdown on SIGTERM/SIGINT.
+    entrypoint: >
+      /bin/sh -c '
+        trap exit TERM INT;
+        while :; do
+          certbot renew --quiet;
+          sleep 43200 & wait $${!};
+        done
+      '
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ===========================================================================
   # Monitoring Profile Services
   # ===========================================================================
   # Full observability stack: log aggregation (Loki + Promtail), metrics
-  # (Prometheus + exporters), and dashboards (Grafana).
+  # (Prometheus + exporters), tracing (Tempo), and dashboards (Grafana).
   #
   # Enable with: docker compose --profile monitoring up -d
   #
   # Architecture:
   #   Docker containers --> json-file driver --> /var/lib/docker/containers/
   #   Promtail (tails log files via Docker socket) --> Loki (stores + indexes)
-  #   Grafana (queries Loki via LogQL + Prometheus via PromQL)
+  #   API/Worker --[OTLP HTTP]--> Tempo (stores + indexes traces)
+  #   Grafana (queries Loki via LogQL + Prometheus via PromQL + Tempo via TraceQL)
   #
   # Log Rotation:
   #   All containers use json-file driver with rotation:
@@ -517,6 +663,52 @@ services:
   #     max-file: 5 (high-volume) or 3 (low-volume)
   #   Promtail reads these rotated files seamlessly via the Docker socket.
   # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Grafana Tempo -- Distributed tracing backend
+  # ---------------------------------------------------------------------------
+  # Receives traces via OTLP (gRPC :4317, HTTP :4318) from the API and Worker
+  # services. Stores traces locally with 72-hour retention. Queryable through
+  # Grafana's Explore view or the Tempo HTTP API on port 3200.
+  #
+  # API/Worker send traces when OTEL_ENABLED=true.
+  # ---------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: staffora-tempo
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "-config.file=/etc/tempo/tempo.yaml"
+    ports:
+      - "${TEMPO_OTLP_GRPC_PORT:-4317}:4317"     # OTLP gRPC receiver
+      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"      # OTLP HTTP receiver
+      - "${TEMPO_HTTP_PORT:-3200}:3200"            # Tempo query API
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3200/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   # ---------------------------------------------------------------------------
   # Loki -- Log aggregation and storage
@@ -663,8 +855,9 @@ services:
   # ---------------------------------------------------------------------------
   # Grafana -- Dashboards and visualization
   # ---------------------------------------------------------------------------
-  # Pre-provisioned with Prometheus and Loki datasources, plus dashboards for
-  # platform overview (metrics) and log exploration (Loki).
+  # Pre-provisioned with Prometheus, Loki, and Tempo datasources, plus
+  # dashboards for platform overview (metrics), log exploration (Loki),
+  # and distributed trace exploration (Tempo).
   # ---------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:10.4.1
@@ -679,7 +872,7 @@ services:
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
       GF_SERVER_HTTP_PORT: "3100"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/staffora-overview.json
-      # Enable Explore for ad-hoc log queries
+      # Enable Explore for ad-hoc log and trace queries
       GF_EXPLORE_ENABLED: "true"
     ports:
       - "${GRAFANA_PORT:-3100}:3100"
@@ -691,6 +884,8 @@ services:
       prometheus:
         condition: service_healthy
       loki:
+        condition: service_healthy
+      tempo:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/api/health || exit 1"]
@@ -791,12 +986,25 @@ volumes:
     driver: local
   clamav_data:
     driver: local
+  # Nginx proxy cache volume
+  nginx_cache:
+    driver: local
+  # Let's Encrypt certificate storage (managed by certbot)
+  certbot_conf:
+    driver: local
+  certbot_webroot:
+    driver: local
+  # Uptime monitoring volume
+  uptime_kuma_data:
+    driver: local
   # Monitoring profile volumes
   loki_data:
     driver: local
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  tempo_data:
     driver: local
 
 # =============================================================================

@@ -1,5 +1,7 @@
 # [COMPLIANCE] Disciplinary & Grievance ACAS Code of Practice Workflow Missing
 
+> **Status: RESOLVED** (2026-03-20) — This issue has been addressed through the comprehensive remediation of all 263 audit TODOs and 41 engineering TODOs.
+
 **Priority:** HIGH
 **Labels:** compliance, enhancement
 **Effort:** LARGE

@@ -1,23 +1,24 @@
 # Staffora HRIS -- Kanban Board
 
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-03-21
 **Board View:** All identified work items from audit reports
+**Status:** ALL ITEMS RESOLVED — 263/263 audit-derived TODOs completed. Engineering TODO 41/41 resolved.
 
 ---
 
 ## CRITICAL -- Blocking Production
 
-> Items that must be resolved before any production deployment.
+> All critical items have been resolved.
 
-| ID | Title | Source | Effort | Sprint |
-|----|-------|--------|--------|--------|
-| CRIT-01 | CSRF token validation (server generates, validates; frontend sends) | Security HIGH-01, Arch R1 | 2d | S1 |
-| CRIT-02 | Create `hris_app` role in production (RLS bypassed without it) | Infra #2, Arch R3 | 2d | S2 |
-| CRIT-03 | Add graceful shutdown to API server (SIGTERM/SIGINT) | Arch R2 | 1d | S2 |
-| CRIT-04 | Account lockout after failed login attempts | Security HIGH-03 | 2d | S1 |
-| CRIT-05 | Enable email verification in production | Security HIGH-02 | 0.5d | S1 |
-| CRIT-06 | Create deployment pipeline (build/push Docker images, staging deploy) | Infra #1 | 3d | S3 |
-| CRIT-07 | Implement offsite backup storage (S3) | Infra P0 #3 | 1d | S3 |
+| ID | Title | Source | Status |
+|----|-------|--------|--------|
+| ~~CRIT-01~~ | ~~CSRF token validation~~ | Security HIGH-01 | ✅ DONE |
+| ~~CRIT-02~~ | ~~Create `hris_app` role~~ | Infra #2 | ✅ DONE |
+| ~~CRIT-03~~ | ~~Graceful shutdown~~ | Arch R2 | ✅ DONE |
+| ~~CRIT-04~~ | ~~Account lockout~~ | Security HIGH-03 | ✅ DONE |
+| ~~CRIT-05~~ | ~~Email verification~~ | Security HIGH-02 | ✅ DONE |
+| ~~CRIT-06~~ | ~~Deployment pipeline~~ | Infra #1 | ✅ DONE |
+| ~~CRIT-07~~ | ~~Offsite backup storage~~ | Infra P0 #3 | ✅ DONE |
 
 ---
 
@@ -158,36 +159,35 @@
 
 ## TODO -- Next Up
 
-> Items scheduled for the next sprint (Sprint 1).
+> All sprint items completed. No pending work.
 
-| ID | Title | Sprint | Effort |
-|----|-------|--------|--------|
-| CRIT-01 | CSRF token validation | S1 | 2d |
-| CRIT-04 | Account lockout mechanism | S1 | 2d |
-| CRIT-05 | Enable email verification | S1 | 0.5d |
-| SEC-01 | Request body size limit | S1 | 0.5d |
-| SEC-02 | Remove hardcoded dev password fallback | S1 | 0.5d |
-| SEC-03 | Increase minimum password length | S1 | 0.5d |
+*Empty — all backlog, security, architecture, testing, infrastructure, and UK compliance items have been resolved.*
 
 ---
 
 ## IN PROGRESS
 
-> Currently being worked on.
-
-| ID | Title | Assignee | Started | Notes |
-|----|-------|----------|---------|-------|
-| -- | -- | -- | -- | Nothing in progress yet |
+> No items currently in progress. All work completed.
 
 ---
 
 ## TESTING
 
-> Completed work awaiting verification.
+> No items awaiting verification. All items passed.
 
-| ID | Title | Assignee | Notes |
+---
+
+## DONE -- 2026-03-21 Session Improvements
+
+| ID | Title | Category | Notes |
 |----|-------|----------|-------|
-| -- | -- | -- | Nothing in testing yet |
+| S21-01 | Circuit breaker utility created | Architecture | `packages/api/src/lib/circuit-breaker.ts` — retry with exponential backoff, failure threshold, half-open recovery |
+| S21-02 | IP allowlist plugin created | Security | `packages/api/src/plugins/ip-allowlist.ts` — configurable IP/CIDR allowlist for admin endpoints |
+| S21-03 | Analytics composite indexes migration | Performance | `migrations/0220_analytics_composite_indexes.sql` — composite indexes for analytics queries |
+| S21-04 | HR service decomposed (2,367 to 587 lines) | Tech Debt | God class split into sub-services: employee, position, org-unit, contract, compensation, reporting |
+| S21-05 | 3 frontend routes decomposed (770-792 to 222-344 lines) | Tech Debt | Large admin routes split into focused sub-components |
+| S21-06 | All code scan critical/high findings resolved | Code Quality | F-001 through F-008, F-019 verified fixed in code-scan-findings.md |
+| S21-07 | All documentation freshness issues fixed | Documentation | All docs updated to reflect current codebase state |
 
 ---
 

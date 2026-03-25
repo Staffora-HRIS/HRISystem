@@ -112,15 +112,18 @@ Plugins have dependencies and **must** be registered in this order in `src/app.t
 
 1. `securityHeadersPlugin` — Security headers (after CORS)
 2. `errorsPlugin` — Error handling, request ID generation
-3. `dbPlugin` — Database connectivity (postgres.js)
-4. `cachePlugin` — Redis caching
-5. `rateLimitPlugin` — Rate limiting (depends on cache)
-6. `betterAuthPlugin` — BetterAuth route handler for `/api/auth/*`
-7. `authPlugin` — Session/user resolution (depends on db, cache)
-8. `tenantPlugin` — Tenant resolution (depends on db, cache, auth)
-9. `rbacPlugin` — Authorization (depends on db, cache, auth, tenant)
-10. `idempotencyPlugin` — Request deduplication (depends on db, cache, auth, tenant)
-11. `auditPlugin` — Audit logging (depends on db, auth, tenant)
+3. `metricsPlugin` — Prometheus metrics (GET /metrics, no auth required)
+4. `tracingPlugin` — OpenTelemetry distributed tracing (no-op when OTEL_ENABLED !== "true")
+5. `dbPlugin` — Database connectivity (postgres.js)
+6. `cachePlugin` — Redis caching
+7. `rateLimitPlugin` — Rate limiting (depends on cache)
+8. `betterAuthPlugin` — BetterAuth route handler for `/api/auth/*`
+9. `authPlugin` — Session/user resolution (depends on db, cache)
+10. `tenantPlugin` — Tenant resolution (depends on db, cache, auth)
+11. `rbacPlugin` — Authorization (depends on db, cache, auth, tenant)
+12. `featureFlagsPlugin` — Feature flag evaluation (depends on db, cache, tenant)
+13. `idempotencyPlugin` — Request deduplication (depends on db, cache, auth, tenant)
+14. `auditPlugin` — Audit logging (depends on db, auth, tenant)
 
 ### Worker Subsystem
 Background processing uses Redis Streams for reliable async operations:

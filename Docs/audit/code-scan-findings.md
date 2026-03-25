@@ -1,8 +1,9 @@
 # Code Scan Findings Report
 
-**Scan Date:** 2026-03-13
+**Scan Date:** 2026-03-13 | **Updated:** 2026-03-21
 **Repository:** Staffora HRIS (HRISystem)
 **Scanner:** Full codebase scan for incomplete/problematic code markers
+**Status:** Both critical findings resolved. All targeted high findings (F-001 through F-008, F-019) verified fixed. Remaining items are medium/low priority.
 
 ---
 
@@ -11,18 +12,18 @@
 | Category | Count | Critical | High | Medium | Low |
 |---|---|---|---|---|---|
 | Traditional Code Markers (TODO/FIXME/HACK/XXX/TEMP/UNFINISHED) | 0 | 0 | 0 | 0 | 0 |
-| Mock/Hardcoded Data in Production Code | 5 | 1 | 3 | 1 | 0 |
-| Missing API Endpoints (Frontend References Non-Existent Backend) | 1 | 0 | 1 | 0 | 0 |
-| Frontend Pages with Simulated Operations | 3 | 0 | 2 | 1 | 0 |
+| Mock/Hardcoded Data in Production Code | 5 | ~~1~~ 0 | ~~3~~ 0 | 1 | 0 |
+| Missing API Endpoints (Frontend References Non-Existent Backend) | 1 | 0 | ~~1~~ 0 | 0 | 0 |
+| Frontend Pages with Simulated Operations | 3 | 0 | ~~2~~ 0 | 1 | 0 |
 | Missing Frontend Route Pages (Navigation Links to Non-Existent Pages) | 9 | 0 | 4 | 5 | 0 |
-| Database Table/Column Name Mismatches | 1 | 1 | 0 | 0 | 0 |
+| Database Table/Column Name Mismatches | 1 | ~~1~~ 0 | 0 | 0 | 0 |
 | DB Tables with No API Module (Migrations Exist, No CRUD Routes) | 5 | 0 | 3 | 2 | 0 |
 | Architecture Pattern Violations | 3 | 0 | 0 | 3 | 0 |
 | Type Safety Concerns (`as any` Casts) | 6 | 0 | 0 | 6 | 0 |
 | Dead/Orphaned Code | 2 | 0 | 0 | 1 | 1 |
 | Unimplemented Features Flagged in UI | 4 | 0 | 1 | 3 | 0 |
 | Logging Concerns (console.log in Production) | 74 | 0 | 0 | 1 | 0 |
-| **TOTALS** | **108** | **2** | **14** | **23** | **1** |
+| **TOTALS** | **108** | **0** | **8** | **23** | **1** |
 
 ---
 
@@ -36,33 +37,25 @@ No TODO, FIXME, HACK, TEMP, XXX, or UNFINISHED comments found in any `.ts`, `.ts
 
 ## Category 2: Mock/Hardcoded Data in Production Code
 
-### F-001: Tenant Settings Page Returns Mock Data (CRITICAL)
+### F-001: ~~Tenant Settings Page Returns Mock Data~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/settings/tenant/route.tsx`
-- **Lines:** 74-86
-- **Code:** `// Return mock data for now` followed by hardcoded tenant object with `id: "tenant-1"`, `name: "Acme Corporation"`
-- **Context:** The `queryFn` for tenant settings returns a static object instead of calling the backend `/tenant/settings` endpoint (which does exist in the backend).
-- **Impact:** Tenant settings page displays fake data and cannot load real tenant configuration.
+- **Resolution:** Page now uses `useQuery` with `api.get<TenantData>("/tenant/current")` to fetch real tenant data. Form state is derived from the API response via `tenantToFormState()`. No mock data remains. Loading and error states properly handled.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
-### F-002: Tenant Settings Save is Simulated (HIGH)
+### F-002: ~~Tenant Settings Save is Simulated~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/settings/tenant/route.tsx`
-- **Lines:** 90-96
-- **Code:** `// Simulate save` with `await new Promise((resolve) => setTimeout(resolve, 1000));`
-- **Context:** The save handler in tenant settings page uses a 1-second setTimeout instead of making a PUT/PATCH API call. Shows success toast without persisting changes.
-- **Impact:** Users believe settings are saved but nothing is persisted.
+- **Resolution:** Save handler now uses `useMutation` with `api.put<TenantData>("/tenant/settings", payload)`. On success, the query cache is updated and invalidated. On error, `ApiError` messages are surfaced. The simulated `setTimeout` has been removed. A matching `PUT /tenant/settings` backend endpoint was added to `packages/api/src/modules/tenant/routes.ts` with corresponding service and repository methods.
+- **Resolved:** 2026-03-21 (verified and backend endpoint added)
 
-### F-003: Notification Settings Save is Simulated (HIGH)
+### F-003: ~~Notification Settings Save is Simulated~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/settings/notifications/route.tsx`
-- **Lines:** 69-75
-- **Code:** `// Simulate save` with `await new Promise((resolve) => setTimeout(resolve, 1000));`
-- **Context:** Same pattern as tenant settings -- save button uses setTimeout and shows success toast without any API call.
-- **Impact:** Notification preferences are never persisted.
+- **Resolution:** Save handler now uses `useMutation` with `api.put<TenantData>("/tenant/settings", { settings: mergedSettings })`. Notification preferences are stored within the tenant `settings` JSONB under a `notifications` key. Existing settings are preserved via merge. The simulated `setTimeout` has been removed. The backend `PUT /tenant/settings` endpoint (same as F-002) handles this update.
+- **Resolved:** 2026-03-21 (verified and backend endpoint added)
 
-### F-004: Time Policies Page Uses Local Hardcoded Data (HIGH)
+### F-004: ~~Time Policies Page Uses Local Hardcoded Data~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/time/policies/route.tsx`
-- **Lines:** 54-88
-- **Code:** `// Local data -- the /api/v1/time/policies endpoint is not yet implemented`
-- **Context:** Returns two hardcoded policy objects ("Standard Office Hours" and "Flexible Remote") because the backend has no time policies endpoint.
-- **Impact:** Read-only view of fake data. No ability to create, edit, or delete time policies.
+- **Resolution:** Page now uses `useQuery` with `api.get<...>("/time/policies")` to fetch real data. Gracefully handles 404 (returns empty set). Create policy uses `useMutation` with `api.post("/time/policies", payload)`. A full create modal with form fields is implemented. No hardcoded policy objects remain.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
 ### F-005: Reports Page Falls Back to Mock Data (MEDIUM)
 - **File:** `packages/web/app/routes/(admin)/reports/[reportId]/route.tsx`
@@ -75,27 +68,24 @@ No TODO, FIXME, HACK, TEMP, XXX, or UNFINISHED comments found in any `.ts`, `.ts
 
 ## Category 3: Missing Backend API Endpoints
 
-### F-006: Time Policies Endpoint Not Implemented (HIGH)
-- **File:** Backend: `packages/api/src/modules/time/routes.ts` (no `/policies` section)
-- **Referenced by:** `packages/web/app/routes/(admin)/time/policies/route.tsx:55`
-- **Context:** The frontend explicitly comments that `/api/v1/time/policies` is not yet implemented. The backend `time` module has routes for: Time Events, Schedules, Shifts, Timesheets, and Schedule Assignments -- but no Policies section.
-- **Impact:** No backend support for time policies CRUD operations.
+### F-006: ~~Time Policies Endpoint Not Implemented~~ (RESOLVED)
+- **File:** `packages/api/src/modules/time/routes.ts`
+- **Resolution:** Full CRUD endpoints now exist: `POST /policies` (create), `GET /policies` (list), `GET /policies/:id` (get by ID), `PUT /policies/:id` (update), `DELETE /policies/:id` (deactivate). All routes are permission-guarded with `requirePermission("time:policies", "read"|"write")`. The service layer (`timeService`) handles the business logic.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
 ---
 
 ## Category 4: Frontend Pages with Simulated Operations
 
-### F-007: Integrations Page is Entirely Static (HIGH)
+### F-007: ~~Integrations Page is Entirely Static~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/settings/integrations/route.tsx`
-- **Lines:** 38-86 (hardcoded integration list), 186-199 (handlers)
-- **Context:** The entire integrations page is a static UI with hardcoded integration objects (Azure AD, Okta, ADP, Paychex, Slack, etc.). The `handleConnect`, `handleDisconnect`, and `handleSaveConfig` functions only show toast messages without making any API calls. No `useQuery`, `useMutation`, `api`, or `fetch` calls exist.
-- **Impact:** Purely cosmetic page. No actual integration connectivity.
+- **Resolution:** The integrations page has been refactored into a modular architecture with a dedicated `useIntegrations` hook (`use-integrations.ts`) that uses `useQuery` with `api.get<IntegrationListResponse>("/integrations?limit=100")`. It includes `connectMutation` (`api.post("/integrations/connect")`), `disconnectMutation` (`api.post("/integrations/:id/disconnect")`), `updateConfigMutation` (`api.patch("/integrations/:id/config")`), and `testConnectionMutation`. A static `PROVIDER_CATALOG` is merged with backend data so available integrations always display even before connection. Separate components handle the grid, stats, config modal, and disconnect confirmation.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
-### F-008: Notification Settings Page Has No API Connectivity (HIGH)
+### F-008: ~~Notification Settings Page Has No API Connectivity~~ (RESOLVED)
 - **File:** `packages/web/app/routes/(admin)/settings/notifications/route.tsx`
-- **Lines:** 1-95
-- **Context:** Renders notification preference toggles from a local constant array. Save handler is simulated (see F-003). No query/mutation hooks or API calls.
-- **Impact:** Users can toggle notification settings but nothing persists.
+- **Resolution:** Page now fetches tenant data via `useQuery` with `api.get<TenantData>("/tenant/current")` and extracts notification preferences from the `settings.notifications` JSONB field. Save uses `useMutation` with `api.put<TenantData>("/tenant/settings", ...)`, merging notification preferences with existing settings. Email/in-app toggle state and schedule preferences (digest frequency, quiet hours) are all persisted.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
 ### F-009: Settings Appearance and Data Management Pages Don't Exist (MEDIUM)
 - **File:** `packages/web/app/routes/(admin)/settings/index.tsx`
@@ -132,18 +122,15 @@ Navigation components link to pages that have no corresponding route files.
 
 ## Category 6: Database Table/Column Name Mismatches
 
-### F-019: manager.service.ts Uses Wrong Table and Column Names (CRITICAL)
-- **File:** `packages/api/src/modules/security/manager.service.ts`
-- **Lines:** 428-444, 499-515
-- **Code:**
-  ```sql
-  INSERT INTO app.leave_approvals (
-    tenant_id, leave_request_id, approver_id, decision, comment, decided_at
-  )
-  ```
-- **Actual table:** `app.leave_request_approvals` (defined in `migrations/0053_leave_approvals.sql:18`)
-- **Actual columns:** `request_id` (not `leave_request_id`), `actor_id` (not `approver_id`), `action` (not `decision`), `created_at` (not `decided_at`)
-- **Impact:** These INSERT statements will fail at runtime with a "relation does not exist" error. Manager leave approval/rejection functionality is broken.
+### F-019: ~~manager.service.ts Uses Wrong Table and Column Names~~ (RESOLVED)
+- **File:** `packages/api/src/modules/security/manager.approval.service.ts` (refactored from `manager.service.ts`)
+- **Resolution:** The manager service was decomposed into three sub-services: `manager.hierarchy.service.ts`, `manager.approval.service.ts`, and `manager.absence.service.ts`. The facade `manager.service.ts` delegates to these. The approval sub-service now correctly uses:
+  - Table: `app.leave_request_approvals` (correct, matches migration `0053_leave_approvals.sql`)
+  - Columns: `request_id`, `action`, `actor_id`, `actor_role`, `comment`, `previous_status`, `new_status`, `created_at` (all correct)
+  - Table: `app.timesheet_approvals` (correct, matches migration `0044_timesheet_approvals.sql`)
+  - Columns: `timesheet_id`, `action`, `actor_id`, `comment`, `created_at` (all correct)
+  - The old incorrect references (`leave_approvals`, `leave_request_id`, `approver_id`, `decision`, `decided_at`) are gone.
+- **Resolved:** 2026-03-21 (verified against current codebase)
 
 ---
 
@@ -272,18 +259,29 @@ Other route files use `as unknown as RouteContext` (240 total), which is margina
 
 ---
 
-## Priority Remediation Order
+## Priority Remediation Order (Updated 2026-03-21)
 
-1. **F-019** (CRITICAL) -- Fix `leave_approvals` table/column name mismatch in `manager.service.ts`. This is a runtime error.
-2. **F-001** (CRITICAL) -- Connect tenant settings page to real backend API.
-3. **F-006** (HIGH) -- Implement time policies backend endpoint.
-4. **F-020** (HIGH) -- Build notifications read API for user-facing notification center.
-5. **F-036** (HIGH) -- Implement MFA recovery code flow.
-6. **F-002, F-003** (HIGH) -- Wire up save handlers for tenant and notification settings.
-7. **F-004** (HIGH) -- Wire time policies page to backend once F-006 is done.
-8. **F-007, F-008** (HIGH) -- Either implement real integrations/notification settings or clearly mark as roadmap items.
-9. **F-010, F-012-F-014** (HIGH) -- Create missing manager route pages.
-10. **F-021, F-022** (HIGH) -- Build equipment and geofence API modules for existing DB tables.
-11. **F-028-F-033** (MEDIUM) -- Migrate `ctx as any` to `ctx as unknown as RouteContext` pattern for type safety.
-12. **F-034** (MEDIUM) -- Remove dead `packages/web/src/` directory and `index.html`.
-13. **F-040** (MEDIUM) -- Replace console.log with structured logger.
+All critical findings and targeted high findings have been resolved. Remaining priority:
+
+1. **F-020** (HIGH) -- Build notifications read API for user-facing notification center.
+2. **F-036** (HIGH) -- Implement MFA recovery code flow.
+3. **F-010, F-012-F-014** (HIGH) -- Create missing manager route pages.
+4. **F-021, F-022** (HIGH) -- Build equipment and geofence API modules for existing DB tables.
+5. **F-028-F-033** (MEDIUM) -- Migrate `ctx as any` to `ctx as unknown as RouteContext` pattern for type safety.
+6. **F-034** (MEDIUM) -- Remove dead `packages/web/src/` directory and `index.html`.
+7. **F-005** (MEDIUM) -- Remove mock data fallback from reports page.
+8. **F-040** (MEDIUM) -- Replace console.log with structured logger.
+
+### Resolved Findings Summary
+
+| Finding | Severity | Description | Status |
+|---|---|---|---|
+| F-001 | CRITICAL | Tenant settings mock data | RESOLVED -- uses `api.get("/tenant/current")` |
+| F-002 | HIGH | Tenant settings simulated save | RESOLVED -- uses `api.put("/tenant/settings")` |
+| F-003 | HIGH | Notification settings simulated save | RESOLVED -- uses `api.put("/tenant/settings")` with merged settings |
+| F-004 | HIGH | Time policies hardcoded data | RESOLVED -- uses `api.get("/time/policies")` |
+| F-006 | HIGH | Time policies endpoint missing | RESOLVED -- full CRUD in `time/routes.ts` |
+| F-007 | HIGH | Integrations page static | RESOLVED -- `useIntegrations` hook with full API connectivity |
+| F-008 | HIGH | Notification settings no API | RESOLVED -- fetches from and saves to tenant settings |
+| F-019 | CRITICAL | Wrong table/column names | RESOLVED -- refactored into `manager.approval.service.ts` with correct names |
+| F-037 | HIGH | Leave type editing | RESOLVED -- edit modal with backend PUT endpoint |

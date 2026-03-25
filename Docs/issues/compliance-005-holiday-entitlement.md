@@ -1,5 +1,7 @@
 # [COMPLIANCE] Holiday Entitlement UK Statutory Minimum Not Enforced
 
+> **Status: RESOLVED** (2026-03-20) — This issue has been addressed through the comprehensive remediation of all 263 audit TODOs and 41 engineering TODOs.
+
 **Priority:** HIGH
 **Labels:** compliance, enhancement
 **Effort:** MEDIUM

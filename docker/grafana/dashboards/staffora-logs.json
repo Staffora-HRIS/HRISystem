@@ -474,6 +474,223 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 84 },
+      "id": 106,
+      "title": "Tenant-Scoped Logs",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 85 },
+          "id": 13,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "Logs for Tenant: $tenant_id",
+          "description": "Enter a Tenant ID in the variable above to filter logs for a specific tenant. Shows all log entries where the structured tenantId field matches.",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "{service=~\"api|worker\"} | json | tenant_id=~\"$tenant_id\" | tenant_id != ``",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 97 },
+      "id": 107,
+      "title": "Request Tracing",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 98 },
+          "id": 14,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Ascending",
+            "wrapLogMessage": true
+          },
+          "title": "Request Trace: $request_id",
+          "description": "Enter a Request ID in the variable above to trace a single request across all services. Shows all log entries for that request in chronological order.",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "{service=~\"api|worker\"} |~ \"$request_id\"",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 110 },
+      "id": 108,
+      "title": "Security Events",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 5 },
+                  { "color": "red", "value": 20 }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 111 },
+          "id": 15,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "Auth Failures (last 1h)",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "sum(count_over_time({service=\"api\"} |~ \"(?i)(auth.*fail|login.*fail|invalid.*credentials|INVALID_CREDENTIALS|unauthorized)\" [1h]))",
+              "legendFormat": "failures",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 111 },
+          "id": 16,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "RLS Violations (last 1h)",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "sum(count_over_time({service=~\"api|worker|postgres\"} |~ \"(?i)(row.?level.?security|rls.*violat|tenant.*mismatch|cross.?tenant|new row violates row-level security)\" [1h]))",
+              "legendFormat": "violations",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 111 },
+          "id": 17,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "Permission Denied (last 1h)",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "sum(count_over_time({service=\"postgres\"} |~ \"(?i)(permission denied|insufficient privilege)\" [1h]))",
+              "legendFormat": "denials",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 115 },
+          "id": 18,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "Security Event Log",
+          "description": "All authentication failures, RLS violations, permission denials, and other security-relevant events.",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "{service=~\"api|worker|postgres\"} |~ \"(?i)(auth.*fail|login.*fail|invalid.*credentials|unauthorized|rls|row.?level.?security|tenant.*mismatch|permission.?denied|insufficient.?privilege|csrf|injection|xss|forbidden)\"",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
     }
   ],
   "schemaVersion": 39,
@@ -542,6 +759,36 @@
         "query": "debug,info,warn,error,fatal",
         "skipUrlSync": false,
         "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Tenant ID",
+        "name": "tenant_id",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "description": "Filter logs by tenant UUID. Leave empty to show all tenants."
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Request ID",
+        "name": "request_id",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "description": "Filter logs by request ID for distributed tracing."
       }
     ]
   },

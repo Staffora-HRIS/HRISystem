@@ -65,6 +65,18 @@ type Pages = {
   "/me/org-chart": {
     params: {};
   };
+  "/me/bank-details": {
+    params: {};
+  };
+  "/me/emergency-contacts": {
+    params: {};
+  };
+  "/me/change-requests": {
+    params: {};
+  };
+  "/me/directory": {
+    params: {};
+  };
   "/manager": {
     params: {};
   };
@@ -115,6 +127,12 @@ type Pages = {
   "/admin/hr/contracts": {
     params: {};
   };
+  "/admin/hr/contract-amendments": {
+    params: {};
+  };
+  "/admin/hr/contract-statements": {
+    params: {};
+  };
   "/admin/hr/departments": {
     params: {};
   };
@@ -122,6 +140,36 @@ type Pages = {
     params: {};
   };
   "/admin/hr/org-chart": {
+    params: {};
+  };
+  "/admin/hr/jobs": {
+    params: {};
+  };
+  "/admin/hr/bank-details": {
+    params: {};
+  };
+  "/admin/hr/emergency-contacts": {
+    params: {};
+  };
+  "/admin/hr/equipment": {
+    params: {};
+  };
+  "/admin/hr/adjustments": {
+    params: {};
+  };
+  "/admin/hr/warnings": {
+    params: {};
+  };
+  "/admin/hr/probation": {
+    params: {};
+  };
+  "/admin/hr/secondments": {
+    params: {};
+  };
+  "/admin/hr/flexible-working": {
+    params: {};
+  };
+  "/admin/hr/headcount-planning": {
     params: {};
   };
   "/admin/time": {
@@ -139,6 +187,9 @@ type Pages = {
   "/admin/time/reports": {
     params: {};
   };
+  "/admin/time/geofence": {
+    params: {};
+  };
   "/admin/leave": {
     params: {};
   };
@@ -151,7 +202,65 @@ type Pages = {
   "/admin/leave/requests": {
     params: {};
   };
+  "/admin/leave/statutory": {
+    params: {};
+  };
+  "/admin/leave/statutory/:entitlementId": {
+    params: {
+      "entitlementId": string;
+    };
+  };
+  "/admin/leave/ssp": {
+    params: {};
+  };
+  "/admin/leave/bereavement": {
+    params: {};
+  };
+  "/admin/leave/carers": {
+    params: {};
+  };
+  "/admin/leave/parental": {
+    params: {};
+  };
+  "/admin/leave/return-to-work": {
+    params: {};
+  };
   "/admin/absence": {
+    params: {};
+  };
+  "/admin/payroll": {
+    params: {};
+  };
+  "/admin/payroll/runs": {
+    params: {};
+  };
+  "/admin/payroll/runs/:runId": {
+    params: {
+      "runId": string;
+    };
+  };
+  "/admin/payroll/schedules": {
+    params: {};
+  };
+  "/admin/payroll/payslips": {
+    params: {};
+  };
+  "/admin/payroll/deductions": {
+    params: {};
+  };
+  "/admin/payroll/tax-codes": {
+    params: {};
+  };
+  "/admin/payroll/tax-details": {
+    params: {};
+  };
+  "/admin/payroll/ni-categories": {
+    params: {};
+  };
+  "/admin/payroll/bank-holidays": {
+    params: {};
+  };
+  "/admin/payroll/pension": {
     params: {};
   };
   "/admin/talent": {
@@ -175,6 +284,18 @@ type Pages = {
   "/admin/talent/recruitment/candidates": {
     params: {};
   };
+  "/admin/talent/recruitment/agencies": {
+    params: {};
+  };
+  "/admin/talent/recruitment/assessments": {
+    params: {};
+  };
+  "/admin/talent/recruitment/dbs-checks": {
+    params: {};
+  };
+  "/admin/talent/recruitment/reference-checks": {
+    params: {};
+  };
   "/admin/benefits": {
     params: {};
   };
@@ -190,6 +311,12 @@ type Pages = {
     };
   };
   "/admin/documents/templates": {
+    params: {};
+  };
+  "/admin/documents/contracts": {
+    params: {};
+  };
+  "/admin/documents/letters": {
     params: {};
   };
   "/admin/onboarding": {
@@ -213,6 +340,57 @@ type Pages = {
   "/admin/workflows/templates": {
     params: {};
   };
+  "/admin/compliance": {
+    params: {};
+  };
+  "/admin/compliance/right-to-work": {
+    params: {};
+  };
+  "/admin/compliance/health-safety": {
+    params: {};
+  };
+  "/admin/compliance/diversity": {
+    params: {};
+  };
+  "/admin/compliance/gender-pay-gap": {
+    params: {};
+  };
+  "/admin/compliance/nmw": {
+    params: {};
+  };
+  "/admin/compliance/wtr": {
+    params: {};
+  };
+  "/admin/compliance/dsar": {
+    params: {};
+  };
+  "/admin/compliance/data-retention": {
+    params: {};
+  };
+  "/admin/compliance/data-breach": {
+    params: {};
+  };
+  "/admin/privacy": {
+    params: {};
+  };
+  "/admin/privacy/dsar": {
+    params: {};
+  };
+  "/admin/privacy/data-erasure": {
+    params: {};
+  };
+  "/admin/privacy/data-breach": {
+    params: {};
+  };
+  "/admin/privacy/consent": {
+    params: {};
+  };
+  "/admin/privacy/notices": {
+    params: {};
+  };
+  "/admin/privacy/privacy-notices": {
+    params: {};
+  };
   "/admin/security": {
     params: {};
   };
@@ -226,6 +404,9 @@ type Pages = {
     params: {};
   };
   "/admin/security/audit-log": {
+    params: {};
+  };
+  "/admin/security/delegations": {
     params: {};
   };
   "/admin/reports": {
@@ -262,6 +443,15 @@ type Pages = {
   "/admin/lms/assignments": {
     params: {};
   };
+  "/admin/lms/budgets": {
+    params: {};
+  };
+  "/admin/lms/cpd": {
+    params: {};
+  };
+  "/admin/lms/ratings": {
+    params: {};
+  };
   "/admin/settings": {
     params: {};
   };
@@ -274,6 +464,18 @@ type Pages = {
   "/admin/settings/integrations": {
     params: {};
   };
+  "/admin/settings/appearance": {
+    params: {};
+  };
+  "/admin/settings/lookup-values": {
+    params: {};
+  };
+  "/admin/settings/bank-holidays": {
+    params: {};
+  };
+  "/admin/settings/delegations": {
+    params: {};
+  };
   "/*": {
     params: {
       "*": string;
@@ -284,7 +486,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/healthz" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/me/org-chart" | "/manager" | "/manager/dashboard" | "/manager/team" | "/manager/org-chart" | "/manager/approvals" | "/manager/approvals/leave" | "/manager/approvals/timesheets" | "/manager/approvals/expenses" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations" | "/*";
+    page: "/" | "/healthz" | "/login" | "/mfa" | "/forgot-password" | "/reset-password" | "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/me/org-chart" | "/me/bank-details" | "/me/emergency-contacts" | "/me/change-requests" | "/me/directory" | "/manager" | "/manager/dashboard" | "/manager/team" | "/manager/org-chart" | "/manager/approvals" | "/manager/approvals/leave" | "/manager/approvals/timesheets" | "/manager/approvals/expenses" | "/manager/schedules" | "/manager/performance" | "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/contract-amendments" | "/admin/hr/contract-statements" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/hr/jobs" | "/admin/hr/bank-details" | "/admin/hr/emergency-contacts" | "/admin/hr/equipment" | "/admin/hr/adjustments" | "/admin/hr/warnings" | "/admin/hr/probation" | "/admin/hr/secondments" | "/admin/hr/flexible-working" | "/admin/hr/headcount-planning" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/time/geofence" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/leave/statutory" | "/admin/leave/statutory/:entitlementId" | "/admin/leave/ssp" | "/admin/leave/bereavement" | "/admin/leave/carers" | "/admin/leave/parental" | "/admin/leave/return-to-work" | "/admin/absence" | "/admin/payroll" | "/admin/payroll/runs" | "/admin/payroll/runs/:runId" | "/admin/payroll/schedules" | "/admin/payroll/payslips" | "/admin/payroll/deductions" | "/admin/payroll/tax-codes" | "/admin/payroll/tax-details" | "/admin/payroll/ni-categories" | "/admin/payroll/bank-holidays" | "/admin/payroll/pension" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/talent/recruitment/agencies" | "/admin/talent/recruitment/assessments" | "/admin/talent/recruitment/dbs-checks" | "/admin/talent/recruitment/reference-checks" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/documents/contracts" | "/admin/documents/letters" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/compliance" | "/admin/compliance/right-to-work" | "/admin/compliance/health-safety" | "/admin/compliance/diversity" | "/admin/compliance/gender-pay-gap" | "/admin/compliance/nmw" | "/admin/compliance/wtr" | "/admin/compliance/dsar" | "/admin/compliance/data-retention" | "/admin/compliance/data-breach" | "/admin/privacy" | "/admin/privacy/dsar" | "/admin/privacy/data-erasure" | "/admin/privacy/data-breach" | "/admin/privacy/consent" | "/admin/privacy/notices" | "/admin/privacy/privacy-notices" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/security/delegations" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/lms/budgets" | "/admin/lms/cpd" | "/admin/lms/ratings" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations" | "/admin/settings/appearance" | "/admin/settings/lookup-values" | "/admin/settings/bank-holidays" | "/admin/settings/delegations" | "/*";
   };
   "routes/healthz.tsx": {
     id: "routes/healthz";
@@ -316,7 +518,7 @@ type RouteFiles = {
   };
   "routes/(app)/layout.tsx": {
     id: "routes/(app)/layout";
-    page: "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/me/org-chart" | "/manager" | "/manager/dashboard" | "/manager/team" | "/manager/org-chart" | "/manager/approvals" | "/manager/approvals/leave" | "/manager/approvals/timesheets" | "/manager/approvals/expenses" | "/manager/schedules" | "/manager/performance";
+    page: "/dashboard" | "/me" | "/me/profile" | "/me/time" | "/me/leave" | "/me/benefits" | "/me/documents" | "/me/learning" | "/me/cases" | "/me/competencies" | "/me/onboarding" | "/me/org-chart" | "/me/bank-details" | "/me/emergency-contacts" | "/me/change-requests" | "/me/directory" | "/manager" | "/manager/dashboard" | "/manager/team" | "/manager/org-chart" | "/manager/approvals" | "/manager/approvals/leave" | "/manager/approvals/timesheets" | "/manager/approvals/expenses" | "/manager/schedules" | "/manager/performance";
   };
   "routes/(app)/dashboard/route.tsx": {
     id: "routes/(app)/dashboard/route";
@@ -366,6 +568,22 @@ type RouteFiles = {
     id: "routes/(app)/me/org-chart/route";
     page: "/me/org-chart";
   };
+  "routes/(app)/me/bank-details/route.tsx": {
+    id: "routes/(app)/me/bank-details/route";
+    page: "/me/bank-details";
+  };
+  "routes/(app)/me/emergency-contacts/route.tsx": {
+    id: "routes/(app)/me/emergency-contacts/route";
+    page: "/me/emergency-contacts";
+  };
+  "routes/(app)/me/change-requests/route.tsx": {
+    id: "routes/(app)/me/change-requests/route";
+    page: "/me/change-requests";
+  };
+  "routes/(app)/me/directory/route.tsx": {
+    id: "routes/(app)/me/directory/route";
+    page: "/me/directory";
+  };
   "routes/(app)/manager/index.tsx": {
     id: "routes/(app)/manager/index";
     page: "/manager";
@@ -408,7 +626,7 @@ type RouteFiles = {
   };
   "routes/(admin)/layout.tsx": {
     id: "routes/(admin)/layout";
-    page: "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/absence" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations";
+    page: "/admin/dashboard" | "/admin/hr" | "/admin/hr/employees" | "/admin/hr/employees/:employeeId" | "/admin/hr/positions" | "/admin/hr/contracts" | "/admin/hr/contract-amendments" | "/admin/hr/contract-statements" | "/admin/hr/departments" | "/admin/hr/organization" | "/admin/hr/org-chart" | "/admin/hr/jobs" | "/admin/hr/bank-details" | "/admin/hr/emergency-contacts" | "/admin/hr/equipment" | "/admin/hr/adjustments" | "/admin/hr/warnings" | "/admin/hr/probation" | "/admin/hr/secondments" | "/admin/hr/flexible-working" | "/admin/hr/headcount-planning" | "/admin/time" | "/admin/time/timesheets" | "/admin/time/schedules" | "/admin/time/policies" | "/admin/time/reports" | "/admin/time/geofence" | "/admin/leave" | "/admin/leave/types" | "/admin/leave/policies" | "/admin/leave/requests" | "/admin/leave/statutory" | "/admin/leave/statutory/:entitlementId" | "/admin/leave/ssp" | "/admin/leave/bereavement" | "/admin/leave/carers" | "/admin/leave/parental" | "/admin/leave/return-to-work" | "/admin/absence" | "/admin/payroll" | "/admin/payroll/runs" | "/admin/payroll/runs/:runId" | "/admin/payroll/schedules" | "/admin/payroll/payslips" | "/admin/payroll/deductions" | "/admin/payroll/tax-codes" | "/admin/payroll/tax-details" | "/admin/payroll/ni-categories" | "/admin/payroll/bank-holidays" | "/admin/payroll/pension" | "/admin/talent" | "/admin/talent/performance" | "/admin/talent/goals" | "/admin/talent/competencies" | "/admin/talent/succession" | "/admin/talent/recruitment" | "/admin/talent/recruitment/candidates" | "/admin/talent/recruitment/agencies" | "/admin/talent/recruitment/assessments" | "/admin/talent/recruitment/dbs-checks" | "/admin/talent/recruitment/reference-checks" | "/admin/benefits" | "/admin/benefits/enrollments" | "/admin/cases" | "/admin/cases/:caseId" | "/admin/documents/templates" | "/admin/documents/contracts" | "/admin/documents/letters" | "/admin/onboarding" | "/admin/onboarding/templates" | "/admin/onboarding/active" | "/admin/analytics" | "/admin/workflows" | "/admin/workflows/builder" | "/admin/workflows/templates" | "/admin/compliance" | "/admin/compliance/right-to-work" | "/admin/compliance/health-safety" | "/admin/compliance/diversity" | "/admin/compliance/gender-pay-gap" | "/admin/compliance/nmw" | "/admin/compliance/wtr" | "/admin/compliance/dsar" | "/admin/compliance/data-retention" | "/admin/compliance/data-breach" | "/admin/privacy" | "/admin/privacy/dsar" | "/admin/privacy/data-erasure" | "/admin/privacy/data-breach" | "/admin/privacy/consent" | "/admin/privacy/notices" | "/admin/privacy/privacy-notices" | "/admin/security" | "/admin/security/users" | "/admin/security/roles" | "/admin/security/permissions" | "/admin/security/audit-log" | "/admin/security/delegations" | "/admin/reports" | "/admin/reports/new" | "/admin/reports/templates" | "/admin/reports/favourites" | "/admin/reports/:reportId" | "/admin/reports/:reportId/edit" | "/admin/lms" | "/admin/lms/courses" | "/admin/lms/paths" | "/admin/lms/assignments" | "/admin/lms/budgets" | "/admin/lms/cpd" | "/admin/lms/ratings" | "/admin/settings" | "/admin/settings/tenant" | "/admin/settings/notifications" | "/admin/settings/integrations" | "/admin/settings/appearance" | "/admin/settings/lookup-values" | "/admin/settings/bank-holidays" | "/admin/settings/delegations";
   };
   "routes/(admin)/dashboard/route.tsx": {
     id: "routes/(admin)/dashboard/route";
@@ -434,6 +652,14 @@ type RouteFiles = {
     id: "routes/(admin)/hr/contracts/route";
     page: "/admin/hr/contracts";
   };
+  "routes/(admin)/hr/contract-amendments/route.tsx": {
+    id: "routes/(admin)/hr/contract-amendments/route";
+    page: "/admin/hr/contract-amendments";
+  };
+  "routes/(admin)/hr/contract-statements/route.tsx": {
+    id: "routes/(admin)/hr/contract-statements/route";
+    page: "/admin/hr/contract-statements";
+  };
   "routes/(admin)/hr/departments/route.tsx": {
     id: "routes/(admin)/hr/departments/route";
     page: "/admin/hr/departments";
@@ -445,6 +671,46 @@ type RouteFiles = {
   "routes/(admin)/hr/org-chart/route.tsx": {
     id: "routes/(admin)/hr/org-chart/route";
     page: "/admin/hr/org-chart";
+  };
+  "routes/(admin)/hr/jobs/route.tsx": {
+    id: "routes/(admin)/hr/jobs/route";
+    page: "/admin/hr/jobs";
+  };
+  "routes/(admin)/hr/bank-details/route.tsx": {
+    id: "routes/(admin)/hr/bank-details/route";
+    page: "/admin/hr/bank-details";
+  };
+  "routes/(admin)/hr/emergency-contacts/route.tsx": {
+    id: "routes/(admin)/hr/emergency-contacts/route";
+    page: "/admin/hr/emergency-contacts";
+  };
+  "routes/(admin)/hr/equipment/route.tsx": {
+    id: "routes/(admin)/hr/equipment/route";
+    page: "/admin/hr/equipment";
+  };
+  "routes/(admin)/hr/adjustments/route.tsx": {
+    id: "routes/(admin)/hr/adjustments/route";
+    page: "/admin/hr/adjustments";
+  };
+  "routes/(admin)/hr/warnings/route.tsx": {
+    id: "routes/(admin)/hr/warnings/route";
+    page: "/admin/hr/warnings";
+  };
+  "routes/(admin)/hr/probation/route.tsx": {
+    id: "routes/(admin)/hr/probation/route";
+    page: "/admin/hr/probation";
+  };
+  "routes/(admin)/hr/secondments/route.tsx": {
+    id: "routes/(admin)/hr/secondments/route";
+    page: "/admin/hr/secondments";
+  };
+  "routes/(admin)/hr/flexible-working/route.tsx": {
+    id: "routes/(admin)/hr/flexible-working/route";
+    page: "/admin/hr/flexible-working";
+  };
+  "routes/(admin)/hr/headcount-planning/route.tsx": {
+    id: "routes/(admin)/hr/headcount-planning/route";
+    page: "/admin/hr/headcount-planning";
   };
   "routes/(admin)/time/index.tsx": {
     id: "routes/(admin)/time/index";
@@ -466,6 +732,10 @@ type RouteFiles = {
     id: "routes/(admin)/time/reports/route";
     page: "/admin/time/reports";
   };
+  "routes/(admin)/time/geofence/route.tsx": {
+    id: "routes/(admin)/time/geofence/route";
+    page: "/admin/time/geofence";
+  };
   "routes/(admin)/leave/index.tsx": {
     id: "routes/(admin)/leave/index";
     page: "/admin/leave";
@@ -482,9 +752,81 @@ type RouteFiles = {
     id: "routes/(admin)/leave/requests/route";
     page: "/admin/leave/requests";
   };
+  "routes/(admin)/leave/statutory/route.tsx": {
+    id: "routes/(admin)/leave/statutory/route";
+    page: "/admin/leave/statutory";
+  };
+  "routes/(admin)/leave/statutory/[entitlementId]/route.tsx": {
+    id: "routes/(admin)/leave/statutory/[entitlementId]/route";
+    page: "/admin/leave/statutory/:entitlementId";
+  };
+  "routes/(admin)/leave/ssp/route.tsx": {
+    id: "routes/(admin)/leave/ssp/route";
+    page: "/admin/leave/ssp";
+  };
+  "routes/(admin)/leave/bereavement/route.tsx": {
+    id: "routes/(admin)/leave/bereavement/route";
+    page: "/admin/leave/bereavement";
+  };
+  "routes/(admin)/leave/carers/route.tsx": {
+    id: "routes/(admin)/leave/carers/route";
+    page: "/admin/leave/carers";
+  };
+  "routes/(admin)/leave/parental/route.tsx": {
+    id: "routes/(admin)/leave/parental/route";
+    page: "/admin/leave/parental";
+  };
+  "routes/(admin)/leave/return-to-work/route.tsx": {
+    id: "routes/(admin)/leave/return-to-work/route";
+    page: "/admin/leave/return-to-work";
+  };
   "routes/(admin)/absence/index.tsx": {
     id: "routes/(admin)/absence/index";
     page: "/admin/absence";
+  };
+  "routes/(admin)/payroll/index.tsx": {
+    id: "routes/(admin)/payroll/index";
+    page: "/admin/payroll";
+  };
+  "routes/(admin)/payroll/runs/route.tsx": {
+    id: "routes/(admin)/payroll/runs/route";
+    page: "/admin/payroll/runs";
+  };
+  "routes/(admin)/payroll/runs/[runId]/route.tsx": {
+    id: "routes/(admin)/payroll/runs/[runId]/route";
+    page: "/admin/payroll/runs/:runId";
+  };
+  "routes/(admin)/payroll/schedules/route.tsx": {
+    id: "routes/(admin)/payroll/schedules/route";
+    page: "/admin/payroll/schedules";
+  };
+  "routes/(admin)/payroll/payslips/route.tsx": {
+    id: "routes/(admin)/payroll/payslips/route";
+    page: "/admin/payroll/payslips";
+  };
+  "routes/(admin)/payroll/deductions/route.tsx": {
+    id: "routes/(admin)/payroll/deductions/route";
+    page: "/admin/payroll/deductions";
+  };
+  "routes/(admin)/payroll/tax-codes/route.tsx": {
+    id: "routes/(admin)/payroll/tax-codes/route";
+    page: "/admin/payroll/tax-codes";
+  };
+  "routes/(admin)/payroll/tax-details/route.tsx": {
+    id: "routes/(admin)/payroll/tax-details/route";
+    page: "/admin/payroll/tax-details";
+  };
+  "routes/(admin)/payroll/ni-categories/route.tsx": {
+    id: "routes/(admin)/payroll/ni-categories/route";
+    page: "/admin/payroll/ni-categories";
+  };
+  "routes/(admin)/payroll/bank-holidays/route.tsx": {
+    id: "routes/(admin)/payroll/bank-holidays/route";
+    page: "/admin/payroll/bank-holidays";
+  };
+  "routes/(admin)/payroll/pension/route.tsx": {
+    id: "routes/(admin)/payroll/pension/route";
+    page: "/admin/payroll/pension";
   };
   "routes/(admin)/talent/index.tsx": {
     id: "routes/(admin)/talent/index";
@@ -514,6 +856,22 @@ type RouteFiles = {
     id: "routes/(admin)/talent/recruitment/candidates/route";
     page: "/admin/talent/recruitment/candidates";
   };
+  "routes/(admin)/talent/recruitment/agencies/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/agencies/route";
+    page: "/admin/talent/recruitment/agencies";
+  };
+  "routes/(admin)/talent/recruitment/assessments/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/assessments/route";
+    page: "/admin/talent/recruitment/assessments";
+  };
+  "routes/(admin)/talent/recruitment/dbs-checks/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/dbs-checks/route";
+    page: "/admin/talent/recruitment/dbs-checks";
+  };
+  "routes/(admin)/talent/recruitment/reference-checks/route.tsx": {
+    id: "routes/(admin)/talent/recruitment/reference-checks/route";
+    page: "/admin/talent/recruitment/reference-checks";
+  };
   "routes/(admin)/benefits/route.tsx": {
     id: "routes/(admin)/benefits/route";
     page: "/admin/benefits";
@@ -533,6 +891,14 @@ type RouteFiles = {
   "routes/(admin)/documents/templates/route.tsx": {
     id: "routes/(admin)/documents/templates/route";
     page: "/admin/documents/templates";
+  };
+  "routes/(admin)/documents/contracts/route.tsx": {
+    id: "routes/(admin)/documents/contracts/route";
+    page: "/admin/documents/contracts";
+  };
+  "routes/(admin)/documents/letters/route.tsx": {
+    id: "routes/(admin)/documents/letters/route";
+    page: "/admin/documents/letters";
   };
   "routes/(admin)/onboarding/index.tsx": {
     id: "routes/(admin)/onboarding/index";
@@ -562,6 +928,74 @@ type RouteFiles = {
     id: "routes/(admin)/workflows/templates/route";
     page: "/admin/workflows/templates";
   };
+  "routes/(admin)/compliance/index.tsx": {
+    id: "routes/(admin)/compliance/index";
+    page: "/admin/compliance";
+  };
+  "routes/(admin)/compliance/right-to-work/route.tsx": {
+    id: "routes/(admin)/compliance/right-to-work/route";
+    page: "/admin/compliance/right-to-work";
+  };
+  "routes/(admin)/compliance/health-safety/route.tsx": {
+    id: "routes/(admin)/compliance/health-safety/route";
+    page: "/admin/compliance/health-safety";
+  };
+  "routes/(admin)/compliance/diversity/route.tsx": {
+    id: "routes/(admin)/compliance/diversity/route";
+    page: "/admin/compliance/diversity";
+  };
+  "routes/(admin)/compliance/gender-pay-gap/route.tsx": {
+    id: "routes/(admin)/compliance/gender-pay-gap/route";
+    page: "/admin/compliance/gender-pay-gap";
+  };
+  "routes/(admin)/compliance/nmw/route.tsx": {
+    id: "routes/(admin)/compliance/nmw/route";
+    page: "/admin/compliance/nmw";
+  };
+  "routes/(admin)/compliance/wtr/route.tsx": {
+    id: "routes/(admin)/compliance/wtr/route";
+    page: "/admin/compliance/wtr";
+  };
+  "routes/(admin)/compliance/dsar/route.tsx": {
+    id: "routes/(admin)/compliance/dsar/route";
+    page: "/admin/compliance/dsar";
+  };
+  "routes/(admin)/compliance/data-retention/route.tsx": {
+    id: "routes/(admin)/compliance/data-retention/route";
+    page: "/admin/compliance/data-retention";
+  };
+  "routes/(admin)/compliance/data-breach/route.tsx": {
+    id: "routes/(admin)/compliance/data-breach/route";
+    page: "/admin/compliance/data-breach";
+  };
+  "routes/(admin)/privacy/index.tsx": {
+    id: "routes/(admin)/privacy/index";
+    page: "/admin/privacy";
+  };
+  "routes/(admin)/privacy/dsar/route.tsx": {
+    id: "routes/(admin)/privacy/dsar/route";
+    page: "/admin/privacy/dsar";
+  };
+  "routes/(admin)/privacy/data-erasure/route.tsx": {
+    id: "routes/(admin)/privacy/data-erasure/route";
+    page: "/admin/privacy/data-erasure";
+  };
+  "routes/(admin)/privacy/data-breach/route.tsx": {
+    id: "routes/(admin)/privacy/data-breach/route";
+    page: "/admin/privacy/data-breach";
+  };
+  "routes/(admin)/privacy/consent/route.tsx": {
+    id: "routes/(admin)/privacy/consent/route";
+    page: "/admin/privacy/consent";
+  };
+  "routes/(admin)/privacy/notices/route.tsx": {
+    id: "routes/(admin)/privacy/notices/route";
+    page: "/admin/privacy/notices";
+  };
+  "routes/(admin)/privacy/privacy-notices/route.tsx": {
+    id: "routes/(admin)/privacy/privacy-notices/route";
+    page: "/admin/privacy/privacy-notices";
+  };
   "routes/(admin)/security/index.tsx": {
     id: "routes/(admin)/security/index";
     page: "/admin/security";
@@ -581,6 +1015,10 @@ type RouteFiles = {
   "routes/(admin)/security/audit-log/route.tsx": {
     id: "routes/(admin)/security/audit-log/route";
     page: "/admin/security/audit-log";
+  };
+  "routes/(admin)/security/delegations/route.tsx": {
+    id: "routes/(admin)/security/delegations/route";
+    page: "/admin/security/delegations";
   };
   "routes/(admin)/reports/route.tsx": {
     id: "routes/(admin)/reports/route";
@@ -622,6 +1060,18 @@ type RouteFiles = {
     id: "routes/(admin)/lms/assignments/route";
     page: "/admin/lms/assignments";
   };
+  "routes/(admin)/lms/budgets/route.tsx": {
+    id: "routes/(admin)/lms/budgets/route";
+    page: "/admin/lms/budgets";
+  };
+  "routes/(admin)/lms/cpd/route.tsx": {
+    id: "routes/(admin)/lms/cpd/route";
+    page: "/admin/lms/cpd";
+  };
+  "routes/(admin)/lms/ratings/route.tsx": {
+    id: "routes/(admin)/lms/ratings/route";
+    page: "/admin/lms/ratings";
+  };
   "routes/(admin)/settings/index.tsx": {
     id: "routes/(admin)/settings/index";
     page: "/admin/settings";
@@ -637,6 +1087,22 @@ type RouteFiles = {
   "routes/(admin)/settings/integrations/route.tsx": {
     id: "routes/(admin)/settings/integrations/route";
     page: "/admin/settings/integrations";
+  };
+  "routes/(admin)/settings/appearance/route.tsx": {
+    id: "routes/(admin)/settings/appearance/route";
+    page: "/admin/settings/appearance";
+  };
+  "routes/(admin)/settings/lookup-values/route.tsx": {
+    id: "routes/(admin)/settings/lookup-values/route";
+    page: "/admin/settings/lookup-values";
+  };
+  "routes/(admin)/settings/bank-holidays/route.tsx": {
+    id: "routes/(admin)/settings/bank-holidays/route";
+    page: "/admin/settings/bank-holidays";
+  };
+  "routes/(admin)/settings/delegations/route.tsx": {
+    id: "routes/(admin)/settings/delegations/route";
+    page: "/admin/settings/delegations";
   };
   "routes/not-found.tsx": {
     id: "routes/not-found";
@@ -666,6 +1132,10 @@ type RouteModules = {
   "routes/(app)/me/competencies/route": typeof import("./app/routes/(app)/me/competencies/route.tsx");
   "routes/(app)/me/onboarding/route": typeof import("./app/routes/(app)/me/onboarding/route.tsx");
   "routes/(app)/me/org-chart/route": typeof import("./app/routes/(app)/me/org-chart/route.tsx");
+  "routes/(app)/me/bank-details/route": typeof import("./app/routes/(app)/me/bank-details/route.tsx");
+  "routes/(app)/me/emergency-contacts/route": typeof import("./app/routes/(app)/me/emergency-contacts/route.tsx");
+  "routes/(app)/me/change-requests/route": typeof import("./app/routes/(app)/me/change-requests/route.tsx");
+  "routes/(app)/me/directory/route": typeof import("./app/routes/(app)/me/directory/route.tsx");
   "routes/(app)/manager/index": typeof import("./app/routes/(app)/manager/index.tsx");
   "routes/(app)/manager/dashboard/route": typeof import("./app/routes/(app)/manager/dashboard/route.tsx");
   "routes/(app)/manager/team/route": typeof import("./app/routes/(app)/manager/team/route.tsx");
@@ -683,19 +1153,50 @@ type RouteModules = {
   "routes/(admin)/hr/employees/[employeeId]/route": typeof import("./app/routes/(admin)/hr/employees/[employeeId]/route.tsx");
   "routes/(admin)/hr/positions/route": typeof import("./app/routes/(admin)/hr/positions/route.tsx");
   "routes/(admin)/hr/contracts/route": typeof import("./app/routes/(admin)/hr/contracts/route.tsx");
+  "routes/(admin)/hr/contract-amendments/route": typeof import("./app/routes/(admin)/hr/contract-amendments/route.tsx");
+  "routes/(admin)/hr/contract-statements/route": typeof import("./app/routes/(admin)/hr/contract-statements/route.tsx");
   "routes/(admin)/hr/departments/route": typeof import("./app/routes/(admin)/hr/departments/route.tsx");
   "routes/(admin)/hr/organization/route": typeof import("./app/routes/(admin)/hr/organization/route.tsx");
   "routes/(admin)/hr/org-chart/route": typeof import("./app/routes/(admin)/hr/org-chart/route.tsx");
+  "routes/(admin)/hr/jobs/route": typeof import("./app/routes/(admin)/hr/jobs/route.tsx");
+  "routes/(admin)/hr/bank-details/route": typeof import("./app/routes/(admin)/hr/bank-details/route.tsx");
+  "routes/(admin)/hr/emergency-contacts/route": typeof import("./app/routes/(admin)/hr/emergency-contacts/route.tsx");
+  "routes/(admin)/hr/equipment/route": typeof import("./app/routes/(admin)/hr/equipment/route.tsx");
+  "routes/(admin)/hr/adjustments/route": typeof import("./app/routes/(admin)/hr/adjustments/route.tsx");
+  "routes/(admin)/hr/warnings/route": typeof import("./app/routes/(admin)/hr/warnings/route.tsx");
+  "routes/(admin)/hr/probation/route": typeof import("./app/routes/(admin)/hr/probation/route.tsx");
+  "routes/(admin)/hr/secondments/route": typeof import("./app/routes/(admin)/hr/secondments/route.tsx");
+  "routes/(admin)/hr/flexible-working/route": typeof import("./app/routes/(admin)/hr/flexible-working/route.tsx");
+  "routes/(admin)/hr/headcount-planning/route": typeof import("./app/routes/(admin)/hr/headcount-planning/route.tsx");
   "routes/(admin)/time/index": typeof import("./app/routes/(admin)/time/index.tsx");
   "routes/(admin)/time/timesheets/route": typeof import("./app/routes/(admin)/time/timesheets/route.tsx");
   "routes/(admin)/time/schedules/route": typeof import("./app/routes/(admin)/time/schedules/route.tsx");
   "routes/(admin)/time/policies/route": typeof import("./app/routes/(admin)/time/policies/route.tsx");
   "routes/(admin)/time/reports/route": typeof import("./app/routes/(admin)/time/reports/route.tsx");
+  "routes/(admin)/time/geofence/route": typeof import("./app/routes/(admin)/time/geofence/route.tsx");
   "routes/(admin)/leave/index": typeof import("./app/routes/(admin)/leave/index.tsx");
   "routes/(admin)/leave/types/route": typeof import("./app/routes/(admin)/leave/types/route.tsx");
   "routes/(admin)/leave/policies/route": typeof import("./app/routes/(admin)/leave/policies/route.tsx");
   "routes/(admin)/leave/requests/route": typeof import("./app/routes/(admin)/leave/requests/route.tsx");
+  "routes/(admin)/leave/statutory/route": typeof import("./app/routes/(admin)/leave/statutory/route.tsx");
+  "routes/(admin)/leave/statutory/[entitlementId]/route": typeof import("./app/routes/(admin)/leave/statutory/[entitlementId]/route.tsx");
+  "routes/(admin)/leave/ssp/route": typeof import("./app/routes/(admin)/leave/ssp/route.tsx");
+  "routes/(admin)/leave/bereavement/route": typeof import("./app/routes/(admin)/leave/bereavement/route.tsx");
+  "routes/(admin)/leave/carers/route": typeof import("./app/routes/(admin)/leave/carers/route.tsx");
+  "routes/(admin)/leave/parental/route": typeof import("./app/routes/(admin)/leave/parental/route.tsx");
+  "routes/(admin)/leave/return-to-work/route": typeof import("./app/routes/(admin)/leave/return-to-work/route.tsx");
   "routes/(admin)/absence/index": typeof import("./app/routes/(admin)/absence/index.tsx");
+  "routes/(admin)/payroll/index": typeof import("./app/routes/(admin)/payroll/index.tsx");
+  "routes/(admin)/payroll/runs/route": typeof import("./app/routes/(admin)/payroll/runs/route.tsx");
+  "routes/(admin)/payroll/runs/[runId]/route": typeof import("./app/routes/(admin)/payroll/runs/[runId]/route.tsx");
+  "routes/(admin)/payroll/schedules/route": typeof import("./app/routes/(admin)/payroll/schedules/route.tsx");
+  "routes/(admin)/payroll/payslips/route": typeof import("./app/routes/(admin)/payroll/payslips/route.tsx");
+  "routes/(admin)/payroll/deductions/route": typeof import("./app/routes/(admin)/payroll/deductions/route.tsx");
+  "routes/(admin)/payroll/tax-codes/route": typeof import("./app/routes/(admin)/payroll/tax-codes/route.tsx");
+  "routes/(admin)/payroll/tax-details/route": typeof import("./app/routes/(admin)/payroll/tax-details/route.tsx");
+  "routes/(admin)/payroll/ni-categories/route": typeof import("./app/routes/(admin)/payroll/ni-categories/route.tsx");
+  "routes/(admin)/payroll/bank-holidays/route": typeof import("./app/routes/(admin)/payroll/bank-holidays/route.tsx");
+  "routes/(admin)/payroll/pension/route": typeof import("./app/routes/(admin)/payroll/pension/route.tsx");
   "routes/(admin)/talent/index": typeof import("./app/routes/(admin)/talent/index.tsx");
   "routes/(admin)/talent/performance/route": typeof import("./app/routes/(admin)/talent/performance/route.tsx");
   "routes/(admin)/talent/goals/route": typeof import("./app/routes/(admin)/talent/goals/route.tsx");
@@ -703,11 +1204,17 @@ type RouteModules = {
   "routes/(admin)/talent/succession/route": typeof import("./app/routes/(admin)/talent/succession/route.tsx");
   "routes/(admin)/talent/recruitment/route": typeof import("./app/routes/(admin)/talent/recruitment/route.tsx");
   "routes/(admin)/talent/recruitment/candidates/route": typeof import("./app/routes/(admin)/talent/recruitment/candidates/route.tsx");
+  "routes/(admin)/talent/recruitment/agencies/route": typeof import("./app/routes/(admin)/talent/recruitment/agencies/route.tsx");
+  "routes/(admin)/talent/recruitment/assessments/route": typeof import("./app/routes/(admin)/talent/recruitment/assessments/route.tsx");
+  "routes/(admin)/talent/recruitment/dbs-checks/route": typeof import("./app/routes/(admin)/talent/recruitment/dbs-checks/route.tsx");
+  "routes/(admin)/talent/recruitment/reference-checks/route": typeof import("./app/routes/(admin)/talent/recruitment/reference-checks/route.tsx");
   "routes/(admin)/benefits/route": typeof import("./app/routes/(admin)/benefits/route.tsx");
   "routes/(admin)/benefits/enrollments/route": typeof import("./app/routes/(admin)/benefits/enrollments/route.tsx");
   "routes/(admin)/cases/route": typeof import("./app/routes/(admin)/cases/route.tsx");
   "routes/(admin)/cases/[caseId]/route": typeof import("./app/routes/(admin)/cases/[caseId]/route.tsx");
   "routes/(admin)/documents/templates/route": typeof import("./app/routes/(admin)/documents/templates/route.tsx");
+  "routes/(admin)/documents/contracts/route": typeof import("./app/routes/(admin)/documents/contracts/route.tsx");
+  "routes/(admin)/documents/letters/route": typeof import("./app/routes/(admin)/documents/letters/route.tsx");
   "routes/(admin)/onboarding/index": typeof import("./app/routes/(admin)/onboarding/index.tsx");
   "routes/(admin)/onboarding/templates/route": typeof import("./app/routes/(admin)/onboarding/templates/route.tsx");
   "routes/(admin)/onboarding/active/route": typeof import("./app/routes/(admin)/onboarding/active/route.tsx");
@@ -715,11 +1222,29 @@ type RouteModules = {
   "routes/(admin)/workflows/index": typeof import("./app/routes/(admin)/workflows/index.tsx");
   "routes/(admin)/workflows/builder/route": typeof import("./app/routes/(admin)/workflows/builder/route.tsx");
   "routes/(admin)/workflows/templates/route": typeof import("./app/routes/(admin)/workflows/templates/route.tsx");
+  "routes/(admin)/compliance/index": typeof import("./app/routes/(admin)/compliance/index.tsx");
+  "routes/(admin)/compliance/right-to-work/route": typeof import("./app/routes/(admin)/compliance/right-to-work/route.tsx");
+  "routes/(admin)/compliance/health-safety/route": typeof import("./app/routes/(admin)/compliance/health-safety/route.tsx");
+  "routes/(admin)/compliance/diversity/route": typeof import("./app/routes/(admin)/compliance/diversity/route.tsx");
+  "routes/(admin)/compliance/gender-pay-gap/route": typeof import("./app/routes/(admin)/compliance/gender-pay-gap/route.tsx");
+  "routes/(admin)/compliance/nmw/route": typeof import("./app/routes/(admin)/compliance/nmw/route.tsx");
+  "routes/(admin)/compliance/wtr/route": typeof import("./app/routes/(admin)/compliance/wtr/route.tsx");
+  "routes/(admin)/compliance/dsar/route": typeof import("./app/routes/(admin)/compliance/dsar/route.tsx");
+  "routes/(admin)/compliance/data-retention/route": typeof import("./app/routes/(admin)/compliance/data-retention/route.tsx");
+  "routes/(admin)/compliance/data-breach/route": typeof import("./app/routes/(admin)/compliance/data-breach/route.tsx");
+  "routes/(admin)/privacy/index": typeof import("./app/routes/(admin)/privacy/index.tsx");
+  "routes/(admin)/privacy/dsar/route": typeof import("./app/routes/(admin)/privacy/dsar/route.tsx");
+  "routes/(admin)/privacy/data-erasure/route": typeof import("./app/routes/(admin)/privacy/data-erasure/route.tsx");
+  "routes/(admin)/privacy/data-breach/route": typeof import("./app/routes/(admin)/privacy/data-breach/route.tsx");
+  "routes/(admin)/privacy/consent/route": typeof import("./app/routes/(admin)/privacy/consent/route.tsx");
+  "routes/(admin)/privacy/notices/route": typeof import("./app/routes/(admin)/privacy/notices/route.tsx");
+  "routes/(admin)/privacy/privacy-notices/route": typeof import("./app/routes/(admin)/privacy/privacy-notices/route.tsx");
   "routes/(admin)/security/index": typeof import("./app/routes/(admin)/security/index.tsx");
   "routes/(admin)/security/users/route": typeof import("./app/routes/(admin)/security/users/route.tsx");
   "routes/(admin)/security/roles/route": typeof import("./app/routes/(admin)/security/roles/route.tsx");
   "routes/(admin)/security/permissions/route": typeof import("./app/routes/(admin)/security/permissions/route.tsx");
   "routes/(admin)/security/audit-log/route": typeof import("./app/routes/(admin)/security/audit-log/route.tsx");
+  "routes/(admin)/security/delegations/route": typeof import("./app/routes/(admin)/security/delegations/route.tsx");
   "routes/(admin)/reports/route": typeof import("./app/routes/(admin)/reports/route.tsx");
   "routes/(admin)/reports/new/route": typeof import("./app/routes/(admin)/reports/new/route.tsx");
   "routes/(admin)/reports/templates/route": typeof import("./app/routes/(admin)/reports/templates/route.tsx");
@@ -730,9 +1255,16 @@ type RouteModules = {
   "routes/(admin)/lms/courses/route": typeof import("./app/routes/(admin)/lms/courses/route.tsx");
   "routes/(admin)/lms/paths/route": typeof import("./app/routes/(admin)/lms/paths/route.tsx");
   "routes/(admin)/lms/assignments/route": typeof import("./app/routes/(admin)/lms/assignments/route.tsx");
+  "routes/(admin)/lms/budgets/route": typeof import("./app/routes/(admin)/lms/budgets/route.tsx");
+  "routes/(admin)/lms/cpd/route": typeof import("./app/routes/(admin)/lms/cpd/route.tsx");
+  "routes/(admin)/lms/ratings/route": typeof import("./app/routes/(admin)/lms/ratings/route.tsx");
   "routes/(admin)/settings/index": typeof import("./app/routes/(admin)/settings/index.tsx");
   "routes/(admin)/settings/tenant/route": typeof import("./app/routes/(admin)/settings/tenant/route.tsx");
   "routes/(admin)/settings/notifications/route": typeof import("./app/routes/(admin)/settings/notifications/route.tsx");
   "routes/(admin)/settings/integrations/route": typeof import("./app/routes/(admin)/settings/integrations/route.tsx");
+  "routes/(admin)/settings/appearance/route": typeof import("./app/routes/(admin)/settings/appearance/route.tsx");
+  "routes/(admin)/settings/lookup-values/route": typeof import("./app/routes/(admin)/settings/lookup-values/route.tsx");
+  "routes/(admin)/settings/bank-holidays/route": typeof import("./app/routes/(admin)/settings/bank-holidays/route.tsx");
+  "routes/(admin)/settings/delegations/route": typeof import("./app/routes/(admin)/settings/delegations/route.tsx");
   "routes/not-found": typeof import("./app/routes/not-found.tsx");
 };

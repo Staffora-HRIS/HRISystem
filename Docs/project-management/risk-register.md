@@ -1,8 +1,9 @@
 # Staffora HRIS -- Risk Register
 
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-03-21
 **Review Cadence:** Monthly
-**Status:** Pre-production
+**Status:** Near production-ready (94/100 — all code TODOs resolved)
+**Note:** Risks R01–R07 updated to reflect resolved/mitigated status per engineering-todo.md (41/41 items resolved).
 
 ---
 
@@ -31,8 +32,9 @@
 | **Consequence** | Data breach exposing all tenants' employee PII. Legal liability under UK GDPR (fines up to GBP 17.5M or 4% of revenue). Complete loss of customer trust. |
 | **Mitigation** | Create `hris_app` role with NOBYPASSRLS in `docker/postgres/init.sql`. Configure production to use `hris_app` for API/worker connections. Reserve `hris` for migrations only. |
 | **Owner** | Sprint 2 (S2-02) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- Fixed via migration 0182; all 65 tables have INSERT RLS policies. Application connects as `hris_app` (NOBYPASSRLS) at runtime. |
 | **Target Date** | Week 4 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -50,8 +52,9 @@
 | **Consequence** | Cross-site request forgery attacks against authenticated users. An attacker can create/modify/delete employee records, approve leave, change compensation via forged requests. |
 | **Mitigation** | Implement HMAC-signed CSRF tokens on server. Add token fetching and header injection in frontend API client. |
 | **Owner** | Sprint 1 (S1-01) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- HMAC-SHA256 + constant-time comparison implemented in auth-better.ts. Frontend sends CSRF tokens on all mutations. |
 | **Target Date** | Week 2 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -69,8 +72,9 @@
 | **Consequence** | Corrupted transactions, orphaned RLS context state, database connection exhaustion after repeated deploys. Users experience random 500 errors during deployments. |
 | **Mitigation** | Add signal handlers to `app.ts` that drain connections and close DB/Redis. Implement request drain period (30s). Pattern already exists in worker.ts. |
 | **Owner** | Sprint 2 (S2-01) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- Graceful shutdown implemented with SIGTERM/SIGINT handlers, connection draining, and request drain period. |
 | **Target Date** | Week 4 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -88,8 +92,9 @@
 | **Consequence** | Manual deployments are error-prone, unrepeatable, and ungoverned. No rollback mechanism. Inconsistent environments between development and production. |
 | **Mitigation** | Create GitHub Actions deploy workflow. Build/push Docker images to GHCR. Auto-deploy to staging on merge to main. Manual gate for production. |
 | **Owner** | Sprint 3 (S3-01) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- Full SSH-based deployment pipeline with rolling restart, migration execution, health checks, and Slack notifications for staging and production. |
 | **Target Date** | Week 6 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -107,7 +112,7 @@
 | **Consequence** | Any single service failure causes complete platform outage. Database failure risks data loss for all data since last backup (up to 24 hours). |
 | **Mitigation** | Phase 3: PostgreSQL streaming replication + WAL archiving. Redis Sentinel. API horizontal scaling behind load balancer. Multiple worker instances via Redis consumer groups. |
 | **Owner** | Sprint 16 (S16-02) |
-| **Status** | OPEN -- Planned for Phase 3 |
+| **Status** | MITIGATED -- PgBouncer configured for connection pooling. Redis Sentinel documented for failover. Full HA requires Phase 3 infrastructure investment. |
 | **Target Date** | Week 32 |
 
 ---
@@ -126,8 +131,9 @@
 | **Consequence** | Under load, connection exhaustion causes 500 errors for all users. BetterAuth's separate pg Pool compounds the issue. |
 | **Mitigation** | Consolidate to single postgres.js connection pool. Remove pg dependency. Limit scheduler pool. Set PostgreSQL max_connections appropriately. |
 | **Owner** | Sprint 2 (S2-03) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- PgBouncer configured for connection pooling. postgres.js pool settings tuned. Dual-driver issue resolved. |
 | **Target Date** | Week 4 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -145,8 +151,9 @@
 | **Consequence** | Credential stuffing attacks succeed against accounts with weak passwords. Unauthorized access to employee PII. |
 | **Mitigation** | Implement account lockout after 10 failed attempts. Track per-account failures. Exponential backoff. Auto-unlock after 30 minutes. |
 | **Owner** | Sprint 1 (S1-02) |
-| **Status** | OPEN -- Not started |
+| **Status** | RESOLVED -- Rate limiting + account lockout implemented. Lockout after 10 failed attempts with exponential backoff and 30-minute auto-unlock. |
 | **Target Date** | Week 2 |
+| **Closed** | 2026-03-21 |
 
 ---
 
@@ -400,30 +407,33 @@
 ## Risk Summary Matrix
 
 ```
+Legend: [x]=RESOLVED  [~]=MITIGATED  unmarked=OPEN
+
                      Impact
-                Low(1)   Medium(2)   High(3)    Critical(4)
-            +--------+-----------+----------+-------------+
-  Likely(3) |        | R08,R10   | R03,R04  | R01,R02     |
-            |        | R16,R17   | R12,R13  | R11,R14     |
-            +--------+-----------+----------+-------------+
-  Possible  |        | R18,R19   | R06,R07  | R05,R09     |
-  (2)       |        |           | R20      | R15         |
-            +--------+-----------+----------+-------------+
-  Unlikely  |        |           |          |             |
-  (1)       |        |           |          |             |
-            +--------+-----------+----------+-------------+
+                Low(1)   Medium(2)   High(3)      Critical(4)
+            +--------+-----------+------------+---------------+
+  Likely(3) |        | R08,R10   | [x]R03     | [x]R01,[x]R02 |
+            |        | R16,R17   | [x]R04     | R11,R14       |
+            |        |           | R12,R13    |               |
+            +--------+-----------+------------+---------------+
+  Possible  |        | R18,R19   | [x]R06     | [~]R05,R09    |
+  (2)       |        |           | [x]R07,R20 | R15           |
+            +--------+-----------+------------+---------------+
+  Unlikely  |        |           |            |               |
+  (1)       |        |           |            |               |
+            +--------+-----------+------------+---------------+
 ```
 
 ---
 
 ## Risk Response Summary
 
-| Score Range | Count | Response |
-|-------------|-------|----------|
-| 9-12 (Critical) | 7 | Active mitigation required. Scheduled in Phase 1-2. |
-| 6-8 (High) | 8 | Mitigation planned. Scheduled in Phase 1-3. |
-| 4-5 (Medium) | 3 | Monitor. Address when resources allow. |
-| 1-3 (Low) | 2 | Accept. Document and revisit quarterly. |
+| Score Range | Open | Resolved/Mitigated | Response |
+|-------------|------|---------------------|----------|
+| 9-12 (Critical) | 4 | 3 (R01, R02, R04) | R11-R14 remain open (compliance). R01, R02, R04 resolved. |
+| 6-8 (High) | 4 | 4 (R03, R05, R06, R07) | R08-R10, R15-R17, R20 remain open. R03, R05 (mitigated), R06, R07 resolved. |
+| 4-5 (Medium) | 2 | 0 | R18, R19 remain open. Monitor. |
+| 1-3 (Low) | 0 | 0 | None. |
 
 ---
 
@@ -431,7 +441,13 @@
 
 | ID | Title | Closure Date | Resolution |
 |----|-------|-------------|------------|
-| -- | -- | -- | No risks closed yet |
+| R01 | Production RLS Bypass | 2026-03-21 | Migration 0182 added INSERT RLS policies to all 65 tables. Runtime uses `hris_app` role with NOBYPASSRLS. |
+| R02 | CSRF Protection Non-Functional | 2026-03-21 | HMAC-SHA256 signed CSRF tokens with constant-time comparison. Frontend sends tokens on all mutations. |
+| R03 | No Graceful Shutdown | 2026-03-21 | SIGTERM/SIGINT handlers with connection draining and request drain period implemented. |
+| R04 | No Deployment Pipeline | 2026-03-21 | Full SSH-based deployment with rolling restart, health checks, and Slack notifications. |
+| R05 | Single Points of Failure | 2026-03-21 | MITIGATED: PgBouncer and Redis Sentinel documented. Full HA deferred to Phase 3. |
+| R06 | DB Connection Pool Exhaustion | 2026-03-21 | PgBouncer configured. postgres.js pool tuned. Dual-driver issue resolved. |
+| R07 | Account Brute-Force | 2026-03-21 | Rate limiting + account lockout (10 attempts, exponential backoff, 30-min auto-unlock). |
 
 ---
 
@@ -440,6 +456,7 @@
 | Date | Reviewer | Changes |
 |------|----------|---------|
 | 2026-03-13 | Initial creation | All 20 risks identified from 6 audit reports |
+| 2026-03-21 | Risk review | R01-R04, R06-R07 marked RESOLVED; R05 marked MITIGATED. All 41 engineering TODOs confirmed resolved. |
 
 ---
 

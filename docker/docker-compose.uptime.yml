@@ -1,0 +1,71 @@
+# =============================================================================
+# Staffora Platform Uptime Monitoring (Uptime Kuma)
+# =============================================================================
+#
+# Usage (preferred -- uses the profile defined in docker-compose.yml):
+#   docker compose --profile uptime up -d
+#
+# Alternative (override file, also requires --profile since the service is
+# defined with 'profiles: [uptime]' in the main compose file):
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.uptime.yml --profile uptime up -d
+#
+# This extends the main compose file to add Uptime Kuma, a self-hosted uptime
+# monitoring service. After starting, open http://localhost:3002 to configure
+# monitors, alert channels, and status pages.
+#
+# Port 3002 is used because port 3001 is reserved for the worker health endpoint.
+#
+# Ports:
+#   - Uptime Kuma: 3002
+#
+# See Docs/operations/uptime-monitoring.md for full setup instructions.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Uptime Kuma -- Self-hosted uptime monitoring
+  # ---------------------------------------------------------------------------
+  # Monitors API health, web frontend, database connectivity, and Redis.
+  # Provides a public status page, alerting (Slack, email), and SSL
+  # certificate expiry monitoring.
+  #
+  # Data is persisted in a Docker volume. Uptime Kuma stores its config
+  # in a SQLite database inside the volume, so all monitors, alerts, and
+  # status page settings survive container restarts.
+  # ---------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: staffora-uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "${UPTIME_KUMA_PORT:-3002}:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get('http://localhost:3001/api/entry-page',{timeout:5000},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - staffora-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  uptime_kuma_data:
+    driver: local

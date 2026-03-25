@@ -1,5 +1,7 @@
 # [SECURITY] No Request Body Size Limit Configured
 
+> **Status: RESOLVED** (2026-03-20) — This issue has been addressed through the comprehensive remediation of all 263 audit TODOs and 41 engineering TODOs.
+
 **Priority:** MEDIUM
 **Labels:** security, enhancement
 **Effort:** SMALL

@@ -1,0 +1,59 @@
+# =============================================================================
+# Grafana Datasource Provisioning -- Tempo (Distributed Tracing)
+# =============================================================================
+# Auto-configures Grafana Tempo as a datasource on first boot.
+# Enables trace exploration via Grafana Explore and TraceQL queries.
+#
+# Trace-to-logs integration links trace spans to Loki log entries using
+# the traceId field, enabling seamless correlation between traces and logs.
+#
+# Trace-to-metrics links trace spans to Prometheus metrics for the same
+# service, enabling correlation between traces and RED metrics.
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: false
+    editable: false
+    uid: tempo
+    jsonData:
+      httpMethod: GET
+      # Link traces to logs in Loki
+      tracesToLogs:
+        datasourceUid: loki
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - key: "staffora.tenant_id"
+            value: "tenantId"
+          - key: "service.name"
+            value: "service"
+      # Link traces to metrics in Prometheus
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        tags:
+          - key: "service.name"
+            value: "service"
+      # Service graph (topology view)
+      serviceMap:
+        datasourceUid: prometheus
+      # Node graph for trace visualization
+      nodeGraph:
+        enabled: true
+      # Search configuration
+      search:
+        hide: false
+      # TraceQL query support
+      traceQuery:
+        timeShiftEnabled: true
+        spanStartTimeShift: "-30m"
+        spanEndTimeShift: "30m"

@@ -1,0 +1,65 @@
+# =============================================================================
+# Grafana Tempo Configuration
+# =============================================================================
+# Distributed tracing backend for the Staffora HRIS platform.
+# Receives traces via OTLP (gRPC on 4317, HTTP on 4318) and stores them
+# locally. Query traces through Grafana or via the Tempo HTTP API on port 3200.
+#
+# Architecture:
+#   API/Worker --[OTLP HTTP :4318]--> Tempo --[storage]--> /tmp/tempo
+#   Grafana --[Tempo API :3200]--> Tempo
+#
+# Documentation: https://grafana.com/docs/tempo/latest/configuration/
+# =============================================================================
+
+# Stream and override defaults
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9096
+
+# Distributor receives spans and routes them to ingesters
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+# Ingester batches incoming spans before writing to storage
+ingester:
+  max_block_duration: 5m
+
+# Compactor merges blocks to reduce storage fragmentation
+compactor:
+  compaction:
+    block_retention: 72h    # Keep traces for 3 days in local dev
+
+# Metrics generator produces span metrics (RED metrics from traces)
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: staffora
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write: []
+
+# Local filesystem storage (suitable for development/single-node)
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+
+# Overrides for per-tenant settings
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - service-graphs
+        - span-metrics

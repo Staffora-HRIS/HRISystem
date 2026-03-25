@@ -1,0 +1,353 @@
+# =============================================================================
+# Grafana Alerting Provisioning -- Loki-Based Alert Rules
+# =============================================================================
+# Log-based alerting rules that query Loki via LogQL. These complement the
+# Prometheus metric-based alerts in prometheus/alert-rules.yml.
+#
+# Alert channels:
+#   - Grafana UI notifications (default)
+#   - Configure contact points in Grafana UI for email/Slack/PagerDuty
+#
+# Evaluation:
+#   - Rules are evaluated every 1 minute by Grafana's built-in alerting engine
+#   - "for" duration controls how long a condition must persist before firing
+# =============================================================================
+
+apiVersion: 1
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Error Rate Alerts -- Detect sudden spikes in application errors
+  # ---------------------------------------------------------------------------
+  - orgId: 1
+    name: Staffora Log Error Alerts
+    folder: Staffora Alerts
+    interval: 1m
+    rules:
+      # -----------------------------------------------------------------------
+      # High error log rate: >20 error-level log lines per minute from API
+      # -----------------------------------------------------------------------
+      - uid: loki-high-error-rate
+        title: "High Error Rate in API Logs"
+        condition: error_count
+        data:
+          - refId: error_count
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service="api", level="error"} [5m]))'
+              legendFormat: "errors"
+              refId: error_count
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+          category: error-rate
+        annotations:
+          summary: "Sustained high error rate detected in API logs"
+          description: >-
+            More than 20 error-level log lines detected from the API service
+            in the last 5 minutes. This may indicate a systemic issue such as
+            database connectivity failure, misconfigured dependencies, or a
+            code regression.
+          runbook: >-
+            1. Open Grafana Explore and query: {service="api", level="error"}
+            2. Check for common error patterns (ECONNREFUSED, timeout, RLS violation)
+            3. Verify database and Redis connectivity
+            4. Check recent deployments for regressions
+          dashboard_uid: staffora-logs
+
+      # -----------------------------------------------------------------------
+      # Fatal log detection: any fatal-level log from any service
+      # -----------------------------------------------------------------------
+      - uid: loki-fatal-detected
+        title: "Fatal Error Detected"
+        condition: fatal_count
+        data:
+          - refId: fatal_count
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service=~"api|worker", level="fatal"} [1m]))'
+              legendFormat: "fatals"
+              refId: fatal_count
+        for: 0s
+        labels:
+          severity: critical
+          component: platform
+          category: fatal
+        annotations:
+          summary: "Fatal error logged -- process may have crashed"
+          description: >-
+            A fatal-level log entry was detected. This typically indicates an
+            unrecoverable error that caused or will cause a process crash.
+          runbook: >-
+            1. Check container status: docker ps
+            2. Review fatal log: {level="fatal"} in Grafana Explore
+            3. Check if the container restarted (docker inspect --format='{{.RestartCount}}')
+            4. Investigate root cause from stack trace in log entry
+
+  # ---------------------------------------------------------------------------
+  # Authentication Failure Alerts
+  # ---------------------------------------------------------------------------
+  - orgId: 1
+    name: Staffora Auth Failure Alerts
+    folder: Staffora Alerts
+    interval: 1m
+    rules:
+      # -----------------------------------------------------------------------
+      # Auth failure spike: >10 failed login attempts in 5 minutes
+      # Detects brute-force attacks or credential-stuffing attempts.
+      # -----------------------------------------------------------------------
+      - uid: loki-auth-failure-spike
+        title: "Authentication Failure Spike"
+        condition: auth_failures
+        data:
+          - refId: auth_failures
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service="api"} |~ "(?i)(auth.*fail|login.*fail|invalid.*credentials|authentication.*error|INVALID_CREDENTIALS|AUTH_FAILED|unauthorized)" [5m]))'
+              legendFormat: "auth_failures"
+              refId: auth_failures
+        for: 1m
+        labels:
+          severity: warning
+          component: auth
+          category: security
+        annotations:
+          summary: "Spike in authentication failures detected"
+          description: >-
+            More than 10 authentication failure log entries detected in the
+            last 5 minutes. This may indicate a brute-force attack, credential
+            stuffing, or a misconfigured client application.
+          runbook: >-
+            1. Query auth failures: {service="api"} |~ "(?i)auth.*fail|invalid.*credentials"
+            2. Check source IPs (if logged) for patterns
+            3. Review rate limiting configuration
+            4. Consider temporary IP blocking if attack is sustained
+            5. Check if a legitimate service has stale credentials
+
+      # -----------------------------------------------------------------------
+      # MFA failure spike: >5 MFA verification failures in 5 minutes
+      # -----------------------------------------------------------------------
+      - uid: loki-mfa-failure-spike
+        title: "MFA Verification Failure Spike"
+        condition: mfa_failures
+        data:
+          - refId: mfa_failures
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service="api"} |~ "(?i)(mfa.*fail|totp.*invalid|two.?factor.*fail|MFA_INVALID|TOTP_EXPIRED)" [5m]))'
+              legendFormat: "mfa_failures"
+              refId: mfa_failures
+        for: 1m
+        labels:
+          severity: warning
+          component: auth
+          category: security
+        annotations:
+          summary: "Spike in MFA verification failures"
+          description: >-
+            Multiple MFA verification failures detected. This may indicate
+            an attempt to bypass two-factor authentication.
+          runbook: >-
+            1. Query MFA failures: {service="api"} |~ "(?i)mfa.*fail|totp.*invalid"
+            2. Identify affected user accounts from tenantId/userId fields
+            3. Consider temporarily locking affected accounts
+            4. Review if MFA secret may have been compromised
+
+  # ---------------------------------------------------------------------------
+  # RLS Violation Alerts -- Row-Level Security policy denials
+  # ---------------------------------------------------------------------------
+  - orgId: 1
+    name: Staffora RLS Violation Alerts
+    folder: Staffora Alerts
+    interval: 1m
+    rules:
+      # -----------------------------------------------------------------------
+      # RLS policy violation detected in PostgreSQL or API logs
+      # These should NEVER occur in normal operation. Any occurrence indicates
+      # either a security issue or a code bug bypassing tenant isolation.
+      # -----------------------------------------------------------------------
+      - uid: loki-rls-violation
+        title: "RLS Policy Violation Detected"
+        condition: rls_violations
+        data:
+          - refId: rls_violations
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service=~"api|worker|postgres"} |~ "(?i)(row.?level.?security|rls.*violat|policy.*denied|tenant.*mismatch|cross.?tenant|TENANT_ISOLATION|new row violates row-level security)" [5m]))'
+              legendFormat: "rls_violations"
+              refId: rls_violations
+        for: 0s
+        labels:
+          severity: critical
+          component: security
+          category: rls
+        annotations:
+          summary: "Row-Level Security violation detected -- IMMEDIATE ACTION REQUIRED"
+          description: >-
+            A Row-Level Security policy violation was logged. This means a
+            query attempted to access data belonging to a different tenant.
+            This is a critical security event that requires immediate
+            investigation.
+          runbook: >-
+            1. IMMEDIATELY query: {service=~"api|worker|postgres"} |~ "(?i)rls|tenant.*mismatch|policy.*denied"
+            2. Identify the tenant_id, user_id, and request path from the log entry
+            3. Determine if this was a code bug or a deliberate attack
+            4. Check if any data was actually exposed (RLS should have blocked it)
+            5. If data exposure confirmed, initiate incident response procedure
+            6. File a security incident report regardless of data exposure
+
+      # -----------------------------------------------------------------------
+      # PostgreSQL permission denied errors (broader security net)
+      # -----------------------------------------------------------------------
+      - uid: loki-pg-permission-denied
+        title: "PostgreSQL Permission Denied"
+        condition: pg_permission_denied
+        data:
+          - refId: pg_permission_denied
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service="postgres"} |~ "(?i)(permission denied|insufficient privilege)" [5m]))'
+              legendFormat: "permission_denied"
+              refId: pg_permission_denied
+        for: 1m
+        labels:
+          severity: warning
+          component: database
+          category: security
+        annotations:
+          summary: "PostgreSQL permission denied errors detected"
+          description: >-
+            Permission denied errors are being logged by PostgreSQL. This may
+            indicate a misconfigured query, a privilege escalation attempt, or
+            a migration that failed to grant required permissions.
+          runbook: >-
+            1. Query PostgreSQL logs: {service="postgres"} |~ "(?i)permission denied"
+            2. Identify the SQL statement and role involved
+            3. Check if this is a legitimate code path missing GRANT statements
+            4. Review recent migrations for missing permission grants
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure Health Alerts (Log-Based)
+  # ---------------------------------------------------------------------------
+  - orgId: 1
+    name: Staffora Infrastructure Log Alerts
+    folder: Staffora Alerts
+    interval: 1m
+    rules:
+      # -----------------------------------------------------------------------
+      # Database connection errors in application logs
+      # -----------------------------------------------------------------------
+      - uid: loki-db-connection-errors
+        title: "Database Connection Errors in Logs"
+        condition: db_conn_errors
+        data:
+          - refId: db_conn_errors
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service=~"api|worker"} |~ "(?i)(ECONNREFUSED.*5432|connection.*refused.*postgres|database.*connection.*failed|pg.*connect.*error|connection.*pool.*exhausted)" [5m]))'
+              legendFormat: "db_errors"
+              refId: db_conn_errors
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          category: connectivity
+        annotations:
+          summary: "Database connection errors detected in application logs"
+          description: >-
+            The API or worker service is logging database connection errors.
+            This may indicate PostgreSQL is down, PgBouncer is overloaded,
+            or the connection pool is exhausted.
+          runbook: >-
+            1. Check PostgreSQL status: docker ps | grep postgres
+            2. Check PgBouncer status: docker logs staffora-pgbouncer --tail 50
+            3. Verify connection pool metrics in Prometheus
+            4. Check for long-running transactions: SELECT * FROM pg_stat_activity WHERE state != 'idle'
+
+      # -----------------------------------------------------------------------
+      # Redis connection errors in application logs
+      # -----------------------------------------------------------------------
+      - uid: loki-redis-connection-errors
+        title: "Redis Connection Errors in Logs"
+        condition: redis_conn_errors
+        data:
+          - refId: redis_conn_errors
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service=~"api|worker"} |~ "(?i)(ECONNREFUSED.*6379|redis.*connection.*refused|redis.*error|NOAUTH|ERR.*AUTH)" [5m]))'
+              legendFormat: "redis_errors"
+              refId: redis_conn_errors
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+          category: connectivity
+        annotations:
+          summary: "Redis connection errors detected in application logs"
+          description: >-
+            The API or worker service is logging Redis connection errors.
+            Sessions, caching, rate limiting, and job queues are all affected.
+          runbook: >-
+            1. Check Redis status: docker ps | grep redis
+            2. Test Redis connectivity: docker exec staffora-redis redis-cli -a $REDIS_PASSWORD ping
+            3. Check Redis memory usage and maxmemory policy
+            4. Review Redis logs: docker logs staffora-redis --tail 50
+
+      # -----------------------------------------------------------------------
+      # Outbox processing failures
+      # -----------------------------------------------------------------------
+      - uid: loki-outbox-failures
+        title: "Domain Outbox Processing Failures"
+        condition: outbox_errors
+        data:
+          - refId: outbox_errors
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service="worker"} |~ "(?i)(outbox.*error|outbox.*fail|event.*publish.*fail|domain.*event.*error)" [10m]))'
+              legendFormat: "outbox_errors"
+              refId: outbox_errors
+        for: 5m
+        labels:
+          severity: warning
+          component: worker
+          category: outbox
+        annotations:
+          summary: "Domain outbox processing failures detected"
+          description: >-
+            The background worker is logging errors related to outbox event
+            processing. Domain events may not be propagating correctly, which
+            can cause downstream side-effects (notifications, analytics, etc.)
+            to be delayed or lost.
+          runbook: >-
+            1. Check worker logs: {service="worker"} |~ "outbox"
+            2. Check outbox table size: SELECT COUNT(*) FROM app.domain_outbox WHERE processed_at IS NULL
+            3. Verify Redis Streams connectivity
+            4. Restart worker if needed: docker restart staffora-worker

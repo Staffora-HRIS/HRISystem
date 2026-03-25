@@ -1,7 +1,7 @@
 # Documentation TODO & Gap Analysis
 
 > Comprehensive gap detection for Staffora documentation system
-> **Last updated:** 2026-03-17
+> **Last updated:** 2026-03-21
 
 ---
 
@@ -14,7 +14,7 @@
 | Frontend Documentation | 4 | 1 | 3 | 0 |
 | API Completeness | 6 | 1 | 0 | 5 |
 | Cross-Linking | 3 | 1 | 0 | 2 |
-| Quality Polish | 5 | 0 | 0 | 5 |
+| Quality Polish | 5 | 3 | 0 | 2 |
 
 ---
 
@@ -87,17 +87,17 @@ The `Docs/api/API_REFERENCE.md` currently documents 20/72 modules. The following
 
 ### Formatting
 
-- [ ] Add "Last Updated" dates to all major documents
+- [x] Add "Last Updated" dates to all major documents — Completed in DOC-OS Phase 2 (40 files)
 - [ ] Add table of contents to files > 5KB
 - [ ] Standardize heading levels (H1 for title, H2 for sections, H3 for subsections)
 - [ ] Ensure consistent Mermaid diagram styling
 
 ### Content Freshness
 
-- [ ] Review `audit/` reports for staleness (quarterly cadence)
-- [ ] Update `project-management/` files to reflect current sprint
+- [x] Review `audit/` reports for staleness (quarterly cadence) — 2026-03-21 sync pass: risk register updated (7 risks RESOLVED/MITIGATED), FINAL_SYSTEM_REPORT updated with 14 UI fixes, technical debt report sub-scores updated
+- [x] Update `project-management/` files to reflect current sprint — 2026-03-21 sync pass: DR drill schedule updated, operations README fixed
 - [ ] Verify all code examples compile against current codebase
-- [ ] Update module counts in README.md (currently says 16, should be 72)
+- [x] Update module counts in README.md (currently says 16, should be 72) — Fixed in DOC-OS Phase 1
 
 ### Process
 
@@ -111,7 +111,7 @@ The `Docs/api/API_REFERENCE.md` currently documents 20/72 modules. The following
 
 ### Advanced Documentation
 
-- [ ] Full Entity-Relationship diagram for database schema
+- [x] Full Entity-Relationship diagram for database schema — 60-entity ER diagram in `architecture/diagrams.md`
 - [ ] OpenAPI/Swagger specification auto-generation from TypeBox schemas
 - [ ] Component library with live examples (Storybook or equivalent)
 - [ ] Searchable documentation site (Docusaurus, VitePress, or Nextra)
@@ -134,8 +134,8 @@ The `Docs/api/API_REFERENCE.md` currently documents 20/72 modules. The following
 | Document 52 missing module endpoints | High | High | P1 |
 | Add request/response examples to API docs | High | Medium | P1 |
 | Cross-link all documentation sections | Medium | Low | P2 |
-| Add "Last Updated" dates | Low | Low | P2 |
-| Full ER diagram | Medium | Medium | P2 |
+| ~~Add "Last Updated" dates~~ | ~~Low~~ | ~~Low~~ | DONE |
+| ~~Full ER diagram~~ | ~~Medium~~ | ~~Medium~~ | DONE |
 | OpenAPI auto-generation | High | High | P3 |
 | Searchable documentation site | Medium | High | P3 |
 | CI documentation checks | Medium | Medium | P3 |
