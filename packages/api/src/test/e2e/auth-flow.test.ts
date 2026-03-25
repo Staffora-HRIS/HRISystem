@@ -592,7 +592,7 @@ describe("Authentication Flow E2E", () => {
     it("should reject unauthenticated access to absence endpoint", async () => {
       if (!isInfraAvailable()) return;
 
-      const response = await getJson("/api/v1/absence/leave-requests");
+      const response = await getJson("/api/v1/absence/leave-types");
 
       expect(response.status).toBe(401);
     });
