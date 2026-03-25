@@ -163,16 +163,32 @@ describe("AuthService", () => {
 
     it("should fallback to user primary tenant when session has no tenant", async () => {
       const cache = createMockCache();
-      // First query returns null currentTenantId, second returns primary tenant,
-      // third is the UPDATE to persist fallback on session
-      let callCount = 0;
+      // First query returns null currentTenantId (from session lookup).
+      // withSystemContext is called to query user_tenants for primary tenant,
+      // then again to persist the fallback onto the session.
       const validUserId = "11111111-1111-1111-1111-111111111111";
+      let systemContextCallCount = 0;
       const db = {
         query: mock(async (..._args: unknown[]) => {
-          callCount++;
-          if (callCount === 1) return [{ currentTenantId: null }];
-          if (callCount === 2) return [{ tenant_id: "primary-tenant" }];
-          return [];
+          // Session lookup returns no currentTenantId
+          return [{ currentTenantId: null }];
+        }),
+        withSystemContext: mock(async (fn: (...args: unknown[]) => unknown) => {
+          systemContextCallCount++;
+          if (systemContextCallCount === 1) {
+            // First call: query user_tenants for primary tenant
+            const txFn = Object.assign(
+              mock(async () => [{ tenantId: "primary-tenant" }]),
+              { unsafe: mock(async () => {}) }
+            );
+            return fn(txFn);
+          }
+          // Second call: UPDATE session to persist fallback
+          const txFn = Object.assign(
+            mock(async () => []),
+            { unsafe: mock(async () => {}) }
+          );
+          return fn(txFn);
         }),
       };
       const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0], cache as unknown as ConstructorParameters<typeof AuthService>[1]);
@@ -225,12 +241,25 @@ describe("AuthService", () => {
   describe("switchTenant", () => {
     it("should return true and update session when user has access", async () => {
       const cache = createMockCache();
-      let callCount = 0;
+      let systemContextCallCount = 0;
       const db = {
-        query: mock(async (..._args: unknown[]) => {
-          callCount++;
-          if (callCount === 1) return [{ has_access: true }];
-          return [];
+        query: mock(async (..._args: unknown[]) => []),
+        withSystemContext: mock(async (fn: (...args: unknown[]) => unknown) => {
+          systemContextCallCount++;
+          if (systemContextCallCount === 1) {
+            // First call: check user_tenants access
+            const txFn = Object.assign(
+              mock(async () => [{ has_access: true }]),
+              { unsafe: mock(async () => {}) }
+            );
+            return fn(txFn);
+          }
+          // Second call: UPDATE session
+          const txFn = Object.assign(
+            mock(async () => []),
+            { unsafe: mock(async () => {}) }
+          );
+          return fn(txFn);
         }),
       };
       const service = new AuthService(db as unknown as ConstructorParameters<typeof AuthService>[0], cache as unknown as ConstructorParameters<typeof AuthService>[1]);

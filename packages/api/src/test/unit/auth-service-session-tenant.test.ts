@@ -44,10 +44,13 @@ describe("AuthService.getSessionTenant (Unit Test)", () => {
     await setTenantContext(db, tenant.id, user.id);
 
     // Create a DatabaseClient-compatible wrapper for the raw postgres connection
-    // AuthService expects a db object with a .query() method that uses template literals
+    // AuthService expects a db object with .query() and .withSystemContext() methods
     const dbWrapper = {
       query: async <T>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]> => {
         return (await (db as any)(strings, ...values)) as T[];
+      },
+      withSystemContext: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => {
+        return await withSystemContext(db!, fn);
       },
     };
     

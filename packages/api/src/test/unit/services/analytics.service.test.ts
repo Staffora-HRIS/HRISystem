@@ -145,6 +145,21 @@ function createMockAnalyticsRepository() {
         { nationality: "Unknown", count: 15 },
       ])
     ),
+    getDiversityByEthnicity: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { ethnicity: "White British", count: 60 },
+        { ethnicity: "Asian", count: 30 },
+        { ethnicity: "Black", count: 20 },
+        { ethnicity: "Mixed", count: 10 },
+        { ethnicity: "Other", count: 10 },
+      ])
+    ),
+    getDiversityByDisability: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { has_disability: true, count: 15 },
+        { has_disability: false, count: 115 },
+      ])
+    ),
     getDiversityByDepartment: mock((_ctx: unknown, _filters: unknown) =>
       Promise.resolve([
         { org_unit_id: "ou1", org_unit_name: "Engineering", gender: "male", count: 30 },
@@ -152,6 +167,29 @@ function createMockAnalyticsRepository() {
         { org_unit_id: "ou2", org_unit_name: "HR", gender: "male", count: 5 },
         { org_unit_id: "ou2", org_unit_name: "HR", gender: "female", count: 10 },
       ])
+    ),
+    getDiversityHiringTrends: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { month: "2026-01", gender: "male", count: 5 },
+        { month: "2026-01", gender: "female", count: 3 },
+      ])
+    ),
+    getDiversityLeavingTrends: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { month: "2026-01", gender: "male", count: 2 },
+        { month: "2026-01", gender: "female", count: 1 },
+      ])
+    ),
+    getDiversityCompletionRate: mock((_ctx: unknown) =>
+      Promise.resolve({ total: 130, completed: 100, rate: 76.9 })
+    ),
+    getGenderPayGapSummary: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve({
+        mean_gap: 8.5,
+        median_gap: 5.2,
+        male_avg: 48000,
+        female_avg: 43920,
+      })
     ),
     // Compensation Analytics
     getCompensationSummary: mock((_ctx: unknown, _filters: unknown) =>
@@ -186,6 +224,26 @@ function createMockAnalyticsRepository() {
         { change_reason: "promotion", count: 12, avg_change_percentage: 8.2 },
         { change_reason: "market", count: 5, avg_change_percentage: 5.0 },
       ])
+    ),
+    getCompaRatioByGrade: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { grade: "L1", avg_compa_ratio: 0.95, min_compa_ratio: 0.80, max_compa_ratio: 1.10, count: 30 },
+        { grade: "L2", avg_compa_ratio: 1.02, min_compa_ratio: 0.90, max_compa_ratio: 1.15, count: 25 },
+      ])
+    ),
+    getPayEquityByGrade: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve([
+        { grade: "L1", male_avg: 45000, female_avg: 43000, gap_percentage: 4.4 },
+        { grade: "L2", male_avg: 55000, female_avg: 53500, gap_percentage: 2.7 },
+      ])
+    ),
+    getPayEquityOverall: mock((_ctx: unknown, _filters: unknown) =>
+      Promise.resolve({
+        mean_gap: 6.5,
+        median_gap: 4.2,
+        male_avg_salary: 48000,
+        female_avg_salary: 44880,
+      })
     ),
     // Workforce Planning Analytics
     getActiveHeadcount: mock((_ctx: unknown, _filters: unknown) =>
@@ -570,7 +628,13 @@ describe("AnalyticsService", () => {
         repository.getDiversityByGender = mock(() => Promise.resolve([]));
         repository.getDiversityByAgeBand = mock(() => Promise.resolve([]));
         repository.getDiversityByNationality = mock(() => Promise.resolve([]));
+        repository.getDiversityByEthnicity = mock(() => Promise.resolve([]));
+        repository.getDiversityByDisability = mock(() => Promise.resolve([]));
         repository.getDiversityByDepartment = mock(() => Promise.resolve([]));
+        repository.getDiversityHiringTrends = mock(() => Promise.resolve([]));
+        repository.getDiversityLeavingTrends = mock(() => Promise.resolve([]));
+        repository.getDiversityCompletionRate = mock(() => Promise.resolve({ total: 0, completed: 0, rate: 0 }));
+        repository.getGenderPayGapSummary = mock(() => Promise.resolve({ mean_gap: 0, median_gap: 0, male_avg: 0, female_avg: 0 }));
 
         const result = await service.getDiversityDashboard(ctx);
 
@@ -662,6 +726,9 @@ describe("AnalyticsService", () => {
         repository.getCompensationByBand = mock(() => Promise.resolve([]));
         repository.getCompensationByDepartment = mock(() => Promise.resolve([]));
         repository.getRecentCompensationChanges = mock(() => Promise.resolve([]));
+        repository.getCompaRatioByGrade = mock(() => Promise.resolve([]));
+        repository.getPayEquityByGrade = mock(() => Promise.resolve([]));
+        repository.getPayEquityOverall = mock(() => Promise.resolve({ mean_gap: 0, median_gap: 0, male_avg_salary: 0, female_avg_salary: 0 }));
 
         const result = await service.getCompensationDashboard(ctx);
 

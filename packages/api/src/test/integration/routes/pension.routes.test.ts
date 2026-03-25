@@ -68,7 +68,7 @@ describe("Pension Routes Integration", () => {
       database: TEST_CONFIG.database.database,
       username: TEST_CONFIG.database.username,
       password: TEST_CONFIG.database.password,
-      max: 1,
+      max: 5,
       idle_timeout: 20,
       connect_timeout: 10,
       connection: { search_path: "app,public" },
@@ -112,7 +112,7 @@ describe("Pension Routes Integration", () => {
       database: TEST_CONFIG.database.database,
       username: TEST_CONFIG.database.adminUsername,
       password: TEST_CONFIG.database.adminPassword,
-      max: 1,
+      max: 5,
       idle_timeout: 5,
       connect_timeout: 10,
     });

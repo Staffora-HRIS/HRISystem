@@ -234,7 +234,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("Marketing Communications");
-      expect(rows[0].isActive).toBe(true);
+      expect(rows[0].is_active).toBe(true);
       expect(rows[0].version).toBe(1);
       purposeIdA = purposeId;
     });
@@ -275,7 +275,7 @@ describe("Privacy Routes - Database Integration", () => {
         SELECT id, tenant_id, code FROM app.consent_purposes
       `;
 
-      expect(rows.every((r: Record<string, unknown>) => r.tenantId === tenantA.id)).toBe(true);
+      expect(rows.every((r: Record<string, unknown>) => r.tenant_id === tenantA.id)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === purposeIdA)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === purposeIdB)).toBe(false);
     });
@@ -357,7 +357,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe("granted");
-      expect(rows[0].consentMethod).toBe("web_form");
+      expect(rows[0].consent_method).toBe("web_form");
       consentRecordIdA = recordId;
     });
 
@@ -394,7 +394,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe("withdrawn");
-      expect(rows[0].withdrawalReason).toBe("Employee requested removal from mailing list");
+      expect(rows[0].withdrawal_reason).toBe("Employee requested removal from mailing list");
     });
 
     it("should write to consent audit log", async () => {
@@ -457,7 +457,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe("received");
-      expect(rows[0].requestType).toBe("access");
+      expect(rows[0].request_type).toBe("access");
       dsarIdA = dsarId;
     });
 
@@ -497,7 +497,7 @@ describe("Privacy Routes - Database Integration", () => {
         SELECT id, tenant_id FROM app.dsar_requests
       `;
 
-      expect(rows.every((r: Record<string, unknown>) => r.tenantId === tenantA.id)).toBe(true);
+      expect(rows.every((r: Record<string, unknown>) => r.tenant_id === tenantA.id)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === dsarIdA)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === dsarIdB)).toBe(false);
     });
@@ -520,7 +520,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe("in_progress");
-      expect(rows[0].identityVerified).toBe(true);
+      expect(rows[0].identity_verified).toBe(true);
     });
 
     it("should complete a DSAR request", async () => {
@@ -563,8 +563,8 @@ describe("Privacy Routes - Database Integration", () => {
       `;
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].moduleName).toBe("hr");
-      expect(rows[0].recordCount).toBe(15);
+      expect(rows[0].module_name).toBe("hr");
+      expect(rows[0].record_count).toBe(15);
 
       // Read back
       const retrieved = await db`
@@ -644,7 +644,7 @@ describe("Privacy Routes - Database Integration", () => {
         SELECT id, tenant_id FROM app.erasure_requests
       `;
 
-      expect(rows.every((r: Record<string, unknown>) => r.tenantId === tenantA.id)).toBe(true);
+      expect(rows.every((r: Record<string, unknown>) => r.tenant_id === tenantA.id)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === erasureIdA)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === erasureIdB)).toBe(false);
     });
@@ -690,9 +690,9 @@ describe("Privacy Routes - Database Integration", () => {
       `;
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].tableName).toBe("employee_personal");
-      expect(rows[0].actionTaken).toBe("anonymized");
-      expect(rows[0].recordCount).toBe(3);
+      expect(rows[0].table_name).toBe("employee_personal");
+      expect(rows[0].action_taken).toBe("anonymized");
+      expect(rows[0].record_count).toBe(3);
     });
   });
 
@@ -772,7 +772,7 @@ describe("Privacy Routes - Database Integration", () => {
         SELECT id, tenant_id, title FROM app.data_breaches
       `;
 
-      expect(rows.every((r: Record<string, unknown>) => r.tenantId === tenantA.id)).toBe(true);
+      expect(rows.every((r: Record<string, unknown>) => r.tenant_id === tenantA.id)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === breachIdA)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === breachIdB)).toBe(false);
     });
@@ -789,7 +789,7 @@ describe("Privacy Routes - Database Integration", () => {
       `;
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].icoNotified).toBe(false);
+      expect(rows[0].ico_notified).toBe(false);
     });
 
     it("should NOT return breach from another tenant", async () => {
@@ -854,8 +854,8 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe("notified_ico");
-      expect(rows[0].icoNotified).toBe(true);
-      expect(rows[0].icoReference).toBe("ICO-2025-001");
+      expect(rows[0].ico_notified).toBe(true);
+      expect(rows[0].ico_reference).toBe("ICO-2025-001");
     });
   });
 
@@ -892,7 +892,7 @@ describe("Privacy Routes - Database Integration", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].title).toBe("Employee Privacy Policy");
       expect(rows[0].version).toBe(1);
-      expect(rows[0].isCurrent).toBe(true);
+      expect(rows[0].is_current).toBe(true);
       noticeIdA = noticeId;
     });
 
@@ -931,7 +931,7 @@ describe("Privacy Routes - Database Integration", () => {
         SELECT id, tenant_id, title FROM app.privacy_notices
       `;
 
-      expect(rows.every((r: Record<string, unknown>) => r.tenantId === tenantA.id)).toBe(true);
+      expect(rows.every((r: Record<string, unknown>) => r.tenant_id === tenantA.id)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === noticeIdA)).toBe(true);
       expect(rows.some((r: Record<string, unknown>) => r.id === noticeIdB)).toBe(false);
     });
@@ -949,7 +949,7 @@ describe("Privacy Routes - Database Integration", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].title).toBe("Employee Privacy Policy");
-      expect(rows[0].isCurrent).toBe(true);
+      expect(rows[0].is_current).toBe(true);
     });
 
     it("should NOT return privacy notice from another tenant", async () => {
@@ -1003,8 +1003,8 @@ describe("Privacy Routes - Database Integration", () => {
       `;
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].privacyNoticeId).toBe(noticeIdA);
-      expect(rows[0].employeeId).toBe(employeeA1);
+      expect(rows[0].privacy_notice_id).toBe(noticeIdA);
+      expect(rows[0].employee_id).toBe(employeeA1);
     });
   });
 

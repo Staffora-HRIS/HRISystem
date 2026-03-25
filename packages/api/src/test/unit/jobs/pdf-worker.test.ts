@@ -49,12 +49,13 @@ describe("PDF Worker - Processor Registrations", () => {
     expect(caseBundleProcessor.retry).toBe(true);
   });
 
-  test("pdfProcessors array contains all 3 processors", () => {
-    expect(pdfProcessors).toHaveLength(3);
+  test("pdfProcessors array contains all 4 processors", () => {
+    expect(pdfProcessors).toHaveLength(4);
     const types = pdfProcessors.map((p) => p.type);
     expect(types).toContain("pdf.certificate");
     expect(types).toContain("pdf.employment_letter");
     expect(types).toContain("pdf.case_bundle");
+    expect(types).toContain("pdf.bulk_document_item");
   });
 });
 

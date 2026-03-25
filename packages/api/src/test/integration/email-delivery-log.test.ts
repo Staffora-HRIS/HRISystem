@@ -149,9 +149,9 @@ describe("Email Delivery Log", () => {
       `;
 
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.toAddress).toBe("alice@example.com");
+      expect(rows[0]!.to_address).toBe("alice@example.com");
       expect(rows[0]!.subject).toBe("Welcome to Staffora");
-      expect(rows[0]!.templateName).toBe("welcome");
+      expect(rows[0]!.template_name).toBe("welcome");
       expect(rows[0]!.status).toBe("queued");
     });
   });
@@ -184,7 +184,7 @@ describe("Email Delivery Log", () => {
 
       expect(rowsA.length).toBeGreaterThanOrEqual(1);
       for (const row of rowsA) {
-        expect(row.tenantId).toBe(tenantA.id);
+        expect(row.tenant_id).toBe(tenantA.id);
       }
 
       // Tenant B context should only see tenant B logs
@@ -195,12 +195,12 @@ describe("Email Delivery Log", () => {
 
       expect(rowsB.length).toBeGreaterThanOrEqual(1);
       for (const row of rowsB) {
-        expect(row.tenantId).toBe(tenantB.id);
+        expect(row.tenant_id).toBe(tenantB.id);
       }
 
       // Ensure no cross-tenant leakage
-      const allAddressesA = rowsA.map((r) => r.toAddress);
-      const allAddressesB = rowsB.map((r) => r.toAddress);
+      const allAddressesA = rowsA.map((r) => r.to_address);
+      const allAddressesB = rowsB.map((r) => r.to_address);
       expect(allAddressesA).not.toContain("info@tenantB.com");
       expect(allAddressesB).not.toContain("secret@tenantA.com");
     });
@@ -232,7 +232,7 @@ describe("Email Delivery Log", () => {
         SELECT status, message_id FROM app.email_delivery_log WHERE id = ${logId}::uuid
       `;
       expect(rows[0]!.status).toBe("sent");
-      expect(rows[0]!.messageId).toBe("msg-123");
+      expect(rows[0]!.message_id).toBe("msg-123");
     });
 
     it("should transition from sent to delivered", async () => {
@@ -290,8 +290,8 @@ describe("Email Delivery Log", () => {
         FROM app.email_delivery_log WHERE id = ${logId}::uuid
       `;
       expect(rows[0]!.status).toBe("bounced");
-      expect(rows[0]!.bounceType).toBe("hard");
-      expect(rows[0]!.bounceReason).toBe("Mailbox does not exist");
+      expect(rows[0]!.bounce_type).toBe("hard");
+      expect(rows[0]!.bounce_reason).toBe("Mailbox does not exist");
     });
 
     it("should transition from queued to failed with error message", async () => {
@@ -319,8 +319,8 @@ describe("Email Delivery Log", () => {
         FROM app.email_delivery_log WHERE id = ${logId}::uuid
       `;
       expect(rows[0]!.status).toBe("failed");
-      expect(rows[0]!.errorMessage).toBe("SMTP connection refused");
-      expect(rows[0]!.retryCount).toBe(1);
+      expect(rows[0]!.error_message).toBe("SMTP connection refused");
+      expect(rows[0]!.retry_count).toBe(1);
     });
   });
 

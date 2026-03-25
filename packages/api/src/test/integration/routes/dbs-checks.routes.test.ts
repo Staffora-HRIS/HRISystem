@@ -64,7 +64,7 @@ describe("DBS Checks Routes Integration", () => {
       database: TEST_CONFIG.database.database,
       username: TEST_CONFIG.database.username,
       password: TEST_CONFIG.database.password,
-      max: 1, idle_timeout: 20, connect_timeout: 10,
+      max: 5, idle_timeout: 20, connect_timeout: 10,
       connection: { search_path: "app,public" },
       transform: postgres.camel,
     });

@@ -53,7 +53,7 @@ describe("Equipment Routes Integration", () => {
       host: TEST_CONFIG.database.host, port: TEST_CONFIG.database.port,
       database: TEST_CONFIG.database.database,
       username: TEST_CONFIG.database.username, password: TEST_CONFIG.database.password,
-      max: 1, idle_timeout: 20, connect_timeout: 10,
+      max: 5, idle_timeout: 20, connect_timeout: 10,
       connection: { search_path: "app,public" },
       transform: postgres.camel,
     });

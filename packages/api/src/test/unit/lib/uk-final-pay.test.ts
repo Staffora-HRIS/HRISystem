@@ -80,7 +80,7 @@ describe("calculateProRataBonus", () => {
     );
 
     expect(result.daysWorked).toBe(183);
-    expect(result.totalDays).toBe(366); // 2025-04-01 to 2026-03-31
+    expect(result.totalDays).toBe(365); // 2025-04-01 to 2026-03-31 (neither year is a leap year)
     expect(result.proRataAmount).toBeGreaterThan(2990);
     expect(result.proRataAmount).toBeLessThan(3010);
   });
