@@ -42,6 +42,8 @@ describe("Secondments Routes Integration", () => {
   let service: SecondmentService;
   let serviceB: SecondmentService;
   let skip = false;
+  let homeDeptId: string;
+  let hostDeptId: string;
 
   beforeAll(async () => {
     await ensureTestInfra();
@@ -69,6 +71,13 @@ describe("Secondments Routes Integration", () => {
 
     await setTenantContext(db, tenant.id, user.id);
     await db`INSERT INTO app.employees (id, tenant_id, employee_number, status, hire_date) VALUES (${user.id}::uuid, ${tenant.id}::uuid, 'SEC-001', 'active', CURRENT_DATE) ON CONFLICT (id) DO NOTHING`;
+
+    // Create org units for home/host departments
+    homeDeptId = crypto.randomUUID();
+    hostDeptId = crypto.randomUUID();
+    await db`INSERT INTO app.org_units (id, tenant_id, code, name, is_active) VALUES (${homeDeptId}::uuid, ${tenant.id}::uuid, ${'HOME-' + suffix}, 'Home Dept', true) ON CONFLICT DO NOTHING`;
+    await db`INSERT INTO app.org_units (id, tenant_id, code, name, is_active) VALUES (${hostDeptId}::uuid, ${tenant.id}::uuid, ${'HOST-' + suffix}, 'Host Dept', true) ON CONFLICT DO NOTHING`;
+
     await clearTenantContext(db);
   });
 
@@ -82,6 +91,7 @@ describe("Secondments Routes Integration", () => {
           await tx`DELETE FROM app.secondments WHERE tenant_id = ${tId}::uuid`;
           await tx`DELETE FROM app.employee_status_history WHERE tenant_id = ${tId}::uuid`;
           await tx`DELETE FROM app.employees WHERE tenant_id = ${tId}::uuid`;
+          await tx`DELETE FROM app.org_units WHERE tenant_id = ${tId}::uuid`;
         }
       });
     } catch (e) { console.error("Cleanup error (non-fatal):", e); }
@@ -100,11 +110,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const result = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "Partner Corp",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "Partner Corp",
       start_date: "2025-07-01",
       expected_end_date: "2025-12-31",
-      reason: "Knowledge sharing initiative",
-    });
+      terms: { notes: "Knowledge sharing initiative" },
+    } as any);
     expect(result.success).toBe(true);
     expect(result.data!.status).toBe("proposed");
   });
@@ -113,11 +125,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const created = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "Get Corp",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "Get Corp",
       start_date: "2025-08-01",
       expected_end_date: "2026-01-31",
-      reason: "Testing",
-    });
+      terms: { notes: "Testing" },
+    } as any);
     const result = await service.getSecondment(ctxA(), created.data!.id);
     expect(result.success).toBe(true);
     expect(result.data!.id).toBe(created.data!.id);
@@ -134,11 +148,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const result = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "Invalid Dates",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "Invalid Dates",
       start_date: "2025-12-01",
       expected_end_date: "2025-06-01",
-      reason: "Should fail",
-    });
+      terms: { notes: "Should fail" },
+    } as any);
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("VALIDATION_ERROR");
   });
@@ -147,11 +163,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const created = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "Approve Corp",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "Approve Corp",
       start_date: "2025-09-01",
       expected_end_date: "2026-02-28",
-      reason: "Transition test",
-    });
+      terms: { notes: "Transition test" },
+    } as any);
     const result = await service.transitionStatus(ctxA(), created.data!.id, {
       to_status: "approved",
     });
@@ -163,11 +181,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const created = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "Invalid Trans",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "Invalid Trans",
       start_date: "2025-10-01",
       expected_end_date: "2026-03-31",
-      reason: "Invalid transition test",
-    });
+      terms: { notes: "Invalid transition test" },
+    } as any);
     const result = await service.transitionStatus(ctxA(), created.data!.id, {
       to_status: "completed",
     });
@@ -186,11 +206,13 @@ describe("Secondments Routes Integration", () => {
     if (skip) return;
     const created = await service.createSecondment(ctxA(), {
       employee_id: user.id,
-      to_external_org: "RLS Corp",
+      home_department_id: homeDeptId,
+      host_department_id: hostDeptId,
+      host_organisation: "RLS Corp",
       start_date: "2025-11-01",
       expected_end_date: "2026-04-30",
-      reason: "RLS test",
-    });
+      terms: { notes: "RLS test" },
+    } as any);
     const result = await serviceB.getSecondment(ctxB(), created.data!.id);
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("NOT_FOUND");

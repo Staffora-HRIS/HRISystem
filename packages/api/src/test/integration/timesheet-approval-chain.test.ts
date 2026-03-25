@@ -198,10 +198,10 @@ describe("Timesheet Approval Chains", () => {
     expect(chain.length).toBe(2);
     expect(chain[0]?.level).toBe(1);
     expect(chain[0]?.status).toBe("active");
-    expect(chain[0]?.approverId).toBe(approver1Id);
+    expect(chain[0]?.approver_id).toBe(approver1Id);
     expect(chain[1]?.level).toBe(2);
     expect(chain[1]?.status).toBe("pending");
-    expect(chain[1]?.approverId).toBe(approver2Id);
+    expect(chain[1]?.approver_id).toBe(approver2Id);
   });
 
   test("level 1 starts as active, other levels start as pending", async () => {
@@ -505,7 +505,7 @@ describe("Timesheet Approval Chains", () => {
       WHERE id = ${timesheetId}::uuid
     `;
     expect(ts?.status).toBe("approved");
-    expect(ts?.approvedBy).toBe(approver1Id);
+    expect(ts?.approved_by).toBe(approver1Id);
   });
 
   test("process_approval_chain_decision function handles rejection", async () => {
@@ -554,7 +554,7 @@ describe("Timesheet Approval Chains", () => {
       WHERE id = ${timesheetId}::uuid
     `;
     expect(ts?.status).toBe("rejected");
-    expect(ts?.rejectionReason).toContain("Hours are wrong");
+    expect(ts?.rejection_reason).toContain("Hours are wrong");
   });
 
   // ===========================================================================
@@ -584,11 +584,11 @@ describe("Timesheet Approval Chains", () => {
     `;
 
     expect(chain.length).toBe(3);
-    expect(chain[0]?.approverId).toBe(approver1Id);
+    expect(chain[0]?.approver_id).toBe(approver1Id);
     expect(chain[0]?.status).toBe("active");
-    expect(chain[1]?.approverId).toBe(approver2Id);
+    expect(chain[1]?.approver_id).toBe(approver2Id);
     expect(chain[1]?.status).toBe("pending");
-    expect(chain[2]?.approverId).toBe(approver3Id);
+    expect(chain[2]?.approver_id).toBe(approver3Id);
     expect(chain[2]?.status).toBe("pending");
   });
 

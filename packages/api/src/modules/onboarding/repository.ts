@@ -305,8 +305,8 @@ export class OnboardingRepository {
         return tx`
           SELECT
             otc.*,
-            a.first_name || ' ' || a.last_name as assignee_name,
-            c.first_name || ' ' || c.last_name as completed_by_name
+            COALESCE(a.first_name || ' ' || a.last_name, a.first_name, a.last_name) as assignee_name,
+            COALESCE(c.first_name || ' ' || c.last_name, c.name) as completed_by_name
           FROM app.onboarding_task_completions otc
           LEFT JOIN app.employees a ON a.id = otc.assignee_id
           LEFT JOIN app.users c ON c.id = otc.completed_by

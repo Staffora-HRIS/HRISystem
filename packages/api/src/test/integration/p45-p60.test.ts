@@ -180,14 +180,14 @@ describe("P45 Document Generation (TODO-129)", () => {
 
     expect(p45).toBeDefined();
     expect(p45.id).toBe(p45Id);
-    expect(p45.employeeId).toBe(employeeId);
-    expect(p45.taxCodeAtLeaving).toBe("1257L");
-    expect(p45.niNumber).toBe("AB123456C");
-    expect(parseFloat(p45.totalPayInYear)).toBe(7700.0);
-    expect(parseFloat(p45.totalTaxInYear)).toBe(1140.0);
-    expect(p45.studentLoanIndicator).toBe(true);
-    expect(p45.studentLoanPlan).toBe("plan2");
-    expect(p45.taxYear).toBe("2025-26");
+    expect(p45.employee_id).toBe(employeeId);
+    expect(p45.tax_code_at_leaving).toBe("1257L");
+    expect(p45.ni_number).toBe("AB123456C");
+    expect(parseFloat(p45.total_pay_in_year)).toBe(7700.0);
+    expect(parseFloat(p45.total_tax_in_year)).toBe(1140.0);
+    expect(p45.student_loan_indicator).toBe(true);
+    expect(p45.student_loan_plan).toBe("plan2");
+    expect(p45.tax_year).toBe("2025-26");
     expect(p45.status).toBe("generated");
   });
 
@@ -201,7 +201,7 @@ describe("P45 Document Generation (TODO-129)", () => {
     `;
 
     expect(p45).toBeDefined();
-    const parts = p45.partsGenerated;
+    const parts = p45.parts_generated;
     expect(parts.part1).toBe(true);
     expect(parts.part1a).toBe(true);
     expect(parts.part2).toBe(true);
@@ -226,8 +226,8 @@ describe("P45 Document Generation (TODO-129)", () => {
     `;
 
     expect(updated.status).toBe("issued");
-    expect(updated.issuedAt).not.toBeNull();
-    expect(updated.issuedBy).toBe(userId);
+    expect(updated.issued_at).not.toBeNull();
+    expect(updated.issued_by).toBe(userId);
   });
 
   it("should enforce RLS - cannot see another tenant's P45", async () => {
@@ -284,15 +284,15 @@ describe("P60 Document Generation (TODO-130)", () => {
     `;
 
     expect(p60).toBeDefined();
-    expect(p60.employeeId).toBe(employeeId);
-    expect(p60.taxYear).toBe("2025-26");
-    expect(p60.finalTaxCode).toBe("1257L");
-    expect(parseFloat(p60.totalPay)).toBe(7700.0);
-    expect(parseFloat(p60.totalTax)).toBe(1140.0);
-    expect(parseFloat(p60.studentLoanDeductions)).toBe(185.0);
-    expect(parseFloat(p60.pensionContributions)).toBe(310.0);
-    expect(p60.niContributions).toBeDefined();
-    expect(p60.niContributions.A).toBeDefined();
+    expect(p60.employee_id).toBe(employeeId);
+    expect(p60.tax_year).toBe("2025-26");
+    expect(p60.final_tax_code).toBe("1257L");
+    expect(parseFloat(p60.total_pay)).toBe(7700.0);
+    expect(parseFloat(p60.total_tax)).toBe(1140.0);
+    expect(parseFloat(p60.student_loan_deductions)).toBe(185.0);
+    expect(parseFloat(p60.pension_contributions)).toBe(310.0);
+    expect(p60.ni_contributions).toBeDefined();
+    expect(p60.ni_contributions.A).toBeDefined();
     expect(p60.status).toBe("generated");
   });
 
@@ -306,12 +306,12 @@ describe("P60 Document Generation (TODO-130)", () => {
       await db`
         INSERT INTO app.p60_documents (
           tenant_id, employee_id, tax_year,
-          total_pay, total_tax,
+          final_tax_code, total_pay, total_tax,
           ni_contributions, student_loan_deductions,
           pension_contributions, status
         ) VALUES (
           ${tenantId}::uuid, ${employeeId}::uuid, ${taxYear},
-          '8000.00', '1200.00',
+          '1257L', '8000.00', '1200.00',
           '{}'::jsonb, '200.00',
           '320.00', 'generated'
         )
@@ -354,8 +354,8 @@ describe("P60 Document Generation (TODO-130)", () => {
     `;
 
     expect(p60).toBeDefined();
-    expect(parseFloat(p60.totalPay)).toBe(8500.0);
-    expect(parseFloat(p60.totalTax)).toBe(1280.0);
+    expect(parseFloat(p60.total_pay)).toBe(8500.0);
+    expect(parseFloat(p60.total_tax)).toBe(1280.0);
     expect(p60.status).toBe("generated");
   });
 
@@ -380,8 +380,8 @@ describe("P60 Document Generation (TODO-130)", () => {
     `;
 
     expect(p60).toBeDefined();
-    expect(p60.employeeId).toBe(employeeId2);
-    expect(p60.finalTaxCode).toBe("BR");
+    expect(p60.employee_id).toBe(employeeId2);
+    expect(p60.final_tax_code).toBe("BR");
   });
 
   it("should transition P60 from generated to issued", async () => {
@@ -402,7 +402,7 @@ describe("P60 Document Generation (TODO-130)", () => {
     `;
 
     expect(updated.status).toBe("issued");
-    expect(updated.issuedAt).not.toBeNull();
+    expect(updated.issued_at).not.toBeNull();
   });
 
   it("should enforce RLS - cannot see another tenant's P60", async () => {
@@ -474,8 +474,8 @@ describe("P45/P60 Outbox Atomicity", () => {
       WHERE id = ${outboxId}::uuid
     `;
     expect(outboxRows.length).toBe(1);
-    expect(outboxRows[0].eventType).toBe("payroll.p45.generated");
-    expect(outboxRows[0].aggregateId).toBe(p45Id);
+    expect(outboxRows[0].event_type).toBe("payroll.p45.generated");
+    expect(outboxRows[0].aggregate_id).toBe(p45Id);
   });
 });
 
@@ -509,7 +509,7 @@ describe("P45/P60 Data Queries", () => {
     `;
 
     expect(rows.length).toBeGreaterThanOrEqual(1);
-    expect(rows[0].taxYear).toBe("2025-26");
+    expect(rows[0].tax_year).toBe("2025-26");
   });
 
   it("should find P60 by employee and tax year", async () => {
@@ -522,7 +522,7 @@ describe("P45/P60 Data Queries", () => {
     `;
 
     expect(p60).toBeDefined();
-    expect(parseFloat(p60.totalPay)).toBeGreaterThan(0);
-    expect(parseFloat(p60.totalTax)).toBeGreaterThan(0);
+    expect(parseFloat(p60.total_pay)).toBeGreaterThan(0);
+    expect(parseFloat(p60.total_tax)).toBeGreaterThan(0);
   });
 });

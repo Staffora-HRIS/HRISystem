@@ -111,23 +111,25 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
     test("should create an approval hierarchy for a department", async () => {
       await setTenantContext(db, tenantId, userId);
 
-      const [row] = await db`
-        INSERT INTO app.timesheet_approval_hierarchies (
+      const hierarchyIdVal = crypto.randomUUID();
+      const levelsArr = [
+        { level: 1, role: "Team Lead", approverId: approver1Id },
+        { level: 2, role: "Department Manager", approverId: approver2Id },
+      ];
+
+      // Insert with explicit jsonb_build_array to avoid parameterized JSON issues
+      const [row] = await db.unsafe(
+        `INSERT INTO app.timesheet_approval_hierarchies (
           id, tenant_id, department_id, name, description, approval_levels, is_active
         ) VALUES (
-          ${crypto.randomUUID()}::uuid,
-          ${tenantId}::uuid,
-          ${orgUnitId}::uuid,
+          $1::uuid, $2::uuid, $3::uuid,
           'Engineering Approval Chain',
           'Two-level approval for engineering timesheets',
-          ${JSON.stringify([
-            { level: 1, role: "Team Lead", approverId: approver1Id },
-            { level: 2, role: "Department Manager", approverId: approver2Id },
-          ])}::jsonb,
+          $4::jsonb,
           true
-        )
-        RETURNING *
-      `;
+        ) RETURNING *`,
+        [hierarchyIdVal, tenantId, orgUnitId, JSON.stringify(levelsArr)]
+      );
 
       expect(row).toBeDefined();
       expect(row.name).toBe("Engineering Approval Chain");
@@ -145,17 +147,16 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
       await setTenantContext(db, tenantId, userId);
 
       const insertDuplicate = async () => {
-        await db`
-          INSERT INTO app.timesheet_approval_hierarchies (
+        await db.unsafe(
+          `INSERT INTO app.timesheet_approval_hierarchies (
             id, tenant_id, department_id, name, approval_levels
           ) VALUES (
-            ${crypto.randomUUID()}::uuid,
-            ${tenantId}::uuid,
-            ${orgUnitId}::uuid,
-            'Duplicate Chain',
-            ${JSON.stringify([{ level: 1, role: "Manager", approverId: approver1Id }])}::jsonb
-          )
-        `;
+            $1::uuid, $2::uuid, $3::uuid, 'Duplicate Chain',
+            $4::jsonb
+          )`,
+          [crypto.randomUUID(), tenantId, orgUnitId,
+           JSON.stringify([{ level: 1, role: "Manager", approverId: approver1Id }])]
+        );
       };
 
       expect(insertDuplicate).toThrow();
@@ -230,19 +231,18 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
       await setTenantContext(db, tenantId, userId);
 
       // Create a hierarchy to delete
-      const [toDelete] = await db`
-        INSERT INTO app.timesheet_approval_hierarchies (
+      const delId = crypto.randomUUID();
+      const [toDelete] = await db.unsafe(
+        `INSERT INTO app.timesheet_approval_hierarchies (
           id, tenant_id, department_id, name, approval_levels
         ) VALUES (
-          ${crypto.randomUUID()}::uuid,
-          ${tenantId}::uuid,
-          NULL,
-          'To Delete',
-          ${JSON.stringify([{ level: 1, role: "Manager", approverId: approver1Id }])}::jsonb
+          $1::uuid, $2::uuid, NULL, 'To Delete', $3::jsonb
         )
         ON CONFLICT (tenant_id, department_id) DO UPDATE SET name = 'To Delete'
-        RETURNING *
-      `;
+        RETURNING *`,
+        [delId, tenantId,
+         JSON.stringify([{ level: 1, role: "Manager", approverId: approver1Id }])]
+      );
 
       const result = await db`
         DELETE FROM app.timesheet_approval_hierarchies

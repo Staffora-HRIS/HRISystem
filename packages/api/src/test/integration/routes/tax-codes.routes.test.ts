@@ -116,6 +116,7 @@ describe("Tax Codes Routes Integration", () => {
         is_cumulative: true,
         week1_month1: false,
         effective_from: "2026-04-06",
+        effective_to: "2026-12-31",
         source: "manual",
       });
       expect(result.success).toBe(true);
@@ -314,13 +315,15 @@ describe("Tax Codes Routes Integration", () => {
   describe("Get Current Tax Code", () => {
     it("should return the current tax code for an employee", async () => {
       if (skip) return;
-      // Create a tax code effective from well in the past with no end date (open-ended)
+      // Create a tax code effective from a recent date with no end date (open-ended)
+      // Use a date that doesn't overlap with other test ranges (2026-04-06..2026-12-31, 2027+, etc.)
       await service.createTaxCode(ctxA(), {
         employee_id: user.id, tax_code: "1257L",
-        effective_from: "2020-01-01",
+        effective_from: "2025-01-01",
+        effective_to: "2025-12-31",
         source: "manual",
       });
-      const result = await service.getCurrentTaxCode(ctxA(), user.id);
+      const result = await service.getCurrentTaxCode(ctxA(), user.id, "2025-06-15");
       expect(result.success).toBe(true);
       expect(result.data!.tax_code).toBe("1257L");
     });

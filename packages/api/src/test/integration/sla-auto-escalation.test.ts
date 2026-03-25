@@ -110,15 +110,22 @@ describe("SLA Auto-Escalation", () => {
       `;
 
       // Create workflow version (active requires published_at/published_by and non-empty steps)
+      // Insert as draft first, then update steps (avoids jsonb_array_length constraint on active status)
       await tx`
         INSERT INTO app.workflow_versions (
           id, tenant_id, definition_id, version, status, steps, published_at, published_by
         ) VALUES (
           ${versionId}::uuid, ${tenant.id}::uuid, ${defId}::uuid,
-          1, 'active',
-          ${JSON.stringify([{ index: 0, name: "Test Step", type: "approval" }])}::jsonb,
+          1, 'draft',
+          '[]'::jsonb,
           now(), ${user.id}::uuid
         )
+      `;
+      await tx`
+        UPDATE app.workflow_versions
+        SET steps = '[{"index":0,"name":"Test Step","type":"approval"}]'::jsonb,
+            status = 'active'
+        WHERE id = ${versionId}::uuid
       `;
 
       // Create workflow instance
