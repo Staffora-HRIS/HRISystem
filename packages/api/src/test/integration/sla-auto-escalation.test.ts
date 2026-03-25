@@ -109,13 +109,15 @@ describe("SLA Auto-Escalation", () => {
         )
       `;
 
-      // Create workflow version
+      // Create workflow version (active requires published_at/published_by and non-empty steps)
       await tx`
         INSERT INTO app.workflow_versions (
-          id, tenant_id, definition_id, status, steps
+          id, tenant_id, definition_id, version, status, steps, published_at, published_by
         ) VALUES (
           ${versionId}::uuid, ${tenant.id}::uuid, ${defId}::uuid,
-          'active', '[]'::jsonb
+          1, 'active',
+          ${JSON.stringify([{ index: 0, name: "Test Step", type: "approval" }])}::jsonb,
+          now(), ${user.id}::uuid
         )
       `;
 

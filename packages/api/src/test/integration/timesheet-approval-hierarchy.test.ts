@@ -67,8 +67,8 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
 
     orgUnitId = crypto.randomUUID();
     await db`
-      INSERT INTO app.org_units (id, tenant_id, name, unit_type, status)
-      VALUES (${orgUnitId}::uuid, ${tenantId}::uuid, 'Engineering', 'department', 'active')
+      INSERT INTO app.org_units (id, tenant_id, code, name, is_active, effective_from)
+      VALUES (${orgUnitId}::uuid, ${tenantId}::uuid, ${"ENG-" + Date.now()}, 'Engineering', true, CURRENT_DATE)
     `;
 
     // Create an employee
@@ -97,7 +97,7 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
         // Ignore cleanup errors
       }
 
-      await closeTestConnections();
+      await closeTestConnections(db);
     }
   });
 

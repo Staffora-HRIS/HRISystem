@@ -64,6 +64,18 @@ function createFailingCache() {
 }
 
 /**
+ * Create a mock Elysia server object that provides requestIP for IP-based rate limiting.
+ * Returns a fixed loopback address so rate-limit tests can run without a real server.
+ */
+function createMockServer() {
+  return {
+    requestIP(_request: Request) {
+      return { address: "127.0.0.1" };
+    },
+  };
+}
+
+/**
  * Build a test app with the given options.
  *
  * Uses `_clientIp` context override to simulate different client IPs in tests.

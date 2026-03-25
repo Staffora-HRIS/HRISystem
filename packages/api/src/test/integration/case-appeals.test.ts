@@ -69,10 +69,10 @@ describe("Case Appeals - ACAS Code Compliance", () => {
 
       // Create a test employee linked to the requester user
       await tx`
-        INSERT INTO app.employees (id, tenant_id, employee_number, first_name, last_name, email, status, user_id)
+        INSERT INTO app.employees (id, tenant_id, employee_number, first_name, last_name, email, status, hire_date, user_id)
         VALUES (
           ${employeeId}::uuid, ${tenant.id}::uuid, ${"EMP-" + Date.now()},
-          'Test', 'Appellant', ${requesterUser.email}, 'active', ${requesterUser.id}::uuid
+          'Test', 'Appellant', ${requesterUser.email}, 'active', CURRENT_DATE, ${requesterUser.id}::uuid
         )
         ON CONFLICT DO NOTHING
       `;

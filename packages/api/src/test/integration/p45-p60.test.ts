@@ -62,8 +62,8 @@ beforeAll(async () => {
 
     // Employee 1: terminated
     await tx`
-      INSERT INTO app.employees (id, tenant_id, employee_number, first_name, last_name, status, hire_date, termination_date, user_id)
-      VALUES (${employeeId}::uuid, ${tenantId}::uuid, 'EMP-P45-001', 'John', 'Doe', 'terminated', '2020-01-15', '2026-02-28', ${userId}::uuid)
+      INSERT INTO app.employees (id, tenant_id, employee_number, first_name, last_name, status, hire_date, termination_date, termination_reason, user_id)
+      VALUES (${employeeId}::uuid, ${tenantId}::uuid, 'EMP-P45-001', 'John', 'Doe', 'terminated', '2020-01-15', '2026-02-28', 'Resignation', ${userId}::uuid)
     `;
 
     // Employee 2: active

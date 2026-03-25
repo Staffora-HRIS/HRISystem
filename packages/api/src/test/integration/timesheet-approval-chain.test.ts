@@ -32,6 +32,8 @@ describe("Timesheet Approval Chains", () => {
   let approver2Id: string;
   let approver3Id: string;
   let employeeId: string;
+  /** Counter to generate unique period ranges per test */
+  let timesheetCounter = 0;
 
   beforeAll(async () => {
     await ensureTestInfra();
@@ -89,16 +91,22 @@ describe("Timesheet Approval Chains", () => {
   });
 
   /**
-   * Helper to create a timesheet in draft status
+   * Helper to create a timesheet in draft status.
+   * Uses a unique period range per call to avoid the timesheets_unique constraint.
    */
   async function createDraftTimesheet(): Promise<string> {
     const id = crypto.randomUUID();
+    const offset = timesheetCounter++;
+    // Each timesheet gets a unique 7-day window shifted by (offset * 8) days into the past
+    const shiftDays = 7 + offset * 8;
     await db`
       INSERT INTO app.timesheets (
         id, tenant_id, employee_id, period_start, period_end, status
       ) VALUES (
         ${id}::uuid, ${tenantId}::uuid, ${employeeId}::uuid,
-        CURRENT_DATE - interval '7 days', CURRENT_DATE, 'draft'
+        CURRENT_DATE - ${shiftDays}::int * interval '1 day',
+        CURRENT_DATE - ${shiftDays - 7}::int * interval '1 day',
+        'draft'
       )
     `;
     return id;

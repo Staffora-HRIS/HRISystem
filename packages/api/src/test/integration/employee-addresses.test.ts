@@ -97,32 +97,32 @@ beforeAll(async () => {
 
     // Create Tenant A
     const [tA] = await adminDb<{ id: string }[]>`
-      INSERT INTO app.tenants (name, slug, domain, subscription_plan, status)
-      VALUES ('Address Test Tenant A', 'addr-test-a-${Date.now()}', 'addr-a.test.com', 'enterprise', 'active')
+      INSERT INTO app.tenants (name, slug, status)
+      VALUES ('Address Test Tenant A', ${'addr-test-a-' + Date.now()}, 'active')
       RETURNING id
     `;
     tenantAId = tA!.id;
 
     // Create Tenant B
     const [tB] = await adminDb<{ id: string }[]>`
-      INSERT INTO app.tenants (name, slug, domain, subscription_plan, status)
-      VALUES ('Address Test Tenant B', 'addr-test-b-${Date.now()}', 'addr-b.test.com', 'enterprise', 'active')
+      INSERT INTO app.tenants (name, slug, status)
+      VALUES ('Address Test Tenant B', ${'addr-test-b-' + Date.now()}, 'active')
       RETURNING id
     `;
     tenantBId = tB!.id;
 
     // Create User A
     const [uA] = await adminDb<{ id: string }[]>`
-      INSERT INTO app.users (tenant_id, email, password_hash, first_name, last_name, status)
-      VALUES (${tenantAId}::uuid, 'addr-a-${Date.now()}@test.com', 'test', 'Address', 'UserA', 'active')
+      INSERT INTO app.users (email, password_hash, name, status)
+      VALUES (${'addr-a-' + Date.now() + '@test.com'}, 'test', 'Address UserA', 'active')
       RETURNING id
     `;
     userAId = uA!.id;
 
     // Create User B
     const [uB] = await adminDb<{ id: string }[]>`
-      INSERT INTO app.users (tenant_id, email, password_hash, first_name, last_name, status)
-      VALUES (${tenantBId}::uuid, 'addr-b-${Date.now()}@test.com', 'test', 'Address', 'UserB', 'active')
+      INSERT INTO app.users (email, password_hash, name, status)
+      VALUES (${'addr-b-' + Date.now() + '@test.com'}, 'test', 'Address UserB', 'active')
       RETURNING id
     `;
     userBId = uB!.id;
