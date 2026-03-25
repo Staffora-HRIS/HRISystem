@@ -98,6 +98,7 @@ describe("Data Breach Routes Integration", () => {
       description: "Test breach report",
       discovery_date: new Date().toISOString(),
       breach_category: "unauthorised_access",
+      nature_of_breach: "Unauthorised access to employee personal records",
       severity: "high",
       detected_by: user.id,
     });
@@ -113,6 +114,7 @@ describe("Data Breach Routes Integration", () => {
       description: "Test get",
       discovery_date: new Date().toISOString(),
       breach_category: "unauthorised_disclosure",
+      nature_of_breach: "Unauthorised disclosure of personal data",
       severity: "medium",
       detected_by: user.id,
     });
@@ -135,6 +137,7 @@ describe("Data Breach Routes Integration", () => {
       description: "Test assess",
       discovery_date: new Date().toISOString(),
       breach_category: "loss",
+      nature_of_breach: "Loss of device containing personal data",
       severity: "low",
       detected_by: user.id,
     });
@@ -156,6 +159,7 @@ describe("Data Breach Routes Integration", () => {
       description: "Test invalid",
       discovery_date: new Date().toISOString(),
       breach_category: "unauthorised_access",
+      nature_of_breach: "Test breach for state transition",
       severity: "low",
       detected_by: user.id,
     });
@@ -188,6 +192,7 @@ describe("Data Breach Routes Integration", () => {
       description: "RLS test",
       discovery_date: new Date().toISOString(),
       breach_category: "unauthorised_access",
+      nature_of_breach: "Test breach for RLS isolation",
       severity: "low",
       detected_by: user.id,
     });

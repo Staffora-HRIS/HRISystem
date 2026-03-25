@@ -115,12 +115,12 @@ describe("Delegations Routes Integration", () => {
         delegateId: user2.id,
         startDate: "2026-04-01",
         endDate: "2026-04-30",
-        scope: "absence",
+        scope: "leave",
       });
       expect(result.success).toBe(true);
       expect(result.data!.delegatorId).toBe(user.id);
       expect(result.data!.delegateId).toBe(user2.id);
-      expect(result.data!.scope).toBe("absence");
+      expect(result.data!.scope).toBe("leave");
       expect(result.data!.isActive).toBe(true);
     });
 
@@ -181,7 +181,7 @@ describe("Delegations Routes Integration", () => {
         delegateId: user2.id,
         startDate: "2026-08-01",
         endDate: "2026-08-31",
-        scope: "cases",
+        scope: "expenses",
       });
       expect(created.success).toBe(true);
 
@@ -201,7 +201,7 @@ describe("Delegations Routes Integration", () => {
   describe("Approver Resolution", () => {
     it("should resolve to self when no active delegation", async () => {
       if (skip) return;
-      const result = await service.resolveApprover(ctxB(), userB.id, "absence");
+      const result = await service.resolveApprover(ctxB(), userB.id, "leave");
       expect(result.success).toBe(true);
       expect(result.data!.effectiveApproverId).toBe(userB.id);
       expect(result.data!.delegationId).toBeNull();

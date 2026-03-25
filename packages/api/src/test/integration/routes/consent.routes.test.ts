@@ -190,7 +190,7 @@ describe("Consent Routes Integration", () => {
       );
       expect(result.success).toBe(true);
       expect(result.data!.status).toBe("granted");
-      expect(result.data!.consent_method).toBe("web");
+      expect(result.data!.consent_method).toBe("web_form");
     });
 
     it("should reject duplicate grant for same purpose", async () => {
@@ -199,8 +199,8 @@ describe("Consent Routes Integration", () => {
         code: `DBLGRANT-${Date.now()}`, name: "Double Grant", description: "Test",
         legal_basis: "consent", data_categories: ["email"],
       });
-      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
-      const result = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
+      const result = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe("CONFLICT");
     });
@@ -213,7 +213,7 @@ describe("Consent Routes Integration", () => {
       });
       await service.updatePurpose(ctxA(), purpose.data!.id, { is_active: false });
 
-      const result = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      const result = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe("VALIDATION_ERROR");
     });
@@ -224,7 +224,7 @@ describe("Consent Routes Integration", () => {
         code: `WITHDRAW-${Date.now()}`, name: "Withdraw Test", description: "Test",
         legal_basis: "consent", data_categories: ["email"],
       });
-      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
 
       const result = await service.withdrawConsent(ctxA(), user.id, purpose.data!.id, "No longer needed");
       expect(result.success).toBe(true);
@@ -238,7 +238,7 @@ describe("Consent Routes Integration", () => {
         code: `DBLWD-${Date.now()}`, name: "Double Withdraw", description: "Test",
         legal_basis: "consent", data_categories: ["email"],
       });
-      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
       await service.withdrawConsent(ctxA(), user.id, purpose.data!.id);
 
       const result = await service.withdrawConsent(ctxA(), user.id, purpose.data!.id);
@@ -255,7 +255,7 @@ describe("Consent Routes Integration", () => {
         code, name: "Check Test", description: "Test",
         legal_basis: "consent", data_categories: ["email"],
       });
-      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
 
       const result = await service.checkConsent(ctxA(), user.id, code);
       expect(result.success).toBe(true);
@@ -270,7 +270,7 @@ describe("Consent Routes Integration", () => {
         code, name: "Stale Test", description: "Original",
         legal_basis: "consent", data_categories: ["email"],
       });
-      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
 
       // Bump version
       await service.updatePurpose(ctxA(), purpose.data!.id, { description: "Updated" });
@@ -334,7 +334,7 @@ describe("Consent Routes Integration", () => {
         legal_basis: "consent", data_categories: ["email"],
       });
 
-      const granted = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web");
+      const granted = await service.grantConsent(ctxA(), user.id, purpose.data!.id, "web_form");
       expect(granted.success).toBe(true);
 
       await setTenantContext(db, tenant.id, user.id);

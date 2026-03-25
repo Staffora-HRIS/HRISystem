@@ -99,12 +99,11 @@ describe("CPD Routes Integration", () => {
   it("should create a CPD record", async () => {
     if (skip) return;
     const result = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "course",
+      employeeId: user.id,
+      activityType: "course",
       title: `CPD Course ${Date.now()}`,
-      description: "Test CPD activity",
       hours: 8,
-      activity_date: "2025-06-01",
+      startDate: "2025-06-01",
     });
     expect(result.success).toBe(true);
     expect(result.data!.title).toContain("CPD Course");
@@ -113,11 +112,11 @@ describe("CPD Routes Integration", () => {
   it("should get a CPD record by ID", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "workshop",
+      employeeId: user.id,
+      activityType: "workshop",
       title: `Get CPD ${Date.now()}`,
       hours: 4,
-      activity_date: "2025-06-15",
+      startDate: "2025-06-15",
     });
     const result = await service.getRecord(ctxA(), created.data!.id);
     expect(result.success).toBe(true);
@@ -133,11 +132,11 @@ describe("CPD Routes Integration", () => {
   it("should update an unverified CPD record", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "seminar",
+      employeeId: user.id,
+      activityType: "seminar",
       title: `Update CPD ${Date.now()}`,
       hours: 2,
-      activity_date: "2025-07-01",
+      startDate: "2025-07-01",
     });
     const result = await service.updateRecord(ctxA(), created.data!.id, {
       title: "Updated CPD Title",
@@ -149,11 +148,11 @@ describe("CPD Routes Integration", () => {
   it("should verify a CPD record", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "conference",
+      employeeId: user.id,
+      activityType: "conference",
       title: `Verify CPD ${Date.now()}`,
       hours: 6,
-      activity_date: "2025-07-15",
+      startDate: "2025-07-15",
     });
     const result = await service.verifyRecord(ctxA(), created.data!.id);
     expect(result.success).toBe(true);
@@ -163,11 +162,11 @@ describe("CPD Routes Integration", () => {
   it("should reject update on verified record", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "course",
+      employeeId: user.id,
+      activityType: "course",
       title: `Verified Update ${Date.now()}`,
       hours: 4,
-      activity_date: "2025-08-01",
+      startDate: "2025-08-01",
     });
     await service.verifyRecord(ctxA(), created.data!.id);
     const result = await service.updateRecord(ctxA(), created.data!.id, { title: "Should Fail" });
@@ -177,11 +176,11 @@ describe("CPD Routes Integration", () => {
   it("should reject delete on verified record", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "course",
+      employeeId: user.id,
+      activityType: "course",
       title: `Verified Delete ${Date.now()}`,
       hours: 4,
-      activity_date: "2025-08-15",
+      startDate: "2025-08-15",
     });
     await service.verifyRecord(ctxA(), created.data!.id);
     const result = await service.deleteRecord(ctxA(), created.data!.id);
@@ -191,11 +190,11 @@ describe("CPD Routes Integration", () => {
   it("should block cross-tenant access (RLS)", async () => {
     if (skip) return;
     const created = await service.createRecord(ctxA(), {
-      employee_id: user.id,
-      activity_type: "course",
+      employeeId: user.id,
+      activityType: "course",
       title: `RLS CPD ${Date.now()}`,
       hours: 2,
-      activity_date: "2025-09-01",
+      startDate: "2025-09-01",
     });
     const result = await serviceB.getRecord(ctxB(), created.data!.id);
     expect(result.success).toBe(false);
