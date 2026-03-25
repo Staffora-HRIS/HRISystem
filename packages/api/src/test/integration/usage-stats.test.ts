@@ -126,7 +126,7 @@ describe("Usage Stats - Per-Tenant Analytics", () => {
         WHERE period_start = '2026-03-15'
       `;
       expect(bRows.length).toBe(1);
-      expect(Number(bRows[0]!.activeUsers)).toBe(10);
+      expect(Number(bRows[0]!.active_users)).toBe(10);
     });
 
     it("should prevent Tenant A from inserting stats for Tenant B", async () => {
@@ -177,11 +177,11 @@ describe("Usage Stats - Per-Tenant Analytics", () => {
       `;
 
       expect(row).toBeDefined();
-      expect(Number(row!.activeUsers)).toBe(15);
-      expect(Number(row!.apiRequests)).toBe(1200);
-      expect(Number(row!.storageBytes)).toBe(2097152);
-      expect(Number(row!.employeeCount)).toBe(42);
-      expect(row!.moduleUsage).toBeDefined();
+      expect(Number(row!.active_users)).toBe(15);
+      expect(Number(row!.api_requests)).toBe(1200);
+      expect(Number(row!.storage_bytes)).toBe(2097152);
+      expect(Number(row!.employee_count)).toBe(42);
+      expect(row!.module_usage).toBeDefined();
     });
 
     it("should upsert (update) when inserting duplicate period", async () => {
@@ -220,9 +220,9 @@ describe("Usage Stats - Per-Tenant Analytics", () => {
         RETURNING *
       `;
 
-      expect(Number(updated!.activeUsers)).toBe(20);
-      expect(Number(updated!.apiRequests)).toBe(1000);
-      expect(Number(updated!.employeeCount)).toBe(35);
+      expect(Number(updated!.active_users)).toBe(20);
+      expect(Number(updated!.api_requests)).toBe(1000);
+      expect(Number(updated!.employee_count)).toBe(35);
     });
   });
 
@@ -328,22 +328,22 @@ describe("Usage Stats - Per-Tenant Analytics", () => {
       const jan = rows[0]!;
 
       // MAX(active_users) across days 1-5: 10+5 = 15
-      expect(Number(jan.activeUsers)).toBe(15);
+      expect(Number(jan.active_users)).toBe(15);
 
       // SUM(api_requests): 100+200+300+400+500 = 1500
-      expect(Number(jan.totalApiRequests)).toBe(1500);
+      expect(Number(jan.total_api_requests)).toBe(1500);
 
       // AVG(api_requests): 1500/5 = 300
-      expect(Number(jan.avgDailyApiRequests)).toBe(300);
+      expect(Number(jan.avg_daily_api_requests)).toBe(300);
 
       // MAX(storage_bytes): 1024*5 = 5120
-      expect(Number(jan.maxStorageBytes)).toBe(5120);
+      expect(Number(jan.max_storage_bytes)).toBe(5120);
 
       // AVG(employee_count): (41+42+43+44+45)/5 = 43
-      expect(Number(jan.avgEmployeeCount)).toBe(43);
+      expect(Number(jan.avg_employee_count)).toBe(43);
 
       // 5 days tracked
-      expect(Number(jan.daysTracked)).toBe(5);
+      expect(Number(jan.days_tracked)).toBe(5);
     });
   });
 });

@@ -62,8 +62,8 @@ describe("Case Appeals - ACAS Code Compliance", () => {
     await withSystemContext(db, async (tx) => {
       // Create a case category
       await tx`
-        INSERT INTO app.case_categories (id, tenant_id, name, description, is_active)
-        VALUES (${caseCategoryId}::uuid, ${tenant.id}::uuid, 'Test Grievance', 'Test category', true)
+        INSERT INTO app.case_categories (id, tenant_id, code, name, description, is_active)
+        VALUES (${caseCategoryId}::uuid, ${tenant.id}::uuid, ${"GRIEVANCE-" + Date.now()}, 'Test Grievance', 'Test category', true)
         ON CONFLICT DO NOTHING
       `;
 
@@ -179,7 +179,7 @@ describe("Case Appeals - ACAS Code Compliance", () => {
         ORDER BY ordinal_position
       `;
 
-      const columnNames = columns.map((c: any) => c.columnName);
+      const columnNames = columns.map((c: any) => c.column_name);
       expect(columnNames).toContain("id");
       expect(columnNames).toContain("tenant_id");
       expect(columnNames).toContain("case_id");

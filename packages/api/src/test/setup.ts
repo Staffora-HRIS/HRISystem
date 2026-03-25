@@ -399,6 +399,11 @@ export function getTestDb(): ReturnType<typeof postgres> {
     max: 1,
     idle_timeout: 20,
     connect_timeout: 10,
+    // Match the production DatabaseClient search_path so bare table names
+    // (without app. prefix) resolve to the app schema.
+    connection: {
+      search_path: "app,public",
+    },
   });
 }
 

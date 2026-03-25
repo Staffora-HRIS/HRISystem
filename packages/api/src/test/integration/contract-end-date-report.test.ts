@@ -253,12 +253,12 @@ describe("Contract End Date Report - Repository", () => {
     `;
 
     expect(rows.length).toBe(2);
-    expect(rows[0].firstName).toBe("Alice");
-    expect(rows[0].contractType).toBe("fixed_term");
-    expect(rows[0].departmentName).toBe("Engineering");
-    expect(rows[1].firstName).toBe("Bob");
-    expect(rows[1].contractType).toBe("contractor");
-    expect(rows[1].departmentName).toBe("Marketing");
+    expect(rows[0].first_name).toBe("Alice");
+    expect(rows[0].contract_type).toBe("fixed_term");
+    expect(rows[0].department_name).toBe("Engineering");
+    expect(rows[1].first_name).toBe("Bob");
+    expect(rows[1].contract_type).toBe("contractor");
+    expect(rows[1].department_name).toBe("Marketing");
   });
 
   test("permanent contracts are excluded", async () => {
@@ -295,7 +295,7 @@ describe("Contract End Date Report - Repository", () => {
     `;
 
     expect(rows.length).toBe(1);
-    expect(rows[0].contractType).toBe("fixed_term");
+    expect(rows[0].contract_type).toBe("fixed_term");
   });
 
   test("filters by department_id", async () => {
@@ -320,7 +320,7 @@ describe("Contract End Date Report - Repository", () => {
     `;
 
     expect(rows.length).toBe(1);
-    expect(rows[0].departmentName).toBe("Marketing");
+    expect(rows[0].department_name).toBe("Marketing");
   });
 });
 
@@ -388,10 +388,10 @@ describe("Contract End Date Report - Pagination", () => {
 
     expect(page1.length).toBe(1);
     const cursorDate =
-      page1[0].contractEndDate instanceof Date
-        ? page1[0].contractEndDate.toISOString().split("T")[0]
-        : String(page1[0].contractEndDate);
-    const cursorId = page1[0].contractId;
+      page1[0].contract_end_date instanceof Date
+        ? page1[0].contract_end_date.toISOString().split("T")[0]
+        : String(page1[0].contract_end_date);
+    const cursorId = page1[0].contract_id;
 
     const page2 = await db`
       SELECT
@@ -410,7 +410,7 @@ describe("Contract End Date Report - Pagination", () => {
     `;
 
     expect(page2.length).toBe(1);
-    expect(page2[0].contractId).not.toBe(page1[0].contractId);
+    expect(page2[0].contract_id).not.toBe(page1[0].contract_id);
   });
 });
 
@@ -432,6 +432,6 @@ describe("Contract End Date Report - Edge Cases", () => {
     `;
 
     expect(rows.length).toBe(1);
-    expect(rows[0].firstName).toBe("Alice");
+    expect(rows[0].first_name).toBe("Alice");
   });
 });

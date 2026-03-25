@@ -81,7 +81,7 @@ describe("push_subscriptions table", () => {
       `;
     });
 
-    const columnNames = columns.map((c) => c.columnName);
+    const columnNames = columns.map((c) => c.column_name);
     expect(columnNames).toContain("id");
     expect(columnNames).toContain("tenant_id");
     expect(columnNames).toContain("user_id");
@@ -103,7 +103,7 @@ describe("push_subscriptions table", () => {
       `;
     });
 
-    expect(result[0]?.rowSecurity).toBe(true);
+    expect(result[0]?.row_security).toBe(true);
   });
 
   test("RLS policies exist", async () => {
@@ -145,7 +145,7 @@ describe("push subscription CRUD", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].endpoint).toBe("https://push.example.com/sub/user1-device1");
-    expect(result[0].deviceType).toBe("web");
+    expect(result[0].device_type).toBe("web");
   });
 
   test("can list subscriptions for current user", async () => {
@@ -161,7 +161,7 @@ describe("push subscription CRUD", () => {
     `;
 
     expect(subs.length).toBeGreaterThanOrEqual(1);
-    expect(subs.every((s) => s.userId === user1.id)).toBe(true);
+    expect(subs.every((s) => s.user_id === user1.id)).toBe(true);
   });
 
   test("upsert on duplicate endpoint replaces subscription", async () => {
@@ -198,9 +198,9 @@ describe("push subscription CRUD", () => {
     `;
 
     expect(result).toHaveLength(1);
-    expect(result[0].authKey).toBe("auth-new");
-    expect(result[0].p256dhKey).toBe("p256dh-new");
-    expect(result[0].deviceType).toBe("pwa");
+    expect(result[0].auth_key).toBe("auth-new");
+    expect(result[0].p256dh_key).toBe("p256dh-new");
+    expect(result[0].device_type).toBe("pwa");
   });
 
   test("can delete a subscription by endpoint", async () => {
@@ -270,7 +270,7 @@ describe("RLS tenant isolation", () => {
 
     // All returned rows should belong to tenant1
     for (const sub of subs) {
-      expect(sub.tenantId).toBe(tenant1.id);
+      expect(sub.tenant_id).toBe(tenant1.id);
     }
   });
 
@@ -285,7 +285,7 @@ describe("RLS tenant isolation", () => {
 
     // All returned rows should belong to tenant2
     for (const sub of subs) {
-      expect(sub.tenantId).toBe(tenant2.id);
+      expect(sub.tenant_id).toBe(tenant2.id);
     }
   });
 

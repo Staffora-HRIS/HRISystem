@@ -81,7 +81,7 @@ beforeAll(async () => {
     // Tax details for employee 2
     await tx`
       INSERT INTO app.employee_tax_details (tenant_id, employee_id, tax_code, ni_number, ni_category, student_loan_plan, effective_from)
-      VALUES (${tenantId}::uuid, ${employeeId2}::uuid, 'BR', 'CD789012E', 'A', 'none', '2025-04-06')
+      VALUES (${tenantId}::uuid, ${employeeId2}::uuid, 'BR', 'CE789012A', 'A', 'none', '2025-04-06')
     `;
 
     // Create a payroll run in the 2025-26 tax year

@@ -140,7 +140,7 @@ describe("Cost Centre Assignments", () => {
     `;
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.entityType).toBe("employee");
+    expect(rows[0]!.entity_type).toBe("employee");
     expect(Number(rows[0]!.percentage)).toBe(100);
   });
 
@@ -163,7 +163,7 @@ describe("Cost Centre Assignments", () => {
     `;
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.entityType).toBe("department");
+    expect(rows[0]!.entity_type).toBe("department");
   });
 
   test("should create an assignment for a position", async () => {
@@ -185,7 +185,7 @@ describe("Cost Centre Assignments", () => {
     `;
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.entityType).toBe("position");
+    expect(rows[0]!.entity_type).toBe("position");
   });
 
   test("should support percentage-based allocation", async () => {
@@ -534,13 +534,13 @@ describe("Cost Centre Assignments - Effective Dating", () => {
     const oldRows = await db<{ effectiveTo: Date | null }[]>`
       SELECT effective_to FROM app.cost_centre_assignments WHERE id = ${initialId}::uuid
     `;
-    expect(oldRows[0]!.effectiveTo).not.toBeNull();
+    expect(oldRows[0]!.effective_to).not.toBeNull();
 
     // Verify new one is current
     const newRows = await db<{ effectiveTo: Date | null }[]>`
       SELECT effective_to FROM app.cost_centre_assignments WHERE id = ${replacement[0]!.id}::uuid
     `;
-    expect(newRows[0]!.effectiveTo).toBeNull();
+    expect(newRows[0]!.effective_to).toBeNull();
   });
 
   test("should support point-in-time queries", async () => {

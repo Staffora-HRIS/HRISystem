@@ -596,7 +596,6 @@ describe("Rate Limiting Plugin", () => {
 
     it("should fall back to in-memory for auth endpoints when Redis fails", async () => {
       const failingCache = createFailingCache();
-      const mockServer = createMockServer();
 
       const app = new Elysia()
         .derive(() => ({
@@ -604,7 +603,7 @@ describe("Rate Limiting Plugin", () => {
           tenantId: null,
           user: null,
           requestId: "test-req",
-          server: mockServer,
+          _clientIp: "127.0.0.1",
         }))
         .use(
           rateLimitPlugin({

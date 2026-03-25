@@ -187,8 +187,8 @@ describe("SLA Auto-Escalation", () => {
         return tx`SELECT * FROM app.check_workflow_task_slas()`;
       });
 
-      expect(result.eventsCreated).toBeGreaterThanOrEqual(1);
-      expect(result.breachesCreated).toBeGreaterThanOrEqual(1);
+      expect(result.events_created).toBeGreaterThanOrEqual(1);
+      expect(result.breaches_created).toBeGreaterThanOrEqual(1);
 
       // Verify the SLA event was created
       const events = await withSystemContext(db, async (tx) => {
@@ -199,10 +199,10 @@ describe("SLA Auto-Escalation", () => {
       });
 
       expect(events.length).toBeGreaterThanOrEqual(1);
-      const breachEvent = events.find((e: any) => e.eventType === "breached");
+      const breachEvent = events.find((e: any) => e.event_type === "breached");
       expect(breachEvent).toBeTruthy();
-      expect(breachEvent.escalationAction).toBe("notify");
-      expect(breachEvent.processedAt).toBeNull();
+      expect(breachEvent.escalation_action).toBe("notify");
+      expect(breachEvent.processed_at).toBeNull();
     });
 
     it("should create a 'warning' SLA event when task approaches deadline", async () => {
@@ -221,8 +221,8 @@ describe("SLA Auto-Escalation", () => {
         return tx`SELECT * FROM app.check_workflow_task_slas()`;
       });
 
-      expect(result.eventsCreated).toBeGreaterThanOrEqual(1);
-      expect(result.warningsCreated).toBeGreaterThanOrEqual(1);
+      expect(result.events_created).toBeGreaterThanOrEqual(1);
+      expect(result.warnings_created).toBeGreaterThanOrEqual(1);
 
       const events = await withSystemContext(db, async (tx) => {
         return tx`
@@ -348,8 +348,8 @@ describe("SLA Auto-Escalation", () => {
       });
 
       expect(logs.length).toBe(1);
-      expect(logs[0].entityType).toBe("workflow_task");
-      expect(logs[0].actionTaken).toBe("reassign");
+      expect(logs[0].entity_type).toBe("workflow_task");
+      expect(logs[0].action_taken).toBe("reassign");
     });
 
     it("should accept escalation log entries for cases", async () => {
@@ -378,10 +378,10 @@ describe("SLA Auto-Escalation", () => {
       });
 
       expect(logs.length).toBe(1);
-      expect(logs[0].entityType).toBe("case");
-      expect(logs[0].actionTaken).toBe("escalate_tier");
-      expect(logs[0].previousLevel).toBe("none");
-      expect(logs[0].newLevel).toBe("tier_1");
+      expect(logs[0].entity_type).toBe("case");
+      expect(logs[0].action_taken).toBe("escalate_tier");
+      expect(logs[0].previous_level).toBe("none");
+      expect(logs[0].new_level).toBe("tier_1");
     });
 
     it("should reject invalid entity_type values", async () => {

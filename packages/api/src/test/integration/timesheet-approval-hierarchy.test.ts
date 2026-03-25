@@ -131,11 +131,11 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
 
       expect(row).toBeDefined();
       expect(row.name).toBe("Engineering Approval Chain");
-      expect(row.departmentId).toBe(orgUnitId);
-      expect(row.isActive).toBe(true);
+      expect(row.department_id).toBe(orgUnitId);
+      expect(row.is_active).toBe(true);
       hierarchyId = row.id;
 
-      const levels = row.approvalLevels as any[];
+      const levels = row.approval_levels as any[];
       expect(levels).toHaveLength(2);
       expect(levels[0].role).toBe("Team Lead");
       expect(levels[1].role).toBe("Department Manager");
@@ -180,7 +180,7 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
       `;
 
       expect(row).toBeDefined();
-      expect(row.departmentId).toBeNull();
+      expect(row.department_id).toBeNull();
       expect(row.name).toBe("Default Approval Chain");
     });
 
@@ -222,7 +222,7 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
 
       expect(updated).toBeDefined();
       expect(updated.name).toBe("Updated Engineering Chain");
-      const levels = updated.approvalLevels as any[];
+      const levels = updated.approval_levels as any[];
       expect(levels).toHaveLength(3);
     });
 
