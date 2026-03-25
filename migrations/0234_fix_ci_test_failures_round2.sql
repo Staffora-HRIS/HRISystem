@@ -124,6 +124,48 @@ BEGIN
     END IF;
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- 4. Fix INSERT RLS policies missing system_context bypass
+-- ---------------------------------------------------------------------------
+-- Some tables from migration 0182 got INSERT policies without the
+-- OR app.is_system_context() clause, causing RLS violations when
+-- the service layer uses set_tenant_context within a transaction.
+-- Drop and recreate the INSERT policies with system context bypass.
+
+DO $$
+DECLARE
+  tables text[] := ARRAY[
+    'equipment_catalog', 'equipment_requests', 'equipment_request_history',
+    'geofence_locations', 'geofence_violations',
+    'approval_delegations', 'delegation_log',
+    'report_definitions', 'saved_reports', 'scheduled_reports', 'report_executions',
+    'family_leave_entitlements', 'family_leave_bookings',
+    'parental_leave_entitlements', 'parental_leave_bookings',
+    'letter_templates', 'letter_instances',
+    'employee_competency_history'
+  ];
+  tbl text;
+BEGIN
+  FOREACH tbl IN ARRAY tables LOOP
+    -- Only update if table exists
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'app' AND table_name = tbl
+    ) THEN
+      EXECUTE format(
+        'DROP POLICY IF EXISTS tenant_isolation_insert ON app.%I', tbl
+      );
+      EXECUTE format(
+        'CREATE POLICY tenant_isolation_insert ON app.%I
+         FOR INSERT WITH CHECK (
+           tenant_id = current_setting(''app.current_tenant'', true)::uuid
+           OR app.is_system_context()
+         )', tbl
+      );
+    END IF;
+  END LOOP;
+END $$;
+
 -- Grant permissions on new objects
 DO $$
 BEGIN
