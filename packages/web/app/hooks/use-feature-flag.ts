@@ -80,6 +80,18 @@ async function fetchFeatureFlags(
 }
 
 // =============================================================================
+// Shared Query Options
+// =============================================================================
+
+const FLAG_QUERY_OPTIONS = {
+  staleTime: 60 * 1000, // 1 minute — matches server-side cache TTL
+  gcTime: 5 * 60 * 1000, // 5 minutes
+  refetchOnWindowFocus: true,
+  retry: 1,
+  placeholderData: (prev: Record<string, boolean> | undefined) => prev,
+} as const;
+
+// =============================================================================
 // Hooks
 // =============================================================================
 
@@ -101,12 +113,7 @@ export function useFeatureFlag(flagName: string): boolean {
   const { data } = useQuery({
     queryKey: featureFlagKeys.evaluate([flagName]),
     queryFn: () => fetchFeatureFlags([flagName]),
-    staleTime: 60 * 1000, // 1 minute — matches server-side cache TTL
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: true,
-    retry: 1,
-    // Keep previous data while refetching to avoid flicker
-    placeholderData: (prev) => prev,
+    ...FLAG_QUERY_OPTIONS,
   });
 
   return data?.[flagName] ?? false;
@@ -133,12 +140,7 @@ export function useFeatureFlags(
   const { data } = useQuery({
     queryKey: featureFlagKeys.evaluate(flagNames),
     queryFn: () => fetchFeatureFlags(flagNames),
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
-    retry: 1,
-    placeholderData: (prev) => prev,
-    // Only enable the query if there are flags to check
+    ...FLAG_QUERY_OPTIONS,
     enabled: flagNames.length > 0,
   });
 
@@ -166,11 +168,7 @@ export function useAllFeatureFlags(): Record<string, boolean> {
   const { data } = useQuery({
     queryKey: featureFlagKeys.evaluate(),
     queryFn: () => fetchFeatureFlags(),
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
-    retry: 1,
-    placeholderData: (prev) => prev,
+    ...FLAG_QUERY_OPTIONS,
   });
 
   return data ?? {};

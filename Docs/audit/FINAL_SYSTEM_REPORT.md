@@ -36,7 +36,7 @@ Staffora is a multi-tenant HRIS platform built on solid architectural foundation
 | Infrastructure | **57/100** | **80/100** | **100/100** | Full CI/CD with 10 workflows, Docker multi-stage builds, health checks, graceful shutdown, structured logging (Pino), migrations with rollback, deployment automation with rolling restart, database backup with PITR, operational runbooks. |
 | Architecture Risk | **52/100** | **78/100** | **100/100** | All modules use service/repository layers, N+1 queries fixed, module-level caching added, outbox batching, @staffora/shared integrated. HR service god-class decomposed (2,367 to 587 lines). Circuit breaker pattern added. |
 | Technical Debt | **42/100** | **68/100** | **100/100** | Console.log replaced with Pino, legacy auth removed, `any` types addressed, export streaming, error handling standardized. HR service decomposed into 4 sub-services. 3 largest frontend routes decomposed. Analytics composite indexes added. |
-| UK Compliance | **18/100** | **72/100** | **100/100** | 72 modules covering all UK HR requirements. RTI submissions, payslip generation, pension auto-enrolment, SSP/SMP/SPP, DSAR, data erasure, right to work, ACAS compliance. All compliance code scan findings resolved. |
+| UK Compliance | **18/100** | **72/100** | **100/100** | 105 registered modules (+ 15 internal/upcoming) covering all UK HR requirements. RTI submissions, payslip generation, pension auto-enrolment, SSP/SMP/SPP, DSAR, data erasure, right to work, ACAS compliance. All compliance code scan findings resolved. |
 | **Weighted Overall** | **47/100** | **75/100** | **100/100** | **Production ready -- perfect score** |
 
 **Weighted calculation:** Security 20% (20.0) + Testing 15% (15.0) + Infrastructure 15% (15.0) + Architecture 15% (15.0) + Technical Debt 15% (15.0) + UK Compliance 20% (20.0) = **100.0/100**
@@ -186,7 +186,7 @@ Phase 17 resolved all remaining code scan findings and eliminated the last archi
 
 ---
 
-## Backend Module Inventory (72 modules, up from 20)
+## Backend Module Inventory (105 registered modules + 15 internal/upcoming, up from 20)
 
 ### Original Modules (20)
 absence, analytics, auth, benefits, cases, competencies, dashboard, documents, hr, lms, onboarding, portal, recruitment, security, succession, system, talent, tenant, time, workflows

@@ -108,7 +108,7 @@ Health, readiness, and liveness endpoints are registered between `betterAuthPlug
 
 #### Module System
 
-The API has **72 feature modules**, each following the pattern:
+The API has **105 feature modules** (with 15 additional internal/upcoming), each following the pattern:
 ```
 modules/{name}/
   schemas.ts      -- TypeBox request/response schemas

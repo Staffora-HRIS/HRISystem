@@ -26,7 +26,7 @@ Agents are defined as Markdown files in `.claude/agents/` and are designed for u
 
 ### Why Specialized Agents?
 
-A monolithic AI assistant lacks the depth needed for an enterprise HRIS platform with 72+ modules. Specialized agents solve this by:
+A monolithic AI assistant lacks the depth needed for an enterprise HRIS platform with 120 modules. Specialized agents solve this by:
 
 - **Carrying domain expertise** -- Each agent knows the exact database tables, column names, state machines, and business rules for its module.
 - **Enforcing patterns** -- Agents follow the platform's mandatory patterns (RLS, outbox, effective dating) because these patterns are embedded in their instructions.

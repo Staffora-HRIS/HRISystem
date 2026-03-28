@@ -217,7 +217,7 @@ graph TD
 
 ## 4. Module Architecture
 
-The standard 5-file pattern used by all 72+ backend modules (shown using the `hr` module as an example).
+The standard 5-file pattern used by all 120 backend modules (shown using the `hr` module as an example).
 
 ```mermaid
 graph LR
@@ -258,20 +258,17 @@ graph LR
 ### Module Count by Category
 
 ```mermaid
-pie title API Modules (72+ total)
-    "Core HR" : 8
-    "Time & Attendance" : 3
-    "Absence & Leave" : 6
-    "Talent & Performance" : 5
-    "LMS & Training" : 4
-    "Cases & Workflows" : 2
-    "Onboarding" : 1
-    "Benefits & Payroll" : 6
-    "Documents & Letters" : 2
-    "UK Compliance" : 16
-    "GDPR & Privacy" : 6
-    "Security & Admin" : 5
-    "Operations & Other" : 8
+pie title API Modules (120 total)
+    "Core HR" : 16
+    "Time & Scheduling" : 9
+    "Talent & Learning" : 11
+    "Recruitment & Onboarding" : 8
+    "Employee Self-Service" : 7
+    "Document Management" : 6
+    "Payroll & Finance" : 11
+    "UK Compliance" : 26
+    "GDPR & Privacy" : 9
+    "Operations & Admin" : 26
 ```
 
 ---

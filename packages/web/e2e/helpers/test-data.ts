@@ -29,29 +29,30 @@ export const EMPLOYEE_USER = {
   name: "Jane Employee",
 } as const;
 
-/** Test employee data for creation flows */
-export const NEW_EMPLOYEE = {
-  firstName: "E2E",
-  lastName: `Test-${Date.now()}`,
-  email: `e2e-test-${Date.now()}@staffora.co.uk`,
-  hireDate: new Date().toISOString().split("T")[0],
-  employmentType: "full_time" as const,
-} as const;
+/** Create fresh test employee data per test to avoid collision under parallelism */
+export function createNewEmployee() {
+  const now = Date.now();
+  return {
+    firstName: "E2E",
+    lastName: `Test-${now}`,
+    email: `e2e-test-${now}@staffora.co.uk`,
+    hireDate: new Date().toISOString().split("T")[0],
+    employmentType: "full_time" as const,
+  };
+}
 
-/** Test leave request data */
-export const NEW_LEAVE_REQUEST = {
-  startDate: (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    return d.toISOString().split("T")[0];
-  })(),
-  endDate: (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 16);
-    return d.toISOString().split("T")[0];
-  })(),
-  reason: "E2E test leave request - annual leave",
-} as const;
+/** Create fresh leave request data per test */
+export function createNewLeaveRequest() {
+  const start = new Date();
+  start.setDate(start.getDate() + 14);
+  const end = new Date();
+  end.setDate(end.getDate() + 16);
+  return {
+    startDate: start.toISOString().split("T")[0],
+    endDate: end.toISOString().split("T")[0],
+    reason: "E2E test leave request - annual leave",
+  };
+}
 
 /** Application routes used in tests */
 export const ROUTES = {

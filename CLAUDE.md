@@ -97,7 +97,7 @@ Default ports: API=3000, Web=5173, Postgres=5432, Redis=6379.
 - `src/app.ts`: Main Elysia entry point — registers plugins then mounts all module routes
 - `src/worker.ts`: Background job processor entry point
 - `src/plugins/`: Elysia plugins (see plugin registration order below)
-- `src/modules/`: Feature modules (72 modules) — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`, `index.ts`. Core modules (hr, time, absence, talent, lms, cases, onboarding, benefits, documents, succession, analytics, competencies, recruitment) plus extensive UK compliance modules (right-to-work, ssp, statutory-leave, pension, warnings, etc.) and GDPR modules (dsar, data-erasure, data-breach, consent, privacy-notices, data-retention)
+- `src/modules/`: Feature modules (120 modules) — each has `routes.ts`, `service.ts`, `repository.ts`, `schemas.ts`, `index.ts`. Core modules (hr, time, absence, talent, lms, cases, onboarding, benefits, documents, succession, analytics, competencies, recruitment) plus extensive UK compliance modules (right-to-work, ssp, statutory-leave, pension, warnings, etc.) and GDPR modules (dsar, data-erasure, data-breach, consent, privacy-notices, data-retention)
 - `src/jobs/`: Background workers (outbox-processor, export-worker, notification-worker, pdf-worker, analytics-worker, domain-event-handlers)
 - `src/worker/`: Worker runtime (scheduler, outbox-processor)
 - `src/db/`: Database migration runner (`migrate.ts`)
@@ -141,7 +141,7 @@ Background processing uses Redis Streams for reliable async operations:
 - `app/lib/`: Utilities (api-client, query-client, auth, theme, utils)
 
 ### Database (migrations/)
-Migrations are numbered `NNNN_description.sql` (highest is 0189, ~228 files). Some numbers (0076–0079, 0187) have duplicates from parallel feature branches — this is a known quirk. New migrations should use the next available number after the highest existing one. There is also a non-numbered `fix_schema_migrations_filenames.sql`. All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
+Migrations are numbered `NNNN_description.sql` (highest is 0234, ~319 SQL files). Some numbers have duplicates from parallel feature branches — this is a known quirk. New migrations should use the next available number after the highest existing one. There is also a non-numbered `fix_schema_migrations_filenames.sql`. All tables live in the `app` schema (not `public`). See `migrations/README.md` for conventions.
 
 Two database roles:
 - `hris` — Superuser/admin (used for migrations)
@@ -315,6 +315,16 @@ Import paths available from the shared package:
 1. Create test in `packages/api/src/test/integration/`
 2. Import helpers from `../setup` (`createTestTenant`, `createTestUser`, `setTenantContext`, etc.)
 3. Always test RLS isolation, idempotency, and outbox atomicity
+
+## Git Conventions
+
+- **Branch naming**: `feat/description`, `fix/description`, `refactor/description`, `docs/description`, `chore/description`
+- **Commit messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/) — e.g., `feat: add employee onboarding checklist`, `fix: correct RLS policy for benefits table`
+- **PR process**: Branch from `main`, ensure `bun run typecheck && bun run lint && bun run test:api` passes, squash and merge
+
+## UK-Only Policy
+
+This is a UK-only HRIS. Do not add US payroll/tax logic (FLSA, FMLA, W-2, I-9), US compliance (EEOC, ADA), USD currency, `en-US` locale, or SSN validation. Use UK equivalents: NI numbers (NINO), GBP, en-GB, SOC codes, WTR status, HMRC integration.
 
 ## Specialized Agents
 

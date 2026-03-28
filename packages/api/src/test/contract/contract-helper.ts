@@ -41,16 +41,9 @@ export interface ContractResult {
  * @returns ContractResult with valid flag and detailed violations
  */
 export function validateContract(schema: TSchema, value: unknown): ContractResult {
-  const valid = Value.Check(schema, value);
-
-  if (valid) {
-    return { valid: true, violations: [] };
-  }
-
   const violations: ContractViolation[] = [];
-  const errors = Value.Errors(schema, value);
 
-  for (const error of errors) {
+  for (const error of Value.Errors(schema, value)) {
     violations.push({
       path: error.path,
       message: error.message,
@@ -60,7 +53,7 @@ export function validateContract(schema: TSchema, value: unknown): ContractResul
     });
   }
 
-  return { valid: false, violations };
+  return { valid: violations.length === 0, violations };
 }
 
 /**

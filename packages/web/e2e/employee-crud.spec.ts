@@ -12,7 +12,7 @@ import {
   EmployeeDetailPage,
 } from "./pages/employees.page";
 import { loginAsAdmin } from "./helpers/auth";
-import { ADMIN_USER, NEW_EMPLOYEE, ROUTES } from "./helpers/test-data";
+import { ADMIN_USER, createNewEmployee, ROUTES } from "./helpers/test-data";
 
 test.describe("Employee List Page", () => {
   let employeesPage: EmployeesListPage;
@@ -143,11 +143,12 @@ test.describe("Hire Employee Modal", () => {
     await hireModal.expectVisible();
 
     // Fill in required fields
+    const emp = createNewEmployee();
     await hireModal.fillForm({
-      firstName: NEW_EMPLOYEE.firstName,
-      lastName: NEW_EMPLOYEE.lastName,
-      email: NEW_EMPLOYEE.email,
-      hireDate: NEW_EMPLOYEE.hireDate,
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      email: emp.email,
+      hireDate: emp.hireDate,
     });
 
     // The button should become enabled once department is also selected

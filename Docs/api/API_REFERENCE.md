@@ -1,6 +1,6 @@
 # API Reference
 
-*Last updated: 2026-03-17*
+*Last updated: 2026-03-28*
 
 Base URL: `http://localhost:3000`
 
@@ -2994,11 +2994,610 @@ Customer-facing portal API. Authentication via BetterAuth; portal users are link
 
 ---
 
-## Related Documentation
+## Talent & Performance Extensions
 
-- [Error Codes](ERROR_CODES.md) — All error codes by module
-- [Security Patterns](../patterns/SECURITY.md) — Authentication and authorization
-- [Architecture Overview](../architecture/ARCHITECTURE.md) — System design context
+### Talent Pools (`/api/v1/talent-pools`)
+
+Talent pool management for succession planning and internal mobility.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/talent-pools` | Yes | List talent pools |
+| POST | `/talent-pools` | Yes | Create talent pool |
+| GET | `/talent-pools/:id` | Yes | Get talent pool by ID |
+| PATCH | `/talent-pools/:id` | Yes | Update talent pool |
+| DELETE | `/talent-pools/:id` | Yes | Delete talent pool |
+| GET | `/talent-pools/:id/members` | Yes | List pool members |
+| POST | `/talent-pools/:id/members` | Yes | Add member to pool |
+| PATCH | `/talent-pools/:id/members/:memberId` | Yes | Update pool member |
+| DELETE | `/talent-pools/:id/members/:memberId` | Yes | Remove member from pool |
+
+---
+
+### 360 Feedback (`/api/v1/feedback-360`)
+
+360-degree feedback cycles, reviewer nomination, and anonymised results.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/feedback-360/cycles` | Yes | List 360 feedback cycles |
+| GET | `/feedback-360/cycles/:id` | Yes | Get cycle by ID |
+| POST | `/feedback-360/cycles` | Yes | Create 360 feedback cycle |
+| PATCH | `/feedback-360/cycles/:id` | Yes | Update cycle (status, deadline) |
+| POST | `/feedback-360/cycles/:id/nominate` | Yes | Nominate reviewers for a cycle |
+| GET | `/feedback-360/cycles/:id/responses` | Yes | List responses for a cycle |
+| GET | `/feedback-360/cycles/:id/results` | Yes | Get aggregated results (anonymised) |
+| POST | `/feedback-360/responses/:id/submit` | Yes | Submit feedback |
+| POST | `/feedback-360/responses/:id/decline` | Yes | Decline feedback |
+
+---
+
+## Time & Scheduling Extensions
+
+### Shift Swaps (`/api/v1/shift-swaps`)
+
+Two-phase shift swap workflow: target employee accepts, then manager approves.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/shift-swaps` | Yes | Request a shift swap |
+| GET | `/shift-swaps` | Yes | List shift swap requests |
+| GET | `/shift-swaps/:id` | Yes | Get shift swap request by ID |
+| POST | `/shift-swaps/:id/accept` | Yes | Target employee accepts swap |
+| POST | `/shift-swaps/:id/reject` | Yes | Target employee rejects swap |
+| POST | `/shift-swaps/:id/approve` | Yes | Manager approves swap |
+| POST | `/shift-swaps/:id/manager-reject` | Yes | Manager rejects swap |
+| POST | `/shift-swaps/:id/cancel` | Yes | Requester cancels swap |
+
+---
+
+## UK Compliance Extensions
+
+### Overtime Requests (`/api/v1/overtime-requests`)
+
+Overtime authorisation workflow with manager approval/rejection.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/overtime-requests` | Yes | Submit overtime request |
+| GET | `/overtime-requests/my` | Yes | List my overtime requests |
+| GET | `/overtime-requests/pending` | Yes | List pending requests (manager) |
+| GET | `/overtime-requests/:id` | Yes | Get overtime request by ID |
+| PATCH | `/overtime-requests/:id/approve` | Yes | Approve overtime request |
+| PATCH | `/overtime-requests/:id/reject` | Yes | Reject overtime request |
+| PATCH | `/overtime-requests/:id/cancel` | Yes | Cancel overtime request |
+
+---
+
+### Overtime Rules (`/api/v1/overtime-rules`)
+
+Overtime rule configuration, rate multipliers, and calculation engine.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/overtime-rules` | Yes | Create an overtime rule |
+| GET | `/overtime-rules` | Yes | List overtime rules |
+| GET | `/overtime-rules/:id` | Yes | Get overtime rule by ID |
+| PUT | `/overtime-rules/:id` | Yes | Update an overtime rule |
+| DELETE | `/overtime-rules/:id` | Yes | Delete an overtime rule |
+| POST | `/overtime-rules/calculate/:employeeId` | Yes | Calculate overtime for one employee |
+| POST | `/overtime-rules/calculate/batch` | Yes | Batch calculate overtime for all employees |
+| GET | `/overtime-rules/calculations` | Yes | List overtime calculations |
+| GET | `/overtime-rules/calculations/:id` | Yes | Get overtime calculation by ID |
+| POST | `/overtime-rules/calculations/:id/approve` | Yes | Approve an overtime calculation |
+
+---
+
+### Tribunal (`/api/v1/tribunal`)
+
+Employment tribunal case preparation and document bundle management.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/tribunal` | Yes | List tribunal cases |
+| GET | `/tribunal/:id` | Yes | Get tribunal case by ID |
+| POST | `/tribunal` | Yes | Create a new tribunal case |
+| PATCH | `/tribunal/:id` | Yes | Update a tribunal case |
+| DELETE | `/tribunal/:id` | Yes | Delete a tribunal case (preparation only) |
+| POST | `/tribunal/:id/documents` | Yes | Add document to bundle |
+| PATCH | `/tribunal/:id/documents/:documentId` | Yes | Update document in bundle |
+| DELETE | `/tribunal/:id/documents/:documentId` | Yes | Remove document from bundle |
+
+---
+
+## GDPR Extensions
+
+### Data Archival (`/api/v1/data-archival`)
+
+Record archiving, restoration, policy-based archival, and compliance dashboard.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/data-archival/records` | Yes | List archived records |
+| GET | `/data-archival/records/:id` | Yes | Get archived record by ID |
+| POST | `/data-archival/records` | Yes | Manually archive a record |
+| POST | `/data-archival/records/:id/restore` | Yes | Restore record from archive |
+| POST | `/data-archival/run` | Yes | Run automated archival |
+| GET | `/data-archival/dashboard` | Yes | Archival dashboard overview |
+| GET | `/data-archival/rules` | Yes | List archival rules |
+| POST | `/data-archival/rules/seed-defaults` | Yes | Seed UK default archival rules |
+| POST | `/data-archival/policies` | Yes | Create archive policy |
+| GET | `/data-archival/policies` | Yes | List archive policies |
+| GET | `/data-archival/policies/:id` | Yes | Get archive policy by ID |
+| PATCH | `/data-archival/policies/:id` | Yes | Update archive policy |
+| DELETE | `/data-archival/policies/:id` | Yes | Delete archive policy |
+| GET | `/data-archival/log` | Yes | List archive execution log |
+| POST | `/data-archival/archival/run` | Yes | Run policy-based archival |
+| POST | `/data-archival/archival/:id/restore` | Yes | Restore from policy-based archive |
+
+---
+
+### DPIA (`/api/v1/dpia`)
+
+UK GDPR Article 35 Data Protection Impact Assessments with DPO review workflow.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/dpia` | Yes | Create a new DPIA assessment |
+| GET | `/dpia` | Yes | List DPIA assessments |
+| GET | `/dpia/:id` | Yes | Get DPIA by ID (includes risks) |
+| PATCH | `/dpia/:id` | Yes | Update DPIA (draft only) |
+| POST | `/dpia/:id/risks` | Yes | Add a risk to a DPIA |
+| GET | `/dpia/:id/risks` | Yes | List risks for a DPIA |
+| POST | `/dpia/:id/submit` | Yes | Submit for DPO review |
+| POST | `/dpia/:id/approve` | Yes | DPO approves or rejects |
+
+---
+
+## Payroll Extensions
+
+### Salary Sacrifice (`/api/v1/salary-sacrifices`)
+
+Salary sacrifice arrangement management with NMW compliance validation.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/salary-sacrifices` | Yes | List salary sacrifices |
+| GET | `/salary-sacrifices/employee/:employeeId` | Yes | List sacrifices for an employee |
+| GET | `/salary-sacrifices/:id` | Yes | Get salary sacrifice by ID |
+| POST | `/salary-sacrifices` | Yes | Create salary sacrifice |
+| PUT | `/salary-sacrifices/:id` | Yes | Update salary sacrifice |
+| DELETE | `/salary-sacrifices/:id` | Yes | End salary sacrifice (soft delete) |
+
+---
+
+## Employee Data Extensions
+
+### Global Mobility (`/api/v1/global-mobility/assignments`)
+
+International assignment tracking with status transitions.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/global-mobility/assignments` | Yes | List international assignments |
+| GET | `/global-mobility/assignments/expiring` | Yes | List expiring assignments |
+| GET | `/global-mobility/assignments/:id` | Yes | Get assignment by ID |
+| POST | `/global-mobility/assignments` | Yes | Create assignment |
+| PATCH | `/global-mobility/assignments/:id` | Yes | Update assignment |
+| POST | `/global-mobility/assignments/:id/transition` | Yes | Transition assignment status |
+
+---
+
+### Employee Change Requests
+
+Employee self-service change requests with HR/manager approval workflow. Two route groups.
+
+#### Portal Routes (`/api/v1/portal/change-requests`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/portal/change-requests` | Yes | Submit a change request |
+| POST | `/portal/change-requests/bulk` | Yes | Submit multiple change requests |
+| GET | `/portal/change-requests` | Yes | List my change requests |
+| GET | `/portal/change-requests/pending-count` | Yes | Count my pending requests |
+| DELETE | `/portal/change-requests/:id` | Yes | Cancel a pending change request |
+
+#### Admin Routes (`/api/v1/hr/change-requests`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/hr/change-requests` | Yes | List pending requests for review |
+| GET | `/hr/change-requests/count` | Yes | Count pending requests for review |
+| GET | `/hr/change-requests/:id` | Yes | Get a change request by ID |
+| PATCH | `/hr/change-requests/:id/review` | Yes | Approve or reject a change request |
+
+---
+
+### Personal Detail Changes
+
+Personal detail self-service changes with sensitive-field approval workflow. Two route groups.
+
+#### Portal Routes (`/api/v1/portal/personal-detail-changes`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/portal/personal-detail-changes` | Yes | Submit a personal detail change |
+| GET | `/portal/personal-detail-changes` | Yes | List my change requests |
+| GET | `/portal/personal-detail-changes/pending-count` | Yes | Count my pending requests |
+| PATCH | `/portal/personal-detail-changes/:id/cancel` | Yes | Cancel a pending request |
+
+#### Admin Routes (`/api/v1/hr/personal-detail-changes`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/hr/personal-detail-changes` | Yes | List pending requests for review |
+| GET | `/hr/personal-detail-changes/count` | Yes | Count pending requests for review |
+| GET | `/hr/personal-detail-changes/:id` | Yes | Get a change request by ID |
+| PATCH | `/hr/personal-detail-changes/:id/review` | Yes | Approve or reject a change request |
+
+---
+
+### Beneficiary Nominations (`/api/v1`)
+
+Beneficiary nomination management for employee benefit plans. Routes span both employee-scoped and direct paths.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/employees/:employeeId/beneficiary-nominations` | Yes | List nominations for employee |
+| GET | `/employees/:employeeId/beneficiary-nominations/summary` | Yes | Percentage summary per benefit type |
+| POST | `/employees/:employeeId/beneficiary-nominations` | Yes | Create a nomination |
+| GET | `/beneficiary-nominations/:id` | Yes | Get a single nomination |
+| PATCH | `/beneficiary-nominations/:id` | Yes | Update a nomination |
+| DELETE | `/beneficiary-nominations/:id` | Yes | Delete a nomination |
+
+---
+
+### Cost Centre Assignments (`/api/v1/cost-centre-assignments`)
+
+Effective-dated cost centre assignments for employees, departments, and positions.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/cost-centre-assignments` | Yes | List assignments (filterable) |
+| GET | `/cost-centre-assignments/history/:entityType/:entityId` | Yes | Get entity assignment history |
+| GET | `/cost-centre-assignments/:id` | Yes | Get assignment by ID |
+| POST | `/cost-centre-assignments` | Yes | Create assignment |
+| PATCH | `/cost-centre-assignments/:id` | Yes | Update assignment |
+
+---
+
+## Benefits Extensions
+
+### Benefits Exchange (`/api/v1/benefits-exchange`)
+
+Benefits provider data exchange for outbound and inbound file processing.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/benefits-exchange/generate` | Yes | Generate outbound exchange file |
+| GET | `/benefits-exchange/history` | Yes | Get exchange history |
+| GET | `/benefits-exchange/:id` | Yes | Get single exchange by ID |
+| POST | `/benefits-exchange/inbound` | Yes | Process inbound exchange file |
+
+---
+
+### Income Protection (`/api/v1/income-protection`)
+
+Income protection insurance policy and enrollment management.
+
+#### Policies
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/income-protection/policies` | Yes | List income protection policies |
+| GET | `/income-protection/policies/:id` | Yes | Get policy by ID |
+| POST | `/income-protection/policies` | Yes | Create policy |
+| PUT | `/income-protection/policies/:id` | Yes | Update policy |
+
+#### Enrollments
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/income-protection/enrollments` | Yes | List enrollments |
+| GET | `/income-protection/enrollments/:id` | Yes | Get enrollment by ID |
+| POST | `/income-protection/enrollments` | Yes | Create enrollment |
+| PUT | `/income-protection/enrollments/:id` | Yes | Update enrollment |
+
+---
+
+## Recruitment Extensions
+
+### Job Boards (`/api/v1/job-boards`)
+
+Job board integrations and vacancy publishing to UK job boards (Indeed, LinkedIn, Reed, Totaljobs, CWJobs).
+
+#### Metadata
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/job-boards/boards` | Yes | List supported job boards |
+
+#### Integrations
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/job-boards/integrations` | Yes | List configured integrations |
+| POST | `/job-boards/integrations` | Yes | Add a new integration |
+| GET | `/job-boards/integrations/:id` | Yes | Get integration by ID |
+| PATCH | `/job-boards/integrations/:id` | Yes | Update an integration |
+| DELETE | `/job-boards/integrations/:id` | Yes | Remove an integration |
+
+#### Postings
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/job-boards/postings` | Yes | Publish vacancy to job board |
+| GET | `/job-boards/postings` | Yes | List job board postings |
+| GET | `/job-boards/postings/:id` | Yes | Get posting status |
+| DELETE | `/job-boards/postings/:id` | Yes | Withdraw posting from job board |
+| POST | `/job-boards/post/:jobId` | Yes | Post job to selected boards (multi-board) |
+
+---
+
+### Offer Letters (`/api/v1/recruitment/offers`)
+
+Offer letter lifecycle: draft, send, accept, and decline.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/recruitment/offers` | Yes | Create offer letter |
+| GET | `/recruitment/offers` | Yes | List offer letters |
+| GET | `/recruitment/offers/:id` | Yes | Get offer letter by ID |
+| PUT | `/recruitment/offers/:id` | Yes | Update draft offer letter |
+| POST | `/recruitment/offers/:id/send` | Yes | Send offer letter to candidate |
+| POST | `/recruitment/offers/:id/accept` | Yes | Candidate accepts offer |
+| POST | `/recruitment/offers/:id/decline` | Yes | Candidate declines offer |
+
+---
+
+### Background Checks (`/api/v1/background-checks`)
+
+Background check provider integration with webhook callbacks.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/background-checks` | Yes | Request a new background check |
+| GET | `/background-checks` | Yes | List background check requests |
+| GET | `/background-checks/:id` | Yes | Get background check by ID |
+| POST | `/background-checks/webhooks/:provider` | No (HMAC) | Provider webhook callback |
+
+---
+
+## Platform & Infrastructure Extensions
+
+### API Keys (`/api/v1/api-keys`)
+
+API key management for machine-to-machine authentication.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/api-keys` | Yes | List API keys (prefix only) |
+| POST | `/api-keys` | Yes | Generate new API key (full key returned once) |
+| GET | `/api-keys/:id` | Yes | Get API key details (prefix only) |
+| PATCH | `/api-keys/:id` | Yes | Update name/scopes/expiry |
+| DELETE | `/api-keys/:id` | Yes | Revoke API key |
+| POST | `/api-keys/:id/rotate` | Yes | Rotate API key (atomic revoke + create) |
+
+---
+
+### Feature Flags
+
+Admin CRUD and user-facing evaluation endpoints.
+
+#### Admin Routes (`/api/v1/admin/feature-flags`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/admin/feature-flags` | Yes | List all flags for tenant |
+| POST | `/admin/feature-flags` | Yes | Create a flag |
+| PATCH | `/admin/feature-flags/:id` | Yes | Update a flag |
+| DELETE | `/admin/feature-flags/:id` | Yes | Delete a flag |
+
+#### Evaluation Routes (`/api/v1/feature-flags`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/feature-flags/evaluate` | Yes | Evaluate flags for current user (preferred) |
+| GET | `/feature-flags/evaluate` | Yes | Evaluate flags for current user (deprecated) |
+
+---
+
+### Data Import (`/api/v1/data-import`)
+
+Structured CSV data import with validation and execution pipeline.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/data-import/upload` | Yes | Upload CSV and create import job |
+| POST | `/data-import/:id/validate` | Yes | Validate import job rows |
+| POST | `/data-import/:id/execute` | Yes | Execute validated import |
+| GET | `/data-import` | Yes | List import jobs |
+| GET | `/data-import/:id` | Yes | Get import job status |
+| GET | `/data-import/:id/errors` | Yes | Get per-row error details |
+
+---
+
+### Bulk Operations (`/api/v1/bulk`)
+
+Batch processing for employees and leave requests.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/bulk/employees` | Yes | Bulk create employees |
+| PATCH | `/bulk/employees` | Yes | Bulk update employee fields |
+| POST | `/bulk/leave-requests` | Yes | Bulk approve/reject leave requests |
+| POST | `/bulk` | Yes | Execute generic bulk API operations |
+
+---
+
+### Bulk Document Generation (`/api/v1/documents`)
+
+Bulk document generation from letter templates for multiple employees.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/documents/bulk-generate` | Yes | Create bulk generation batch |
+| GET | `/documents/bulk-generate/:batchId` | Yes | Get batch status with item details |
+
+---
+
+### E-Signatures (`/api/v1/e-signatures`)
+
+E-signature request lifecycle with internal signing, external provider support, and audit trail.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/e-signatures` | Yes | List signature requests |
+| POST | `/e-signatures` | Yes | Create signature request |
+| GET | `/e-signatures/:id` | Yes | Get signature request by ID |
+| GET | `/e-signatures/:id/events` | Yes | Get audit trail for signature request |
+| POST | `/e-signatures/:id/send` | Yes | Mark request as sent |
+| POST | `/e-signatures/:id/view` | Yes | Mark request as viewed |
+| POST | `/e-signatures/:id/sign` | Yes | Internal sign ("I agree" with IP + timestamp) |
+| POST | `/e-signatures/:id/decline` | Yes | Decline the signature request |
+| POST | `/e-signatures/:id/cancel` | Yes | Cancel the signature request |
+| POST | `/e-signatures/:id/void` | Yes | Void the signature request (admin) |
+| POST | `/e-signatures/:id/remind` | Yes | Send a reminder to the signer |
+
+---
+
+### SSO
+
+Enterprise SSO (SAML/OIDC) configuration and login endpoints.
+
+#### Admin Routes (`/api/v1/sso/configs`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/sso/configs` | Yes | List SSO configurations |
+| POST | `/sso/configs` | Yes | Create SSO configuration |
+| GET | `/sso/configs/:id` | Yes | Get SSO configuration by ID |
+| PATCH | `/sso/configs/:id` | Yes | Update SSO configuration |
+| DELETE | `/sso/configs/:id` | Yes | Delete SSO configuration |
+| GET | `/sso/configs/:id/login-attempts` | Yes | List login attempts (audit) |
+
+#### Public Routes (`/api/v1/auth/sso`)
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/auth/sso/:tenantSlug/providers` | No | Discover SSO providers for a tenant |
+| GET | `/auth/sso/:tenantSlug/:configId/login` | No | Initiate SSO login (redirect to IdP) |
+| GET | `/auth/sso/:tenantSlug/:configId/callback` | No | OIDC callback (redirect from IdP) |
+
+---
+
+### Lookup Values (`/api/v1/lookup-values`)
+
+Tenant-configurable lookup categories and values for dropdowns and settings.
+
+#### Categories
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/lookup-values/categories` | Yes | List lookup categories |
+| POST | `/lookup-values/categories` | Yes | Create lookup category |
+| GET | `/lookup-values/categories/:id` | Yes | Get lookup category by ID |
+| PATCH | `/lookup-values/categories/:id` | Yes | Update lookup category |
+| DELETE | `/lookup-values/categories/:id` | Yes | Delete lookup category |
+| GET | `/lookup-values/categories/:id/values` | Yes | List values in category |
+| POST | `/lookup-values/categories/:id/values` | Yes | Create value in category |
+
+#### Values
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/lookup-values/values/:id` | Yes | Get value by ID |
+| PATCH | `/lookup-values/values/:id` | Yes | Update value |
+| DELETE | `/lookup-values/values/:id` | Yes | Delete value |
+
+#### Convenience
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/lookup-values/by-code/:code` | Yes | Get values by category code |
+| POST | `/lookup-values/seed` | Yes | Seed default lookup categories |
+
+---
+
+### Integrations (`/api/v1/integrations`)
+
+Third-party integration management with connection testing and configuration.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/integrations` | Yes | List all integrations for tenant |
+| GET | `/integrations/:id` | Yes | Get a single integration |
+| POST | `/integrations/connect` | Yes | Connect (create/update) an integration |
+| PATCH | `/integrations/:id/config` | Yes | Update integration configuration |
+| POST | `/integrations/:id/disconnect` | Yes | Disconnect an integration |
+| POST | `/integrations/:id/test` | Yes | Test an integration connection |
+| DELETE | `/integrations/:id` | Yes | Delete an integration |
+
+---
+
+### Policy Distribution (`/api/v1/policy-distributions`)
+
+Policy document distribution and read-receipt tracking.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/policy-distributions` | Yes | List all policy distributions |
+| POST | `/policy-distributions` | Yes | Distribute a policy document |
+| GET | `/policy-distributions/:id/status` | Yes | Get distribution status with acknowledgements |
+| POST | `/policy-distributions/acknowledge` | Yes | Acknowledge a distribution (read receipt) |
+
+---
+
+### Email Tracking (`/api/v1/email-tracking`)
+
+Email delivery monitoring, statistics, and bounce event recording.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/email-tracking/deliveries` | Yes | List email delivery log entries |
+| GET | `/email-tracking/deliveries/stats` | Yes | Get delivery statistics |
+| GET | `/email-tracking/deliveries/:id` | Yes | Get single delivery log entry |
+| POST | `/email-tracking/deliveries/bounce` | Yes | Record a bounce event (webhook) |
+
+---
+
+### Calendar Sync (`/api/v1/calendar`)
+
+Calendar connection management and iCal feed serving.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/calendar/connections` | Yes | List user's calendar connections |
+| POST | `/calendar/ical/enable` | Yes | Enable iCal feed (generates unique token) |
+| POST | `/calendar/ical/regenerate` | Yes | Regenerate iCal feed token |
+| DELETE | `/calendar/ical` | Yes | Disable iCal feed |
+| GET | `/calendar/ical/:token` | No | Serve iCal feed (.ics) (token is credential) |
+
+---
+
+### Webhooks (`/api/v1/webhooks`)
+
+Outbound webhook subscription management and delivery tracking.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| POST | `/webhooks/subscriptions` | Yes | Create a webhook subscription |
+| GET | `/webhooks/subscriptions` | Yes | List webhook subscriptions |
+| GET | `/webhooks/subscriptions/:id` | Yes | Get a webhook subscription |
+| PUT | `/webhooks/subscriptions/:id` | Yes | Update a webhook subscription |
+| DELETE | `/webhooks/subscriptions/:id` | Yes | Delete a webhook subscription |
+| POST | `/webhooks/subscriptions/:id/test` | Yes | Send a test webhook event |
+| GET | `/webhooks/deliveries` | Yes | List webhook deliveries |
+
+---
+
+### Usage Stats (`/api/v1/system`)
+
+Per-tenant usage analytics with daily and monthly granularity.
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| GET | `/system/usage` | Yes | Get tenant usage statistics |
 
 ---
 

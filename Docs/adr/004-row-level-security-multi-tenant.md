@@ -10,7 +10,7 @@ Staffora is a multi-tenant HRIS platform where each tenant (employer organisatio
 
 We need a tenant isolation strategy that:
 
-- **Prevents cross-tenant data access at the database level**, not just the application level. A single missed `WHERE tenant_id = ?` clause in any of the 72+ backend modules must not result in data leakage.
+- **Prevents cross-tenant data access at the database level**, not just the application level. A single missed `WHERE tenant_id = ?` clause in any of the 120 backend modules must not result in data leakage.
 - **Is enforceable in tests**: Integration tests must be able to verify that tenant isolation actually works, not just that the application code includes the correct filters.
 - **Supports administrative bypass**: System operations (migrations, outbox processing, cross-tenant reports) need a controlled mechanism to operate across tenant boundaries.
 - **Works with PostgreSQL**: The database is PostgreSQL 16 and we need a solution native to the database engine.
@@ -95,7 +95,7 @@ The test helper `expectRlsError()` validates that cross-tenant operations fail a
 - **Transparent to application code**: Once `set_tenant_context` is called (which happens automatically in `withTransaction`), all queries are automatically scoped. Developers do not need to remember to add `WHERE tenant_id = ?` to every query.
 - **Testable**: Because tests run as `hris_app` (NOBYPASSRLS), RLS is enforced in the test suite. Cross-tenant access failures are caught before deployment.
 - **Standard PostgreSQL feature**: RLS is built into PostgreSQL 9.5+ with no extensions required. It works with any managed PostgreSQL provider.
-- **Consistent enforcement across 72 modules**: Every module's queries pass through the same `withTransaction` context-setting mechanism.
+- **Consistent enforcement across 105+ modules**: Every module's queries pass through the same `withTransaction` context-setting mechanism.
 
 ### Negative
 

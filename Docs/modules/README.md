@@ -1,8 +1,8 @@
 # Staffora Module Catalog
 
-Complete reference for all 72 backend modules in the Staffora HRIS platform. Each module lives in `packages/api/src/modules/{name}/` and follows the standard 5-file architecture. All routes are mounted under `/api/v1` in `packages/api/src/app.ts`.
+Complete reference for all 105 backend modules in the Staffora HRIS platform. Each module lives in `packages/api/src/modules/{name}/` and follows the standard 5-file architecture. All routes are mounted under `/api/v1` in `packages/api/src/app.ts`.
 
-*Last updated: 2026-03-17*
+*Last updated: 2026-03-28*
 
 ---
 
@@ -52,6 +52,9 @@ Modules that implement UK-specific employment legislation and regulatory require
 | Contract Amendments | `/contract-amendments` | 5 | Employment contract change tracking |
 | Contract Statements | `/contract-statements` | 6 | Written statements of employment (s.1 ERA 1996) |
 | DBS Checks | `/dbs-checks` | 6 | Disclosure and Barring Service checks |
+| Overtime Requests | `/overtime-requests` | 7 | Overtime authorisation workflow with submission and manager approval |
+| Overtime Rules | `/overtime-rules` | 10 | Overtime calculation rules, rate multipliers, and effective-dated configuration |
+| Tribunal | `/tribunal` | 8 | Employment tribunal case preparation, documentation, and timeline tracking |
 
 ## GDPR and Data Privacy Modules
 
@@ -65,6 +68,8 @@ Modules that implement GDPR and UK Data Protection Act 2018 requirements.
 | Data Retention | `/data-retention` | 11 | Retention schedules and automated purge |
 | Consent | `/consent` | 11 | Consent management (Article 7) |
 | Privacy Notices | `/privacy-notices` | 7 | Privacy notice management (Articles 13-14) |
+| Data Archival | `/data-archival` | 15 | Record archival with policies, automation, restoration, and audit logging |
+| DPIA | `/dpia` | 8 | Data Protection Impact Assessments with risk evaluation and DPO approval |
 
 ## Payroll Modules
 
@@ -78,6 +83,7 @@ Modules for payroll processing, tax, and payment management.
 | Tax Codes | `/tax-codes` | 4 | HMRC tax code management |
 | Deductions | `/deductions` | 8 | Payroll deduction rules |
 | Bank Details | `/employees/:employeeId/bank-details` | 6 | Employee bank account details (sub-resource) |
+| Salary Sacrifice | `/salary-sacrifices` | 6 | Salary sacrifice arrangement management with NMW compliance checks |
 
 ## Employee Data Modules
 
@@ -90,6 +96,11 @@ Modules for managing employee personal and supplementary data.
 | Diversity | `/diversity` | 5 | Diversity and equality monitoring |
 | Reasonable Adjustments | `/reasonable-adjustments` | 8 | Disability reasonable adjustments |
 | Secondments | `/secondments` | 5 | Employee secondment tracking |
+| Global Mobility | `/global-mobility/assignments` | 6 | International assignment tracking with status transitions and visa management |
+| Employee Change Requests | `/portal/change-requests`, `/hr/change-requests` | 9 | Employee-initiated detail changes with HR review and auto-approval |
+| Personal Detail Changes | `/portal/personal-detail-changes`, `/hr/personal-detail-changes` | 8 | Personal detail change requests with auto-approval for non-sensitive fields |
+| Beneficiary Nominations | `/employees/:employeeId/beneficiary-nominations` | 6 | Beneficiary nomination management for insurance benefits with allocation percentages |
+| Cost Centre Assignments | `/cost-centre-assignments` | 5 | Effective-dated cost centre allocation for employees, departments, positions |
 
 ## Learning and Development Modules
 
@@ -101,6 +112,42 @@ Modules extending the core LMS with assessment, CPD, and budget tracking.
 | Course Ratings | `/course-ratings` | 3 | LMS course feedback and ratings |
 | CPD | `/cpd` | 6 | Continuing professional development records |
 | Training Budgets | `/training-budgets` | 8 | Training budget allocation and tracking |
+
+## Talent & Performance Extensions
+
+Modules extending the core Talent module with multi-rater feedback and pipeline management.
+
+| Module | Prefix | Endpoints | Description |
+|--------|--------|-----------|-------------|
+| Talent Pools | `/talent-pools` | 9 | Candidate pipeline management with pool membership and tracking |
+| Feedback 360 | `/feedback-360` | 9 | 360-degree multi-rater feedback cycles with anonymised results |
+
+## Time & Scheduling Extensions
+
+Modules extending core Time & Attendance with shift management workflows.
+
+| Module | Prefix | Endpoints | Description |
+|--------|--------|-----------|-------------|
+| Shift Swaps | `/shift-swaps` | 8 | Two-phase shift swap approval (employee accepts, then manager approves) |
+
+## Benefits Administration Extensions
+
+Modules extending core Benefits with provider integration and insurance management.
+
+| Module | Prefix | Endpoints | Description |
+|--------|--------|-----------|-------------|
+| Benefits Exchange | `/benefits-exchange` | 4 | Inbound/outbound benefits provider data exchange file management |
+| Income Protection | `/income-protection` | 8 | Income protection policy and enrolment management with effective dating |
+
+## Recruitment Extensions
+
+Modules extending core Recruitment with job boards, offers, and background screening.
+
+| Module | Prefix | Endpoints | Description |
+|--------|--------|-----------|-------------|
+| Job Boards | `/job-boards` | 12 | External job board integration for vacancy posting and withdrawal |
+| Offer Letters | `/recruitment/offers` | 7 | Template-based offer letter generation with candidate response tracking |
+| Background Checks | `/background-checks` | 4 | Background check provider integration and webhook callbacks |
 
 ## Platform and Infrastructure Modules
 
@@ -126,6 +173,49 @@ Modules that provide platform-level functionality, portals, and system administr
 | Letter Templates | `/letter-templates` | 7 | HR letter/document generation |
 | Delegations | `/delegations` | 5 | Authority delegation management |
 | Reference Checks | `/reference-checks` | 6 | Employment reference management |
+| API Keys | `/api-keys` | 6 | Machine-to-machine API key management with rotation and scope control |
+| Feature Flags | `/admin/feature-flags`, `/feature-flags` | 6 | Feature flag CRUD and client-side evaluation with role-based targeting |
+| Data Import | `/data-import` | 6 | Structured CSV/Excel import with validation, error reporting, and transactions |
+| Bulk Operations | `/bulk` | 4 | Cross-module batch operations for employees, leave, and generic APIs |
+| Bulk Document Generation | `/documents/bulk-generate` | 2 | Asynchronous batch document generation from templates |
+| E-Signatures | `/e-signatures` | 11 | E-signature request lifecycle with internal and external provider support |
+| SSO | `/sso/configs`, `/auth/sso` | 9 | Enterprise SSO configuration (SAML/OIDC) and login flow management |
+| Lookup Values | `/lookup-values` | 13 | Tenant-customisable lookup categories and dropdown values |
+| Integrations | `/integrations` | 7 | Tenant-scoped third-party service integration management |
+| Policy Distribution | `/policy-distributions` | 4 | Policy document distribution with read receipt tracking |
+| Email Tracking | `/email-tracking` | 4 | Email delivery monitoring and bounce event recording |
+| Calendar Sync | `/calendar` | 5 | Calendar integration with iCal feed generation |
+| Webhooks | `/webhooks` | 7 | Outbound webhook subscriptions and delivery management |
+| Usage Stats | `/system` | 1 | System usage analytics and adoption metrics |
+
+## Upcoming & Internal Modules
+
+Modules with source code but not yet registered as API routes in `app.ts`. These are either under development or provide internal services consumed by other modules.
+
+### Under Development (routes defined, not yet registered)
+
+| Module | Prefix | Endpoints | Status |
+|--------|--------|-----------|--------|
+| Announcements | `/announcements` | 7 | Company announcements and employee communications |
+| Recognition | `/recognition` | 3 | Peer recognition system with leaderboard |
+| TOIL | `/toil` | 8 | Time Off In Lieu accrual and usage tracking |
+| Total Reward | `/total-reward` | 3 | Total compensation and reward statement generation |
+| TUPE | `/tupe/transfers` | 10 | TUPE transfer tracking and employee handover (Transfer of Undertakings) |
+| Whistleblowing | `/whistleblowing` | 5 | Confidential whistleblowing channel and case management |
+| Sickness Analytics | `/analytics/sickness` | 5 | Absence pattern analysis and sick leave compliance reporting |
+| Tenant Provisioning | `/admin/tenants` | 3 | Automated new tenant onboarding and configuration |
+
+### Internal Service Modules (no public API)
+
+| Module | Purpose |
+|--------|---------|
+| Admin Jobs | Background administrative job scheduling and execution |
+| Agency Workers | Agency worker data model used by Agencies module |
+| IR35 | IR35 status determination support for contractor management |
+| One-on-Ones | Manager-employee 1:1 meeting tracking (used by Talent) |
+| Overtime | Core overtime calculation engine (used by Overtime Rules/Requests) |
+| ROPA | Records of Processing Activities data model (used by DPIA) |
+| Suspensions | Employee suspension tracking (used by Warnings/Cases) |
 
 ---
 

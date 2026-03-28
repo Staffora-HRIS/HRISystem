@@ -99,7 +99,7 @@ Source: Comprehensive repository audit (Phases 1–13) + AI CTO review
 **Status:** Majority of `any` usage is in Elysia plugin derive functions where the framework requires runtime type casting (`ctx as any`). This is an Elysia.js framework limitation, not application code debt. TypeBox schemas provide runtime validation. Remaining `any` types in test files and type assertion boundaries are acceptable.
 
 ### ~~DOC-001: API Reference May Be Out of Date~~ — RESOLVED
-**Status:** `Docs/api/API_REFERENCE.md` documents 200+ endpoints across all modules. Module catalog at `Docs/modules/README.md` covers all 72 backend modules.
+**Status:** `Docs/api/API_REFERENCE.md` documents 400+ endpoints across all modules. Module catalog at `Docs/modules/README.md` covers all 105 registered backend modules plus 15 internal/upcoming.
 
 ### ~~INFRA-001: Nginx Configuration Missing~~ — RESOLVED
 **Status:** `docker/nginx/nginx.conf` exists with reverse proxy configuration.

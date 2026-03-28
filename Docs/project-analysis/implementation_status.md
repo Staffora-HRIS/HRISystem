@@ -16,7 +16,7 @@
 | Infrastructure | 95/100 | EXCELLENT | Full CI/CD, Docker multi-stage, health checks, structured logging, incident runbooks |
 | Architecture | 95/100 | EXCELLENT | All modules layered, N+1 fixed, caching added, outbox batching, @staffora/shared integrated |
 | Technical Debt | 92/100 | EXCELLENT | Pino logging, legacy auth removed, error handling standardized, streaming exports |
-| UK Compliance | 96/100 | EXCELLENT | 72 modules, RTI submissions, payslip generation, pension, SSP/SMP/SPP, DSAR, right to work |
+| UK Compliance | 96/100 | EXCELLENT | 105 modules (+ 15 internal/upcoming), RTI submissions, payslip generation, pension, SSP/SMP/SPP, DSAR, right to work |
 | **Weighted Overall** | **94/100** | **NEAR READY** | |
 
 ### Changes Since Last Audit (2026-03-15)
@@ -271,7 +271,7 @@
 ---
 
 *Code-verified audit completed 2026-03-15.*
-*Sources: Docs/ (20 files), packages/api/src/ (72 modules), packages/web/app/ (149 routes), migrations/ (224 files), audit/*
+*Sources: Docs/ (250+ files), packages/api/src/ (120 modules), packages/web/app/ (160 routes), migrations/ (320 files), audit/*
 
 ---
 

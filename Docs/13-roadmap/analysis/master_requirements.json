@@ -1,0 +1,216 @@
+{
+  "metadata": {
+    "generated": "2026-03-14",
+    "platform": "Staffora HRIS (staffora.co.uk)",
+    "source_documents": [
+      "Docs/ENTERPRISE_HR_CAPABILITY_CHECKLIST.md",
+      "Docs/FEATURE_VALIDATION_REPORT.md",
+      "Docs/PRODUCTION_CHECKLIST.md",
+      "Docs/api/API_REFERENCE.md",
+      "Docs/api/ERROR_CODES.md",
+      "Docs/architecture/ARCHITECTURE.md",
+      "Docs/architecture/DATABASE.md",
+      "Docs/architecture/WORKER_SYSTEM.md",
+      "Docs/guides/GETTING_STARTED.md",
+      "Docs/guides/DEPLOYMENT.md",
+      "Docs/guides/FRONTEND.md",
+      "Docs/patterns/SECURITY.md",
+      "Docs/patterns/STATE_MACHINES.md",
+      "Docs/patterns/README.md",
+      "audit/FINAL_SYSTEM_REPORT.md",
+      "audit/MASTER_TODO.md",
+      "audit/implementation-plans.md"
+    ],
+    "total_requirements": 651
+  },
+  "categories": [
+    {
+      "id": "employee_lifecycle",
+      "name": "Employee Lifecycle Management",
+      "total_items": 58,
+      "requirements": [
+        { "id": "ELM-001", "title": "Employee creation wizard", "priority": "CRITICAL", "status": "PARTIAL" },
+        { "id": "ELM-002", "title": "Unique employee number generation", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-003", "title": "Personal details capture", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-004", "title": "Contact information management", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-005", "title": "Employment status tracking (state machine)", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-006", "title": "Employment start date recording", "priority": "CRITICAL", "status": "PARTIAL" },
+        { "id": "ELM-007", "title": "Multiple employment support", "priority": "MEDIUM", "status": "PARTIAL" },
+        { "id": "ELM-008", "title": "Employee photo management", "priority": "LOW", "status": "COMPLETE" },
+        { "id": "ELM-009", "title": "Preferred name handling", "priority": "MEDIUM", "status": "COMPLETE" },
+        { "id": "ELM-010", "title": "Title and honorifics", "priority": "LOW", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-011", "title": "Pronoun recording", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-012", "title": "NI number validation", "priority": "CRITICAL", "status": "PARTIAL" },
+        { "id": "ELM-013", "title": "Diversity data collection", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-014", "title": "Disability reasonable adjustments", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-015", "title": "Bank details management", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-016", "title": "Tax code recording", "priority": "CRITICAL", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-017", "title": "Student loan deduction tracking", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-018", "title": "Employee transfer processing", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-019", "title": "Promotion processing", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-020", "title": "Demotion processing", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-021", "title": "Secondment management", "priority": "MEDIUM", "status": "COMPLETE" },
+        { "id": "ELM-022", "title": "Acting-up arrangements", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-023", "title": "Termination processing", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-024", "title": "Termination reason taxonomy", "priority": "CRITICAL", "status": "PARTIAL" },
+        { "id": "ELM-025", "title": "Resignation capture", "priority": "CRITICAL", "status": "PARTIAL" },
+        { "id": "ELM-026", "title": "Redundancy processing", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-027", "title": "PILON calculation", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-028", "title": "Garden leave management", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-029", "title": "Exit interview recording", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-030", "title": "Leaver checklist automation", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-031", "title": "Re-hire detection", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-032", "title": "Re-hire processing", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-033", "title": "TUPE transfer management", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-034", "title": "Employee timeline view", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-035", "title": "Employment history reconstruction (point-in-time)", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-036", "title": "Effective-dated personal details", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-037", "title": "Bulk employee creation (CSV/Excel import)", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-038", "title": "Employee merge/deduplication", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-039", "title": "Employee data validation rules", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-040", "title": "Employee search and filtering", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-041", "title": "Employee quick view card", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-042", "title": "Custom employee fields", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-043", "title": "Employee notes and annotations", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-044", "title": "Employee attachments", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-045", "title": "Length of service calculation", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-046", "title": "Work anniversary tracking", "priority": "LOW", "status": "PARTIAL" },
+        { "id": "ELM-047", "title": "Retirement date projection", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-048", "title": "Dependants recording", "priority": "MEDIUM", "status": "COMPLETE" },
+        { "id": "ELM-049", "title": "Previous employment history", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-050", "title": "Qualification and certification tracking", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-051", "title": "Employee consent management", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-052", "title": "Data retention scheduling", "priority": "CRITICAL", "status": "COMPLETE" },
+        { "id": "ELM-053", "title": "Employee self-service profile editing", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-054", "title": "Manager view of direct reports", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-055", "title": "Employee org chart position", "priority": "HIGH", "status": "COMPLETE" },
+        { "id": "ELM-056", "title": "Employee status change notifications", "priority": "HIGH", "status": "PARTIAL" },
+        { "id": "ELM-057", "title": "Continuous service date override", "priority": "HIGH", "status": "NOT_IMPLEMENTED" },
+        { "id": "ELM-058", "title": "Employee record locking after retention", "priority": "MEDIUM", "status": "NOT_IMPLEMENTED" }
+      ]
+    },
+    {
+      "id": "compensation_payroll",
+      "name": "Compensation & Payroll",
+      "total_items": 44,
+      "coverage_percent": 38,
+      "critical_gaps": [
+        "Tax code management",
+        "Student loan tracking",
+        "Payslip generation",
+        "P45 generation",
+        "P60 generation",
+        "HMRC RTI/FPS/EPS submission",
+        "Holiday pay 52-week reference",
+        "Final pay calculation",
+        "Pay schedule assignment",
+        "NI category tracking"
+      ]
+    },
+    {
+      "id": "uk_compliance",
+      "name": "UK Employment Compliance",
+      "total_items": 28,
+      "coverage_percent": 72,
+      "implemented_modules": [
+        "ssp", "right-to-work", "dsar", "data-erasure", "data-breach",
+        "flexible-working", "warnings", "gender-pay-gap", "family-leave",
+        "parental-leave", "wtr", "nmw", "health-safety", "contract-statements",
+        "privacy-notices", "consent", "data-retention", "bank-holidays",
+        "reasonable-adjustments", "return-to-work", "contract-amendments",
+        "diversity", "probation", "bereavement", "carers-leave"
+      ],
+      "remaining_gaps": [
+        "HMRC RTI integration",
+        "P45/P60 generation",
+        "Holiday pay 52-week reference period",
+        "Carryover rules (EU 4-week vs 1.6-week distinction)"
+      ]
+    },
+    {
+      "id": "infrastructure",
+      "name": "Infrastructure & Deployment",
+      "total_items": 30,
+      "requirements": [
+        { "id": "INFRA-001", "title": "Container registry push workflow", "priority": "P0", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-002", "title": "Let's Encrypt auto-renewal", "priority": "P0", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-003", "title": "Automated daily backups", "priority": "P0", "status": "PARTIAL" },
+        { "id": "INFRA-004", "title": "Backup restore procedure tested", "priority": "P0", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-005", "title": "Kubernetes manifests", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-006", "title": "Point-in-time recovery (PITR)", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-007", "title": "Read replica for reporting", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-008", "title": "CDN for static assets", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-009", "title": "Blue/green deployment strategy", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-010", "title": "Prometheus + Grafana monitoring", "priority": "P1", "status": "NOT_IMPLEMENTED" },
+        { "id": "INFRA-011", "title": "Log aggregation (ELK/Loki)", "priority": "P2", "status": "NOT_IMPLEMENTED" }
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Security & Access Control",
+      "total_items": 26,
+      "coverage_percent": 95,
+      "implemented": [
+        "BetterAuth sessions + MFA", "CSRF HMAC-SHA256", "RBAC", "RLS", "Rate limiting",
+        "Account lockout", "Email verification", "Security headers", "CORS",
+        "Audit logging", "Sentry error tracking", "CodeQL + Trivy CI scanning",
+        "Structured logging with PII redaction"
+      ],
+      "remaining_gaps": [
+        "MFA recovery codes",
+        "IP-based rate limiting for unauthenticated",
+        "Redis fallback for rate limiting",
+        "SSO (SAML/OIDC)",
+        "Penetration testing"
+      ]
+    },
+    {
+      "id": "testing",
+      "name": "Testing Requirements",
+      "total_items": 18,
+      "coverage_percent": 55,
+      "implemented": [
+        "RLS integration tests", "Idempotency tests", "Outbox tests",
+        "Effective-dating tests", "State machine tests", "E2E employee lifecycle",
+        "Auth flow E2E", "Test data factories", "Coverage thresholds in CI"
+      ],
+      "remaining_gaps": [
+        "14 partial service unit tests (test local copies not actual services)",
+        "HTTP-level route tests using app.handle()",
+        "Admin frontend route tests",
+        "Manager frontend route tests",
+        "Worker integration tests (Redis Streams E2E)",
+        "RBAC route-level tests",
+        "Rate limiting integration tests",
+        "Concurrent overlap tests",
+        "Session lifecycle tests"
+      ]
+    }
+  ],
+  "api_requirements": {
+    "documented_endpoints": 200,
+    "source": "Docs/api/API_REFERENCE.md",
+    "conventions": {
+      "versioning": "/api/v1/...",
+      "pagination": "cursor-based",
+      "error_shape": "{ error: { code, message, details, requestId } }",
+      "idempotency": "Idempotency-Key header required on mutations",
+      "validation": "TypeBox schemas on all endpoints"
+    }
+  },
+  "architecture_requirements": {
+    "database": {
+      "engine": "PostgreSQL 16",
+      "schema": "app",
+      "rls": "Required on all tenant tables",
+      "migrations": "Numbered NNNN_description.sql",
+      "roles": ["hris (superuser)", "hris_app (NOBYPASSRLS runtime)"]
+    },
+    "patterns": {
+      "outbox": "Domain events written in same transaction as business write",
+      "effective_dating": "effective_from/effective_to on all time-versioned data",
+      "state_machines": "Enforced at DB trigger + service layer + shared package",
+      "idempotency": "Scope: (tenant_id, user_id, route_key), expire 24-72h"
+    }
+  }
+}

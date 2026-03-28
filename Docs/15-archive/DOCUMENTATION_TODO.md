@@ -4,9 +4,9 @@
 
 ## Summary
 
-- **Total backend modules**: 72 (in `packages/api/src/modules/`)
-- **Documented in API_REFERENCE.md**: 20
-- **Undocumented modules**: 52
+- **Total backend modules**: 120 (105 registered + 15 internal/upcoming in `packages/api/src/modules/`)
+- **Documented in API_REFERENCE.md**: 105 (all registered modules)
+- **Undocumented modules**: 0 (resolved 2026-03-28)
 
 ---
 
