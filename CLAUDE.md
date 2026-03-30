@@ -320,6 +320,7 @@ Import paths available from the shared package:
 
 - **Branch naming**: `feat/description`, `fix/description`, `refactor/description`, `docs/description`, `chore/description`
 - **Commit messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/) — e.g., `feat: add employee onboarding checklist`, `fix: correct RLS policy for benefits table`
+- **No AI attribution**: Never add `Co-Authored-By`, `Generated-By`, or any other attribution to Claude, Anthropic, or any AI tool in commit messages, PR descriptions, or code comments. All commits must appear as authored solely by the human developer.
 - **PR process**: Branch from `main`, ensure `bun run typecheck && bun run lint && bun run test:api` passes, squash and merge
 
 ## UK-Only Policy
