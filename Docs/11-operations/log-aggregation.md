@@ -368,5 +368,5 @@ For production HA deployment, consider:
 
 - [Production Checklist](production-checklist.md) -- Section 4: Monitoring & Observability
 - [Monitoring Stack](../../docker/docker-compose.monitoring.yml) -- Prometheus + Grafana metrics
-- [DevOps Guide](../devops/docker-guide.md) -- Docker development deep-dive
-- [Architecture Overview](../architecture/ARCHITECTURE.md) -- System design and request flow
+- [DevOps Guide](../06-devops/docker-guide.md) -- Docker development deep-dive
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) -- System design and request flow

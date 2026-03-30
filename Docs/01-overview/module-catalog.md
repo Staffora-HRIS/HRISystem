@@ -299,11 +299,11 @@ All modules automatically receive these capabilities via Elysia plugins register
 
 ## Related Documentation
 
-- [API Reference](../api/API_REFERENCE.md) -- Full endpoint listing with request/response schemas
-- [Error Codes](../api/ERROR_CODES.md) -- Error code reference organised by module
-- [Architecture](../architecture/ARCHITECTURE.md) -- System design with Mermaid diagrams
-- [Database](../architecture/DATABASE.md) -- Schema, migrations, RLS policy catalog
-- [State Machines](../patterns/STATE_MACHINES.md) -- Workflow state diagrams for all 5 state machines
-- [Security Patterns](../patterns/SECURITY.md) -- RLS, auth, RBAC, audit, and idempotency details
-- [Worker System](../architecture/WORKER_SYSTEM.md) -- Background job processing (outbox, notifications, exports)
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md) -- Permission model and RBAC details
+- [API Reference](../04-api/API_REFERENCE.md) -- Full endpoint listing with request/response schemas
+- [Error Codes](../04-api/ERROR_CODES.md) -- Error code reference organised by module
+- [Architecture](../02-architecture/ARCHITECTURE.md) -- System design with Mermaid diagrams
+- [Database](../02-architecture/DATABASE.md) -- Schema, migrations, RLS policy catalog
+- [State Machines](../02-architecture/state-machines.md) -- Workflow state diagrams for all 5 state machines
+- [Security Patterns](../02-architecture/security-patterns.md) -- RLS, auth, RBAC, audit, and idempotency details
+- [Worker System](../02-architecture/WORKER_SYSTEM.md) -- Background job processing (outbox, notifications, exports)
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md) -- Permission model and RBAC details

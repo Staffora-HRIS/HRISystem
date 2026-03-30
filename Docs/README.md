@@ -1,8 +1,8 @@
 # Staffora Documentation
 
 > **Enterprise multi-tenant HRIS platform** — [staffora.co.uk](https://staffora.co.uk)
-> 196 files | 15 sections | 120+ modules | 200+ API endpoints | 160 frontend routes
-> **Last updated:** 2026-03-28
+> 219 files | 15 sections | 120+ modules | 200+ API endpoints | 160 frontend routes
+> **Last updated:** 2026-03-30
 
 ---
 
@@ -13,7 +13,7 @@
 | Getting Started | [05-development/getting-started.md](05-development/getting-started.md) | First-time developer setup, prerequisites, Docker |
 | Architecture Overview | [02-architecture/ARCHITECTURE.md](02-architecture/ARCHITECTURE.md) | System design, plugin chain, request flow |
 | Architecture Diagrams | [02-architecture/diagrams.md](02-architecture/diagrams.md) | 20+ Mermaid diagrams for all subsystems |
-| API Reference | [04-api/API_REFERENCE.md](04-api/API_REFERENCE.md) | All 200+ REST endpoints by module |
+| API Reference | [04-api/api-reference.md](04-api/api-reference.md) | All 200+ REST endpoints by module |
 | Module Catalog | [01-overview/module-catalog.md](01-overview/module-catalog.md) | Complete catalog of all backend modules |
 | Frontend Guide | [05-development/frontend-overview.md](05-development/frontend-overview.md) | React architecture, routes, components |
 | Database Guide | [02-architecture/DATABASE.md](02-architecture/DATABASE.md) | Schema, RLS, migrations, table catalog |
@@ -101,8 +101,8 @@
 
 | File | Description |
 |------|-------------|
-| [api-reference.md](04-api/api-reference.md) | API reference (alternate format) |
-| [API_REFERENCE.md](04-api/API_REFERENCE.md) | All 200+ endpoints organized by module |
+| [api-reference.md](04-api/api-reference.md) | Complete API reference — all 120 modules, 200+ endpoints |
+| [API_REFERENCE.md](04-api/API_REFERENCE.md) | Legacy API reference (redirects to api-reference.md) |
 | [ERROR_CODES.md](04-api/ERROR_CODES.md) | Error codes and messages by module |
 | [README.md](04-api/README.md) | API section index |
 
@@ -379,7 +379,7 @@ Get up and running quickly:
 API modules, database, and service patterns:
 
 1. [Module Catalog](01-overview/module-catalog.md) -- All modules with endpoints and architecture
-2. [API Reference](04-api/API_REFERENCE.md) -- 200+ endpoints organized by module
+2. [API Reference](04-api/api-reference.md) -- 200+ endpoints organized by module
 3. [Backend Development](05-development/backend-development.md) -- Backend development patterns and conventions
 4. [Database Guide](02-architecture/database-guide.md) -- Schema, RLS, queries, performance deep-dive
 5. [Security Architecture](07-security/README.md) -- Auth, RBAC, RLS, OWASP mitigations

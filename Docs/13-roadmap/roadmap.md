@@ -14,6 +14,27 @@
 
 ## Roadmap Overview
 
+```mermaid
+gantt
+    title Staffora HRIS Roadmap
+    dateFormat  YYYY-MM-DD
+    axisFormat  %b %Y
+
+    section Phase 1
+    Security and Infrastructure    :done, p1, 2026-03-16, 2026-03-21
+
+    section Phase 2
+    Technical Debt and Testing     :done, p2, 2026-03-18, 2026-03-25
+
+    section Phase 3
+    Feature Completion             :active, p3, 2026-03-22, 2026-06-30
+    MVP Staging                    :milestone, m1, 2026-05-15, 0d
+
+    section Phase 4
+    Production and Operations      :p4, 2026-06-01, 2026-12-31
+    Production Launch              :milestone, m2, 2026-09-01, 0d
+```
+
 ```
 Q2 2026         Q3 2026         Q4 2026         Q1 2027
 Apr  May  Jun   Jul  Aug  Sep   Oct  Nov  Dec   Jan  Feb  Mar
@@ -309,5 +330,5 @@ Phase 4 (Production + Ongoing)
 - [Sprint Plan Phase 1](sprint-plan-phase1.md) — Critical fixes sprint plan
 - [Sprint Plan Phase 2](sprint-plan-phase2.md) — High priority sprint plan
 - [Sprint Plan Phase 3](sprint-plan-phase3.md) — Feature completion sprint plan
-- [Implementation Status](../project-analysis/implementation_status.md) — Current feature completion assessment
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity scores
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Current feature completion assessment
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity scores

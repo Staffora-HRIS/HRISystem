@@ -196,19 +196,19 @@ All services communicate on the `hris-network` bridge network (subnet `172.28.0.
 
 ## Related Documentation
 
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch verification
-- [DevOps Status](../devops/devops-status-report.md) — Infrastructure overview
-- [Security Patterns](../patterns/SECURITY.md) — Security architecture
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch verification
+- [DevOps Status](../06-devops/devops-status-report.md) — Infrastructure overview
+- [Security Patterns](../02-architecture/security-patterns.md) — Security architecture
 
 ---
 
 ## Related Documents
 
 - [Getting Started](GETTING_STARTED.md) — Initial setup and development environment
-- [Architecture Overview](../architecture/ARCHITECTURE.md) — System architecture and service topology
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline architecture and status
-- [DevOps Tasks](../devops/devops-tasks.md) — Infrastructure task list and progress
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch readiness checklist
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity assessment
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
-- [Worker System](../architecture/WORKER_SYSTEM.md) — Background job processing architecture
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) — System architecture and service topology
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline architecture and status
+- [DevOps Tasks](../06-devops/devops-tasks.md) — Infrastructure task list and progress
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch readiness checklist
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity assessment
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
+- [Worker System](../02-architecture/WORKER_SYSTEM.md) — Background job processing architecture

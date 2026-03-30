@@ -9,8 +9,8 @@
 - [Database Index Reference](./database-indexes.md) -- Complete index catalog and performance strategy
 - [Worker System](./worker-system.md) -- Outbox table and domain event processing
 - [Permissions System](./PERMISSIONS_SYSTEM.md) -- RBAC tables and role hierarchy
-- [Security Patterns](../patterns/SECURITY.md) -- RLS enforcement and audit
-- [Testing Guide](../testing/test-matrix.md) -- Database and RLS test coverage
+- [Security Patterns](../02-architecture/security-patterns.md) -- RLS enforcement and audit
+- [Testing Guide](../08-testing/test-matrix.md) -- Database and RLS test coverage
 
 ---
 

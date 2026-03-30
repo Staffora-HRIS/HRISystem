@@ -32,7 +32,7 @@ Files follow the pattern `category-NNN-description.md` where:
 
 ## Related Documentation
 
-- [Docs/audit/](../audit/) -- System audit reports that identify these issues
-- [Docs/audit/technical-debt-report.md](../audit/technical-debt-report.md) -- Technical debt overview
-- [Docs/audit/security-audit.md](../audit/security-audit.md) -- Security audit findings
-- [Docs/compliance/](../compliance/) -- Compliance documentation and requirements
+- [Docs/audit/](../15-archive/audit/) -- System audit reports that identify these issues
+- [Docs/audit/technical-debt-report.md](../15-archive/audit/technical-debt-report.md) -- Technical debt overview
+- [Docs/audit/security-audit.md](../15-archive/audit/security-audit.md) -- Security audit findings
+- [Docs/compliance/](../12-compliance/) -- Compliance documentation and requirements

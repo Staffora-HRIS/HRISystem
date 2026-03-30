@@ -167,5 +167,5 @@ staffora-platform/
 - [Architecture Map](architecture-map.md) — High-level architecture map with diagrams
 - [Database Guide](DATABASE.md) — Schema, migrations, and table catalog
 - [Worker System](WORKER_SYSTEM.md) — Background job processing subsystem
-- [Getting Started](../guides/GETTING_STARTED.md) — Development setup and common commands
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion by module
+- [Getting Started](../05-development/GETTING_STARTED.md) — Development setup and common commands
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion by module

@@ -79,7 +79,7 @@ These issues were identified in the prior audit but have been fixed before this 
 
 ## Issues Status — All Resolved
 
-All 41 engineering issues identified during the audit have been resolved as of 2026-03-20. See [Master Engineering TODO](../project-management/master-engineering-todo.md) for full details.
+All 41 engineering issues identified during the audit have been resolved as of 2026-03-20. See [Master Engineering TODO](../13-roadmap/master-engineering-todo.md) for full details.
 
 ### P0 CRITICAL — 7/7 RESOLVED
 
@@ -303,8 +303,8 @@ All 41 engineering issues identified during the audit have been resolved as of 2
 The Staffora platform has strong architectural foundations, comprehensive feature coverage, and all 41 identified engineering issues have been resolved. The platform has full deployment automation, comprehensive test coverage, operational runbooks, database backup and recovery procedures, structured logging, a feature flags system for controlled rollout, circuit breaker for external service resilience, and IP allowlisting for admin endpoint protection. All code scan findings resolved. All audit dimensions at 100/100. The platform is fully production-ready.
 
 **Remaining enhancement work is tracked in:**
-- [DevOps Tasks](../devops/devops-tasks.md) — Infrastructure enhancements (E2E in CI, performance regression pipeline)
-- [Risk Register](../project-management/risk-register.md) — Ongoing risk monitoring
+- [DevOps Tasks](../06-devops/devops-tasks.md) — Infrastructure enhancements (E2E in CI, performance regression pipeline)
+- [Risk Register](../13-roadmap/risk-register.md) — Ongoing risk monitoring
 
 ---
 
@@ -316,10 +316,10 @@ The Staffora platform has strong architectural foundations, comprehensive featur
 ## Related Documents
 
 - [Production Checklist](production-checklist.md) — Pre-launch readiness checklist
-- [Final System Report](../audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
-- [Security Audit](../audit/security-audit.md) — Security posture assessment
-- [Testing Audit](../audit/testing-audit.md) — Test quality and coverage analysis
-- [Performance Audit](../audit/PERFORMANCE_AUDIT.md) — Performance findings and recommendations
-- [Technical Debt Report](../audit/technical-debt-report.md) — Structural debt assessment
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline status
-- [Roadmap](../project-management/roadmap.md) — Product roadmap and release timeline
+- [Final System Report](../15-archive/audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
+- [Security Audit](../15-archive/audit/security-audit.md) — Security posture assessment
+- [Testing Audit](../15-archive/audit/testing-audit.md) — Test quality and coverage analysis
+- [Performance Audit](../15-archive/audit/PERFORMANCE_AUDIT.md) — Performance findings and recommendations
+- [Technical Debt Report](../15-archive/audit/technical-debt-report.md) — Structural debt assessment
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline status
+- [Roadmap](../13-roadmap/roadmap.md) — Product roadmap and release timeline

@@ -323,10 +323,10 @@ The system passes all certification criteria:
 
 ## Related Documents
 
-- [UK Compliance Audit](../audit/uk-compliance-audit.md) — Detailed UK employment law compliance findings
-- [State Machines](../patterns/STATE_MACHINES.md) — Employee lifecycle and leave request workflows
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion by compliance domain
-- [Master Requirements](../project-analysis/master_requirements.md) — Full requirements including UK statutory requirements
-- [Sprint Plan Phase 3](../project-management/sprint-plan-phase3.md) — UK compliance feature development sprints
-- [Security Patterns](../patterns/SECURITY.md) — GDPR and data protection enforcement
-- [Database Guide](../architecture/DATABASE.md) — Compliance-related tables and migrations
+- [UK Compliance Audit](../15-archive/audit/uk-compliance-audit.md) — Detailed UK employment law compliance findings
+- [State Machines](../02-architecture/state-machines.md) — Employee lifecycle and leave request workflows
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion by compliance domain
+- [Master Requirements](../13-roadmap/analysis/master_requirements.md) — Full requirements including UK statutory requirements
+- [Sprint Plan Phase 3](../13-roadmap/sprint-plan-phase3.md) — UK compliance feature development sprints
+- [Security Patterns](../02-architecture/security-patterns.md) — GDPR and data protection enforcement
+- [Database Guide](../02-architecture/DATABASE.md) — Compliance-related tables and migrations

@@ -562,7 +562,7 @@ UI components in `app/components/ui/` still have no visual documentation or isol
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
 - [Performance Audit](PERFORMANCE_AUDIT.md) — Performance implications of technical debt
 - [Testing Audit](testing-audit.md) — Test quality as a source of technical debt
-- [Architecture Redesign](../architecture/architecture-redesign.md) — Architectural changes to address debt
-- [Engineering TODO](../project-management/engineering-todo.md) — Master task list including debt items
-- [Sprint Plan Phase 2](../project-management/sprint-plan-phase2.md) — Debt reduction sprint work
-- [Enterprise Engineering Checklist](../checklists/enterprise-engineering-checklist.md) — Code quality checklist items
+- [Architecture Redesign](../02-architecture/architecture-redesign.md) — Architectural changes to address debt
+- [Engineering TODO](../13-roadmap/engineering-todo.md) — Master task list including debt items
+- [Sprint Plan Phase 2](../13-roadmap/sprint-plan-phase2.md) — Debt reduction sprint work
+- [Enterprise Engineering Checklist](../11-operations/enterprise-engineering-checklist.md) — Code quality checklist items

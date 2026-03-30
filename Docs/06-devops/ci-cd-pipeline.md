@@ -28,38 +28,107 @@ This document describes the continuous integration and continuous deployment pip
 
 ## Pipeline Overview
 
-```
-  Pull Request                 Push to main               Manual / Tag
-      |                             |                         |
-      v                             v                         v
-  +----------+              +-----------+              +-----------+
-  | PR Check |              |   Tests   |              |  Release  |
-  | (fast)   |              | (full)    |              | (tag: v*) |
-  +----------+              +-----------+              +-----------+
-      |                          |                         |
-      v                          v                         v
-  +----------+              +-----------+              +-----------+
-  | Tests    |              |  Deploy   |              |   Build   |
-  | (full)   |              |           |              |   + Tag   |
-  +----------+              +-----+-----+              +-----------+
-      |                          |
-      v                          v
-  +----------+           +------+------+
-  | E2E Tests|           | test | build|
-  +----------+           +------+------+
-                                |
-                    +-----------+-----------+
-                    |                       |
-             +------+------+        +------+------+
-             |   staging   |        | production  |
-             | (auto)      |        | (manual)    |
-             +-------------+        +------+------+
-                                           |
-                                    +------+------+
-                                    |  rollback   |
-                                    | (auto on    |
-                                    |  failure)   |
-                                    +-------------+
+```mermaid
+flowchart TD
+    subgraph triggers ["Triggers"]
+        PR["Pull Request to main"]
+        PUSH["Push to main"]
+        TAG["Tag push v*"]
+        MANUAL["Manual dispatch"]
+        CRON_SEC["Weekly Mon 6am"]
+        CRON_CHAOS["Weekly Sun 2am"]
+    end
+
+    subgraph pr_pipeline ["PR Pipeline -- fast feedback, no DB required"]
+        PR_CHECK["PR Check\nTypecheck + Lint"]
+        BUNDLE["Bundle Size Budget"]
+        DOCKER_VERIFY["Docker Build Verify\nno push"]
+        MIGRATION["Migration Check\nnaming + RLS"]
+    end
+
+    subgraph test_pipeline ["Test Pipeline -- Postgres 16 + Redis 7"]
+        TESTS_UNIT["Unit and Integration Tests\nbun test"]
+        TESTS_FE["Frontend Tests\nVitest + jsdom"]
+        COVERAGE["Coverage Gates\nAPI: 20% min / Web: 50% min"]
+    end
+
+    subgraph e2e_pipeline ["E2E Pipeline -- live API server"]
+        E2E["E2E Tests\nhris_app role\nRLS enforced"]
+    end
+
+    subgraph deploy_pipeline ["Deploy Pipeline"]
+        DEPLOY_TEST["Test Suite Gate"]
+        BUILD_IMAGES["Build Docker Images\nAPI + Web pushed to GHCR"]
+        STAGING["Deploy to Staging\nautomatic"]
+        PRODUCTION["Deploy to Production\nmanual approval"]
+        HEALTH["Health Check\n/health endpoint"]
+        ROLLBACK["Auto Rollback\non health failure"]
+    end
+
+    subgraph release_pipeline ["Release Pipeline"]
+        RELEASE["Create GitHub Release\nBuild tagged images"]
+    end
+
+    subgraph security_pipeline ["Security Pipeline"]
+        DEP_AUDIT["Dependency Audit\nnpx audit-ci"]
+        DOCKER_SCAN["Docker Image Scan\nTrivy CRITICAL/HIGH"]
+        SECRET_SCAN["Secret Detection\nTruffleHog"]
+    end
+
+    subgraph chaos_pipeline ["Chaos Pipeline"]
+        CHAOS["Chaos Tests\nDB failures, connections,\ndata integrity"]
+    end
+
+    PR --> PR_CHECK
+    PR --> BUNDLE
+    PR --> DOCKER_VERIFY
+    PR -->|migrations changed| MIGRATION
+    PR --> TESTS_UNIT
+    PR --> TESTS_FE
+    PR --> E2E
+    PR --> DEP_AUDIT
+    PR --> DOCKER_SCAN
+    PR --> SECRET_SCAN
+
+    PUSH --> TESTS_UNIT
+    PUSH --> TESTS_FE
+    PUSH --> E2E
+    PUSH --> DEPLOY_TEST
+    PUSH --> DEP_AUDIT
+    PUSH --> DOCKER_SCAN
+    PUSH --> SECRET_SCAN
+
+    TAG --> RELEASE
+
+    MANUAL --> DEPLOY_TEST
+    CRON_SEC --> DEP_AUDIT
+    CRON_SEC --> DOCKER_SCAN
+    CRON_SEC --> SECRET_SCAN
+    CRON_CHAOS --> CHAOS
+
+    TESTS_UNIT --> COVERAGE
+    TESTS_FE --> COVERAGE
+
+    DEPLOY_TEST --> BUILD_IMAGES
+    BUILD_IMAGES --> STAGING
+    STAGING --> HEALTH
+    BUILD_IMAGES -.->|manual trigger| PRODUCTION
+    PRODUCTION --> HEALTH
+    HEALTH -->|failure| ROLLBACK
+
+    classDef trigger fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    classDef check fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
+    classDef test fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
+    classDef deploy fill:#fff3e0,stroke:#f57c00,color:#e65100
+    classDef security fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    classDef release fill:#e0f2f1,stroke:#00796b,color:#004d40
+
+    class PR,PUSH,TAG,MANUAL,CRON_SEC,CRON_CHAOS trigger
+    class PR_CHECK,BUNDLE,DOCKER_VERIFY,MIGRATION check
+    class TESTS_UNIT,TESTS_FE,COVERAGE,E2E,CHAOS test
+    class DEPLOY_TEST,BUILD_IMAGES,STAGING,PRODUCTION,HEALTH,ROLLBACK deploy
+    class DEP_AUDIT,DOCKER_SCAN,SECRET_SCAN security
+    class RELEASE release
 ```
 
 ---

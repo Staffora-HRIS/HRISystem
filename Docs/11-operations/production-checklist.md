@@ -397,9 +397,9 @@ These are already production-grade and should not be rebuilt:
 ## Related Documents
 
 - [Production Readiness Report](production-readiness-report.md) — Platform maturity scores and gap analysis
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline architecture
-- [DevOps Master Checklist](../checklists/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
-- [Security Audit](../audit/security-audit.md) — Security posture assessment
-- [Risk Register](../project-management/risk-register.md) — Production deployment risks
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline architecture
+- [DevOps Master Checklist](../06-devops/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
+- [Security Audit](../15-archive/audit/security-audit.md) — Security posture assessment
+- [Risk Register](../13-roadmap/risk-register.md) — Production deployment risks

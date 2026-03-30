@@ -799,9 +799,9 @@ The helper script at `docker/scripts/rotate-secrets.sh` generates new random val
 ## Related Documents
 
 - [Production Checklist](production-checklist.md) -- Secrets management section
-- [Security Patterns](../patterns/SECURITY.md) -- RLS, auth, RBAC patterns
-- [Deployment Guide](../guides/DEPLOYMENT.md) -- Container deployment instructions
-- [Docker Guide](../devops/docker-guide.md) -- Docker Compose configuration
+- [Security Patterns](../02-architecture/security-patterns.md) -- RLS, auth, RBAC patterns
+- [Deployment Guide](../05-development/DEPLOYMENT.md) -- Container deployment instructions
+- [Docker Guide](../06-devops/docker-guide.md) -- Docker Compose configuration
 - [SLA/SLO Definitions](sla-slo-definitions.md) -- Service level objectives (rotation should not breach SLOs)
 - [DR Drill Schedule](dr-drill-schedule.md) -- Recovery drills that may require credential access
 - [Multi-Region Plan](multi-region-plan.md) -- Secrets must be rotated in both regions

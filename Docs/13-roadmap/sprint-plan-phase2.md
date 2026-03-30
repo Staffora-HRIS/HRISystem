@@ -471,6 +471,6 @@
 - [Sprint Plan Phase 3](sprint-plan-phase3.md) — Feature completion following Phase 2
 - [Roadmap](roadmap.md) — Product roadmap and release timeline
 - [Kanban Board](kanban-board.md) — Work item tracking across all domains
-- [Technical Debt Report](../audit/technical-debt-report.md) — Technical debt driving Phase 2 work
-- [Testing Audit](../audit/testing-audit.md) — Test quality findings driving Phase 2 testing work
-- [UK Compliance Report](../compliance/uk-hr-compliance-report.md) — Compliance requirements for Phase 2
+- [Technical Debt Report](../15-archive/audit/technical-debt-report.md) — Technical debt driving Phase 2 work
+- [Testing Audit](../15-archive/audit/testing-audit.md) — Test quality findings driving Phase 2 testing work
+- [UK Compliance Report](../12-compliance/uk-hr-compliance-report.md) — Compliance requirements for Phase 2

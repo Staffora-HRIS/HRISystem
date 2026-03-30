@@ -5,7 +5,7 @@
 
 **Related documentation:**
 - [Docker Guide](./docker-guide.md) -- Container configuration and multi-stage builds
-- [Database Guide](../architecture/database-guide.md) -- Migration system and RLS validation
+- [Database Guide](../02-architecture/database-guide.md) -- Migration system and RLS validation
 - [DevOps Status Report](./devops-status-report.md) -- Current infrastructure state
 
 ---

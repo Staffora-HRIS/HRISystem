@@ -34,6 +34,6 @@ These reports are point-in-time snapshots. Check the report dates and cross-refe
 
 ## Related Documentation
 
-- [Docs/issues/](../issues/) -- Individual issue specifications derived from these audits
-- [Docs/checklists/](../checklists/) -- Engineering and DevOps quality checklists
-- [Docs/compliance/](../compliance/) -- Compliance requirements and reports
+- [Docs/issues/](../14-troubleshooting/issues/) -- Individual issue specifications derived from these audits
+- [11-operations/](../11-operations/) -- Engineering and DevOps quality checklists
+- [Docs/compliance/](../12-compliance/) -- Compliance requirements and reports

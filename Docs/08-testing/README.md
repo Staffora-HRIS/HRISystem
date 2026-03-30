@@ -15,11 +15,11 @@
 
 Related documentation:
 
-- [Security Architecture](../security/README.md) -- authentication, authorization, RLS, headers
-- [Patterns: Security](../patterns/SECURITY.md) -- RLS, auth, RBAC, audit, idempotency patterns
-- [Patterns: State Machines](../patterns/STATE_MACHINES.md) -- lifecycle transitions tested in integration tests
-- [API Reference](../api/API_REFERENCE.md) -- endpoint contracts validated by route tests
-- [Database](../architecture/DATABASE.md) -- schema, migrations, RLS policies
+- [Security Architecture](../07-security/README.md) -- authentication, authorization, RLS, headers
+- [Patterns: Security](../02-architecture/security-patterns.md) -- RLS, auth, RBAC, audit, idempotency patterns
+- [Patterns: State Machines](../02-architecture/state-machines.md) -- lifecycle transitions tested in integration tests
+- [API Reference](../04-api/API_REFERENCE.md) -- endpoint contracts validated by route tests
+- [Database](../02-architecture/DATABASE.md) -- schema, migrations, RLS policies
 
 ---
 

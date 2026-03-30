@@ -9,7 +9,7 @@ This document lists every route in the Staffora HRIS web application, organized 
 - [Frontend Architecture Overview](./README.md)
 - [Component Library](./components.md)
 - [Data Fetching Patterns](./data-fetching.md)
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md)
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md)
 
 ---
 
@@ -286,7 +286,7 @@ Key principles:
 - **Admin routes** (`/admin/*`) require module-specific permissions
 - **Admin users** (roles: `super_admin`, `tenant_admin`, `hr_admin`) bypass permission checks and can access all routes
 
-See the [Permissions System documentation](../architecture/PERMISSIONS_SYSTEM.md) for complete permission model details.
+See the [Permissions System documentation](../02-architecture/PERMISSIONS_SYSTEM.md) for complete permission model details.
 
 ---
 

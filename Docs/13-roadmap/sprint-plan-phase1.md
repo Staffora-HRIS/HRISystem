@@ -347,6 +347,6 @@ All of the following must be true before moving to Phase 2:
 - [Sprint Plan Phase 3](sprint-plan-phase3.md) — Feature completion following Phase 2
 - [Roadmap](roadmap.md) — Product roadmap and release timeline
 - [Kanban Board](kanban-board.md) — Work item tracking across all domains
-- [Security Audit](../audit/security-audit.md) — Security findings driving Phase 1 work
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Infrastructure findings driving Phase 1 work
+- [Security Audit](../15-archive/audit/security-audit.md) — Security findings driving Phase 1 work
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Infrastructure findings driving Phase 1 work
 - [Risk Register](risk-register.md) — Risks mitigated by Phase 1 fixes

@@ -970,5 +970,5 @@ Wrapper component that only renders its children on the client side (not during 
 - [Frontend Architecture Overview](./README.md)
 - [Complete Route Map](./routes.md)
 - [Data Fetching Patterns](./data-fetching.md)
-- [API Reference](../api/API_REFERENCE.md)
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md)
+- [API Reference](../04-api/API_REFERENCE.md)
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md)

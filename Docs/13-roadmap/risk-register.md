@@ -472,7 +472,7 @@ Legend: [x]=RESOLVED  [~]=MITIGATED  unmarked=OPEN
 - [Roadmap](roadmap.md) — Product roadmap and release timeline
 - [Kanban Board](kanban-board.md) — Work item tracking across all domains
 - [Engineering TODO](engineering-todo.md) — Master engineering task list
-- [Security Audit](../audit/security-audit.md) — Security findings driving risk items
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Infrastructure risks and findings
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch readiness requirements
-- [Architecture Redesign](../architecture/architecture-redesign.md) — Architectural risk mitigations
+- [Security Audit](../15-archive/audit/security-audit.md) — Security findings driving risk items
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Infrastructure risks and findings
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch readiness requirements
+- [Architecture Redesign](../02-architecture/architecture-redesign.md) — Architectural risk mitigations

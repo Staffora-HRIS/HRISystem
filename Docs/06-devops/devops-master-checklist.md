@@ -941,9 +941,9 @@
 ## Related Documents
 
 - [Enterprise Engineering Checklist](enterprise-engineering-checklist.md) — Full engineering audit checklist
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline architecture and status
-- [DevOps Status Report](../devops/devops-status-report.md) — Pipeline health and configuration details
-- [DevOps Tasks](../devops/devops-tasks.md) — Infrastructure task list and progress
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Infrastructure findings and recommendations
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch readiness checklist
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline architecture and status
+- [DevOps Status Report](../06-devops/devops-status-report.md) — Pipeline health and configuration details
+- [DevOps Tasks](../06-devops/devops-tasks.md) — Infrastructure task list and progress
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Infrastructure findings and recommendations
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch readiness checklist

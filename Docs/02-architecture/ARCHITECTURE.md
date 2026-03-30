@@ -275,6 +275,6 @@ Every tenant-owned table has:
 - [Permissions System](PERMISSIONS_SYSTEM.md) — 7-layer access control architecture
 - [Architecture Map](architecture-map.md) — Detailed architecture map with diagrams
 - [Repository Map](repository-map.md) — Monorepo structure and module inventory
-- [Security Patterns](../patterns/SECURITY.md) — RLS, authentication, and security enforcement
-- [API Reference](../api/API_REFERENCE.md) — Complete endpoint documentation
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Production deployment with Docker Compose
+- [Security Patterns](../02-architecture/security-patterns.md) — RLS, authentication, and security enforcement
+- [API Reference](../04-api/API_REFERENCE.md) — Complete endpoint documentation
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Production deployment with Docker Compose

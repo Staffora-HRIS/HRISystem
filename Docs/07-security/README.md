@@ -587,19 +587,19 @@ Beyond the dedicated security tests, integration tests in `packages/api/src/test
 
 | Document | Path | Description |
 |---|---|---|
-| Security Patterns | [`Docs/patterns/SECURITY.md`](../patterns/SECURITY.md) | Reusable security patterns: RLS, auth, RBAC, audit, idempotency |
-| Security Audit | [`Docs/audit/security-audit.md`](../audit/security-audit.md) | Full security audit report |
-| Security Review Checklist | [`Docs/audit/security-review-checklist.md`](../audit/security-review-checklist.md) | Checklist for security reviews |
-| CSRF Token Validation | [`Docs/issues/security-001-csrf-token-validation.md`](../issues/security-001-csrf-token-validation.md) | Known issue: CSRF token validation gaps |
-| Frontend CSRF Tokens | [`Docs/issues/security-002-frontend-csrf-tokens-not-sent.md`](../issues/security-002-frontend-csrf-tokens-not-sent.md) | Known issue: frontend CSRF token transmission |
-| Email Verification | [`Docs/issues/security-003-email-verification-disabled.md`](../issues/security-003-email-verification-disabled.md) | Known issue: email verification disabled in dev |
-| Account Lockout | [`Docs/issues/security-004-account-lockout-missing.md`](../issues/security-004-account-lockout-missing.md) | Known issue: account lockout policy gaps |
-| Password Policy | [`Docs/issues/security-005-password-policy-weak.md`](../issues/security-005-password-policy-weak.md) | Known issue: password policy improvements needed |
-| GDPR DSAR Endpoint | [`Docs/issues/security-006-gdpr-dsar-endpoint.md`](../issues/security-006-gdpr-dsar-endpoint.md) | Known issue: DSAR endpoint implementation status |
-| Data Erasure | [`Docs/issues/security-007-data-erasure-missing.md`](../issues/security-007-data-erasure-missing.md) | Known issue: data erasure implementation status |
-| Request Body Size | [`Docs/issues/security-008-request-body-size-limit.md`](../issues/security-008-request-body-size-limit.md) | Known issue: request body size limits |
-| Permissions System | [`Docs/architecture/PERMISSIONS_SYSTEM.md`](../architecture/PERMISSIONS_SYSTEM.md) | Detailed RBAC and permissions architecture |
-| Permissions v2 Migration | [`Docs/architecture/permissions-v2-migration-guide.md`](../architecture/permissions-v2-migration-guide.md) | Guide for migrating to the enhanced permission guard |
+| Security Patterns | [`Docs/patterns/SECURITY.md`](../02-architecture/security-patterns.md) | Reusable security patterns: RLS, auth, RBAC, audit, idempotency |
+| Security Audit | [`Docs/audit/security-audit.md`](../15-archive/audit/security-audit.md) | Full security audit report |
+| Security Review Checklist | [`Docs/audit/security-review-checklist.md`](../15-archive/audit/security-review-checklist.md) | Checklist for security reviews |
+| CSRF Token Validation | [`14-troubleshooting/issues/security-001-csrf-token-validation.md`](../14-troubleshooting/issues/security-001-csrf-token-validation.md) | Known issue: CSRF token validation gaps |
+| Frontend CSRF Tokens | [`14-troubleshooting/issues/security-002-frontend-csrf-tokens-not-sent.md`](../14-troubleshooting/issues/security-002-frontend-csrf-tokens-not-sent.md) | Known issue: frontend CSRF token transmission |
+| Email Verification | [`14-troubleshooting/issues/security-003-email-verification-disabled.md`](../14-troubleshooting/issues/security-003-email-verification-disabled.md) | Known issue: email verification disabled in dev |
+| Account Lockout | [`14-troubleshooting/issues/security-004-account-lockout-missing.md`](../14-troubleshooting/issues/security-004-account-lockout-missing.md) | Known issue: account lockout policy gaps |
+| Password Policy | [`14-troubleshooting/issues/security-005-password-policy-weak.md`](../14-troubleshooting/issues/security-005-password-policy-weak.md) | Known issue: password policy improvements needed |
+| GDPR DSAR Endpoint | [`14-troubleshooting/issues/security-006-gdpr-dsar-endpoint.md`](../14-troubleshooting/issues/security-006-gdpr-dsar-endpoint.md) | Known issue: DSAR endpoint implementation status |
+| Data Erasure | [`14-troubleshooting/issues/security-007-data-erasure-missing.md`](../14-troubleshooting/issues/security-007-data-erasure-missing.md) | Known issue: data erasure implementation status |
+| Request Body Size | [`14-troubleshooting/issues/security-008-request-body-size-limit.md`](../14-troubleshooting/issues/security-008-request-body-size-limit.md) | Known issue: request body size limits |
+| Permissions System | [`Docs/architecture/PERMISSIONS_SYSTEM.md`](../02-architecture/PERMISSIONS_SYSTEM.md) | Detailed RBAC and permissions architecture |
+| Permissions v2 Migration | [`Docs/architecture/permissions-v2-migration-guide.md`](../02-architecture/permissions-v2-migration-guide.md) | Guide for migrating to the enhanced permission guard |
 
 ### Key Source Files
 

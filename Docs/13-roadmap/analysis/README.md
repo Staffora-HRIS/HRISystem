@@ -20,6 +20,6 @@ This directory provides a structured view of what the platform needs to deliver 
 
 ## Related Documentation
 
-- [Docs/audit/feature-validation-report.md](../audit/feature-validation-report.md) -- Feature completeness validation
-- [Docs/audit/missing-features.md](../audit/missing-features.md) -- Identified feature gaps
-- [Docs/audit/MASTER_TODO.md](../audit/MASTER_TODO.md) -- Prioritised TODO list from audit findings
+- [Docs/audit/feature-validation-report.md](../15-archive/audit/feature-validation-report.md) -- Feature completeness validation
+- [Docs/audit/missing-features.md](../15-archive/audit/missing-features.md) -- Identified feature gaps
+- [Docs/audit/MASTER_TODO.md](../15-archive/audit/MASTER_TODO.md) -- Prioritised TODO list from audit findings

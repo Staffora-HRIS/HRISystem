@@ -442,7 +442,7 @@ P3: WAF ───────────────> can be done independently
 
 - [DevOps Status Report](devops-status-report.md) — CI/CD architecture and pipeline health
 - [DevOps Dashboard](devops-dashboard.md) — Pipeline architecture and status overview
-- [DevOps Master Checklist](../checklists/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Infrastructure findings and recommendations
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [Kanban Board](../project-management/kanban-board.md) — Work item tracking across all domains
+- [DevOps Master Checklist](../06-devops/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Infrastructure findings and recommendations
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [Kanban Board](../13-roadmap/kanban-board.md) — Work item tracking across all domains

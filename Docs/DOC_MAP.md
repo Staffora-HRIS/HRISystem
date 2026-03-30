@@ -1,8 +1,8 @@
 # Documentation Map
 
 > Visual navigation system for all Staffora documentation
-> **197 files** across **15 numbered directories** | **120 backend modules** | **160+ frontend routes**
-> Last updated: 2026-03-28
+> **219 files** across **15 numbered directories** | **120 backend modules** | **160+ frontend routes**
+> Last updated: 2026-03-30
 
 ---
 
@@ -12,21 +12,21 @@
 graph TD
     Portal["docs/README.md<br/>Documentation Portal"]
 
-    Portal --> Overview["01-overview/<br/>2 files"]
+    Portal --> Overview["01-overview/<br/>4 files"]
     Portal --> Arch["02-architecture/<br/>22 files"]
-    Portal --> Features["03-features/<br/>12 files"]
+    Portal --> Features["03-features/<br/>13 files"]
     Portal --> API["04-api/<br/>4 files"]
-    Portal --> Dev["05-development/<br/>15 files"]
-    Portal --> DevOps["06-devops/<br/>8 files"]
+    Portal --> Dev["05-development/<br/>16 files"]
+    Portal --> DevOps["06-devops/<br/>10 files"]
     Portal --> Security["07-security/<br/>7 files"]
     Portal --> Testing["08-testing/<br/>4 files"]
     Portal --> Integrations["09-integrations/<br/>3 files"]
-    Portal --> AI["10-ai-agents/<br/>1 file"]
-    Portal --> Ops["11-operations/<br/>34 files"]
-    Portal --> Compliance["12-compliance/<br/>16 files"]
-    Portal --> Roadmap["13-roadmap/<br/>12 files"]
+    Portal --> AI["10-ai-agents/<br/>5 files"]
+    Portal --> Ops["11-operations/<br/>36 files"]
+    Portal --> Compliance["12-compliance/<br/>17 files"]
+    Portal --> Roadmap["13-roadmap/<br/>13 files"]
     Portal --> Troubleshoot["14-troubleshooting/<br/>29 files"]
-    Portal --> Archive["15-archive/<br/>27 files"]
+    Portal --> Archive["15-archive/<br/>29 files"]
 
     subgraph Core["Core Documentation"]
         Overview

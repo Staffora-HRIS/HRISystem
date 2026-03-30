@@ -21,7 +21,7 @@ The Staffora HRIS documentation system has been audited, restructured, and organ
 | `Docs/operations/` | Production checklists and readiness reports |
 | `Docs/devops/` | Infrastructure status, CI/CD tasks |
 | `Docs/compliance/` | UK employment law, GDPR documentation |
-| `Docs/checklists/` | Engineering quality checklists |
+| `11-operations/` | Engineering quality checklists |
 | `Docs/archive/` | Superseded/deprecated documentation |
 
 ### 2. Files Moved from `.claude/` to `Docs/` (13)
@@ -36,8 +36,8 @@ The Staffora HRIS documentation system has been audited, restructured, and organ
 | `.claude/devops-report.md` | `Docs/devops/devops-status-report.md` |
 | `.claude/devops-todo.md` | `Docs/devops/devops-tasks.md` |
 | `.claude/devops-dashboard.md` | `Docs/devops/devops-dashboard.md` |
-| `.claude/enterprise-engineering-checklist.md` | `Docs/checklists/enterprise-engineering-checklist.md` |
-| `.claude/devops-master-checklist.md` | `Docs/checklists/devops-master-checklist.md` |
+| `.claude/enterprise-engineering-checklist.md` | `11-operations/enterprise-engineering-checklist.md` |
+| `.claude/devops-master-checklist.md` | `11-operations/devops-master-checklist.md` |
 | `.claude/system-documentation.md` | `Docs/system-documentation.md` |
 | `.claude/master_todo.md` | `Docs/project-management/engineering-todo.md` |
 | `.claude/master-engineering-todo.md` | `Docs/project-management/master-engineering-todo.md` |
@@ -75,12 +75,12 @@ The Staffora HRIS documentation system has been audited, restructured, and organ
 New navigation READMEs for directories that lacked them:
 - `Docs/devops/README.md`
 - `Docs/compliance/README.md`
-- `Docs/checklists/README.md`
+- `11-operations/README.md`
 - `Docs/operations/README.md`
 - `Docs/archive/README.md`
 - `Docs/issues/README.md`
 - `Docs/audit/README.md`
-- `Docs/project-analysis/README.md`
+- `13-roadmap/analysis/README.md`
 
 ### 7. Master Index Rewritten
 

@@ -1264,16 +1264,16 @@ When background jobs are not executing:
 
 | Document | Description |
 |----------|-------------|
-| [Getting Started Guide](../guides/GETTING_STARTED.md) | Initial setup instructions |
-| [Architecture Overview](../architecture/ARCHITECTURE.md) | System design and data flow |
-| [Database Reference](../architecture/DATABASE.md) | Schema, migrations, RLS policies |
-| [API Reference](../api/API_REFERENCE.md) | All 190+ endpoints by module |
-| [Error Codes Reference](../api/ERROR_CODES.md) | Complete error code catalog by module |
-| [Security Architecture](../security/README.md) | Auth, RBAC, RLS, OWASP mitigations |
-| [Worker System](../architecture/WORKER_SYSTEM.md) | Redis Streams, outbox, job processors |
-| [Testing Guide](../testing/README.md) | Test infrastructure and guides |
-| [Docker Guide](../devops/docker-guide.md) | Container architecture, development workflow |
-| [CI/CD Pipeline](../devops/ci-cd.md) | GitHub Actions workflows |
-| [Integrations](../integrations/README.md) | External service configuration (S3, SMTP, Firebase) |
-| [State Machines](../patterns/STATE_MACHINES.md) | Employee lifecycle, leave, cases, workflows |
+| [Getting Started Guide](../05-development/GETTING_STARTED.md) | Initial setup instructions |
+| [Architecture Overview](../02-architecture/ARCHITECTURE.md) | System design and data flow |
+| [Database Reference](../02-architecture/DATABASE.md) | Schema, migrations, RLS policies |
+| [API Reference](../04-api/API_REFERENCE.md) | All 190+ endpoints by module |
+| [Error Codes Reference](../04-api/ERROR_CODES.md) | Complete error code catalog by module |
+| [Security Architecture](../07-security/README.md) | Auth, RBAC, RLS, OWASP mitigations |
+| [Worker System](../02-architecture/WORKER_SYSTEM.md) | Redis Streams, outbox, job processors |
+| [Testing Guide](../08-testing/README.md) | Test infrastructure and guides |
+| [Docker Guide](../06-devops/docker-guide.md) | Container architecture, development workflow |
+| [CI/CD Pipeline](../06-devops/ci-cd.md) | GitHub Actions workflows |
+| [Integrations](../09-integrations/README.md) | External service configuration (S3, SMTP, Firebase) |
+| [State Machines](../02-architecture/state-machines.md) | Employee lifecycle, leave, cases, workflows |
 | [`.claude/learning.md`](../../.claude/learning.md) | Raw debugging discoveries (source for this guide) |

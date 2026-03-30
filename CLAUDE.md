@@ -342,67 +342,100 @@ Use these agents (defined in `.claude/agents/`, all swarm-enabled) for domain-sp
 
 ## Documentation (`Docs/`)
 
-Detailed documentation is organized in `Docs/` with subfolder READMEs for AI context loading (190+ files, 21 directories):
+Detailed documentation is organized in `Docs/` with subfolder READMEs for AI context loading (220+ files across 15 numbered directories):
 
 ```
 Docs/
-├── README.md                  ← Documentation portal: folder map, quick links, audience guides
-├── system-documentation.md    ← Complete system reference (consolidated)
-├── DOC_MAP.md                 ← Visual navigation map of all documentation
-├── DOC_HEALTH_REPORT.md       ← Documentation health scoring
-├── DOC_TODO.md                ← Gap analysis and improvement backlog
-├── guides/                    ← Setup, deployment, frontend usage
-│   ├── GETTING_STARTED.md, DEPLOYMENT.md, FRONTEND.md
-├── architecture/              ← System design and internals
-│   ├── ARCHITECTURE.md        # System overview, plugin chain, request flow
-│   ├── diagrams.md            # 20 Mermaid diagrams for all subsystems
-│   ├── DATABASE.md            # Schema, migrations, RLS, table catalog
-│   ├── database-guide.md      # Database deep-dive (queries, roles, performance)
-│   ├── WORKER_SYSTEM.md       # Background jobs, Redis Streams, outbox
-│   ├── worker-system.md       # Worker system deep-dive
-│   ├── PERMISSIONS_SYSTEM.md  # Permission model and RBAC details
-│   ├── architecture-map.md, repository-map.md, permissions-v2-migration-guide.md
-├── api/                       ← API surface and contracts
-│   ├── API_REFERENCE.md       # All 200+ endpoints by module
-│   └── ERROR_CODES.md         # Error codes with messages by module
-├── modules/                   ← Module catalog
-│   └── README.md              # All 72 backend modules documented
-├── frontend/                  ← Frontend documentation
-│   ├── README.md              # Frontend architecture overview
-│   ├── routes.md              # Complete route map (160 routes)
-│   ├── components.md          # Component library documentation
-│   └── data-fetching.md       # React Query and API patterns
-├── testing/                   ← Testing documentation
-│   ├── README.md              # Testing guide and infrastructure
-│   └── test-matrix.md         # Test coverage matrix
-├── security/                  ← Security documentation
-│   └── README.md              # Auth, RBAC, RLS, OWASP mitigations
-├── integrations/              ← Integration documentation
-│   └── README.md              # S3, email, Firebase, Redis, BetterAuth
-├── ai-agents/                 ← AI development documentation
-│   └── README.md              # Agent system, skills, memory
-├── troubleshooting/           ← Troubleshooting guide
-│   └── README.md              # Common issues, debug procedures
-├── patterns/                  ← Reusable design patterns
-│   ├── STATE_MACHINES.md      # 5 state machines with Mermaid diagrams
-│   └── SECURITY.md            # RLS, auth, RBAC, audit, idempotency
-├── operations/                ← Production readiness
-│   ├── production-checklist.md, production-readiness-report.md
-├── devops/                    ← Infrastructure & CI/CD
-│   ├── docker-guide.md        # Docker development deep-dive
-│   ├── ci-cd.md               # CI/CD pipeline documentation
-│   ├── devops-status-report.md, devops-tasks.md
-├── compliance/                ← UK regulations & GDPR
-│   └── uk-hr-compliance-report.md
-├── checklists/                ← Engineering quality checklists
-│   ├── enterprise-engineering-checklist.md, devops-master-checklist.md
-├── audit/                     ← System audit reports (21 files)
-├── issues/                    ← Known issues by category (40 files)
-├── project-management/        ← Roadmaps, sprints, risk register
-├── project-analysis/          ← Requirements & implementation status
-└── archive/                   ← Superseded documentation
-    ├── README.md
-    └── (archived duplicates)
+├── README.md                    ← Documentation portal: folder map, quick links, audience guides
+├── DOC_MAP.md                   ← Visual navigation map of all documentation
+├── DOC_HEALTH_REPORT.md         ← Documentation health scoring
+├── DOC_TODO.md                  ← Gap analysis and improvement backlog
+├── CONTRIBUTING.md              ← Contribution guidelines
+├── CHANGELOG.md                 ← Documentation changelog
+├── SEARCH_INDEX.md              ← Searchable index of all docs
+│
+├── 01-overview/                 ← System overview and glossary
+│   ├── system-documentation.md  # Complete system reference (consolidated)
+│   ├── module-catalog.md        # All backend modules documented
+│   └── glossary.md              # Domain terminology
+├── 02-architecture/             ← System design and internals (22 files + ADRs)
+│   ├── ARCHITECTURE.md          # System overview, plugin chain, request flow
+│   ├── DATABASE.md              # Schema, migrations, RLS, table catalog
+│   ├── PERMISSIONS_SYSTEM.md    # Permission model and RBAC details
+│   ├── WORKER_SYSTEM.md         # Background jobs, Redis Streams, outbox
+│   ├── diagrams.md              # Mermaid diagrams for all subsystems
+│   ├── state-machines.md        # State machine definitions and transitions
+│   ├── security-patterns.md     # RLS, auth, RBAC, audit, idempotency
+│   ├── database-guide.md        # Database deep-dive (queries, roles, performance)
+│   ├── database-indexes.md      # Index strategy and optimization
+│   ├── shared-package.md        # @staffora/shared package reference
+│   ├── architecture-map.md, repository-map.md
+│   └── adr/                     # Architecture Decision Records (5 ADRs)
+├── 03-features/                 ← Feature module documentation (13 files)
+│   ├── core-hr.md               # Core HR, employees, org structure
+│   ├── time-attendance.md       # Time events, schedules, timesheets
+│   ├── absence-management.md    # Leave types, balances, accruals
+│   ├── talent-management.md     # Performance, goals, competencies
+│   ├── recruitment.md           # Recruitment pipeline
+│   ├── case-management.md       # Cases, SLA, escalation
+│   ├── onboarding.md            # Onboarding checklists, templates
+│   └── uk-compliance.md         # UK-specific compliance features
+├── 04-api/                      ← API surface and contracts
+│   ├── API_REFERENCE.md         # All 200+ endpoints by module
+│   └── ERROR_CODES.md           # Error codes with messages by module
+├── 05-development/              ← Developer guides (16 files)
+│   ├── getting-started.md       # Setup and onboarding
+│   ├── backend-development.md   # Elysia.js module patterns
+│   ├── frontend-overview.md     # React Router v7 architecture
+│   ├── frontend-routes.md       # Complete route map (160 routes)
+│   ├── frontend-components.md   # Component library documentation
+│   ├── frontend-data-fetching.md # React Query and API patterns
+│   ├── coding-patterns.md       # Reusable code patterns
+│   ├── database-guide.md        # Query patterns for developers
+│   └── environment-variables.md # Environment configuration
+├── 06-devops/                   ← Infrastructure and CI/CD (10 files)
+│   ├── docker-guide.md          # Docker development deep-dive
+│   ├── ci-cd.md                 # CI/CD pipeline documentation
+│   ├── database-migrations.md   # Migration workflow and conventions
+│   ├── devops-dashboard.md      # DevOps status overview
+│   └── devops-master-checklist.md # Engineering quality checklist
+├── 07-security/                 ← Security documentation (7 files)
+│   ├── authentication.md        # Better Auth, sessions, MFA
+│   ├── authorization.md         # RBAC, permissions
+│   ├── data-protection.md       # Encryption, GDPR data handling
+│   ├── rls-multi-tenancy.md     # Row-Level Security policies
+│   └── security-audit.md        # Security audit findings
+├── 08-testing/                  ← Testing documentation (4 files)
+│   ├── testing-guide.md         # Test infrastructure and patterns
+│   └── test-coverage-matrix.md  # Coverage by module
+├── 09-integrations/             ← External service integrations (3 files)
+│   ├── external-services.md     # S3, email, Firebase, Redis
+│   └── webhook-system.md        # Webhook delivery and retry
+├── 10-ai-agents/                ← AI agent documentation (5 files)
+│   ├── agent-catalog.md         # All agents and their domains
+│   ├── skill-catalog.md         # Available skills reference
+│   └── memory-system.md         # Agent memory architecture
+├── 11-operations/               ← Production operations (36 files incl. runbooks/)
+│   ├── monitoring-observability.md  # Metrics, tracing, alerting
+│   ├── disaster-recovery.md     # DR procedures and RTO/RPO
+│   ├── production-checklist.md  # Go-live checklist
+│   ├── enterprise-engineering-checklist.md
+│   └── runbooks/                # Operational runbooks
+├── 12-compliance/               ← UK regulations and GDPR (17 files incl. issues/)
+│   ├── uk-employment-law.md     # UK employment law reference
+│   ├── gdpr-compliance.md       # GDPR implementation details
+│   ├── uk-compliance-audit.md   # Compliance audit findings
+│   └── issues/                  # Compliance issue tracking (12 files)
+├── 13-roadmap/                  ← Project management (13 files incl. analysis/)
+│   ├── roadmap.md               # Product roadmap
+│   ├── kanban-board.md          # Current sprint board
+│   ├── engineering-todo.md      # Engineering backlog
+│   ├── risk-register.md         # Risk tracking
+│   └── analysis/                # Requirements and implementation analysis
+├── 14-troubleshooting/          ← Troubleshooting guides (29 files incl. issues/)
+│   └── issues/                  # Known issues: architecture, security, tech-debt
+└── 15-archive/                  ← Superseded documentation (29 files incl. audit/)
+    └── audit/                   # Historical audit reports
 ```
 
 When working on a specific area, read the relevant subfolder README first, then drill into the detailed file. Each subfolder README provides a summary of its contents and links to the detailed documents within.

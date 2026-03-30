@@ -166,6 +166,6 @@ All agent and skill definitions are stored in the `.claude/` directory:
 
 - [Architecture Overview](../02-architecture/ARCHITECTURE.md) -- System design reference
 - [Repository Map](../02-architecture/repository-map.md) -- Codebase layout
-- [Design Patterns](../08-patterns/README.md) -- Reusable design patterns
+- [Design Patterns](../02-architecture/security-patterns.md) -- Reusable design patterns
 - [CLAUDE.md](../../CLAUDE.md) -- Primary project instructions
 - [.claude/CLAUDE.md](../../.claude/CLAUDE.md) -- Agent operating rules

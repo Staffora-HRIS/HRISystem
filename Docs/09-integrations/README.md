@@ -543,10 +543,10 @@ HMRC integration will require:
 
 ## Related Documents
 
-- [Architecture Overview](../architecture/ARCHITECTURE.md) -- System design and request flow
-- [Database Reference](../architecture/DATABASE.md) -- Schema, migrations, RLS details
-- [Worker System](../architecture/WORKER_SYSTEM.md) -- Background job processing architecture
-- [Security Patterns](../patterns/SECURITY.md) -- Authentication, authorization, and audit
-- [Deployment Guide](../guides/DEPLOYMENT.md) -- Production deployment configuration
-- [Error Codes Reference](../api/ERROR_CODES.md) -- API error codes by module
-- [UK Compliance](../compliance/uk-hr-compliance-report.md) -- UK regulatory requirements
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) -- System design and request flow
+- [Database Reference](../02-architecture/DATABASE.md) -- Schema, migrations, RLS details
+- [Worker System](../02-architecture/WORKER_SYSTEM.md) -- Background job processing architecture
+- [Security Patterns](../02-architecture/security-patterns.md) -- Authentication, authorization, and audit
+- [Deployment Guide](../05-development/DEPLOYMENT.md) -- Production deployment configuration
+- [Error Codes Reference](../04-api/ERROR_CODES.md) -- API error codes by module
+- [UK Compliance](../12-compliance/uk-hr-compliance-report.md) -- UK regulatory requirements

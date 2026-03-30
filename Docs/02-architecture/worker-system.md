@@ -7,8 +7,8 @@
 
 - [Architecture Overview](./ARCHITECTURE.md) -- System-level architecture
 - [Database Guide](./database-guide.md) -- Outbox table schema and RLS context
-- [State Machines](../patterns/STATE_MACHINES.md) -- Workflow state transitions triggered by workers
-- [Testing Guide](../testing/test-matrix.md) -- Background job test coverage
+- [State Machines](../02-architecture/state-machines.md) -- Workflow state transitions triggered by workers
+- [Testing Guide](../08-testing/test-matrix.md) -- Background job test coverage
 
 ---
 

@@ -363,5 +363,5 @@ The recommended path forward is:
 - [UK Compliance Audit](uk-compliance-audit.md) — UK employment law compliance findings
 - [Infrastructure Audit](infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
 - [UI Verification Report](UI_VERIFICATION_REPORT.md) — Full frontend audit with 14 fixes applied (2026-03-21)
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity assessment
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion tracking
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity assessment
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion tracking

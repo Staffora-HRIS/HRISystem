@@ -688,8 +688,8 @@ Module count: 105 backend modules, ~320 migration files, 8 CI/CD workflows
 ## Related Documents
 
 - [DevOps Master Checklist](devops-master-checklist.md) — DevOps and production readiness checklist
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch deployment checklist
-- [Final System Report](../audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
-- [Technical Debt Report](../audit/technical-debt-report.md) — Structural debt assessment
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion assessment
-- [Engineering TODO](../project-management/engineering-todo.md) — Master engineering task list
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch deployment checklist
+- [Final System Report](../15-archive/audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
+- [Technical Debt Report](../15-archive/audit/technical-debt-report.md) — Structural debt assessment
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion assessment
+- [Engineering TODO](../13-roadmap/engineering-todo.md) — Master engineering task list

@@ -8,6 +8,7 @@ This guide covers the full testing infrastructure for the Staffora HRIS platform
 
 ## Table of Contents
 
+- [Test Architecture Overview](#test-architecture-overview)
 - [Test Runner Overview](#test-runner-overview)
 - [Infrastructure Requirements](#infrastructure-requirements)
 - [Running Tests](#running-tests)
@@ -21,6 +22,161 @@ This guide covers the full testing infrastructure for the Staffora HRIS platform
 - [Writing Unit Tests](#writing-unit-tests)
 - [Writing Frontend Tests](#writing-frontend-tests)
 - [Coverage Requirements](#coverage-requirements)
+
+---
+
+## Test Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph infra ["Docker Infrastructure"]
+        PG["PostgreSQL 16\nport 5432"]
+        REDIS["Redis 7\nport 6379"]
+    end
+
+    subgraph roles ["Database Roles"]
+        HRIS_ADMIN["hris role\nsuperuser\nused for migrations + bootstrap"]
+        HRIS_APP["hris_app role\nNOBYPASSRLS\nused for all test queries"]
+    end
+
+    subgraph rls_enforcement ["RLS Enforcement"]
+        RLS["Row-Level Security\ntenant_id = current_setting\napp.current_tenant"]
+    end
+
+    subgraph api_tests ["packages/api/src/test/ -- bun test"]
+        subgraph integration ["integration/"]
+            INT_CORE["Core Integration\nRLS, idempotency, outbox,\neffective-dating, state-machines"]
+            subgraph routes ["routes/"]
+                ROUTES_HR["HR module"]
+                ROUTES_ABSENCE["Absence module"]
+                ROUTES_TIME["Time module"]
+                ROUTES_TALENT["Talent module"]
+                ROUTES_LMS["LMS module"]
+                ROUTES_CASES["Cases module"]
+                ROUTES_ONBOARDING["Onboarding module"]
+                ROUTES_BENEFITS["Benefits module"]
+                ROUTES_DOCS["Documents module"]
+                ROUTES_RECRUIT["Recruitment module"]
+                ROUTES_COMPLIANCE["Compliance modules"]
+                ROUTES_GDPR["GDPR modules"]
+                ROUTES_PAYROLL["Payroll module"]
+            end
+            MULTI_TENANT["multi-tenant/\nCross-tenant isolation attacks"]
+            WORKFLOWS["workflows/\nMulti-step flow tests"]
+        end
+
+        subgraph unit ["unit/ -- mocks, no DB required"]
+            UNIT_SERVICES["services/\nHR, absence, time, talent,\nLMS, cases, onboarding, benefits,\ndocuments, analytics, recruitment,\npayroll, notifications, workflows"]
+            UNIT_PLUGINS["plugins/\naudit, auth, cache, db, errors,\nidempotency, rate-limit, RBAC,\nsecurity-headers, tenant"]
+            UNIT_REPOS["repositories/\nHR, absence, time"]
+            UNIT_JOBS["jobs/\nanalytics, export, notification,\noutbox-processor, pdf-worker,\ndomain-event-handlers"]
+            UNIT_LIB["lib/\ndistributed-lock, pagination,\nUK holiday pay, UK final pay,\nUK leave carryover, virus scan"]
+        end
+
+        subgraph e2e ["e2e/ -- full request lifecycle"]
+            E2E_AUTH["auth-flow"]
+            E2E_EMPLOYEE["employee-lifecycle"]
+            E2E_LEAVE["leave-request-flow"]
+            E2E_CASE["case-management-flow"]
+            E2E_ONBOARD["onboarding-flow"]
+            E2E_TENANT["multi-tenant-isolation"]
+            E2E_SMOKE["ci-smoke"]
+        end
+
+        subgraph contract ["contract/"]
+            CONTRACT_AUTH["auth-contract"]
+            CONTRACT_HR["hr-contract"]
+            CONTRACT_ABSENCE["absence-contract"]
+        end
+
+        subgraph security ["security/ -- OWASP mitigations"]
+            SEC_AUTH["authentication"]
+            SEC_AUTHZ["authorization-bypass"]
+            SEC_CSRF["csrf-protection"]
+            SEC_INJECT["injection-attacks"]
+            SEC_SQL["sql-injection"]
+            SEC_XSS["xss-prevention"]
+            SEC_INPUT["input-validation"]
+            SEC_RATE["rate-limiting"]
+        end
+
+        subgraph performance ["performance/"]
+            PERF_QUERY["query-performance"]
+            PERF_CONCURRENT["concurrent-access"]
+            PERF_CACHE["cache-performance"]
+            PERF_LARGE["large-dataset"]
+        end
+
+        subgraph chaos ["chaos/ -- resilience"]
+            CHAOS_DB["database-failures"]
+            CHAOS_CONN["connection-failures"]
+            CHAOS_DATA["data-integrity"]
+        end
+    end
+
+    subgraph web_tests ["packages/web/ -- vitest + jsdom"]
+        WEB_COMPONENTS["Component tests\napp/__tests__/"]
+        WEB_HOOKS["Hook tests"]
+        WEB_LIB["Utility tests\nlib/__tests__/"]
+    end
+
+    subgraph helpers ["Test Helpers -- packages/api/src/test/"]
+        SETUP["setup.ts\nensureTestInfra, createTestContext,\nsetTenantContext, withSystemContext"]
+        FACTORIES["helpers/factories.ts\ntenant, user, employee, leave,\ntime events, roles, permissions"]
+        API_CLIENT["helpers/api-client.ts\nTestApiClient with auth sessions,\nidempotency, CSRF"]
+        ASSERTIONS["helpers/assertions.ts\nRLS, status, data, date,\nstate machine, audit, performance"]
+        MOCKS["helpers/mocks.ts\nmock DB, cache, Redis,\nservices, repositories, outbox"]
+    end
+
+    PG --> HRIS_ADMIN
+    HRIS_ADMIN -->|bootstrap + migrate| HRIS_APP
+    HRIS_APP --> RLS
+    REDIS --> api_tests
+
+    RLS --> integration
+    RLS --> e2e
+    RLS --> contract
+    RLS --> security
+    RLS --> performance
+    RLS --> chaos
+
+    MOCKS --> unit
+
+    SETUP --> integration
+    SETUP --> e2e
+    SETUP --> security
+    FACTORIES --> integration
+    FACTORIES --> e2e
+    API_CLIENT --> integration
+    API_CLIENT --> e2e
+    ASSERTIONS --> integration
+    ASSERTIONS --> security
+
+    classDef infra fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef role fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    classDef rls fill:#fff3e0,stroke:#e65100,color:#bf360c
+    classDef integration_style fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef unit_style fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    classDef e2e_style fill:#e0f7fa,stroke:#00838f,color:#006064
+    classDef security_style fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    classDef perf_style fill:#fff8e1,stroke:#f9a825,color:#f57f17
+    classDef chaos_style fill:#efebe9,stroke:#4e342e,color:#3e2723
+    classDef web_style fill:#e8eaf6,stroke:#283593,color:#1a237e
+    classDef helper_style fill:#f1f8e9,stroke:#558b2f,color:#33691e
+
+    class PG,REDIS infra
+    class HRIS_ADMIN,HRIS_APP role
+    class RLS rls
+    class INT_CORE,ROUTES_HR,ROUTES_ABSENCE,ROUTES_TIME,ROUTES_TALENT,ROUTES_LMS,ROUTES_CASES,ROUTES_ONBOARDING,ROUTES_BENEFITS,ROUTES_DOCS,ROUTES_RECRUIT,ROUTES_COMPLIANCE,ROUTES_GDPR,ROUTES_PAYROLL,MULTI_TENANT,WORKFLOWS integration_style
+    class UNIT_SERVICES,UNIT_PLUGINS,UNIT_REPOS,UNIT_JOBS,UNIT_LIB unit_style
+    class E2E_AUTH,E2E_EMPLOYEE,E2E_LEAVE,E2E_CASE,E2E_ONBOARD,E2E_TENANT,E2E_SMOKE e2e_style
+    class CONTRACT_AUTH,CONTRACT_HR,CONTRACT_ABSENCE e2e_style
+    class SEC_AUTH,SEC_AUTHZ,SEC_CSRF,SEC_INJECT,SEC_SQL,SEC_XSS,SEC_INPUT,SEC_RATE security_style
+    class PERF_QUERY,PERF_CONCURRENT,PERF_CACHE,PERF_LARGE perf_style
+    class CHAOS_DB,CHAOS_CONN,CHAOS_DATA chaos_style
+    class WEB_COMPONENTS,WEB_HOOKS,WEB_LIB web_style
+    class SETUP,FACTORIES,API_CLIENT,ASSERTIONS,MOCKS helper_style
+```
 
 ---
 

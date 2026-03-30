@@ -52,6 +52,6 @@ This directory contains the operational documentation needed to deploy, monitor,
 
 ## Related Documentation
 
-- [Docs/devops/](../devops/) -- DevOps status reports and infrastructure tasks
-- [Docs/guides/DEPLOYMENT.md](../guides/DEPLOYMENT.md) -- Deployment procedures and environment setup
-- [Docs/checklists/](../checklists/) -- Engineering and DevOps quality checklists
+- [Docs/devops/](../06-devops/) -- DevOps status reports and infrastructure tasks
+- [Docs/guides/DEPLOYMENT.md](../05-development/DEPLOYMENT.md) -- Deployment procedures and environment setup
+- [11-operations/](../11-operations/) -- Engineering and DevOps quality checklists

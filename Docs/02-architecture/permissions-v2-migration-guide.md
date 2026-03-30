@@ -231,7 +231,7 @@ No existing routes need to change immediately — the v1 guards continue to work
 ## Related Documents
 
 - [Permissions System](PERMISSIONS_SYSTEM.md) — Full 7-layer permission architecture specification
-- [Security Patterns](../patterns/SECURITY.md) — RLS, RBAC, and authorization enforcement
-- [API Reference](../api/API_REFERENCE.md) — Endpoint permission requirements
-- [Security Audit](../audit/security-audit.md) — Access control audit findings
-- [Frontend Guide](../guides/FRONTEND.md) — UI permission guards and hooks
+- [Security Patterns](../02-architecture/security-patterns.md) — RLS, RBAC, and authorization enforcement
+- [API Reference](../04-api/API_REFERENCE.md) — Endpoint permission requirements
+- [Security Audit](../15-archive/audit/security-audit.md) — Access control audit findings
+- [Frontend Guide](../05-development/FRONTEND.md) — UI permission guards and hooks

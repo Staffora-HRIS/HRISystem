@@ -347,7 +347,7 @@ All 17 findings have been addressed. ✅ = implemented, — = not applicable.
 
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
 - [Technical Debt Report](technical-debt-report.md) — Structural debt contributing to performance issues
-- [Database Guide](../architecture/DATABASE.md) — Query patterns and database conventions
-- [Worker System](../architecture/WORKER_SYSTEM.md) — Background job processing performance
-- [Architecture Redesign](../architecture/architecture-redesign.md) — Scalability recommendations
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity assessment
+- [Database Guide](../02-architecture/DATABASE.md) — Query patterns and database conventions
+- [Worker System](../02-architecture/WORKER_SYSTEM.md) — Background job processing performance
+- [Architecture Redesign](../02-architecture/architecture-redesign.md) — Scalability recommendations
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity assessment

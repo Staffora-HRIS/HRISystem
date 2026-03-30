@@ -217,6 +217,6 @@ Workers use Redis consumer groups for horizontal scaling:
 - [Architecture Overview](ARCHITECTURE.md) — System architecture and service topology
 - [Database Guide](DATABASE.md) — Domain outbox table and migration conventions
 - [Architecture Map](architecture-map.md) — Worker subsystem in the architecture diagram
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose worker service configuration
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Worker infrastructure findings
-- [Performance Audit](../audit/PERFORMANCE_AUDIT.md) — Outbox processor performance analysis
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose worker service configuration
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Worker infrastructure findings
+- [Performance Audit](../15-archive/audit/PERFORMANCE_AUDIT.md) — Outbox processor performance analysis

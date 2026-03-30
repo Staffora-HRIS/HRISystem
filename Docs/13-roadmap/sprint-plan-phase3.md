@@ -528,6 +528,6 @@
 - [Sprint Plan Phase 2](sprint-plan-phase2.md) — High priority items (prerequisite)
 - [Roadmap](roadmap.md) — Product roadmap and release timeline
 - [Kanban Board](kanban-board.md) — Work item tracking across all domains
-- [UK Compliance Report](../compliance/uk-hr-compliance-report.md) — UK statutory requirements driving Phase 3
-- [UK Compliance Audit](../audit/uk-compliance-audit.md) — Compliance findings driving Phase 3 work
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion tracking
+- [UK Compliance Report](../12-compliance/uk-hr-compliance-report.md) — UK statutory requirements driving Phase 3
+- [UK Compliance Audit](../15-archive/audit/uk-compliance-audit.md) — Compliance findings driving Phase 3 work
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion tracking

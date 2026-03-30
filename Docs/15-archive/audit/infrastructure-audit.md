@@ -454,10 +454,10 @@ The Docker composition, build system, and environment management are solid for a
 ## Related Documents
 
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline architecture
-- [DevOps Status Report](../devops/devops-status-report.md) — Pipeline health and configuration
-- [DevOps Master Checklist](../checklists/devops-master-checklist.md) — DevOps readiness checklist
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch infrastructure requirements
-- [Architecture Map](../architecture/architecture-map.md) — Deployment architecture diagrams
-- [Risk Register](../project-management/risk-register.md) — Infrastructure risks and mitigations
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline architecture
+- [DevOps Status Report](../06-devops/devops-status-report.md) — Pipeline health and configuration
+- [DevOps Master Checklist](../06-devops/devops-master-checklist.md) — DevOps readiness checklist
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch infrastructure requirements
+- [Architecture Map](../02-architecture/architecture-map.md) — Deployment architecture diagrams
+- [Risk Register](../13-roadmap/risk-register.md) — Infrastructure risks and mitigations

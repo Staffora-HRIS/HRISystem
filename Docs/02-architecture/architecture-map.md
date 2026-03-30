@@ -779,5 +779,5 @@ Payroll (`payroll`, `payroll-config`, `payslips`, `tax-codes`, `deductions`), em
 - [Database Guide](DATABASE.md) — Schema, migrations, and RLS conventions
 - [Worker System](WORKER_SYSTEM.md) — Background processing architecture
 - [Permissions System](PERMISSIONS_SYSTEM.md) — 7-layer access control model
-- [DevOps Dashboard](../devops/devops-dashboard.md) — CI/CD pipeline architecture
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment topology
+- [DevOps Dashboard](../06-devops/devops-dashboard.md) — CI/CD pipeline architecture
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment topology

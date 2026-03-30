@@ -8,8 +8,8 @@ This document describes how the Staffora frontend communicates with the API, man
 
 - [Frontend Architecture Overview](./README.md)
 - [Component Library](./components.md)
-- [API Reference](../api/API_REFERENCE.md)
-- [Error Codes](../api/ERROR_CODES.md)
+- [API Reference](../04-api/API_REFERENCE.md)
+- [Error Codes](../04-api/ERROR_CODES.md)
 
 ---
 
@@ -864,7 +864,7 @@ onSuccess: (newEmployee) => {
 - [Frontend Architecture Overview](./README.md)
 - [Component Library](./components.md)
 - [Complete Route Map](./routes.md)
-- [API Reference](../api/API_REFERENCE.md)
-- [Error Codes](../api/ERROR_CODES.md)
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md)
-- [Database Schema](../architecture/DATABASE.md)
+- [API Reference](../04-api/API_REFERENCE.md)
+- [Error Codes](../04-api/ERROR_CODES.md)
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md)
+- [Database Schema](../02-architecture/DATABASE.md)

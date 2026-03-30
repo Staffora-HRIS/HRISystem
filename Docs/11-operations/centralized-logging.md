@@ -590,6 +590,6 @@ For production HA:
 
 - [Log Aggregation Guide](log-aggregation.md) -- Quick reference for the logging stack
 - [Production Checklist](production-checklist.md) -- Section 4: Monitoring & Observability
-- [Docker Guide](../devops/docker-guide.md) -- Docker development deep-dive
-- [Architecture Overview](../architecture/ARCHITECTURE.md) -- System design and request flow
+- [Docker Guide](../06-devops/docker-guide.md) -- Docker development deep-dive
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) -- System design and request flow
 - [SLA/SLO Definitions](sla-slo-definitions.md) -- Service level objectives that drive alerting thresholds

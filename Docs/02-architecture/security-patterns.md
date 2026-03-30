@@ -246,19 +246,19 @@ Configured in `app.ts`:
 
 ## Related Documentation
 
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md) — 7-layer permission architecture
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md) — 7-layer permission architecture
 - [State Machines](STATE_MACHINES.md) — Status workflow enforcement
-- [Production Checklist](../operations/production-checklist.md) — Security verification items
-- [Security Issues](../issues/) — Known security issues and remediation
+- [Production Checklist](../11-operations/production-checklist.md) — Security verification items
+- [Security Issues](../14-troubleshooting/issues/) — Known security issues and remediation
 
 ---
 
 ## Related Documents
 
 - [State Machines](STATE_MACHINES.md) — Lifecycle state transitions with audit trails
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md) — Full 7-layer permission architecture
-- [Permissions V2 Migration Guide](../architecture/permissions-v2-migration-guide.md) — Adopting enhanced permission guards
-- [Database Guide](../architecture/DATABASE.md) — RLS policies and tenant isolation at the schema level
-- [Security Audit](../audit/security-audit.md) — Comprehensive security findings and remediations
-- [API Reference](../api/API_REFERENCE.md) — CSRF, idempotency, and auth header requirements
-- [Testing Audit](../audit/testing-audit.md) — Security test coverage assessment
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md) — Full 7-layer permission architecture
+- [Permissions V2 Migration Guide](../02-architecture/permissions-v2-migration-guide.md) — Adopting enhanced permission guards
+- [Database Guide](../02-architecture/DATABASE.md) — RLS policies and tenant isolation at the schema level
+- [Security Audit](../15-archive/audit/security-audit.md) — Comprehensive security findings and remediations
+- [API Reference](../04-api/API_REFERENCE.md) — CSRF, idempotency, and auth header requirements
+- [Testing Audit](../15-archive/audit/testing-audit.md) — Security test coverage assessment

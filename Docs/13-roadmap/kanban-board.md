@@ -232,5 +232,5 @@
 - [Sprint Plan Phase 1](sprint-plan-phase1.md) — Critical fixes sprint plan
 - [Sprint Plan Phase 2](sprint-plan-phase2.md) — High priority sprint plan
 - [Sprint Plan Phase 3](sprint-plan-phase3.md) — Feature completion sprint plan
-- [Tickets](../project-analysis/tickets.md) — Development tickets from code audit
-- [Master TODO](../audit/MASTER_TODO.md) — Audit-derived TODO items
+- [Tickets](../13-roadmap/analysis/tickets.md) — Development tickets from code audit
+- [Master TODO](../15-archive/audit/MASTER_TODO.md) — Audit-derived TODO items

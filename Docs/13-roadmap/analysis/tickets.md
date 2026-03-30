@@ -322,7 +322,7 @@
 
 - [Master Requirements](master_requirements.md) — Requirements these tickets address
 - [Implementation Status](implementation_status.md) — Current feature completion assessment
-- [Kanban Board](../project-management/kanban-board.md) — Work item tracking board
-- [Engineering TODO](../project-management/engineering-todo.md) — Master engineering task list
-- [Master TODO](../audit/MASTER_TODO.md) — Audit-derived TODO items
-- [Roadmap](../project-management/roadmap.md) — Product roadmap for ticket scheduling
+- [Kanban Board](../13-roadmap/kanban-board.md) — Work item tracking board
+- [Engineering TODO](../13-roadmap/engineering-todo.md) — Master engineering task list
+- [Master TODO](../15-archive/audit/MASTER_TODO.md) — Audit-derived TODO items
+- [Roadmap](../13-roadmap/roadmap.md) — Product roadmap for ticket scheduling

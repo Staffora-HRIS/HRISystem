@@ -7,10 +7,10 @@
 **Related documentation:**
 
 - [Testing Guide](README.md) -- Infrastructure, helpers, and how to write tests
-- [Worker System](../architecture/worker-system.md) -- Background job architecture
-- [Database Guide](../architecture/database-guide.md) -- RLS, transactions, and query patterns
-- [Security Patterns](../patterns/SECURITY.md) -- Security patterns being tested
-- [API Reference](../api/API_REFERENCE.md) -- Endpoint contracts
+- [Worker System](../02-architecture/worker-system.md) -- Background job architecture
+- [Database Guide](../02-architecture/database-guide.md) -- RLS, transactions, and query patterns
+- [Security Patterns](../02-architecture/security-patterns.md) -- Security patterns being tested
+- [API Reference](../04-api/API_REFERENCE.md) -- Endpoint contracts
 
 ---
 

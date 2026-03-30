@@ -617,7 +617,7 @@ throw createValidationError({
 ## Related Documents
 
 - [API Reference](API_REFERENCE.md) -- Complete endpoint documentation
-- [Security Patterns](../patterns/SECURITY.md) -- Authentication and authorization error scenarios
-- [Frontend Guide](../guides/FRONTEND.md) -- Error handling in the React frontend
-- [Architecture Overview](../architecture/ARCHITECTURE.md) -- Error plugin in the plugin pipeline
-- [State Machines](../patterns/STATE_MACHINES.md) -- State machine transitions and the `STATE_MACHINE_VIOLATION` error
+- [Security Patterns](../02-architecture/security-patterns.md) -- Authentication and authorization error scenarios
+- [Frontend Guide](../05-development/FRONTEND.md) -- Error handling in the React frontend
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) -- Error plugin in the plugin pipeline
+- [State Machines](../02-architecture/state-machines.md) -- State machine transitions and the `STATE_MACHINE_VIOLATION` error

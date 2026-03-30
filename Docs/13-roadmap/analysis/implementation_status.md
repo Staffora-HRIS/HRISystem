@@ -281,8 +281,8 @@
 
 - [Master Requirements](master_requirements.md) — Full requirements list being tracked
 - [Tickets](tickets.md) — Development tickets for unimplemented features
-- [Final System Report](../audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity assessment
-- [Roadmap](../project-management/roadmap.md) — Product roadmap and delivery timeline
-- [Engineering TODO](../project-management/engineering-todo.md) — Master engineering task list
-- [Repository Map](../architecture/repository-map.md) — Module inventory and code structure
+- [Final System Report](../15-archive/audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit report with scores
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity assessment
+- [Roadmap](../13-roadmap/roadmap.md) — Product roadmap and delivery timeline
+- [Engineering TODO](../13-roadmap/engineering-todo.md) — Master engineering task list
+- [Repository Map](../02-architecture/repository-map.md) — Module inventory and code structure

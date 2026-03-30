@@ -199,7 +199,7 @@
 - [Architecture Overview](ARCHITECTURE.md) — Current system architecture
 - [Architecture Map](architecture-map.md) — Current architecture diagrams
 - [Database Guide](DATABASE.md) — Current database design and conventions
-- [Performance Audit](../audit/PERFORMANCE_AUDIT.md) — Performance findings addressed by redesign
-- [Technical Debt Report](../audit/technical-debt-report.md) — Structural debt driving redesign
-- [Production Readiness Report](../operations/production-readiness-report.md) — Platform maturity assessment
-- [Risk Register](../project-management/risk-register.md) — Architectural risks and mitigations
+- [Performance Audit](../15-archive/audit/PERFORMANCE_AUDIT.md) — Performance findings addressed by redesign
+- [Technical Debt Report](../15-archive/audit/technical-debt-report.md) — Structural debt driving redesign
+- [Production Readiness Report](../11-operations/production-readiness-report.md) — Platform maturity assessment
+- [Risk Register](../13-roadmap/risk-register.md) — Architectural risks and mitigations

@@ -619,8 +619,8 @@ This audit examines the codebase for evidence of UK employment law compliance fe
 ## Related Documents
 
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
-- [UK Compliance Report](../compliance/uk-hr-compliance-report.md) — UK compliance remediation status
-- [Sprint Plan Phase 3](../project-management/sprint-plan-phase3.md) — UK compliance feature sprints
-- [Master Requirements](../project-analysis/master_requirements.md) — UK statutory requirements
-- [Implementation Status](../project-analysis/implementation_status.md) — Compliance feature completion
-- [State Machines](../patterns/STATE_MACHINES.md) — Employee and leave lifecycle workflows
+- [UK Compliance Report](../12-compliance/uk-hr-compliance-report.md) — UK compliance remediation status
+- [Sprint Plan Phase 3](../13-roadmap/sprint-plan-phase3.md) — UK compliance feature sprints
+- [Master Requirements](../13-roadmap/analysis/master_requirements.md) — UK statutory requirements
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Compliance feature completion
+- [State Machines](../02-architecture/state-machines.md) — Employee and leave lifecycle workflows

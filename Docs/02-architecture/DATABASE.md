@@ -230,8 +230,8 @@ await withSystemContext(db, async (tx) => {
 
 - [Migration Conventions](../../migrations/README.md) — Migration file format and ordering
 - [Worker System](WORKER_SYSTEM.md) — Background processing with Redis Streams
-- [Security Patterns](../patterns/SECURITY.md) — RLS and authentication details
-- [Effective Dating](../patterns/STATE_MACHINES.md) — Time-versioned record patterns
+- [Security Patterns](../02-architecture/security-patterns.md) — RLS and authentication details
+- [Effective Dating](../02-architecture/state-machines.md) — Time-versioned record patterns
 
 ---
 
@@ -239,8 +239,8 @@ await withSystemContext(db, async (tx) => {
 
 - [Architecture Overview](ARCHITECTURE.md) — System architecture and data flow diagrams
 - [Worker System](WORKER_SYSTEM.md) — Outbox table processing and domain events
-- [Security Patterns](../patterns/SECURITY.md) — Row-Level Security enforcement details
-- [State Machines](../patterns/STATE_MACHINES.md) — Entity lifecycle states stored in the database
-- [Getting Started](../guides/GETTING_STARTED.md) — Running migrations and seeding data
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Database infrastructure findings
-- [Performance Audit](../audit/PERFORMANCE_AUDIT.md) — Query performance findings and recommendations
+- [Security Patterns](../02-architecture/security-patterns.md) — Row-Level Security enforcement details
+- [State Machines](../02-architecture/state-machines.md) — Entity lifecycle states stored in the database
+- [Getting Started](../05-development/GETTING_STARTED.md) — Running migrations and seeding data
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Database infrastructure findings
+- [Performance Audit](../15-archive/audit/PERFORMANCE_AUDIT.md) — Query performance findings and recommendations

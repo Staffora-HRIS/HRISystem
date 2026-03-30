@@ -632,9 +632,9 @@ The shared `isStrongPassword()` function exists but is not wired into the Better
 ## Related Documents
 
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
-- [Security Patterns](../patterns/SECURITY.md) — RLS, authentication, and authorization patterns
-- [Permissions System](../architecture/PERMISSIONS_SYSTEM.md) — 7-layer permission architecture
-- [Database Guide](../architecture/DATABASE.md) — RLS policies and tenant isolation
-- [Production Checklist](../operations/production-checklist.md) — Security items in pre-launch checklist
-- [Risk Register](../project-management/risk-register.md) — Security risks and mitigations
-- [Sprint Plan Phase 1](../project-management/sprint-plan-phase1.md) — Security hardening sprint
+- [Security Patterns](../02-architecture/security-patterns.md) — RLS, authentication, and authorization patterns
+- [Permissions System](../02-architecture/PERMISSIONS_SYSTEM.md) — 7-layer permission architecture
+- [Database Guide](../02-architecture/DATABASE.md) — RLS policies and tenant isolation
+- [Production Checklist](../11-operations/production-checklist.md) — Security items in pre-launch checklist
+- [Risk Register](../13-roadmap/risk-register.md) — Security risks and mitigations
+- [Sprint Plan Phase 1](../13-roadmap/sprint-plan-phase1.md) — Security hardening sprint

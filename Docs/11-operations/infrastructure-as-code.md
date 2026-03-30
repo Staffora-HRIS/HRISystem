@@ -1336,4 +1336,4 @@ terraform destroy
 - [Docs/operations/disaster-recovery.md](disaster-recovery.md) -- Recovery procedures
 - [Docs/operations/backup-verification.md](backup-verification.md) -- Backup verification
 - [Docs/operations/secret-rotation.md](secret-rotation.md) -- Secret rotation procedures
-- [Docs/devops/ci-cd.md](../devops/ci-cd.md) -- CI/CD pipeline documentation
+- [Docs/devops/ci-cd.md](../06-devops/ci-cd.md) -- CI/CD pipeline documentation

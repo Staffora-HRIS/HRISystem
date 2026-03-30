@@ -214,9 +214,9 @@ All requirements are considered met when:
 
 - [Implementation Status](implementation_status.md) — Feature completion against these requirements
 - [Tickets](tickets.md) — Development tickets derived from requirements gaps
-- [Roadmap](../project-management/roadmap.md) — Product roadmap for requirement delivery
-- [Sprint Plan Phase 1](../project-management/sprint-plan-phase1.md) — Critical requirement fixes
-- [Sprint Plan Phase 2](../project-management/sprint-plan-phase2.md) — High priority requirement work
-- [Sprint Plan Phase 3](../project-management/sprint-plan-phase3.md) — Feature completion sprints
-- [UK Compliance Report](../compliance/uk-hr-compliance-report.md) — UK statutory requirements coverage
-- [Final System Report](../audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit and feature scores
+- [Roadmap](../13-roadmap/roadmap.md) — Product roadmap for requirement delivery
+- [Sprint Plan Phase 1](../13-roadmap/sprint-plan-phase1.md) — Critical requirement fixes
+- [Sprint Plan Phase 2](../13-roadmap/sprint-plan-phase2.md) — High priority requirement work
+- [Sprint Plan Phase 3](../13-roadmap/sprint-plan-phase3.md) — Feature completion sprints
+- [UK Compliance Report](../12-compliance/uk-hr-compliance-report.md) — UK statutory requirements coverage
+- [Final System Report](../15-archive/audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit and feature scores

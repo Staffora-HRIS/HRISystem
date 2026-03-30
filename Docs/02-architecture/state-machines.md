@@ -300,16 +300,16 @@ stateDiagram-v2
 ## Related Documentation
 
 - [Security Patterns](SECURITY.md) — RLS, RBAC, audit logging
-- [Database Guide](../architecture/DATABASE.md) — Effective dating and schema design
-- [API Reference](../api/API_REFERENCE.md) — Endpoint documentation
+- [Database Guide](../02-architecture/DATABASE.md) — Effective dating and schema design
+- [API Reference](../04-api/API_REFERENCE.md) — Endpoint documentation
 
 ---
 
 ## Related Documents
 
 - [Security Patterns](SECURITY.md) — Authorization enforcement for state transitions
-- [Architecture Overview](../architecture/ARCHITECTURE.md) — System architecture and data flow
-- [Database Guide](../architecture/DATABASE.md) — Transition audit tables and effective dating
-- [API Reference](../api/API_REFERENCE.md) — Endpoints that trigger state transitions
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion by module
-- [UK Compliance Report](../compliance/uk-hr-compliance-report.md) — UK-specific lifecycle requirements
+- [Architecture Overview](../02-architecture/ARCHITECTURE.md) — System architecture and data flow
+- [Database Guide](../02-architecture/DATABASE.md) — Transition audit tables and effective dating
+- [API Reference](../04-api/API_REFERENCE.md) — Endpoints that trigger state transitions
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion by module
+- [UK Compliance Report](../12-compliance/uk-hr-compliance-report.md) — UK-specific lifecycle requirements

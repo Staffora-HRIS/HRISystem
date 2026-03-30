@@ -643,9 +643,9 @@ Solutions:
 
 - [Production Checklist](production-checklist.md) -- Pre-launch readiness items
 - [Production Readiness Report](production-readiness-report.md) -- Platform maturity assessment
-- [Deployment Guide](../guides/DEPLOYMENT.md) -- Docker Compose deployment instructions
-- [Database Architecture](../architecture/DATABASE.md) -- Schema, migrations, RLS
-- [Database Guide](../architecture/database-guide.md) -- Query patterns, roles, performance
+- [Deployment Guide](../05-development/DEPLOYMENT.md) -- Docker Compose deployment instructions
+- [Database Architecture](../02-architecture/DATABASE.md) -- Schema, migrations, RLS
+- [Database Guide](../02-architecture/database-guide.md) -- Query patterns, roles, performance
 - `docker/postgres/postgresql.conf` -- PostgreSQL configuration (WAL archiving settings)
 - `docker/scripts/backup-db.sh` -- Daily pg_dump backup script
 - `docker/scripts/restore-db.sh` -- Simple restore from pg_dump

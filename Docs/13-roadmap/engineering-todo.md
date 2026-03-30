@@ -228,7 +228,7 @@ These items were completed during the 2026-03-21 engineering session, addressing
 - [Roadmap](roadmap.md) — Product roadmap and release timeline
 - [Kanban Board](kanban-board.md) — Work item tracking across all domains
 - [Risk Register](risk-register.md) — Project risks and mitigation plans
-- [Master TODO](../audit/MASTER_TODO.md) — Audit-derived TODO items
-- [Tickets](../project-analysis/tickets.md) — Development tickets from code audit
-- [Final System Report](../audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit scores and findings
-- [Technical Debt Report](../audit/technical-debt-report.md) — Structural debt assessment
+- [Master TODO](../15-archive/audit/MASTER_TODO.md) — Audit-derived TODO items
+- [Tickets](../13-roadmap/analysis/tickets.md) — Development tickets from code audit
+- [Final System Report](../15-archive/audit/FINAL_SYSTEM_REPORT.md) — Consolidated audit scores and findings
+- [Technical Debt Report](../15-archive/audit/technical-debt-report.md) — Structural debt assessment

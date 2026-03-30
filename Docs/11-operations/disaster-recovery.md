@@ -868,5 +868,5 @@ These items are not yet implemented but would strengthen the DR posture. They ar
 - [Worker System](worker-system.md) -- Background job architecture
 - [Monitoring & Observability](monitoring-observability.md) -- Metrics, tracing, health checks
 - [External Service Integrations](../09-integrations/external-services.md) -- S3, SMTP, Redis configuration
-- [Docker Guide](../devops/docker-guide.md) -- Container management deep-dive
+- [Docker Guide](../06-devops/docker-guide.md) -- Container management deep-dive
 - [Secret Rotation](secret-rotation.md) -- Credential rotation procedures

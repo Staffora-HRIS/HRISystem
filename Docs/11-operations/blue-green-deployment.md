@@ -520,6 +520,6 @@ curl -X POST http://localhost:3100/api/annotations \
 
 - [Docs/operations/disaster-recovery.md](disaster-recovery.md) -- Recovery procedures and RTO/RPO targets
 - [Docs/operations/auto-scaling.md](auto-scaling.md) -- Horizontal scaling configuration
-- [Docs/guides/DEPLOYMENT.md](../guides/DEPLOYMENT.md) -- General deployment guide
+- [Docs/guides/DEPLOYMENT.md](../05-development/DEPLOYMENT.md) -- General deployment guide
 - [docker/docker-compose.scale.yml](../../docker/docker-compose.scale.yml) -- Scaling override
 - [docker/nginx/nginx.conf](../../docker/nginx/nginx.conf) -- Production nginx configuration

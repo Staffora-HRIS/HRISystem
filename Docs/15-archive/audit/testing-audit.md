@@ -485,6 +485,6 @@ The codebase has undergone a substantial testing quality improvement between the
 - [Final System Report](FINAL_SYSTEM_REPORT.md) — Consolidated audit report with all scores
 - [Technical Debt Report](technical-debt-report.md) — Testing debt in the structural debt assessment
 - [Security Audit](security-audit.md) — Security test coverage findings
-- [Implementation Status](../project-analysis/implementation_status.md) — Feature completion and test gaps
-- [Sprint Plan Phase 2](../project-management/sprint-plan-phase2.md) — Testing infrastructure sprint work
-- [Enterprise Engineering Checklist](../checklists/enterprise-engineering-checklist.md) — Testing checklist items
+- [Implementation Status](../13-roadmap/analysis/implementation_status.md) — Feature completion and test gaps
+- [Sprint Plan Phase 2](../13-roadmap/sprint-plan-phase2.md) — Testing infrastructure sprint work
+- [Enterprise Engineering Checklist](../11-operations/enterprise-engineering-checklist.md) — Testing checklist items

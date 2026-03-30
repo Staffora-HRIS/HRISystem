@@ -61,6 +61,36 @@ Operational runbooks for the Staffora HRIS platform. Each runbook provides step-
 
 ## General Incident Workflow
 
+```mermaid
+flowchart TD
+    DETECT["1. Detect\nAlert fires or user report"]
+    ACK["2. Acknowledge\nAssign incident commander"]
+    TRIAGE["3. Triage\nIdentify affected system"]
+    MITIGATE["4. Mitigate\nFollow runbook Immediate Actions"]
+    INVESTIGATE["5. Investigate\nRoot cause analysis"]
+    RESOLVE["6. Resolve\nApply permanent fix"]
+    REVIEW["7. Review\nPost-incident template within 48h"]
+
+    DETECT --> ACK --> TRIAGE --> MITIGATE --> INVESTIGATE --> RESOLVE --> REVIEW
+
+    subgraph severity ["Response Time by Severity"]
+        P1["P1 Critical: 15 min"]
+        P2["P2 High: 1 hour"]
+        P3["P3 Medium: 4 hours"]
+        P4["P4 Low: Next business day"]
+    end
+
+    ACK -. "response\ntime" .-> severity
+
+    subgraph runbooks ["Runbook Selection"]
+        RB_INFRA["Infrastructure\nDB connections, Redis,\ndisk, SSL"]
+        RB_APP["Application\nAPI 5xx, migration,\nrollback"]
+        RB_SEC["Security\nBreach response"]
+    end
+
+    TRIAGE --> runbooks
+```
+
 1. **Detect** -- Alert fires or user reports an issue.
 2. **Acknowledge** -- Assign an incident commander within the response time for the severity level.
 3. **Triage** -- Identify the affected system and open the matching runbook.

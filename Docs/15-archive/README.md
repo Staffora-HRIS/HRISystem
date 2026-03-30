@@ -11,7 +11,7 @@ Superseded or deprecated documentation kept for historical reference. Files here
 | [enterprise-hr-capability-checklist-old.md](enterprise-hr-capability-checklist-old.md) | Previous enterprise HR capability checklist (superseded by Docs/audit/hr-enterprise-checklist.md) |
 | [feature-validation-report-old.md](feature-validation-report-old.md) | Previous feature validation report (superseded by Docs/audit/feature-validation-report.md) |
 | [permissions-system-design-old.md](permissions-system-design-old.md) | Earlier permissions system design document (superseded by current RBAC implementation) |
-| [tickets-pm-old.md](tickets-pm-old.md) | Previous project management tickets (superseded by Docs/project-analysis/tickets.md) |
+| [tickets-pm-old.md](tickets-pm-old.md) | Previous project management tickets (superseded by 13-roadmap/analysis/tickets.md) |
 | [todo-master-analysis.md](todo-master-analysis.md) | Historical master TODO analysis |
 | [todo-master-pm-old.md](todo-master-pm-old.md) | Previous master TODO project management tracking |
 
@@ -21,6 +21,6 @@ These files are retained for historical context only. Do not use them as the sou
 
 ## Related Documentation
 
-- [Docs/audit/](../audit/) -- Current audit reports and system assessments
-- [Docs/project-analysis/](../project-analysis/) -- Current requirements and implementation tracking
-- [Docs/checklists/](../checklists/) -- Current engineering checklists
+- [Docs/audit/](../15-archive/audit/) -- Current audit reports and system assessments
+- [13-roadmap/analysis/](../13-roadmap/analysis/) -- Current requirements and implementation tracking
+- [11-operations/](../11-operations/) -- Current engineering checklists

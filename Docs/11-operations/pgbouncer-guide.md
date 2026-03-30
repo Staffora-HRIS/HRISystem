@@ -294,8 +294,8 @@ This should never happen if `server_reset_query = DISCARD ALL` is set. Verify:
 ## Related Documentation
 
 - [production-checklist.md](production-checklist.md) -- Production deployment checklist
-- [Docs/architecture/DATABASE.md](../architecture/DATABASE.md) -- Database schema and RLS documentation
-- [Docs/architecture/database-guide.md](../architecture/database-guide.md) -- Database deep-dive
+- [Docs/architecture/DATABASE.md](../02-architecture/DATABASE.md) -- Database schema and RLS documentation
+- [Docs/architecture/database-guide.md](../02-architecture/database-guide.md) -- Database deep-dive
 - `docker/pgbouncer/pgbouncer.ini` -- PgBouncer configuration file
 - `docker/pgbouncer/userlist.txt` -- PgBouncer user credentials
 - `packages/api/src/plugins/db.ts` -- Database plugin with PgBouncer detection

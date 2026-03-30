@@ -744,7 +744,7 @@ Going from 4/10 to 8/10 in observability within 8 weeks would raise the overall 
 
 - [DevOps Tasks](devops-tasks.md) — Infrastructure task list and progress tracking
 - [DevOps Dashboard](devops-dashboard.md) — Pipeline architecture and status overview
-- [DevOps Master Checklist](../checklists/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
-- [Production Checklist](../operations/production-checklist.md) — Pre-launch readiness checklist
+- [DevOps Master Checklist](../06-devops/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
+- [Production Checklist](../11-operations/production-checklist.md) — Pre-launch readiness checklist

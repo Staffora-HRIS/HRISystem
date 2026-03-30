@@ -228,5 +228,5 @@ Verification failures are logged as warnings but do not delete the backup file o
 ## Related Documentation
 
 - [Production Checklist](production-checklist.md) -- Database operations requirements
-- [Docker Development Guide](../devops/docker-guide.md) -- Container management
-- [Deployment Guide](../guides/DEPLOYMENT.md) -- Production deployment procedures
+- [Docker Development Guide](../06-devops/docker-guide.md) -- Container management
+- [Deployment Guide](../05-development/DEPLOYMENT.md) -- Production deployment procedures

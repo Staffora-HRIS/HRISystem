@@ -867,7 +867,7 @@ docker exec staffora-nginx nginx -s reload
 ## Related Documentation
 
 - [docker/nginx/nginx.conf](../../docker/nginx/nginx.conf) -- Base nginx configuration
-- [Docs/security/README.md](../security/README.md) -- Security architecture overview
-- [Docs/patterns/SECURITY.md](../patterns/SECURITY.md) -- Security patterns (RLS, auth, RBAC)
+- [Docs/security/README.md](../07-security/README.md) -- Security architecture overview
+- [Docs/patterns/SECURITY.md](../02-architecture/security-patterns.md) -- Security patterns (RLS, auth, RBAC)
 - [Docs/operations/log-aggregation.md](log-aggregation.md) -- Loki/Promtail log aggregation
 - [Docs/operations/auto-scaling.md](auto-scaling.md) -- Scaling configuration

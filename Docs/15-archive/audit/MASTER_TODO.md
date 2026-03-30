@@ -511,6 +511,6 @@ TODO-163 through TODO-263 (LOW items)
 - [Security Audit](security-audit.md) — Security findings driving TODO items
 - [Testing Audit](testing-audit.md) — Testing findings driving TODO items
 - [Technical Debt Report](technical-debt-report.md) — Debt findings driving TODO items
-- [Engineering TODO](../project-management/engineering-todo.md) — Master engineering task list
-- [Kanban Board](../project-management/kanban-board.md) — Work item tracking board
-- [Tickets](../project-analysis/tickets.md) — Development tickets from code audit
+- [Engineering TODO](../13-roadmap/engineering-todo.md) — Master engineering task list
+- [Kanban Board](../13-roadmap/kanban-board.md) — Work item tracking board
+- [Tickets](../13-roadmap/analysis/tickets.md) — Development tickets from code audit

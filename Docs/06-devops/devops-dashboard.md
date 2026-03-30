@@ -119,7 +119,7 @@ graph TD
 
 - [DevOps Status Report](devops-status-report.md) — Detailed CI/CD architecture and pipeline health
 - [DevOps Tasks](devops-tasks.md) — Infrastructure task list and progress tracking
-- [DevOps Master Checklist](../checklists/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
-- [Deployment Guide](../guides/DEPLOYMENT.md) — Docker Compose deployment instructions
-- [Infrastructure Audit](../audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
-- [Architecture Map](../architecture/architecture-map.md) — System architecture diagrams
+- [DevOps Master Checklist](../06-devops/devops-master-checklist.md) — Comprehensive DevOps readiness checklist
+- [Deployment Guide](../05-development/DEPLOYMENT.md) — Docker Compose deployment instructions
+- [Infrastructure Audit](../15-archive/audit/infrastructure-audit.md) — Docker, CI/CD, and infrastructure findings
+- [Architecture Map](../02-architecture/architecture-map.md) — System architecture diagrams

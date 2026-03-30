@@ -3308,7 +3308,7 @@ Even `tenant_admin` does not see board compensation unless they are also assigne
 
 - [Permissions V2 Migration Guide](permissions-v2-migration-guide.md) — Adopting the enhanced permission layers
 - [Architecture Overview](ARCHITECTURE.md) — System architecture and plugin pipeline
-- [Security Patterns](../patterns/SECURITY.md) — RLS, authentication, and authorization enforcement
-- [API Reference](../api/API_REFERENCE.md) — Endpoint permission requirements
-- [Security Audit](../audit/security-audit.md) — Authorization and access control findings
-- [Frontend Guide](../guides/FRONTEND.md) — UI permission guards and role-based rendering
+- [Security Patterns](../02-architecture/security-patterns.md) — RLS, authentication, and authorization enforcement
+- [API Reference](../04-api/API_REFERENCE.md) — Endpoint permission requirements
+- [Security Audit](../15-archive/audit/security-audit.md) — Authorization and access control findings
+- [Frontend Guide](../05-development/FRONTEND.md) — UI permission guards and role-based rendering
