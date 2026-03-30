@@ -292,7 +292,11 @@ describe("P60 Document Generation (TODO-130)", () => {
     expect(parseFloat(p60.student_loan_deductions)).toBe(185.0);
     expect(parseFloat(p60.pension_contributions)).toBe(310.0);
     expect(p60.ni_contributions).toBeDefined();
-    expect(p60.ni_contributions.A).toBeDefined();
+    // postgres.js usually auto-parses JSONB, but handle string fallback
+    const niContribs = typeof p60.ni_contributions === "string"
+      ? JSON.parse(p60.ni_contributions)
+      : p60.ni_contributions;
+    expect(niContribs.A).toBeDefined();
     expect(p60.status).toBe("generated");
   });
 
@@ -320,7 +324,7 @@ describe("P60 Document Generation (TODO-130)", () => {
       expect(true).toBe(false);
     } catch (error: any) {
       // Should fail with unique constraint violation
-      expect(error.message).toContain("uq_p60_employee_tax_year");
+      expect(error.message).toContain("p60_documents_unique");
     }
   });
 

@@ -64,13 +64,16 @@ beforeAll(async () => {
   await ensureTestInfra();
   if (!isInfraAvailable()) return;
 
+  // Use max: 1 to ensure session-level set_config() (tenant context) persists
+  // across queries within the same test. With max > 1, session state may be
+  // lost when postgres.js assigns queries to different pooled connections.
   db = postgres({
     host: TEST_CONFIG.database.host,
     port: TEST_CONFIG.database.port,
     database: TEST_CONFIG.database.database,
     username: TEST_CONFIG.database.username,
     password: TEST_CONFIG.database.password,
-    max: 5,
+    max: 1,
     idle_timeout: 10,
     connect_timeout: 5,
     transform: {
@@ -79,13 +82,15 @@ beforeAll(async () => {
   });
 
   // Create test tenants and users within system context
+  // Use max: 1 to ensure enable_system_context() and subsequent queries
+  // share the same connection (system context is session-level state).
   const adminDb = postgres({
     host: TEST_CONFIG.database.host,
     port: TEST_CONFIG.database.port,
     database: TEST_CONFIG.database.database,
     username: TEST_CONFIG.database.adminUsername,
     password: TEST_CONFIG.database.adminPassword,
-    max: 2,
+    max: 1,
     idle_timeout: 10,
     transform: {
       column: { to: postgres.toCamel, from: postgres.fromCamel },
@@ -184,7 +189,7 @@ afterAll(async () => {
     database: TEST_CONFIG.database.database,
     username: TEST_CONFIG.database.adminUsername,
     password: TEST_CONFIG.database.adminPassword,
-    max: 2,
+    max: 1,
     idle_timeout: 5,
     transform: {
       column: { to: postgres.toCamel, from: postgres.fromCamel },

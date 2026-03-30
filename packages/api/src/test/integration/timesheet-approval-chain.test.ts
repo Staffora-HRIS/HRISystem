@@ -139,7 +139,7 @@ describe("Timesheet Approval Chains", () => {
       ORDER BY ordinal_position
     `;
 
-    const columnNames = columns.map((c: any) => c.columnName);
+    const columnNames = columns.map((c: any) => c.column_name);
     expect(columnNames).toContain("id");
     expect(columnNames).toContain("tenant_id");
     expect(columnNames).toContain("timesheet_id");

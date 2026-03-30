@@ -54,6 +54,7 @@ describe("AbsenceService (Enhanced)", () => {
     db = getTestDb();
 
     // camelCase-transformed connection so RETURNING * produces camelCase properties
+    // Use postgres.camel for bidirectional transform (camelCase <-> snake_case)
     camelDb = postgres({
       host: TEST_CONFIG.database.host,
       port: TEST_CONFIG.database.port,
@@ -63,7 +64,8 @@ describe("AbsenceService (Enhanced)", () => {
       max: 1,
       idle_timeout: 20,
       connect_timeout: 10,
-      transform: postgres.toCamel,
+      connection: { search_path: "app,public" },
+      transform: postgres.camel,
     });
 
     const suffix = Date.now();

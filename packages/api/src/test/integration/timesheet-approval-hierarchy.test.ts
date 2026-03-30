@@ -146,7 +146,8 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
     test("should enforce unique constraint per department per tenant", async () => {
       await setTenantContext(db, tenantId, userId);
 
-      const insertDuplicate = async () => {
+      let threw = false;
+      try {
         await db.unsafe(
           `INSERT INTO app.timesheet_approval_hierarchies (
             id, tenant_id, department_id, name, approval_levels
@@ -157,9 +158,11 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
           [crypto.randomUUID(), tenantId, orgUnitId,
            JSON.stringify([{ level: 1, role: "Manager", approverId: approver1Id }])]
         );
-      };
-
-      expect(insertDuplicate).toThrow();
+      } catch (e: any) {
+        threw = true;
+        expect(e.message).toContain("timesheet_approval_hierarchies_unique");
+      }
+      expect(threw).toBe(true);
     });
 
     test("should create a tenant-wide default hierarchy (null department_id)", async () => {
@@ -269,7 +272,8 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
     test("should reject empty approval_levels array", async () => {
       await setTenantContext(db, tenantId, userId);
 
-      const insertEmpty = async () => {
+      let threw = false;
+      try {
         await db`
           INSERT INTO app.timesheet_approval_hierarchies (
             id, tenant_id, name, approval_levels
@@ -280,9 +284,11 @@ describe("Timesheet Approval Hierarchy (TODO-251)", () => {
             '[]'::jsonb
           )
         `;
-      };
-
-      expect(insertEmpty).toThrow();
+      } catch (e: any) {
+        threw = true;
+        expect(e.message).toContain("timesheet_approval_hierarchies_levels_nonempty");
+      }
+      expect(threw).toBe(true);
     });
   });
 

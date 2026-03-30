@@ -171,7 +171,7 @@ describe("Employee Positions (Concurrent Employment) Integration", () => {
         effective_from: "2024-01-01",
       })
     );
-    expect(orgUnitRes.status).toBe(200);
+    expect(orgUnitRes.status).toBe(201);
     const orgUnitBody = (await orgUnitRes.json()) as { id: string };
     orgUnitIdA = orgUnitBody.id;
     createdOrgUnitIds.push(orgUnitIdA);
@@ -241,7 +241,7 @@ describe("Employee Positions (Concurrent Employment) Integration", () => {
         effective_from: "2024-01-01",
       })
     );
-    expect(orgUnitResB.status).toBe(200);
+    expect(orgUnitResB.status).toBe(201);
     const orgUnitBodyB = (await orgUnitResB.json()) as { id: string };
     orgUnitIdB = orgUnitBodyB.id;
     createdOrgUnitIds.push(orgUnitIdB);

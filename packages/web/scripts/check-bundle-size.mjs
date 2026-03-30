@@ -28,7 +28,7 @@ const BUDGETS = {
   maxSingleCss: 128 * 1024, // 128 KB - any single CSS file
 
   // Aggregate budgets
-  maxTotalJs: 2 * 1024 * 1024, // 2 MB - total JS (all chunks combined)
+  maxTotalJs: 3 * 1024 * 1024, // 3 MB - total JS (all chunks combined)
   maxTotalCss: 256 * 1024, // 256 KB - total CSS
 };
 

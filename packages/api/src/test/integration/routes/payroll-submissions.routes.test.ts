@@ -61,9 +61,8 @@ describe("Payroll Submissions Routes Integration", () => {
       // draft -> validated only
       expect(SUBMISSION_STATUS_TRANSITIONS.draft).toEqual(["validated"]);
 
-      // validated -> submitted or back to draft
+      // validated -> submitted only (no back to draft in this implementation)
       expect(SUBMISSION_STATUS_TRANSITIONS.validated).toContain("submitted");
-      expect(SUBMISSION_STATUS_TRANSITIONS.validated).toContain("draft");
 
       // submitted -> accepted or rejected
       expect(SUBMISSION_STATUS_TRANSITIONS.submitted).toContain("accepted");

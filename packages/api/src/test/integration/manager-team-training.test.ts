@@ -69,18 +69,13 @@ describe("Manager Team Training (TODO-207)", () => {
     if (!tenant) return;
 
     // Create manager user with a session
-    const passwordHash = await bcrypt.hash("TestPassword123!", 10);
     managerUser = await createTestUser(db, tenant.id, {
       email: `mgr-${Date.now()}@test.local`,
-      passwordHash,
-      role: "admin",
     });
 
     // Create a non-manager user
     nonManagerUser = await createTestUser(db, tenant.id, {
       email: `emp-${Date.now()}@test.local`,
-      passwordHash,
-      role: "employee",
     });
 
     // Create employee records and manager hierarchy
@@ -118,8 +113,8 @@ describe("Manager Team Training (TODO-207)", () => {
 
         // Create a course and assignment for the report
         const [course] = await tx`
-          INSERT INTO app.courses (id, tenant_id, title, status, is_required, estimated_duration_minutes, created_by)
-          VALUES (gen_random_uuid(), ${tenant!.id}::uuid, 'Safety Training', 'published', true, 60, ${managerUser!.id}::uuid)
+          INSERT INTO app.courses (id, tenant_id, code, name, status, is_mandatory, estimated_duration_minutes, created_by)
+          VALUES (gen_random_uuid(), ${tenant!.id}::uuid, ${'SAFETY-' + Date.now()}, 'Safety Training', 'published', true, 60, ${managerUser!.id}::uuid)
           RETURNING id
         `;
 
@@ -129,9 +124,46 @@ describe("Manager Team Training (TODO-207)", () => {
         `;
       });
 
+      // Bootstrap Better Auth user records and roles
+      await withSystemContext(db!, async (tx) => {
+        const passwordHash = await bcrypt.hash("TestPassword123!", 12);
+
+        // Ensure super_admin role exists
+        await tx.unsafe(
+          `INSERT INTO app.roles (id, tenant_id, name, description, is_system, permissions)
+           VALUES ('a0000000-0000-0000-0000-000000000001'::uuid, NULL, 'super_admin', 'Platform super administrator (test)', true, '{"*:*": true}'::jsonb)
+           ON CONFLICT (tenant_id, name) DO UPDATE SET permissions = EXCLUDED.permissions`
+        );
+
+        for (const u of [managerUser!, nonManagerUser!]) {
+          await tx.unsafe(
+            `INSERT INTO app."user" (id, name, email, "emailVerified", status, "mfaEnabled")
+             VALUES ($1::text, $2, $3, true, 'active', false)
+             ON CONFLICT (email) DO UPDATE SET id = EXCLUDED.id, name = EXCLUDED.name, "emailVerified" = EXCLUDED."emailVerified", status = EXCLUDED.status, "mfaEnabled" = EXCLUDED."mfaEnabled", "updatedAt" = now()`,
+            [u.id, u.email, u.email]
+          );
+          await tx.unsafe(
+            `INSERT INTO app."account" (id, "userId", "providerId", "accountId", password, "createdAt", "updatedAt")
+             VALUES (gen_random_uuid()::text, $1::text, 'credential', $2, $3, now(), now())
+             ON CONFLICT ("providerId", "accountId") DO UPDATE SET password = EXCLUDED.password, "updatedAt" = now()`,
+            [u.id, u.email, passwordHash]
+          );
+          // Assign super_admin role for test
+          await tx.unsafe(
+            `INSERT INTO app.role_assignments (tenant_id, user_id, role_id, constraints)
+             SELECT $1::uuid, $2::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, '{}'::jsonb
+             WHERE NOT EXISTS (
+               SELECT 1 FROM app.role_assignments
+               WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND role_id = 'a0000000-0000-0000-0000-000000000001'::uuid
+             )`,
+            [tenant!.id, u.id]
+          );
+        }
+      });
+
       // Login as manager to get session cookie
       const loginRes = await app.handle(
-        new Request("http://localhost/api/v1/auth/login", {
+        new Request("http://localhost/api/auth/sign-in/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -146,7 +178,7 @@ describe("Manager Team Training (TODO-207)", () => {
 
       // Login as non-manager
       const loginRes2 = await app.handle(
-        new Request("http://localhost/api/v1/auth/login", {
+        new Request("http://localhost/api/auth/sign-in/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -171,6 +203,13 @@ describe("Manager Team Training (TODO-207)", () => {
           await tx`DELETE FROM app.courses WHERE tenant_id = ${tenant!.id}::uuid`.catch(() => {});
           await tx`DELETE FROM app.employee_personal WHERE tenant_id = ${tenant!.id}::uuid`.catch(() => {});
           await tx`DELETE FROM app.employees WHERE tenant_id = ${tenant!.id}::uuid`.catch(() => {});
+        }
+        // Clean up Better Auth records
+        for (const u of [managerUser, nonManagerUser]) {
+          if (!u) continue;
+          await tx.unsafe(`DELETE FROM app."session" WHERE "userId" = $1::text`, [u.id]).catch(() => {});
+          await tx.unsafe(`DELETE FROM app."account" WHERE "userId" = $1::text`, [u.id]).catch(() => {});
+          await tx.unsafe(`DELETE FROM app."user" WHERE id = $1::text`, [u.id]).catch(() => {});
         }
       });
 

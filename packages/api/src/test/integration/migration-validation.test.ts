@@ -218,6 +218,7 @@ describe("Migration Validation", () => {
 
       // Find tenant-owned tables missing tenant isolation policies
       // Exclude partition child tables as they inherit policies from parent
+      // Exclude views (relkind='v') since RLS policies only apply to tables
       const tablesWithTenantId = await adminDb<{ tableName: string }[]>`
         SELECT DISTINCT col.table_name as "tableName"
         FROM information_schema.columns col
@@ -227,6 +228,7 @@ describe("Migration Validation", () => {
           AND col.column_name = 'tenant_id'
           AND col.table_name NOT IN ('schema_migrations')
           AND c.relispartition = false
+          AND c.relkind = 'r'
       `;
 
       const tablesMissingPolicy: string[] = [];

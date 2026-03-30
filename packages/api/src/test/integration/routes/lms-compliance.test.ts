@@ -67,10 +67,10 @@ describe("LMS Compliance Report Integration", () => {
       orgUnit2Id = crypto.randomUUID();
 
       await tx`
-        INSERT INTO app.org_units (id, tenant_id, code, name, unit_type, status)
+        INSERT INTO app.org_units (id, tenant_id, code, name, type, is_active)
         VALUES
-          (${orgUnitId}::uuid, ${tenantId}::uuid, 'ENG', 'Engineering', 'department', 'active'),
-          (${orgUnit2Id}::uuid, ${tenantId}::uuid, 'HR', 'Human Resources', 'department', 'active')
+          (${orgUnitId}::uuid, ${tenantId}::uuid, 'ENG', 'Engineering', 'department', true),
+          (${orgUnit2Id}::uuid, ${tenantId}::uuid, 'HR', 'Human Resources', 'department', true)
       `;
 
       // Create positions
@@ -78,10 +78,10 @@ describe("LMS Compliance Report Integration", () => {
       position2Id = crypto.randomUUID();
 
       await tx`
-        INSERT INTO app.positions (id, tenant_id, code, title, org_unit_id, status)
+        INSERT INTO app.positions (id, tenant_id, code, title, org_unit_id, is_active)
         VALUES
-          (${positionId}::uuid, ${tenantId}::uuid, 'SWE', 'Software Engineer', ${orgUnitId}::uuid, 'active'),
-          (${position2Id}::uuid, ${tenantId}::uuid, 'HRM', 'HR Manager', ${orgUnit2Id}::uuid, 'active')
+          (${positionId}::uuid, ${tenantId}::uuid, 'SWE', 'Software Engineer', ${orgUnitId}::uuid, true),
+          (${position2Id}::uuid, ${tenantId}::uuid, 'HRM', 'HR Manager', ${orgUnit2Id}::uuid, true)
       `;
 
       // Create mandatory courses
@@ -110,8 +110,8 @@ describe("LMS Compliance Report Integration", () => {
         `;
 
         await tx`
-          INSERT INTO app.employees (id, tenant_id, employee_number, status, user_id)
-          VALUES (${empId}::uuid, ${tenantId}::uuid, ${'EMP-' + (1000 + i)}, 'active', ${empUserId}::uuid)
+          INSERT INTO app.employees (id, tenant_id, employee_number, status, user_id, hire_date)
+          VALUES (${empId}::uuid, ${tenantId}::uuid, ${'EMP-' + (1000 + i)}, 'active', ${empUserId}::uuid, CURRENT_DATE - INTERVAL '1 year')
         `;
 
         // First two employees in Engineering, last two in HR
@@ -119,8 +119,8 @@ describe("LMS Compliance Report Integration", () => {
         const assignPosition = i < 2 ? positionId : position2Id;
 
         await tx`
-          INSERT INTO app.position_assignments (id, tenant_id, employee_id, position_id, org_unit_id, is_primary, effective_from, started_at)
-          VALUES (${crypto.randomUUID()}::uuid, ${tenantId}::uuid, ${empId}::uuid, ${assignPosition}::uuid, ${assignOrgUnit}::uuid, true, CURRENT_DATE, now())
+          INSERT INTO app.position_assignments (id, tenant_id, employee_id, position_id, org_unit_id, is_primary, effective_from)
+          VALUES (${crypto.randomUUID()}::uuid, ${tenantId}::uuid, ${empId}::uuid, ${assignPosition}::uuid, ${assignOrgUnit}::uuid, true, CURRENT_DATE)
         `;
       }
 

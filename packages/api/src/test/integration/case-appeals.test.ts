@@ -548,8 +548,8 @@ describe("Case Appeals - ACAS Code Compliance", () => {
         WHERE id = ${appealId}::uuid
       `;
 
-      expect(appeal.originalDecisionMakerId).toBe(resolverUser.id);
-      expect(appeal.hearingOfficerId).toBe(appealOfficerUser.id);
+      expect(appeal.original_decision_maker_id).toBe(resolverUser.id);
+      expect(appeal.hearing_officer_id).toBe(appealOfficerUser.id);
       await clearTenantContext(db);
     });
 
@@ -567,7 +567,7 @@ describe("Case Appeals - ACAS Code Compliance", () => {
         WHERE id = ${appealId}::uuid
       `;
 
-      expect(appeal.appellantEmployeeId).toBe(employeeId);
+      expect(appeal.appellant_employee_id).toBe(employeeId);
       await clearTenantContext(db);
     });
 
@@ -599,7 +599,7 @@ describe("Case Appeals - ACAS Code Compliance", () => {
         SELECT appeal_grounds FROM app.case_appeals WHERE id = ${appealId}::uuid
       `;
 
-      expect(appeal.appealGrounds).toContain("investigation was not thorough");
+      expect(appeal.appeal_grounds).toContain("investigation was not thorough");
       await clearTenantContext(db);
     });
 
@@ -633,8 +633,8 @@ describe("Case Appeals - ACAS Code Compliance", () => {
       `;
 
       expect(appeal.status).toBe("upheld");
-      expect(appeal.outcomeNotes).toContain("reviewing all evidence");
-      expect(appeal.decidedAt).not.toBeNull();
+      expect(appeal.outcome_notes).toContain("reviewing all evidence");
+      expect(appeal.decided_at).not.toBeNull();
       await clearTenantContext(db);
     });
   });
