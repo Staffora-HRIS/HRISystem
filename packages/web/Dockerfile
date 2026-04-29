@@ -7,7 +7,7 @@
 # =============================================================================
 # Stage 1: Install dependencies
 # =============================================================================
-FROM oven/bun:1.3.11-alpine AS deps
+FROM oven/bun:1.3.13-alpine AS deps
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN bun install --ignore-scripts --frozen-lockfile
 # =============================================================================
 # Stage 2: Build the application
 # =============================================================================
-FROM oven/bun:1.3.11-alpine AS builder
+FROM oven/bun:1.3.13-alpine AS builder
 
 WORKDIR /app
 
@@ -51,7 +51,7 @@ RUN bun run --filter @staffora/web build
 # =============================================================================
 # Stage 3: Production runtime
 # =============================================================================
-FROM oven/bun:1.3.11-alpine AS runner
+FROM oven/bun:1.3.13-alpine AS runner
 
 WORKDIR /app
 
