@@ -465,17 +465,27 @@ describe("useFieldPermissions Hook", () => {
       expect(visibleFields).toEqual(["firstName", "department"]);
     });
 
-    it("should return empty arrays when no data", () => {
+    it("should derive fields/groups for both undefined and populated inputs", () => {
       function deriveFieldsAndGroups(data: EntityFieldGroup[] | undefined) {
         const fields = data ? data.flatMap((group) => group.fields) : [];
         const groups = data ?? [];
         return { fields, groups };
       }
 
-      const { fields, groups } = deriveFieldsAndGroups(undefined);
+      // Undefined input: both arrays empty.
+      const empty = deriveFieldsAndGroups(undefined);
+      expect(empty.fields).toEqual([]);
+      expect(empty.groups).toEqual([]);
 
-      expect(fields).toEqual([]);
-      expect(groups).toEqual([]);
+      // Populated input: fields are flattened across groups (exercises the truthy branch
+      // so the conditionals actually matter — keeps the helper meaningful).
+      const sample: EntityFieldGroup[] = [
+        { groupId: "g1", groupName: "G1", fields: [{ fieldName: "a", canView: true, canEdit: true }] },
+        { groupId: "g2", groupName: "G2", fields: [{ fieldName: "b", canView: true, canEdit: false }] },
+      ] as unknown as EntityFieldGroup[];
+      const populated = deriveFieldsAndGroups(sample);
+      expect(populated.fields.map((f) => f.fieldName)).toEqual(["a", "b"]);
+      expect(populated.groups).toHaveLength(2);
     });
   });
 
