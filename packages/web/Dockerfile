@@ -55,6 +55,11 @@ FROM oven/bun:1.3.11-alpine AS runner
 
 WORKDIR /app
 
+# Refresh Alpine packages so the runtime image includes patched OS libs
+# (zlib, musl, libssl3/libcrypto3 etc.). Bun's base image lags Alpine
+# upstream so we pick up CVE fixes ourselves rather than wait for a rebuild.
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
 # Create non-root user for security (matching API Dockerfile convention)
 RUN addgroup --system --gid 1001 staffora && \
     adduser --system --uid 1001 --ingroup staffora staffora

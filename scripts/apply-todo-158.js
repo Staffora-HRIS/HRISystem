@@ -130,10 +130,7 @@ console.log("\n=== Updating repository.ts ===");
 let repo = readFile("repository.ts");
 
 if (!repo.includes("getComplianceOverview")) {
-  // Read the separate file with repo methods
-  const repoMethodsPath = path.join(BASE, "scripts/todo-158-repo-methods.ts.txt");
-
-  // Write repo methods file first
+  // Inline repo methods (the source-of-truth lives in this script).
   const repoMethods = `
   // ===========================================================================
   // Compliance Endpoints (TODO-158)
