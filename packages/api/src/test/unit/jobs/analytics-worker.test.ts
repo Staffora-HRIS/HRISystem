@@ -417,10 +417,10 @@ describe("Analytics Worker - AggregatedMetric", () => {
 
 describe("Analytics Worker - Turnover Calculation Logic", () => {
   test("returns 0 when avgHeadcount is 0 (division-safe)", () => {
-    const terminations = 5;
-    const avgHeadcount = 0;
-    const turnoverRate = avgHeadcount > 0 ? (terminations / avgHeadcount) * 100 : 0;
-    expect(turnoverRate).toBe(0);
+    const computeTurnover = (terminations: number, avgHeadcount: number) =>
+      avgHeadcount > 0 ? (terminations / avgHeadcount) * 100 : 0;
+    expect(computeTurnover(5, 0)).toBe(0);
+    expect(computeTurnover(5, 100)).toBe(5);
   });
 
   test("calculates total turnover rate correctly", () => {
@@ -453,10 +453,10 @@ describe("Analytics Worker - Absence Rate Calculation Logic", () => {
   });
 
   test("returns 0 when totalWorkingDays is 0 (division-safe)", () => {
-    const absenceDays = 5;
-    const totalWorkingDays = 0;
-    const absenceRate = totalWorkingDays > 0 ? (absenceDays / totalWorkingDays) * 100 : 0;
-    expect(absenceRate).toBe(0);
+    const computeAbsenceRate = (absenceDays: number, totalWorkingDays: number) =>
+      totalWorkingDays > 0 ? (absenceDays / totalWorkingDays) * 100 : 0;
+    expect(computeAbsenceRate(5, 0)).toBe(0);
+    expect(computeAbsenceRate(5, 100)).toBe(5);
   });
 
   test("calculates absence rate correctly", () => {

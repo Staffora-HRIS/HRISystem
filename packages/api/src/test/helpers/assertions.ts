@@ -4,8 +4,6 @@
  * Extended assertion utilities for testing Staffora-specific functionality.
  */
 
-import { expect } from "bun:test";
-
 // =============================================================================
 // Response Assertions
 // =============================================================================

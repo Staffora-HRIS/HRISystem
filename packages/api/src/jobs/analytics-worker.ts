@@ -955,81 +955,6 @@ async function processAnalyticsMetrics(
 // =============================================================================
 
 /**
- * Store aggregated metric
- */
-async function storeAggregatedMetric(
-  db: import("../plugins/db").DatabaseClient,
-  metric: AggregatedMetric,
-  forceRecalculate: boolean
-): Promise<void> {
-  await db.withSystemContext(async (tx) => {
-    if (forceRecalculate) {
-      // Delete existing metric for same period and dimensions
-      await tx`
-        DELETE FROM app.analytics_aggregates
-        WHERE tenant_id = ${metric.tenantId}::uuid
-          AND metric_type = ${metric.metricType}
-          AND granularity = ${metric.granularity}
-          AND period_start = ${metric.periodStart}
-          AND period_end = ${metric.periodEnd}
-          AND dimensions = ${JSON.stringify(metric.dimensions)}::jsonb
-      `;
-    }
-
-    // Upsert the metric
-    await tx`
-      INSERT INTO app.analytics_aggregates (
-        tenant_id,
-        metric_type,
-        granularity,
-        period_start,
-        period_end,
-        dimensions,
-        value,
-        count,
-        sum,
-        min,
-        max,
-        avg,
-        metadata,
-        calculated_at,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        ${metric.tenantId}::uuid,
-        ${metric.metricType},
-        ${metric.granularity},
-        ${metric.periodStart},
-        ${metric.periodEnd},
-        ${JSON.stringify(metric.dimensions)}::jsonb,
-        ${metric.value},
-        ${metric.count},
-        ${metric.sum},
-        ${metric.min},
-        ${metric.max},
-        ${metric.avg},
-        ${JSON.stringify(metric.metadata)}::jsonb,
-        ${metric.calculatedAt},
-        now(),
-        now()
-      )
-      ON CONFLICT (tenant_id, metric_type, granularity, period_start, dimensions)
-      DO UPDATE SET
-        value = EXCLUDED.value,
-        count = EXCLUDED.count,
-        sum = EXCLUDED.sum,
-        min = EXCLUDED.min,
-        max = EXCLUDED.max,
-        avg = EXCLUDED.avg,
-        metadata = EXCLUDED.metadata,
-        calculated_at = EXCLUDED.calculated_at,
-        updated_at = now()
-    `;
-  });
-}
-
-/**
  * Store multiple aggregated metrics in a single transaction.
  * Reduces round-trips compared to storing one at a time.
  */
@@ -1104,51 +1029,6 @@ async function storeAggregatedMetricsBatch(
 }
 
 /**
- * Store metric snapshot
- */
-async function storeMetricSnapshot(
-  db: import("../plugins/db").DatabaseClient,
-  metric: {
-    tenantId: string;
-    metricType: MetricType;
-    asOfDate: Date;
-    dimensions: Record<string, string>;
-    value: number;
-    unit: string;
-    calculatedAt: Date;
-  }
-): Promise<void> {
-  await db.withSystemContext(async (tx) => {
-    await tx`
-      INSERT INTO app.analytics_snapshots (
-        tenant_id,
-        metric_type,
-        as_of_date,
-        dimensions,
-        value,
-        unit,
-        calculated_at,
-        created_at
-      )
-      VALUES (
-        ${metric.tenantId}::uuid,
-        ${metric.metricType},
-        ${metric.asOfDate},
-        ${JSON.stringify(metric.dimensions)}::jsonb,
-        ${metric.value},
-        ${metric.unit},
-        ${metric.calculatedAt},
-        now()
-      )
-      ON CONFLICT (tenant_id, metric_type, as_of_date, dimensions)
-      DO UPDATE SET
-        value = EXCLUDED.value,
-        calculated_at = EXCLUDED.calculated_at
-    `;
-  });
-}
-
-/**
  * Store multiple metric snapshots in a single transaction.
  * Reduces round-trips compared to storing one at a time.
  */
@@ -1210,7 +1090,6 @@ export async function runScheduledAnalytics(
   } = options;
 
   const now = new Date();
-  const asOfDate = now.toISOString().split("T")[0] || "";
 
   console.log(`[Analytics] Running scheduled analytics for tenant ${tenantId}`);
 

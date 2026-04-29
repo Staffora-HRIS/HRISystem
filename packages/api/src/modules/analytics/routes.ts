@@ -470,9 +470,7 @@ export const analyticsRoutes = new Elysia({ prefix: "/analytics", name: "analyti
   // GET /analytics/reports - Get list of standard reports
   .get(
     "/reports",
-    async (ctx) => {
-      const { tenantContext, set } = ctx as any;
-      
+    async (_ctx) => {
       // Return a static catalog of available standard reports
       const reports = [
         {

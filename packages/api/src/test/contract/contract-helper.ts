@@ -159,9 +159,7 @@ export function assertPaginatedResponse(
  * Assert the standard error response shape:
  * { error: { code: string, message: string, details?: object } }
  */
-export function assertErrorResponse(body: unknown, context?: string): void {
-  const prefix = context ? `${context}: ` : "";
-
+export function assertErrorResponse(body: unknown, _context?: string): void {
   expect(body).toBeDefined();
   expect(typeof body).toBe("object");
   expect(body).not.toBeNull();
@@ -191,10 +189,8 @@ export function assertErrorResponse(body: unknown, context?: string): void {
 export function assertRequiredFields(
   body: unknown,
   fields: Record<string, string>,
-  context?: string
+  _context?: string
 ): void {
-  const prefix = context ? `${context}: ` : "";
-
   expect(body).toBeDefined();
   expect(typeof body).toBe("object");
   expect(body).not.toBeNull();

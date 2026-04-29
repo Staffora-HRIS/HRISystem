@@ -383,7 +383,6 @@ describe("useTenant Hook", () => {
   describe("Time Formatting Logic", () => {
     it("should format time in 24-hour format", () => {
       const d = new Date(2025, 0, 1, 14, 30);
-      const format = "HH:mm";
 
       const hours = d.getHours();
       const minutes = String(d.getMinutes()).padStart(2, "0");
@@ -394,7 +393,6 @@ describe("useTenant Hook", () => {
 
     it("should format time in 12-hour format", () => {
       const d = new Date(2025, 0, 1, 14, 30);
-      const format = "hh:mm A";
 
       const hours = d.getHours();
       const minutes = String(d.getMinutes()).padStart(2, "0");

@@ -61,10 +61,6 @@ const MeResponseSchema = t.Object({
   tenants: t.Array(TenantResponseSchema),
 });
 
-const SuccessResponseSchema = t.Object({
-  success: t.Literal(true),
-});
-
 const SwitchTenantResponseSchema = t.Object({
   success: t.Literal(true),
   tenantId: t.String(),
@@ -150,7 +146,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", name: "auth-routes" })
   .get(
     "/tenants",
     async (ctx) => {
-      const { authService, user, session, set, requestId } = ctx as any;
+      const { authService, user, set, requestId } = ctx as any;
 
       try {
         const userWithTenants = await authService.getUserWithTenants(user.id);

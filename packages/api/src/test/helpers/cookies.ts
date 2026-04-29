@@ -17,7 +17,7 @@ export function splitCombinedSetCookieHeader(value: string): string[] {
     if (value[i] !== "," || value[i + 1] !== " ") continue;
 
     const rest = value.slice(i + 2);
-    const boundary = /^[A-Za-z0-9!#$%&'*+.^_`|~.-]+=/.test(rest);
+    const boundary = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+=/.test(rest);
     if (!boundary) continue;
 
     out.push(value.slice(start, i));

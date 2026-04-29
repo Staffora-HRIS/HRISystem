@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import postgres from "postgres";
 import {
   getTestDb, ensureTestInfra, isInfraAvailable, closeTestConnections,
-  createTestTenant, createTestUser, setTenantContext, clearTenantContext,
+  createTestTenant, createTestUser, clearTenantContext,
   cleanupTestTenant, cleanupTestUser, TEST_CONFIG,
   type TestTenant, type TestUser,
 } from "../../setup";

@@ -36,7 +36,6 @@ import {
   Feedback360CycleFiltersSchema,
   IdParamsSchema,
   UuidSchema,
-  PaginationQuerySchema,
   Feedback360CycleStatusSchema,
   Feedback360ReviewerTypeSchema,
   Feedback360ResponseStatusSchema,
@@ -542,7 +541,7 @@ export const feedback360Routes = new Elysia({ prefix: "/feedback-360", name: "fe
   .post(
     "/responses/:id/decline",
     async (ctx) => {
-      const { feedback360Service, tenantContext, params, body, headers, audit, requestId, error } = ctx as any;
+      const { feedback360Service, tenantContext, params, headers, audit, requestId, error } = ctx as any;
       const idempotencyKey = headers["idempotency-key"];
 
       const result = await feedback360Service.declineFeedback(tenantContext, params.id);

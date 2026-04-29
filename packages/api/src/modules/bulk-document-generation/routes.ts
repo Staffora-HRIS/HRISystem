@@ -12,7 +12,7 @@
  * - generated_letters: read  (to check batch status)
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import type { AuditHelper } from "../../plugins/audit";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";

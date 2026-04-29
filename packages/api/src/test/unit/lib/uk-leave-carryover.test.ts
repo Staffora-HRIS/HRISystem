@@ -9,12 +9,8 @@
 import { describe, test, expect } from "bun:test";
 import {
   calculateLeaveCarryover,
-  EU_MINIMUM_WEEKS,
-  ADDITIONAL_STATUTORY_WEEKS,
-  STANDARD_DAYS_PER_WEEK,
   PROTECTED_CARRYOVER_REASONS,
   type CarryoverInput,
-  type CarryoverResult,
 } from "../../../lib/uk-leave-carryover";
 
 // =============================================================================

@@ -23,7 +23,6 @@ import {
 } from "./schemas";
 import {
   SuccessSchema,
-  UuidSchema,
   IdParamsSchema,
   OptionalIdempotencyHeaderSchema,
   benefitsErrorStatusMap,

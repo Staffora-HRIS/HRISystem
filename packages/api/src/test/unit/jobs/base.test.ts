@@ -432,10 +432,11 @@ describe("BaseWorker pollStream backpressure", () => {
 
   test("returns 0 when at concurrency limit", () => {
     // Simulates: if (this.activeJobs >= this.config.concurrency) return 0;
-    const activeJobs = 5;
-    const concurrency = 5;
-    const result = activeJobs >= concurrency ? 0 : 1;
-    expect(result).toBe(0);
+    const computeAvailable = (activeJobs: number, concurrency: number) =>
+      activeJobs >= concurrency ? 0 : concurrency - activeJobs;
+    expect(computeAvailable(5, 5)).toBe(0);
+    expect(computeAvailable(6, 5)).toBe(0);
+    expect(computeAvailable(3, 5)).toBe(2);
   });
 
   test("calculates available slots correctly", () => {

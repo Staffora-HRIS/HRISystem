@@ -43,7 +43,6 @@ describe("Manager Team Training (TODO-207)", () => {
   let managerCookie: string | null = null;
   let managerEmployeeId: string | null = null;
 
-  let reportUser: TestUser | null = null;
   let reportEmployeeId: string | null = null;
 
   let nonManagerUser: TestUser | null = null;

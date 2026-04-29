@@ -21,7 +21,7 @@
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import type { AuditHelper } from "../../plugins/audit";
-import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import type { DatabaseClient } from "../../plugins/db";
 import { TribunalRepository } from "./repository";
 import { TribunalService } from "./service";
@@ -30,16 +30,12 @@ import {
   UpdateTribunalCaseSchema,
   AddTribunalDocumentSchema,
   UpdateTribunalDocumentSchema,
-  TribunalCaseResponseSchema,
   TribunalCaseListResponseSchema,
-  TribunalCaseStatusSchema,
-  TribunalClaimTypeSchema,
   TribunalCaseFiltersSchema,
   IdParamsSchema,
   DocumentIdParamsSchema,
   PaginationQuerySchema,
   OptionalIdempotencyHeaderSchema,
-  UuidSchema,
   // Types
   type CreateTribunalCase,
   type UpdateTribunalCase,

@@ -20,7 +20,6 @@ import {
   ensureTestInfra,
   isInfraAvailable,
   getTestDb,
-  closeTestConnections,
   createTestTenant,
   createTestUser,
   withSystemContext,

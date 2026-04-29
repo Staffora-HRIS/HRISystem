@@ -410,7 +410,7 @@ async function handleTimesheetApproved(
   event: DomainEvent,
   ctx: EventHandlerContext
 ): Promise<void> {
-  const { timesheet, approver } = event.payload as {
+  const { timesheet } = event.payload as {
     timesheet: { id: string; employeeId: string };
     approver: string;
   };
@@ -576,7 +576,7 @@ async function handleLeaveRequestApproved(
   event: DomainEvent,
   ctx: EventHandlerContext
 ): Promise<void> {
-  const { request, approver } = event.payload as {
+  const { request } = event.payload as {
     request: {
       id: string;
       employeeId: string;
@@ -642,7 +642,7 @@ async function handleLeaveRequestRejected(
   event: DomainEvent,
   ctx: EventHandlerContext
 ): Promise<void> {
-  const { request, rejector, reason } = event.payload as {
+  const { request, reason } = event.payload as {
     request: { id: string; employeeId: string };
     rejector: string;
     reason?: string;

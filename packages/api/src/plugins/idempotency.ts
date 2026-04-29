@@ -12,7 +12,7 @@
  * - Concurrent request handling (locking)
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { type DatabaseClient } from "./db";
 import { type CacheClient, CacheTTL } from "./cache";
 

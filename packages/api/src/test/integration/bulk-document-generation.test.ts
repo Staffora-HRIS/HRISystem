@@ -9,7 +9,7 @@
  * - Idempotency of batch items
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   getTestDb,
   ensureTestInfra,
@@ -18,7 +18,6 @@ import {
   createTestTenant,
   createTestUser,
   setTenantContext,
-  clearTenantContext,
   cleanupTestTenant,
   cleanupTestUser,
   withSystemContext,

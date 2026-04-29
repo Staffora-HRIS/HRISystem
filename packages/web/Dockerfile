@@ -31,8 +31,10 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
-# Copy dependencies from deps stage
+# Copy dependencies from deps stage (Bun hoists most to root, some to package-level)
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy root package.json (needed for bun --filter workspace resolution)
 COPY package.json ./

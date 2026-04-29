@@ -33,7 +33,6 @@ import {
   NotificationFiltersSchema,
   UnreadCountResponseSchema,
   MarkAllReadResponseSchema,
-  PushTokenResponseSchema,
   RegisterPushTokenSchema,
   PaginationQuerySchema,
   IdParamsSchema,

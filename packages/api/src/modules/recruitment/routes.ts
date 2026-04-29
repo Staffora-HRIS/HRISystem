@@ -23,7 +23,6 @@ import {
   AdvanceCandidateSchema,
   CandidateFiltersSchema,
   CandidateStageSchema,
-  CandidateSourceSchema,
   CreateRecruitmentCostSchema,
   UpdateRecruitmentCostSchema,
   RecruitmentCostCategorySchema,

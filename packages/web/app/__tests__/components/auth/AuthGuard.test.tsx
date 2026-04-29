@@ -5,13 +5,12 @@
  * loading states, return URL construction, and SSR considerations.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 describe("AuthGuard Component", () => {
   describe("Authentication State Logic", () => {
     it("should show loading when auth is pending", () => {
       const isPending = true;
-      const session = null;
       const isClient = true;
 
       const showLoading = !isClient || isPending;
@@ -20,7 +19,6 @@ describe("AuthGuard Component", () => {
 
     it("should show loading when not on client (SSR)", () => {
       const isPending = false;
-      const session = { user: { id: "user-1" } };
       const isClient = false;
 
       const showLoading = !isClient || isPending;
@@ -29,7 +27,6 @@ describe("AuthGuard Component", () => {
 
     it("should not show loading when client and auth resolved", () => {
       const isPending = false;
-      const session = { user: { id: "user-1" } };
       const isClient = true;
 
       const showLoading = !isClient || isPending;
@@ -52,40 +49,28 @@ describe("AuthGuard Component", () => {
   });
 
   describe("Redirect Logic", () => {
-    it("should redirect when client-side, not pending, and no session", () => {
-      const isClient = true;
-      const isPending = false;
-      const session = null;
+    function computeShouldRedirect(
+      isClient: boolean,
+      isPending: boolean,
+      session: { user: { id: string } } | null
+    ): boolean {
+      return isClient && !isPending && !session;
+    }
 
-      const shouldRedirect = isClient && !isPending && !session;
-      expect(shouldRedirect).toBe(true);
+    it("should redirect when client-side, not pending, and no session", () => {
+      expect(computeShouldRedirect(true, false, null)).toBe(true);
     });
 
     it("should not redirect during SSR", () => {
-      const isClient = false;
-      const isPending = false;
-      const session = null;
-
-      const shouldRedirect = isClient && !isPending && !session;
-      expect(shouldRedirect).toBe(false);
+      expect(computeShouldRedirect(false, false, null)).toBe(false);
     });
 
     it("should not redirect while pending", () => {
-      const isClient = true;
-      const isPending = true;
-      const session = null;
-
-      const shouldRedirect = isClient && !isPending && !session;
-      expect(shouldRedirect).toBe(false);
+      expect(computeShouldRedirect(true, true, null)).toBe(false);
     });
 
     it("should not redirect when session exists", () => {
-      const isClient = true;
-      const isPending = false;
-      const session = { user: { id: "user-1" } };
-
-      const shouldRedirect = isClient && !isPending && !session;
-      expect(shouldRedirect).toBe(false);
+      expect(computeShouldRedirect(true, false, { user: { id: "user-1" } })).toBe(false);
     });
   });
 

@@ -11,16 +11,13 @@ import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorCodes } from "../../plugins/errors";
 import { logger } from "../../lib/logger";
-import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { mapErrorToStatus } from "../../lib/route-helpers";
 import { ChangeRequestRepository } from "./repository";
 import { ChangeRequestService } from "./service";
 import {
   CreateChangeRequestSchema,
   CreateBulkChangeRequestSchema,
   ReviewChangeRequestSchema,
-  ChangeRequestResponseSchema,
-  ChangeRequestListResponseSchema,
-  ChangeRequestFiltersSchema,
   IdParamsSchema,
   IdempotencyHeaderSchema,
   PaginationQuerySchema,

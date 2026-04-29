@@ -8,12 +8,7 @@
 import { test, expect } from "@playwright/test";
 import { LoginPage, MfaPage } from "./pages/login.page";
 import { login, logout, isRedirectedToLogin } from "./helpers/auth";
-import {
-  ADMIN_USER,
-  EMPLOYEE_USER,
-  ROUTES,
-  PAGE_HEADINGS,
-} from "./helpers/test-data";
+import { ADMIN_USER, ROUTES, PAGE_HEADINGS } from "./helpers/test-data";
 
 test.describe("Login Page", () => {
   let loginPage: LoginPage;
@@ -183,8 +178,6 @@ test.describe("MFA Flow", () => {
   // These tests verify the UI works but may need specific test users with MFA configured.
 
   test("should display the MFA page with TOTP input when redirected", async ({ page }) => {
-    const mfaPage = new MfaPage(page);
-
     // Navigate to MFA page directly (will redirect to login without valid state)
     await page.goto(ROUTES.mfa);
 

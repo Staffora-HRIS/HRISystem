@@ -29,7 +29,6 @@ import type { TenantContext } from "../../types/service-result";
 import {
   isDateWithinLockedPeriod,
   findActiveLocksForRange,
-  mapPeriodLockToEnhancedResponse,
 } from "./period-lock.service";
 
 export interface PeriodLockViolation {

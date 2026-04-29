@@ -47,45 +47,6 @@ import type { DomainEvent } from "../../jobs/outbox-processor";
 // =============================================================================
 
 /**
- * Helper to wait for a condition with timeout.
- * Polls the check function every `intervalMs` until it returns true or timeout.
- */
-async function waitFor(
-  check: () => Promise<boolean>,
-  timeoutMs = 10_000,
-  intervalMs = 100
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return false;
-}
-
-/**
- * Build a lightweight DatabaseClient-like wrapper around the test postgres.js
- * connection so startOutboxPolling can call db.withSystemContext().
- */
-function wrapTestDb(db: ReturnType<typeof getTestDb>) {
-  return {
-    withSystemContext: async <T>(
-      callback: (tx: any) => Promise<T>
-    ): Promise<T> => {
-      return (await db.begin(async (tx: any) => {
-        await tx`SELECT set_config('app.current_tenant', '00000000-0000-0000-0000-000000000000', true)`;
-        await tx`SELECT app.enable_system_context()`;
-        try {
-          return await callback(tx);
-        } finally {
-          await tx`SELECT app.disable_system_context()`;
-        }
-      })) as unknown as T;
-    },
-  };
-}
-
-/**
  * Unique stream key prefix for test isolation.
  * Each test suite uses a unique stream key to avoid interference from other
  * concurrent test runs or leftover data.

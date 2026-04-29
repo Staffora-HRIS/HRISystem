@@ -41,34 +41,6 @@ import type {
 // =============================================================================
 
 /**
- * Valid stage transitions for disciplinary cases.
- */
-const DISCIPLINARY_TRANSITIONS: Record<DisciplinaryStage, DisciplinaryStage[]> = {
-  informal_resolution: [],   // Not used for disciplinary
-  formal_submission: [],      // Not used for disciplinary
-  investigation: ["notification"],
-  notification: ["hearing"],
-  hearing: ["decision"],
-  decision: ["appeal", "closed"],
-  appeal: ["closed"],
-  closed: [],
-};
-
-/**
- * Valid stage transitions for grievance cases.
- */
-const GRIEVANCE_TRANSITIONS: Record<DisciplinaryStage, DisciplinaryStage[]> = {
-  informal_resolution: ["formal_submission", "closed"],
-  formal_submission: ["investigation"],
-  investigation: ["hearing"],
-  notification: [],           // Not used for grievance
-  hearing: ["decision"],
-  decision: ["appeal", "closed"],
-  appeal: ["closed"],
-  closed: [],
-};
-
-/**
  * ACAS Code requires minimum 5 working days notice before hearing.
  * This calculates the earliest valid hearing date.
  */

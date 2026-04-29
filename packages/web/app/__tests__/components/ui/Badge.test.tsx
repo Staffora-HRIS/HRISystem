@@ -263,36 +263,24 @@ describe("Badge Component", () => {
       expect(shouldRender).toBe(true);
     });
 
-    it("should cap display at max value", () => {
-      const count = 150;
-      const max = 99;
-      const displayCount = count > max ? `${max}+` : count;
+    function formatBadgeCount(count: number, max: number): string | number {
+      return count > max ? `${max}+` : count;
+    }
 
-      expect(displayCount).toBe("99+");
+    it("should cap display at max value", () => {
+      expect(formatBadgeCount(150, 99)).toBe("99+");
     });
 
     it("should show exact count when below max", () => {
-      const count = 42;
-      const max = 99;
-      const displayCount = count > max ? `${max}+` : count;
-
-      expect(displayCount).toBe(42);
+      expect(formatBadgeCount(42, 99)).toBe(42);
     });
 
     it("should handle custom max value", () => {
-      const count = 15;
-      const max = 10;
-      const displayCount = count > max ? `${max}+` : count;
-
-      expect(displayCount).toBe("10+");
+      expect(formatBadgeCount(15, 10)).toBe("10+");
     });
 
     it("should show exact count when equal to max", () => {
-      const count = 99;
-      const max = 99;
-      const displayCount = count > max ? `${max}+` : count;
-
-      expect(displayCount).toBe(99);
+      expect(formatBadgeCount(99, 99)).toBe(99);
     });
 
     it("should default variant to error", () => {

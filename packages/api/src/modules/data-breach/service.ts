@@ -18,10 +18,8 @@ import type { DataBreachRepository, BreachRow, TimelineEntryRow } from "./reposi
 import type { ServiceResult, PaginatedServiceResult, TenantContext } from "../../types/service-result";
 import { ErrorCodes } from "../../plugins/errors";
 import {
-  canTransitionDataBreach,
   getValidDataBreachTransitions,
   validateDataBreachTransition,
-  getDataBreachTransitionLabel,
   DataBreachStates,
   type DataBreachState,
 } from "@staffora/shared/state-machines";
@@ -152,7 +150,6 @@ export class DataBreachService {
 
     // Validate state transition: must be in 'reported' to transition to 'assessing'
     const currentStatus = existing.status as DataBreachState;
-    const targetStatus = DataBreachStates.ASSESSING;
 
     // Allow assess from 'reported' or if already 'assessing' (re-assessment)
     if (

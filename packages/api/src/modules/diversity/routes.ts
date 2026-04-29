@@ -12,7 +12,7 @@
  * All diversity fields are voluntary with explicit consent.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import type { AuditHelper } from "../../plugins/audit";

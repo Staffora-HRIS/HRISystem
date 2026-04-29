@@ -11,7 +11,7 @@
  * - Document and history tab behaviour
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Types mirrored from the route
@@ -77,20 +77,6 @@ interface HistoryRecord {
   createdAt: string;
   createdBy: string | null;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  active: "success",
-  on_leave: "warning",
-  terminated: "danger",
-  pending: "secondary",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  active: "Active",
-  on_leave: "On Leave",
-  terminated: "Terminated",
-  pending: "Pending",
-};
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-";
@@ -283,7 +269,7 @@ describe("Admin Employee Detail Page", () => {
     });
 
     it("should switch to selected tab", () => {
-      let activeTab: TabId = "overview";
+      let activeTab: TabId;
       activeTab = "personal";
       expect(activeTab).toBe("personal");
 
@@ -293,50 +279,40 @@ describe("Admin Employee Detail Page", () => {
   });
 
   describe("Loading and Error States", () => {
+    function computeRenderState(
+      isLoading: boolean,
+      error: Error | null,
+      employee: EmployeeDetail | null
+    ) {
+      return {
+        showLoading: isLoading,
+        showError: !isLoading && (!!error || !employee),
+        showContent: !isLoading && !error && !!employee,
+      };
+    }
+
     it("should show loading spinner when isLoading is true", () => {
-      const isLoading = true;
-      const error = null;
-      const employee = null;
-
-      const showLoading = isLoading;
-      const showError = !isLoading && (!!error || !employee);
-      const showContent = !isLoading && !error && !!employee;
-
-      expect(showLoading).toBe(true);
-      expect(showError).toBe(false);
-      expect(showContent).toBe(false);
+      const state = computeRenderState(true, null, null);
+      expect(state.showLoading).toBe(true);
+      expect(state.showError).toBe(false);
+      expect(state.showContent).toBe(false);
     });
 
     it("should show error state when employee is not found", () => {
-      const isLoading = false;
-      const error = new Error("Not found");
-      const employee = null;
-
-      const showLoading = isLoading;
-      const showError = !isLoading && (!!error || !employee);
-      const showContent = !isLoading && !error && !!employee;
-
-      expect(showLoading).toBe(false);
-      expect(showError).toBe(true);
-      expect(showContent).toBe(false);
+      const state = computeRenderState(false, new Error("Not found"), null);
+      expect(state.showLoading).toBe(false);
+      expect(state.showError).toBe(true);
+      expect(state.showContent).toBe(false);
     });
 
     it("should show error state when employee data is null", () => {
-      const isLoading = false;
-      const error = null;
-      const employee = null;
-
-      const showError = !isLoading && (!!error || !employee);
-      expect(showError).toBe(true);
+      const state = computeRenderState(false, null, null);
+      expect(state.showError).toBe(true);
     });
 
     it("should show content when employee data is loaded", () => {
-      const isLoading = false;
-      const error = null;
-      const employee = createEmployeeDetail();
-
-      const showContent = !isLoading && !error && !!employee;
-      expect(showContent).toBe(true);
+      const state = computeRenderState(false, null, createEmployeeDetail());
+      expect(state.showContent).toBe(true);
     });
   });
 
@@ -383,40 +359,28 @@ describe("Admin Employee Detail Page", () => {
   });
 
   describe("Edit Employee Modal Validation", () => {
-    it("should disable save when firstName is empty", () => {
-      const firstName = "";
-      const lastName = "Smith";
-      const isPending = false;
+    function isSaveDisabled(
+      firstName: string,
+      lastName: string,
+      isPending: boolean
+    ): boolean {
+      return !firstName || !lastName || isPending;
+    }
 
-      const disabled = !firstName || !lastName || isPending;
-      expect(disabled).toBe(true);
+    it("should disable save when firstName is empty", () => {
+      expect(isSaveDisabled("", "Smith", false)).toBe(true);
     });
 
     it("should disable save when lastName is empty", () => {
-      const firstName = "John";
-      const lastName = "";
-      const isPending = false;
-
-      const disabled = !firstName || !lastName || isPending;
-      expect(disabled).toBe(true);
+      expect(isSaveDisabled("John", "", false)).toBe(true);
     });
 
     it("should enable save when both names are filled", () => {
-      const firstName = "John";
-      const lastName = "Smith";
-      const isPending = false;
-
-      const disabled = !firstName || !lastName || isPending;
-      expect(disabled).toBe(false);
+      expect(isSaveDisabled("John", "Smith", false)).toBe(false);
     });
 
     it("should disable save when mutation is pending", () => {
-      const firstName = "John";
-      const lastName = "Smith";
-      const isPending = true;
-
-      const disabled = !firstName || !lastName || isPending;
-      expect(disabled).toBe(true);
+      expect(isSaveDisabled("John", "Smith", true)).toBe(true);
     });
 
     it("should show 'Saving...' text when pending", () => {

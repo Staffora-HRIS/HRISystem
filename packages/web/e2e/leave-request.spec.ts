@@ -168,8 +168,6 @@ test.describe("Leave Request Approval Workflow", () => {
     const approveCount = await leaveRequestsPage.approveButtons.count();
 
     if (approveCount > 0) {
-      const initialRowCount = await leaveRequestsPage.getRowCount();
-
       await leaveRequestsPage.approveFirstRequest();
       await approvalModal.expectVisible();
       await approvalModal.confirmApproval();

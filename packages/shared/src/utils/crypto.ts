@@ -8,6 +8,41 @@
 import { randomBytes, createHash, pbkdf2Sync, timingSafeEqual } from "crypto";
 
 // =============================================================================
+// Internal Helpers
+// =============================================================================
+
+/**
+ * Generate a uniformly distributed random integer in the range [0, range).
+ *
+ * Uses rejection sampling over a 32-bit unsigned random integer to eliminate
+ * the modulo bias that would occur if we simply did `randomBytes(N) % range`
+ * when `range` does not evenly divide 2^N.
+ *
+ * @param range - Exclusive upper bound (must be a positive integer <= 2^32)
+ * @returns Uniformly distributed integer in [0, range)
+ */
+function unbiasedRandomInt(range: number): number {
+  if (!Number.isInteger(range) || range <= 0) {
+    throw new Error("range must be a positive integer");
+  }
+
+  const MAX = 0x100000000; // 2^32
+  // Largest multiple of `range` that fits in [0, MAX). Values >= threshold
+  // would skew the distribution and must be rejected.
+  const threshold = Math.floor(MAX / range) * range;
+
+  // Loop is bounded in expectation: rejection probability is at most 50%
+  // per iteration regardless of `range`, so this terminates quickly.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const value = randomBytes(4).readUInt32BE(0);
+    if (value < threshold) {
+      return value % range;
+    }
+  }
+}
+
+// =============================================================================
 // ID Generation
 // =============================================================================
 
@@ -63,14 +98,12 @@ export function generateId(): string {
 export function generateShortId(length: number = 12): string {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = randomBytes(length);
   let result = "";
 
   for (let i = 0; i < length; i++) {
-    const byte = bytes[i];
-    if (byte !== undefined) {
-      result += chars[byte % chars.length];
-    }
+    // Use rejection sampling to avoid modulo bias (chars.length = 62
+    // does not evenly divide 2^8 or 2^32).
+    result += chars[unbiasedRandomInt(chars.length)];
   }
 
   return result;
@@ -83,14 +116,12 @@ export function generateShortId(length: number = 12): string {
  * @returns Numeric code string
  */
 export function generateNumericCode(length: number = 6): string {
-  const bytes = randomBytes(length);
   let code = "";
 
   for (let i = 0; i < length; i++) {
-    const byte = bytes[i];
-    if (byte !== undefined) {
-      code += (byte % 10).toString();
-    }
+    // Use rejection sampling to avoid modulo bias (10 does not evenly
+    // divide 2^8 or 2^32 — naive `byte % 10` over-represents 0-5).
+    code += unbiasedRandomInt(10).toString();
   }
 
   return code;

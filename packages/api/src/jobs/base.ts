@@ -661,8 +661,8 @@ export class BaseWorker {
    * Get worker health status
    */
   async getHealth(): Promise<WorkerHealth> {
-    let redisStatus: "up" | "down" = "down";
-    let dbStatus: "up" | "down" = "down";
+    let redisStatus: "up" | "down";
+    let dbStatus: "up" | "down";
 
     try {
       await this.redis.ping();

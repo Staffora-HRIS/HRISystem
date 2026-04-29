@@ -17,7 +17,6 @@ import {
   cleanupTestTenant,
   cleanupTestUser,
   withSystemContext,
-  assertRlsViolation,
   expectRlsError,
   type TestTenant,
   type TestUser,
@@ -49,10 +48,10 @@ describe("RLS - Row Level Security", () => {
   afterAll(async () => {
     if (!db || !userA || !userB || !tenantA || !tenantB) return;
     // Cleanup
-    if (userA) await cleanupTestUser(db, userA.id);
-    if (userB) await cleanupTestUser(db, userB.id);
-    if (tenantA) await cleanupTestTenant(db, tenantA.id);
-    if (tenantB) await cleanupTestTenant(db, tenantB.id);
+    await cleanupTestUser(db, userA.id);
+    await cleanupTestUser(db, userB.id);
+    await cleanupTestTenant(db, tenantA.id);
+    await cleanupTestTenant(db, tenantB.id);
     await closeTestConnections(db);
   });
 
@@ -157,7 +156,7 @@ describe("RLS - Row Level Security", () => {
       await setTenantContext(db, tenantA.id, userA.id);
 
       // This should affect 0 rows due to RLS
-      const result = await db`
+      await db`
         UPDATE app.org_units
         SET name = 'Hacked'
         WHERE id = ${orgUnitB}::uuid

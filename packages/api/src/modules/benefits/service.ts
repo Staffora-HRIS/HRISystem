@@ -842,8 +842,6 @@ export class BenefitsService {
       };
     }
 
-    const enrollments: EnrollmentResponse[] = [];
-
     const results = await this.db.withTransaction(context, async (tx) => {
       const created: (EnrollmentRow & { dependentDetails: { id: string; name: string; relationship: string }[] })[] = [];
 

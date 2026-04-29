@@ -19,7 +19,6 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { ErrorCodes } from "../../plugins/errors";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import type { DatabaseClient } from "../../plugins/db";
 import { HealthSafetyRepository } from "./repository";
@@ -34,18 +33,12 @@ import {
   RiskAssessmentFiltersSchema,
   RiskAssessmentResponseSchema,
   CreateDSEAssessmentSchema,
-  UpdateDSEAssessmentSchema,
   DSEAssessmentFiltersSchema,
   DSEAssessmentResponseSchema,
   DashboardResponseSchema,
   PaginationQuerySchema,
   IdParamsSchema,
   OptionalIdempotencyHeaderSchema,
-  IncidentSeveritySchema,
-  IncidentStatusSchema,
-  RiskAssessmentStatusSchema,
-  RiskLevelSchema,
-  DSEStatusSchema,
   type CreateIncident,
   type UpdateIncident,
   type CreateRiskAssessment,

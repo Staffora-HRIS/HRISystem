@@ -227,7 +227,6 @@ export class ConsentRepository {
     bumpVersion: boolean
   ): Promise<ConsentPurposeRow | null> {
     // Build SET clause dynamically
-    const setClauses: string[] = [];
     const values: Record<string, unknown> = {};
 
     if (data.name !== undefined) {

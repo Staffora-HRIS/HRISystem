@@ -22,7 +22,6 @@ import {
   isCaseState,
   getCaseStateMachineSummary,
   getCaseTransitionMetadata,
-  CaseStates,
   type CaseState,
 } from "@staffora/shared/state-machines";
 

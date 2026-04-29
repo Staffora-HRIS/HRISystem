@@ -41,9 +41,6 @@ import type {
 /** Default review interval in days if no review date is set */
 const DEFAULT_REVIEW_INTERVAL_DAYS = 14;
 
-/** Warn if suspension has been active for more than this many days without review */
-const REVIEW_OVERDUE_THRESHOLD_DAYS = 21;
-
 // =============================================================================
 // Service
 // =============================================================================

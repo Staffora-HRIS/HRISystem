@@ -9,7 +9,6 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
 import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
-import { ErrorCodes } from "../../plugins/errors";
 import { DocumentsRepository, type TenantContext } from "./repository";
 import { DocumentsService } from "./service";
 import {
@@ -425,7 +424,7 @@ export const documentsRoutes = new Elysia({ prefix: "/documents", name: "documen
   .post(
     "/",
     async (ctx) => {
-      const { documentsService, body, headers, tenantContext, audit, requestId, error, set } =
+      const { documentsService, body, tenantContext, audit, requestId, error, set } =
         ctx as any;
 
       // file_key is required - should come from upload completion

@@ -192,9 +192,6 @@ setEnvIfMissing("TEST_DB_NAME", "hris");
 // Database Client
 // =============================================================================
 
-let testDb: ReturnType<typeof postgres> | null = null;
-let testRedis: Redis | null = null;
-
 let didPreflight = false;
 let infraAvailable = false;
 let infraError: string | null = null;
@@ -437,16 +434,10 @@ export async function closeTestConnections(
 ): Promise<void> {
   if (db) {
     await db.end();
-  } else if (testDb) {
-    await testDb.end();
-    testDb = null;
   }
 
   if (redis) {
     redis.disconnect();
-  } else if (testRedis) {
-    testRedis.disconnect();
-    testRedis = null;
   }
 }
 

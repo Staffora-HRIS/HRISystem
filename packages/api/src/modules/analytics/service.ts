@@ -922,9 +922,6 @@ export class AnalyticsService {
   ): Promise<ServiceResult<WorkforceHeadcountTrendsResponse>> {
     const data = await this.repository.getWorkforceHeadcountTrends(context, filters);
 
-    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
-    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
-
     return {
       success: true,
       data: {
@@ -948,9 +945,6 @@ export class AnalyticsService {
     filters: WorkforceAnalyticsFilters = {}
   ): Promise<ServiceResult<WorkforceTurnoverRateResponse>> {
     const data = await this.repository.getWorkforceTurnoverRate(context, filters);
-
-    const startDate = filters.start_date || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
-    const endDate = filters.end_date || new Date().toISOString().split("T")[0]!;
 
     return {
       success: true,

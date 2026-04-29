@@ -23,7 +23,6 @@ import {
   expect,
   beforeAll,
   afterAll,
-  beforeEach,
   afterEach,
 } from "bun:test";
 import {
@@ -34,8 +33,6 @@ import {
   closeTestConnections,
   createTestTenant,
   createTestUser,
-  setTenantContext,
-  clearTenantContext,
   cleanupTestTenant,
   cleanupTestUser,
   withSystemContext,
@@ -130,41 +127,6 @@ async function getSessionByToken(
   });
 
   return result[0] ?? null;
-}
-
-/**
- * Query session from the legacy sessions table.
- */
-async function getLegacySession(
-  db: ReturnType<typeof import("../setup").getTestDb>,
-  userId: string
-): Promise<
-  Array<{
-    id: string;
-    userId: string;
-    invalidatedAt: Date | null;
-    expiresAt: Date;
-  }>
-> {
-  return await withSystemContext(db, async (tx) => {
-    return await tx<
-      Array<{
-        id: string;
-        userId: string;
-        invalidatedAt: Date | null;
-        expiresAt: Date;
-      }>
-    >`
-      SELECT
-        id,
-        user_id as "userId",
-        invalidated_at as "invalidatedAt",
-        expires_at as "expiresAt"
-      FROM app.sessions
-      WHERE user_id = ${userId}::uuid
-      ORDER BY created_at DESC
-    `;
-  });
 }
 
 /**

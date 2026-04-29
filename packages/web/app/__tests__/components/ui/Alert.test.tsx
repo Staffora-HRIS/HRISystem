@@ -171,7 +171,6 @@ describe("Alert Component", () => {
 
     it("should fall back to default variant icon when no custom icon", () => {
       const icon: unknown = undefined;
-      const variant: AlertVariant = "success";
       const useDefault = !icon;
       expect(useDefault).toBe(true);
     });

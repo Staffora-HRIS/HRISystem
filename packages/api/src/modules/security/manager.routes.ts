@@ -9,14 +9,14 @@ import { Elysia, t } from "elysia";
 import { requireAuthContext, requireTenantContext } from "../../plugins";
 import { ErrorCodes } from "../../plugins/errors";
 import { ManagerService } from "./manager.service";
-import { ApprovalTypeSchema, ApprovalActionSchema, TeamTrainingQuerySchema } from "./manager.schemas";
+import { ApprovalTypeSchema, TeamTrainingQuerySchema } from "./manager.schemas";
 
 export const managerRoutes = new Elysia({ prefix: "/manager" })
   // Get team overview/dashboard
   .get(
     "/overview",
     async (ctx) => {
-      const { tenant, user, db, set, requestId } = ctx as any;
+      const { tenant, user, db } = ctx as any;
 
 
       const service = new ManagerService(db);
@@ -40,7 +40,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/is-manager",
     async (ctx) => {
-      const { tenant, user, db, set, requestId } = ctx as any;
+      const { tenant, user, db } = ctx as any;
 
 
       const service = new ManagerService(db);
@@ -64,7 +64,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/team",
     async (ctx) => {
-      const { tenant, user, db, set, requestId } = ctx as any;
+      const { tenant, user, db } = ctx as any;
 
 
       const service = new ManagerService(db);
@@ -88,7 +88,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/team/all",
     async (ctx) => {
-      const { tenant, user, db, query, set, requestId } = ctx as any;
+      const { tenant, user, db, query } = ctx as any;
 
 
       const maxDepth = parseInt(query?.maxDepth ?? "10", 10);
@@ -153,7 +153,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/approvals",
     async (ctx) => {
-      const { tenant, user, db, query, set, requestId } = ctx as any;
+      const { tenant, user, db, query } = ctx as any;
 
 
       const service = new ManagerService(db);
@@ -320,7 +320,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/absence/calendar",
     async (ctx) => {
-      const { tenant, user, db, query, set, requestId } = ctx as any;
+      const { tenant, user, db, query } = ctx as any;
 
 
       // Default to current month if not specified
@@ -358,7 +358,7 @@ export const managerRoutes = new Elysia({ prefix: "/manager" })
   .get(
     "/team/:employeeId/is-subordinate",
     async (ctx) => {
-      const { tenant, user, db, params, set, requestId } = ctx as any;
+      const { tenant, user, db, params } = ctx as any;
 
 
       const service = new ManagerService(db);

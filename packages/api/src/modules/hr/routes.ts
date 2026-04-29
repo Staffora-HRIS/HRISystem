@@ -14,7 +14,6 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { AppError, NotFoundError, ConflictError } from "../../plugins/errors";
 import { AuditActions } from "../../plugins/audit";
 import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
 import { HRRepository, type TenantContext } from "./repository";
@@ -40,7 +39,6 @@ import {
   EmployeeStatusTransitionSchema,
   EmployeeTerminationSchema,
   UpdateNiCategorySchema,
-  NiCategorySchema,
   EmployeeResponseSchema,
   EmployeeListResponseSchema,
   EmployeeFiltersSchema,
@@ -48,8 +46,6 @@ import {
   PaginationQuerySchema,
   IdParamsSchema,
   EmployeeNumberParamsSchema,
-  HistoryDimensionParamsSchema,
-  IdempotencyHeaderSchema,
   OptionalIdempotencyHeaderSchema,
   UuidSchema,
   DateSchema,
@@ -62,7 +58,6 @@ import {
   EmployeeAddressListResponseSchema,
   EmployeeAddressIdParamsSchema,
   AddressHistoryQuerySchema,
-  AddressTypeSchema,
   RehireEmployeeSchema,
   RehireResponseSchema,
   // Position assignment (concurrent employment) schemas
@@ -153,7 +148,7 @@ export const hrRoutes = new Elysia({ prefix: "/hr", name: "hr-routes" })
   .get(
     "/org-units",
     async (ctx) => {
-      const { hrService, query, tenantContext, error } = ctx as any;
+      const { hrService, query, tenantContext } = ctx as any;
       const { cursor, limit, ...filters } = query;
       const parsedLimit =
         limit !== undefined && limit !== null ? Number(limit) : undefined;

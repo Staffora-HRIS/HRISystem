@@ -13,7 +13,7 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { ErrorResponseSchema } from "../../lib/route-helpers";
 import type { DatabaseClient } from "../../plugins/db";
 import type { TenantContext } from "../../types/service-result";
 
@@ -122,14 +122,6 @@ interface RecruitmentAnalyticsFilters {
   end_date: string;
   department_id?: string;
 }
-
-// =============================================================================
-// Error Codes
-// =============================================================================
-
-const RECRUITMENT_ANALYTICS_ERROR_CODES: Record<string, number> = {
-  INVALID_DATE_RANGE: 400,
-};
 
 // =============================================================================
 // Helper: Normalise date range

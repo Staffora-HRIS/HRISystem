@@ -36,8 +36,6 @@ import {
   ReviewChangeRequestSchema,
   ChangeRequestResponseSchema,
   ChangeRequestListResponseSchema,
-  MyChangeRequestsQuerySchema,
-  PendingReviewQuerySchema,
   IdParamsSchema,
   IdempotencyHeaderSchema,
   PaginationQuerySchema,

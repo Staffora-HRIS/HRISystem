@@ -381,7 +381,6 @@ export class WebhooksRepository {
     }
   ): Promise<void> {
     await this.db.withSystemContext(async (tx: any) => {
-      const status = result.success ? "success" : "pending";
       const responseBody = result.responseBody
         ? result.responseBody.substring(0, 4096)
         : null;

@@ -23,7 +23,6 @@ import type { DatabaseClient } from "../../plugins/db";
 import { CalendarSyncRepository } from "./repository";
 import { CalendarSyncService } from "./service";
 import {
-  CalendarConnectionResponseSchema,
   IcalEnableResponseSchema,
   IcalTokenParamsSchema,
   OptionalIdempotencyHeaderSchema,

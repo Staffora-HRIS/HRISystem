@@ -47,7 +47,13 @@ export * from "./statutory-notice";
  * Generate a URL-safe slug from a string
  */
 export function slugify(text: string): string {
-  return text
+  // Cap input length to prevent ReDoS (CodeQL js/polynomial-redos):
+  // the regex chain below has polynomial backtracking on long runs of
+  // separator chars (e.g. "-----..."). 1000 chars is far more than any
+  // legitimate slug source (names, titles) would ever require.
+  const MAX_INPUT = 1000;
+  const input = text.length > MAX_INPUT ? text.slice(0, MAX_INPUT) : text;
+  return input
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, "")

@@ -10,7 +10,7 @@
  * - Navigation and user interaction patterns
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Types mirrored from the route to keep tests self-contained
@@ -285,50 +285,43 @@ describe("Admin Employees List Page", () => {
   });
 
   describe("Empty State Logic", () => {
-    it("should show filter hint when filters are applied and list is empty", () => {
-      const search = "nonexistent";
-      const statusFilter = "active";
-      const departmentFilter = "";
-      const employees: Employee[] = [];
-
+    function getEmptyStateMessage(
+      search: string,
+      statusFilter: string,
+      departmentFilter: string
+    ): string {
       const hasFilters = !!(search || statusFilter || departmentFilter);
-      const message = hasFilters
+      return hasFilters
         ? "Try adjusting your filters"
         : "Start by hiring your first employee";
+    }
 
-      expect(message).toBe("Try adjusting your filters");
+    function shouldShowHireButton(
+      search: string,
+      statusFilter: string,
+      departmentFilter: string
+    ): boolean {
+      return !search && !statusFilter && !departmentFilter;
+    }
+
+    it("should show filter hint when filters are applied and list is empty", () => {
+      expect(getEmptyStateMessage("nonexistent", "active", "")).toBe(
+        "Try adjusting your filters"
+      );
     });
 
     it("should show hire CTA when no filters and list is empty", () => {
-      const search = "";
-      const statusFilter = "";
-      const departmentFilter = "";
-      const employees: Employee[] = [];
-
-      const hasFilters = !!(search || statusFilter || departmentFilter);
-      const message = hasFilters
-        ? "Try adjusting your filters"
-        : "Start by hiring your first employee";
-
-      expect(message).toBe("Start by hiring your first employee");
+      expect(getEmptyStateMessage("", "", "")).toBe(
+        "Start by hiring your first employee"
+      );
     });
 
     it("should show hire button only when no filters are active", () => {
-      const search = "";
-      const statusFilter = "";
-      const departmentFilter = "";
-
-      const showHireButton = !search && !statusFilter && !departmentFilter;
-      expect(showHireButton).toBe(true);
+      expect(shouldShowHireButton("", "", "")).toBe(true);
     });
 
     it("should hide hire button when any filter is active", () => {
-      const search = "test";
-      const statusFilter = "";
-      const departmentFilter = "";
-
-      const showHireButton = !search && !statusFilter && !departmentFilter;
-      expect(showHireButton).toBe(false);
+      expect(shouldShowHireButton("test", "", "")).toBe(false);
     });
   });
 
@@ -401,17 +394,8 @@ describe("Admin Employees List Page", () => {
     });
 
     it("should reset form when modal is closed", () => {
-      let form: HireFormState = {
-        firstName: "John",
-        lastName: "Smith",
-        email: "john@example.com",
-        hireDate: "2024-06-01",
-        orgUnitId: "org-123",
-        employmentType: "part_time",
-      };
-
-      // Simulate modal close
-      form = { ...INITIAL_HIRE_FORM };
+      // Simulate modal close: form is reset to initial values
+      const form: HireFormState = { ...INITIAL_HIRE_FORM };
 
       expect(form.firstName).toBe("");
       expect(form.lastName).toBe("");

@@ -28,8 +28,6 @@ import {
   UpdatePlanSchema,
   CreatePlanItemSchema,
   UpdatePlanItemSchema,
-  PlanResponseSchema,
-  PlanItemResponseSchema,
   PlanFiltersSchema,
   PaginationQuerySchema,
   IdParamsSchema,
@@ -50,19 +48,6 @@ interface PluginContext {
   body: unknown;
   set: { status: number };
 }
-
-// =============================================================================
-// Error Response Schema
-// =============================================================================
-
-const ErrorResponseSchema = t.Object({
-  error: t.Object({
-    code: t.String(),
-    message: t.String(),
-    details: t.Optional(t.Record(t.String(), t.Unknown())),
-    requestId: t.String(),
-  }),
-});
 
 // =============================================================================
 // Routes
