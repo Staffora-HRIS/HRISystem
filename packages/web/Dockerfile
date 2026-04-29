@@ -72,6 +72,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/web/package.json ./packages/web/
 
 RUN bun install --ignore-scripts --production --frozen-lockfile && \
+    find node_modules -path '*/@esbuild/*/bin/esbuild' -type f -delete && \
     rm -rf /tmp/* ~/.bun/install/cache
 
 # Copy the shared package (needed at runtime for imports)
