@@ -16,14 +16,13 @@ import type { DomainEvent } from "./outbox-processor";
 import type { EventHandlerContext } from "./domain-event-handlers";
 import type { ProcessorRegistration, JobPayload, JobContext } from "./base";
 import { WebhooksRepository } from "../modules/webhooks/repository";
-import { WebhooksService, computeWebhookSignature, calculateNextRetryAt } from "../modules/webhooks/service";
+import { WebhooksService } from "../modules/webhooks/service";
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 const DELIVERY_BATCH_SIZE = 50;
-const DELIVERY_POLL_INTERVAL_MS = 5000;
 
 // =============================================================================
 // Domain Event Handler

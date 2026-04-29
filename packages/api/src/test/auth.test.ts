@@ -8,7 +8,7 @@
  * - Session retrieval
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll } from "bun:test";
 import { app } from "../app";
 import { ensureTestInfra, isInfraAvailable } from "./setup";
 

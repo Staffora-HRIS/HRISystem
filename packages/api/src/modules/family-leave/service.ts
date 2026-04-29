@@ -111,17 +111,6 @@ const STATUTORY_RATES = {
 } as const;
 
 // =============================================================================
-// Valid State Transitions
-// =============================================================================
-
-const VALID_STATUS_TRANSITIONS: Record<FamilyLeaveStatus, FamilyLeaveStatus[]> = {
-  planned: ["active", "cancelled"],
-  active: ["completed", "cancelled"],
-  completed: [],
-  cancelled: [],
-};
-
-// =============================================================================
 // Domain Event Types
 // =============================================================================
 

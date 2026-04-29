@@ -46,7 +46,6 @@ import {
   type TestTenant,
   type TestUser,
 } from "../setup";
-import { StreamKeys } from "../../jobs/base";
 import type { DomainEvent } from "../../jobs/outbox-processor";
 
 // =============================================================================
@@ -161,7 +160,6 @@ describe("Worker Redis Streams E2E (TODO-093)", () => {
       const streamKey = testStreamKey();
       const consumerGroup = `test-pipeline-group-${Date.now()}`;
       const consumerName = `test-pipeline-consumer-${Date.now()}`;
-      const aggregateId = crypto.randomUUID();
       const employeeNumber = `WRK-PIPE-${Date.now()}`;
 
       // Step 1: Create employee and outbox event atomically (simulating real business write)

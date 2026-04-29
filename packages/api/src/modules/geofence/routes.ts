@@ -24,20 +24,16 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { ErrorResponseSchema, DeleteSuccessSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { mapErrorToStatus } from "../../lib/route-helpers";
 import type { DatabaseClient } from "../../plugins/db";
 import { GeofenceRepository } from "./repository";
 import { GeofenceService } from "./service";
 import {
-  GeofenceLocationResponseSchema,
   GeofenceLocationFiltersSchema,
   CreateGeofenceLocationSchema,
   UpdateGeofenceLocationSchema,
   NearbyGeofencesQuerySchema,
-  NearbyGeofenceSchema,
   LocationCheckSchema,
-  LocationCheckResponseSchema,
-  GeofenceViolationResponseSchema,
   ViolationFiltersSchema,
   ResolveViolationSchema,
   PaginationQuerySchema,

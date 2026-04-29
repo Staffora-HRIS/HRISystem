@@ -20,7 +20,7 @@
 import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { OvertimeRulesRepository } from "./repository";
-import { OvertimeRulesService, OvertimeRuleErrorCodes } from "./service";
+import { OvertimeRulesService } from "./service";
 import {
   CreateOvertimeRuleSchema,
   UpdateOvertimeRuleSchema,

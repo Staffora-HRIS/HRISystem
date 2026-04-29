@@ -39,11 +39,6 @@ import {
 // Shared Schemas
 // =============================================================================
 
-const SuccessSchema = t.Object({
-  success: t.Literal(true),
-  message: t.String(),
-});
-
 const IdParamsSchema = t.Object({
   id: t.String({ format: "uuid" }),
 });
@@ -371,7 +366,6 @@ export const eSignaturesRoutes = new Elysia({
       const {
         eSignaturesService,
         params,
-        body,
         tenantContext,
         request,
         audit,

@@ -24,7 +24,6 @@ import {
   CreateRetentionExceptionSchema,
   RetentionPolicyResponseSchema,
   RetentionPolicyListResponseSchema,
-  RetentionReviewResponseSchema,
   RetentionReviewListResponseSchema,
   RetentionExceptionResponseSchema,
   RetentionDashboardResponseSchema,

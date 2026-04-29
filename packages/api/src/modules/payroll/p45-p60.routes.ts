@@ -18,7 +18,7 @@
  *   Portal: employee self-service (own documents only)
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 
 // =============================================================================

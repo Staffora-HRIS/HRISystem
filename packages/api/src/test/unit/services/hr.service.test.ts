@@ -21,7 +21,6 @@ import {
   isEmployeeState,
   getStateMachineSummary,
   getTransitionMetadata,
-  EmployeeStates,
   type EmployeeState,
 } from "@staffora/shared/state-machines";
 

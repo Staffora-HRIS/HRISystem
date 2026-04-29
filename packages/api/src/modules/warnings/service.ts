@@ -48,16 +48,6 @@ const DEFAULT_EXPIRY_MONTHS: Record<WarningLevel, number> = {
   final_written: 12,
 };
 
-/**
- * Valid status transitions for warnings
- */
-const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
-  active: ["expired", "rescinded", "appealed"],
-  appealed: ["active", "rescinded"], // via appeal resolution
-  expired: [],   // terminal
-  rescinded: [], // terminal
-};
-
 // =============================================================================
 // Helpers
 // =============================================================================

@@ -240,10 +240,6 @@ export class PayrollConfigRepository {
     data: UpdatePaySchedule,
     tx: TransactionSql
   ): Promise<PayScheduleRow | null> {
-    // Build SET clause dynamically from provided fields
-    const sets: string[] = [];
-    const setClauses: Array<ReturnType<typeof tx>> = [];
-
     // We use explicit field-by-field updates within the tagged template
     // to maintain type safety and SQL injection protection
     const [row] = await tx`

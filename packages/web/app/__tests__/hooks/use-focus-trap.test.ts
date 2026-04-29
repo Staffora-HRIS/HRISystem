@@ -107,18 +107,19 @@ describe("useFocusTrap", () => {
     });
 
     it("should move to previous element on Shift+Tab in the middle", () => {
-      const elements = ["first", "second", "third"];
-      const activeIndex: number = 1;
-      const shiftKey = true;
-
-      let nextFocusIndex: number;
-      if (shiftKey && activeIndex === 0) {
-        nextFocusIndex = elements.length - 1;
-      } else {
-        nextFocusIndex = activeIndex - 1;
+      function computePreviousFocusIndex(
+        elements: string[],
+        activeIndex: number,
+        shiftKey: boolean
+      ): number {
+        if (shiftKey && activeIndex === 0) {
+          return elements.length - 1;
+        }
+        return activeIndex - 1;
       }
 
-      expect(nextFocusIndex).toBe(0);
+      const elements = ["first", "second", "third"];
+      expect(computePreviousFocusIndex(elements, 1, true)).toBe(0);
     });
   });
 });

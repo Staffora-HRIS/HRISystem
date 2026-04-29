@@ -187,7 +187,7 @@ export const lifeEventRoutes = new Elysia({ name: "benefits-life-event-routes" }
   .get(
     "/my-life-events",
     async (ctx) => {
-      const { benefitsService, user, tenant, db, set } = ctx as any;
+      const { user, tenant, db, set } = ctx as any;
 
       try {
         // Get employee ID for current user

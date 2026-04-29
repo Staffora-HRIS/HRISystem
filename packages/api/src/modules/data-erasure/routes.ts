@@ -10,7 +10,6 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { AuditActions } from "../../plugins/audit";
 import type { AuditHelper } from "../../plugins/audit";
 import {
   ErrorResponseSchema,
@@ -34,7 +33,6 @@ import {
   EmployeeIdParamsSchema,
   PaginationQuerySchema,
   OptionalIdempotencyHeaderSchema,
-  UuidSchema,
   type CreateErasureRequest,
   type ApproveErasureRequest,
   type RejectErasureRequest,

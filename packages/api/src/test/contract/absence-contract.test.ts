@@ -34,8 +34,6 @@ import {
 } from "../setup";
 import { buildCookieHeader } from "../helpers/cookies";
 import {
-  assertMatchesSchema,
-  assertPaginatedResponse,
   assertErrorResponse,
   assertRequiredFields,
   validateContract,

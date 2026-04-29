@@ -18,6 +18,7 @@
 import http from "k6/http";
 import { check, sleep, group } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
+import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -202,11 +203,17 @@ function buildHeaders(sessionCookie) {
 
 // ---------------------------------------------------------------------------
 // Helper — pick a random element from an array
+//
+// SECURITY NOTE: This is a k6 load test (not security-sensitive code).
+// Uses k6-utils' randomIntBetween for non-cryptographic test data selection
+// (picking which employee/operation/limit to exercise). Never used to
+// generate credentials, tokens, session IDs, or any auth-crossing material.
 // ---------------------------------------------------------------------------
 
 function randomChoice(arr) {
   if (!arr || arr.length === 0) return null;
-  return arr[Math.floor(Math.random() * arr.length)];
+  // load test only — non-security context (test fixture rotation)
+  return arr[randomIntBetween(0, arr.length - 1)];
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +335,8 @@ function doListOperation(data, headers) {
 
 function listEmployees(data, headers) {
   group("List - Employees", () => {
-    const limit = [10, 20, 50][Math.floor(Math.random() * 3)];
+    // load test only — non-security context (page-size rotation)
+    const limit = [10, 20, 50][randomIntBetween(0, 2)];
     const res = http.get(
       `${data.baseUrl}/api/v1/hr/employees?limit=${limit}`,
       {
@@ -502,18 +510,20 @@ export default function (data) {
   const headers = buildHeaders(data.sessionCookie);
 
   // Weighted random selection: 60% read, 30% list, 10% write
-  const roll = Math.random();
+  // load test only — non-security context (traffic mix simulation)
+  const roll = randomIntBetween(0, 99);
 
-  if (roll < 0.6) {
+  if (roll < 60) {
     doReadOperation(data, headers);
-  } else if (roll < 0.9) {
+  } else if (roll < 90) {
     doListOperation(data, headers);
   } else {
     doWriteOperation(data, headers);
   }
 
   // Simulate realistic think time (1-3 seconds)
-  sleep(1 + Math.random() * 2);
+  // load test only — non-security context (think-time jitter)
+  sleep(randomIntBetween(1, 3));
 }
 
 // ---------------------------------------------------------------------------

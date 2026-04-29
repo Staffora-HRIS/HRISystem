@@ -37,11 +37,6 @@ const OptionalIdempotencyHeaderSchema = t.Object({
   "idempotency-key": t.Optional(t.String()),
 });
 
-const SuccessResponseSchema = t.Object({
-  success: t.Literal(true),
-  message: t.String(),
-});
-
 /**
  * Module-specific error code to HTTP status mapping.
  */

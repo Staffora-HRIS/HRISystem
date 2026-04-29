@@ -602,15 +602,6 @@ describe("Timesheet Approval Chains", () => {
     const timesheetId = await createDraftTimesheet();
     await submitTimesheet(timesheetId);
 
-    // Track outbox before
-    const [beforeCount] = await db`
-      SELECT COUNT(*)::int AS count FROM app.domain_outbox
-      WHERE tenant_id = ${tenantId}::uuid
-        AND aggregate_id = ${timesheetId}::uuid
-        AND event_type LIKE 'time.timesheet.%'
-    `;
-    const before = beforeCount?.count ?? 0;
-
     // Approve via SQL function
     await db`
       INSERT INTO app.timesheet_approval_chains (

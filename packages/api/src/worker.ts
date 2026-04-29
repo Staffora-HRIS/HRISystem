@@ -250,7 +250,7 @@ async function main(): Promise<void> {
   });
 
   // Start health check server
-  const healthServer = createHealthServer(
+  createHealthServer(
     () => worker.getHealth(),
     config.healthPort
   );

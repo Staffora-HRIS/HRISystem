@@ -601,7 +601,7 @@ export class SubmissionService {
       const isValid = errors.length === 0;
       const now = new Date();
 
-      const result = await this.db.withTransaction(ctx, async (tx) => {
+      await this.db.withTransaction(ctx, async (tx) => {
         const newStatus: PayrollSubmissionStatus = isValid ? "validated" : "draft";
         const updated = await this.submissionRepo.updateSubmissionStatus(
           ctx,

@@ -12,7 +12,7 @@ import {
   EmployeeDetailPage,
 } from "./pages/employees.page";
 import { loginAsAdmin } from "./helpers/auth";
-import { ADMIN_USER, createNewEmployee, ROUTES } from "./helpers/test-data";
+import { createNewEmployee, ROUTES } from "./helpers/test-data";
 
 test.describe("Employee List Page", () => {
   let employeesPage: EmployeesListPage;

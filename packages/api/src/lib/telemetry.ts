@@ -32,7 +32,6 @@
 import {
   trace,
   SpanStatusCode,
-  SpanKind,
   TraceFlags,
 } from "@opentelemetry/api";
 import type {

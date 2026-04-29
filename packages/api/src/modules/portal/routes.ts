@@ -50,7 +50,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
 
   // My team (direct reports)
   .get("/my-team", async (ctx) => {
-    const { user, tenant, portalService, tenantContext, set } = ctx as any;
+    const { portalService, tenantContext, set } = ctx as any;
 
     try {
       return await portalService.getMyTeam(tenantContext);
@@ -63,7 +63,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
 
   // My pending tasks
   .get("/tasks", async (ctx) => {
-    const { user, tenant, portalService, tenantContext, set } = ctx as any;
+    const { portalService, tenantContext, set } = ctx as any;
 
     try {
       return await portalService.getMyTasks(tenantContext);
@@ -76,7 +76,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
 
   // My pending approvals
   .get("/approvals", async (ctx) => {
-    const { user, tenant, portalService, tenantContext, set } = ctx as any;
+    const { portalService, tenantContext, set } = ctx as any;
 
     try {
       return await portalService.getMyApprovals(tenantContext);
@@ -134,7 +134,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
 
   // Dashboard summary
   .get("/dashboard", async (ctx) => {
-    const { user, tenant, portalService, tenantContext, set } = ctx as any;
+    const { portalService, tenantContext, set } = ctx as any;
 
     try {
       return await portalService.getDashboardSummary(tenantContext);

@@ -217,7 +217,17 @@ function sendToClam(buffer: Buffer, config: VirusScanConfig): Promise<string> {
       // Send INSTREAM command (null-terminated)
       socket.write("zINSTREAM\0");
 
-      // Send file data in chunks
+      // Send file data in chunks.
+      //
+      // SECURITY NOTE (CodeQL js/file-access-to-http, alert #50 — false positive):
+      // Streaming the file buffer to a TCP socket is the explicit purpose of this
+      // function: ClamAV's INSTREAM protocol requires the file content to be
+      // transmitted to the daemon for malware inspection. The destination
+      // (config.host / config.port) is sourced exclusively from the
+      // CLAMAV_HOST / CLAMAV_PORT environment variables via getVirusScanConfig()
+      // and is never influenced by request data or user input. ClamAV is an
+      // admin-operated, trusted internal service. This alert is dismissed via
+      // the GitHub API after merge.
       let offset = 0;
       while (offset < buffer.length) {
         const end = Math.min(offset + CHUNK_SIZE, buffer.length);

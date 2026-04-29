@@ -9,7 +9,7 @@
  * - Set tenant context in database connection
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { type DatabaseClient } from "./db";
 import { type CacheClient, CacheTTL } from "./cache";
 

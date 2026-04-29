@@ -10,7 +10,6 @@ import { ErrorCodes } from "../../plugins/errors";
 import { handleServiceError } from "../../lib/route-errors";
 import type { DatabaseClient } from "../../plugins/db";
 import type { AuditHelper } from "../../plugins/audit";
-import { ReferenceCheckRepository } from "./repository";
 import { ReferenceCheckService } from "./service";
 import {
   IdParamsSchema,

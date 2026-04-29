@@ -172,7 +172,6 @@ export class ReasonableAdjustmentsRepository {
     const rows = await this.db.withTransaction(context, async (tx) => {
       // Build dynamic WHERE conditions
       const conditions: string[] = [];
-      const params: unknown[] = [];
 
       if (filters.employee_id) {
         conditions.push(`employee_id = '${filters.employee_id}'::uuid`);

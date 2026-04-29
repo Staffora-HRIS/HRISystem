@@ -56,14 +56,6 @@ describe("Notification Worker", () => {
 
     it("should retry on transient failures", () => {
       const maxRetries = 3;
-      let attempts = 0;
-      
-      const sendWithRetry = async () => {
-        attempts++;
-        if (attempts < maxRetries) throw new Error("Transient failure");
-        return { success: true };
-      };
-      
       expect(maxRetries).toBe(3);
     });
   });

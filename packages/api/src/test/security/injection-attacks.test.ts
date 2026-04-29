@@ -43,10 +43,13 @@ describe("SQL Injection Prevention", () => {
   });
 
   it("should escape special characters in LIKE queries", () => {
-    const userInput = "test%_value";
-    const escaped = userInput.replace(/[%_]/g, "\\$&");
-    
-    expect(escaped).toBe("test\\%\\_value");
+    // Input includes a literal backslash to verify backslash escaping happens
+    // before wildcard escaping (otherwise "\%" becomes "\\%" which still
+    // escapes the wildcard in LIKE, defeating the sanitization).
+    const userInput = "test\\%_value";
+    const escaped = userInput.replace(/[\\%_]/g, "\\$&");
+
+    expect(escaped).toBe("test\\\\\\%\\_value");
   });
 });
 

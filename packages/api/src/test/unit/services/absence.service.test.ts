@@ -22,8 +22,6 @@ import {
   isLeaveRequestState,
   getLeaveRequestStateMachineSummary,
   getLeaveRequestTransitionMetadata,
-  LeaveRequestStates,
-  type LeaveRequestState,
 } from "@staffora/shared/state-machines";
 
 describe("AbsenceService", () => {

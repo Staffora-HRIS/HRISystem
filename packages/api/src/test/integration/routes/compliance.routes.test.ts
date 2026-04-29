@@ -18,7 +18,6 @@ import {
   createTestTenant,
   createTestUser,
   setTenantContext,
-  clearTenantContext,
   withSystemContext,
   cleanupTestTenant,
   cleanupTestUser,

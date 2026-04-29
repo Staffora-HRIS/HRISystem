@@ -11,7 +11,7 @@
  * - AuditActions data access constants
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import {
   AuditActions,
   SENSITIVE_READ_ROUTES,

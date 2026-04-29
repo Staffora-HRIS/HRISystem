@@ -9,7 +9,7 @@
  */
 
 import { Elysia } from "elysia";
-import { getBetterAuth, getPgPool, closePgPool, getPgPoolStats } from "./better-auth";
+import { getBetterAuth, getPgPool, closePgPool } from "./better-auth";
 
 let lastDbReachabilityCheckAt = 0;
 let lastDbReachable: boolean | null = null;
@@ -392,7 +392,6 @@ export function betterAuthPlugin() {
 
     // Handle exact /api/auth path (without trailing path)
     .all("/api/auth", async (ctx) => {
-      const { request } = ctx as any;
       try {
         const safeRequest = await buildBetterAuthRequest(ctx as any);
         const response = await auth.handler(safeRequest);

@@ -37,7 +37,6 @@ import {
   finalizePayrollPeriod,
   mapPeriodLockToEnhancedResponse,
   listPeriodLocksEnhanced,
-  isDateWithinLockedPeriod,
 } from "./period-lock.service";
 
 // =============================================================================
@@ -153,7 +152,6 @@ export const periodLockRoutes = new Elysia({
       const {
         payrollService,
         body,
-        params,
         headers,
         tenantContext,
         audit,

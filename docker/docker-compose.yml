@@ -95,7 +95,7 @@ services:
   #   - Admin/superuser connections
   # ---------------------------------------------------------------------------
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:v1.23.1-p3
     container_name: staffora-pgbouncer
     restart: unless-stopped
     environment:

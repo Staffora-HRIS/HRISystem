@@ -5,7 +5,7 @@
  * field catalog, favourites, scheduling, and system templates.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
 import { getHttpStatus } from "../../lib/route-errors";
 import type { DatabaseClient } from "../../plugins/db";
@@ -19,7 +19,6 @@ import {
   ShareReportSchema,
   IdParamsSchema,
   PaginationQuerySchema,
-  FieldValuesParamsSchema,
   ExportFormatParamsSchema,
   CreateReportScheduleSchema,
   UpdateReportScheduleSchema,

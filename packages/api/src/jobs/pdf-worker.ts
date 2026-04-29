@@ -615,7 +615,7 @@ export class HtmlPdfGenerator implements PdfGenerator {
 /**
  * HTML templates for PDF generation
  */
-const PDF_TEMPLATES: Record<string, string> = {
+const _PDF_TEMPLATES: Record<string, string> = {
   // Certificate template
   certificate: `
 <!DOCTYPE html>

@@ -29,7 +29,6 @@ import {
   SsoConfigResponseSchema,
   SsoConfigFiltersSchema,
   SsoLoginAttemptResponseSchema,
-  SsoLoginInitResponseSchema,
   SsoCallbackQuerySchema,
   CreateSsoConfigSchema,
   UpdateSsoConfigSchema,

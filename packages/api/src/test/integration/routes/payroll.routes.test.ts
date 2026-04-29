@@ -1131,7 +1131,7 @@ describe("Payslips Routes Integration", () => {
         ni_employer: 350.00,
       };
 
-      for (const [key, value] of Object.entries(amounts)) {
+      for (const value of Object.values(amounts)) {
         expect(value).toBeGreaterThanOrEqual(0);
       }
     });
@@ -1177,7 +1177,6 @@ describe("Payslips Routes Integration", () => {
     });
 
     it("should allow reversal from approved back to draft", async () => {
-      const transition = { from: "approved", to: "draft" };
       const validTransitions: Record<string, string[]> = {
         draft: ["approved"],
         approved: ["issued", "draft"],

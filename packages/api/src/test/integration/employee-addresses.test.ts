@@ -44,18 +44,6 @@ async function resetSystemContext(sql: ReturnType<typeof postgres>): Promise<voi
   await sql`SELECT app.disable_system_context()`;
 }
 
-async function withSystemContext<T>(
-  sql: ReturnType<typeof postgres>,
-  fn: () => Promise<T>
-): Promise<T> {
-  await sql`SELECT app.enable_system_context()`;
-  try {
-    return await fn();
-  } finally {
-    await sql`SELECT app.disable_system_context()`;
-  }
-}
-
 // =============================================================================
 // Setup
 // =============================================================================

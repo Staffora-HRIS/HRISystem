@@ -25,7 +25,6 @@ import {
   getValidTransitions,
   validateTransition,
   isTerminalState,
-  EmployeeStates,
 } from "@staffora/shared";
 
 describe("State Machine", () => {

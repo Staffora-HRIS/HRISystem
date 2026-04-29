@@ -11,7 +11,7 @@
  * - POST   /policy-distributions/acknowledge  — Acknowledge (read receipt) a distribution
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import {
   ErrorResponseSchema,
   mapErrorToStatus,
@@ -20,7 +20,6 @@ import type { DatabaseClient } from "../../plugins/db";
 import { PolicyDistributionRepository } from "./repository";
 import { PolicyDistributionService } from "./service";
 import {
-  DistributionResponseSchema,
   DistributionStatusResponseSchema,
   AcknowledgementResponseSchema,
   CreateDistributionSchema,

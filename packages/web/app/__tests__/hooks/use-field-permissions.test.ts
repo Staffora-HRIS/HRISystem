@@ -466,9 +466,13 @@ describe("useFieldPermissions Hook", () => {
     });
 
     it("should return empty arrays when no data", () => {
-      const data: EntityFieldGroup[] | undefined = undefined;
-      const fields = data ? data.flatMap((group) => group.fields) : [];
-      const groups = data ?? [];
+      function deriveFieldsAndGroups(data: EntityFieldGroup[] | undefined) {
+        const fields = data ? data.flatMap((group) => group.fields) : [];
+        const groups = data ?? [];
+        return { fields, groups };
+      }
+
+      const { fields, groups } = deriveFieldsAndGroups(undefined);
 
       expect(fields).toEqual([]);
       expect(groups).toEqual([]);

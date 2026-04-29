@@ -7,7 +7,6 @@
 import { Elysia, t } from "elysia";
 import { requireTenantContext } from "../../plugins";
 import { requirePermission } from "../../plugins/rbac";
-import { AuditActions } from "../../plugins/audit";
 import { ErrorCodes } from "../../plugins/errors";
 import { PortalService } from "./portal.service";
 import {
@@ -43,7 +42,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .get(
     "/available",
     async (ctx) => {
-      const { tenant, user, db, set, requestId } = ctx as any;
+      const { tenant, user, db } = ctx as any;
 
 
       const service = new PortalService(db);
@@ -198,7 +197,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .post(
     "/access",
     async (ctx) => {
-      const { tenant, user, db, body, audit, set, requestId } = ctx as any;
+      const { tenant, user, db, body, audit, requestId } = ctx as any;
 
 
       const service = new PortalService(db);
@@ -289,7 +288,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .get(
     "/users/:userId/access",
     async (ctx) => {
-      const { tenant, user, db, params, set, requestId } = ctx as any;
+      const { tenant, db, params } = ctx as any;
 
 
       const service = new PortalService(db);
@@ -314,7 +313,7 @@ export const portalRoutes = new Elysia({ prefix: "/portal" })
   .post(
     "/users/:userId/sync-access",
     async (ctx) => {
-      const { tenant, user, db, params, audit, set, requestId } = ctx as any;
+      const { tenant, user, db, params, audit, requestId } = ctx as any;
 
 
       const service = new PortalService(db);

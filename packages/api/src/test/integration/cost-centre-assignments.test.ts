@@ -19,7 +19,6 @@ import {
   createTestTenant,
   createTestUser,
   setTenantContext,
-  clearTenantContext,
   withSystemContext,
   closeTestConnections,
   type TestTenant,

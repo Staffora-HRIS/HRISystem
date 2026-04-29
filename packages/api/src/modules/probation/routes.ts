@@ -16,14 +16,11 @@
 
 import { Elysia, t } from "elysia";
 import { requirePermission } from "../../plugins/rbac";
-import { ErrorResponseSchema, mapErrorToStatus } from "../../lib/route-helpers";
+import { mapErrorToStatus } from "../../lib/route-helpers";
 import type { DatabaseClient } from "../../plugins/db";
 import { ProbationRepository } from "./repository";
 import { ProbationService } from "./service";
 import {
-  ProbationReviewResponseSchema,
-  ProbationReviewDetailResponseSchema,
-  ProbationReminderResponseSchema,
   ProbationFiltersSchema,
   CreateProbationReviewSchema,
   ExtendProbationSchema,

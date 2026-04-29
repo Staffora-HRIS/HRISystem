@@ -215,7 +215,7 @@ describe("SLA Auto-Escalation", () => {
     it("should create a 'warning' SLA event when task approaches deadline", async () => {
       if (!db || !tenant || !user) return;
 
-      const { taskId, slaId } = await createTestWorkflowWithSla({
+      const { taskId } = await createTestWorkflowWithSla({
         deadlineHours: 48,
         warningHours: 24,
         escalationAction: "notify",
@@ -280,7 +280,7 @@ describe("SLA Auto-Escalation", () => {
     it("should be markable as processed via mark_sla_event_processed()", async () => {
       if (!db || !tenant || !user) return;
 
-      const { taskId, slaId } = await createTestWorkflowWithSla({
+      await createTestWorkflowWithSla({
         deadlineHours: 24,
         escalationAction: "notify",
         escalationTargetUserId: user.id,
@@ -302,7 +302,7 @@ describe("SLA Auto-Escalation", () => {
       const eventId = events[0].id;
 
       // Mark as processed
-      const [markResult] = await withSystemContext(db, async (tx) => {
+      await withSystemContext(db, async (tx) => {
         return tx`
           SELECT app.mark_sla_event_processed(
             ${eventId}::uuid,

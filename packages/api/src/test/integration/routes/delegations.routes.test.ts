@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import postgres from "postgres";
 import {
   getTestDb, ensureTestInfra, isInfraAvailable, closeTestConnections,
-  createTestTenant, createTestUser, setTenantContext, clearTenantContext,
+  createTestTenant, createTestUser, clearTenantContext,
   cleanupTestTenant, cleanupTestUser, withSystemContext, TEST_CONFIG,
   type TestTenant, type TestUser,
 } from "../../setup";
@@ -105,7 +105,6 @@ describe("Delegations Routes Integration", () => {
   afterEach(async () => { if (skip) return; await clearTenantContext(db); });
 
   const ctxA = () => ({ tenantId: tenant.id, userId: user.id });
-  const ctxA2 = () => ({ tenantId: tenant.id, userId: user2.id });
   const ctxB = () => ({ tenantId: tenantB.id, userId: userB.id });
 
   describe("Create Delegation", () => {

@@ -181,10 +181,9 @@ beforeAll(async () => {
       RETURNING id
     `;
 
-    const pos = await tx<{ id: string }[]>`
+    await tx`
       INSERT INTO app.positions (tenant_id, code, title, org_unit_id)
       VALUES (${tenant2.id}::uuid, ${"POS-CED-T2"}, ${"Other Position"}, ${ou[0]!.id}::uuid)
-      RETURNING id
     `;
 
     const emp4 = await tx<{ id: string }[]>`

@@ -26,7 +26,9 @@ function loadDatabaseUrl(): string {
 }
 
 const email = process.env["ROOT_EMAIL"] ?? "root@staffora.co.uk";
-const password = process.env["ROOT_PASSWORD"] ?? `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+const providedPassword = process.env["ROOT_PASSWORD"];
+const wasGenerated = !providedPassword;
+const password = providedPassword ?? `${crypto.randomUUID()}-${crypto.randomUUID()}`;
 
 const tenantId = process.env["ROOT_TENANT_ID"];
 const tenantSlug = process.env["ROOT_TENANT_SLUG"];
@@ -38,8 +40,12 @@ const db = postgres(loadDatabaseUrl(), { max: 1, connection: { search_path: "app
 try {
   const result = await bootstrapRoot(db, { email, password, name, tenantId, tenantSlug, tenantName });
   console.log(JSON.stringify(result, null, 2));
-  console.log(`\nGenerated password: ${password}`);
-  console.log("Save this password now — it will not be shown again.");
+  if (wasGenerated) {
+    console.log(`\nGenerated password: ${password}`);
+    console.log("Save this password now — it will not be shown again.");
+  } else {
+    console.log("\nUsing ROOT_PASSWORD from environment");
+  }
 } finally {
   await db.end({ timeout: 2 });
 }

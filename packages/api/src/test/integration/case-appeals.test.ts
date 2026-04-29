@@ -36,7 +36,6 @@ describe("Case Appeals - ACAS Code Compliance", () => {
   let resolverUser: TestUser;
   let appealOfficerUser: TestUser;
   let employeeId: string;
-  let caseId: string;
   let caseCategoryId: string;
 
   beforeAll(async () => {

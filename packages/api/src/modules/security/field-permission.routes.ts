@@ -10,7 +10,6 @@ import { requirePermission } from "../../plugins/rbac";
 import { AuditActions } from "../../plugins/audit";
 import { FieldPermissionService } from "./field-permission.service";
 import {
-  FieldPermissionLevel,
   BulkFieldPermissionUpdateSchema,
   SetFieldPermissionSchema,
 } from "./field-permission.schemas";
@@ -20,7 +19,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .get(
     "/",
     async (ctx) => {
-      const { tenant, user, db, set, requestId } = ctx as any;
+      const { tenant, user, db } = ctx as any;
 
 
       const service = new FieldPermissionService(db);
@@ -44,7 +43,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .get(
     "/:entity",
     async (ctx) => {
-      const { tenant, user, db, params, set, requestId } = ctx as any;
+      const { tenant, user, db, params } = ctx as any;
 
 
       const service = new FieldPermissionService(db);
@@ -69,7 +68,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .get(
     "/my-permissions",
     async (ctx) => {
-      const { tenant, user, db, query, set, requestId } = ctx as any;
+      const { tenant, user, db, query } = ctx as any;
 
 
       const service = new FieldPermissionService(db);
@@ -108,7 +107,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .get(
     "/roles/:roleId",
     async (ctx) => {
-      const { tenant, user, db, params, set, requestId } = ctx as any;
+      const { tenant, user, db, params } = ctx as any;
 
 
       const service = new FieldPermissionService(db);
@@ -148,7 +147,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .put(
     "/roles/:roleId",
     async (ctx) => {
-      const { tenant, user, db, params, body, audit, set, requestId } =
+      const { tenant, user, db, params, body, audit, requestId } =
         ctx as any;
 
 
@@ -186,7 +185,7 @@ export const fieldPermissionRoutes = new Elysia({ prefix: "/fields" })
   .put(
     "/roles/:roleId/fields/:fieldId",
     async (ctx) => {
-      const { tenant, user, db, params, body, audit, set, requestId } =
+      const { tenant, user, db, params, body, audit, requestId } =
         ctx as any;
 
 

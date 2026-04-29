@@ -229,7 +229,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
   .get(
     "/employees/me",
     async (ctx) => {
-      const { competenciesService, competenciesRepository, tenantContext, set } = ctx as any;
+      const { competenciesService, tenantContext } = ctx as any;
 
       // Resolve current user's employee ID
       const [emp] = await (ctx as any).db.withTransaction(
@@ -263,7 +263,7 @@ export const competenciesRoutes = new Elysia({ prefix: "/competencies" })
   .get(
     "/employees/me/gaps",
     async (ctx) => {
-      const { competenciesService, tenantContext, set } = ctx as any;
+      const { competenciesService, tenantContext } = ctx as any;
 
       // Resolve current user's employee ID
       const [emp] = await (ctx as any).db.withTransaction(

@@ -20,7 +20,7 @@ import {
 
 export const absenceRoutes = new Elysia({ prefix: "/absence", name: "absence-routes" })
   .derive((ctx) => {
-    const { db, cache } = ctx as any;
+    const { db } = ctx as any;
     const repo = new AbsenceRepository(db);
     const service = new AbsenceService(repo);
     return { absenceService: service };

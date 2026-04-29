@@ -19,7 +19,6 @@ import {
   createTestContext,
   ensureTestInfra,
   isInfraAvailable,
-  setTenantContext,
   withSystemContext,
   type TestContext,
 } from "../../setup";

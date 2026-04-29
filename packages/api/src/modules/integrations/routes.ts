@@ -20,14 +20,10 @@ import type { DatabaseClient } from "../../plugins/db";
 import { IntegrationsRepository } from "./repository";
 import { IntegrationsService } from "./service";
 import {
-  IntegrationResponseSchema,
-  IntegrationFiltersSchema,
   IntegrationStatusSchema,
-  PaginationQuerySchema,
   ConnectIntegrationSchema,
   UpdateIntegrationConfigSchema,
   IdParamsSchema,
-  ProviderParamsSchema,
   OptionalIdempotencyHeaderSchema,
   TestConnectionResponseSchema,
 } from "./schemas";
